@@ -1,0 +1,4 @@
+{
+    "python.defaultInterpreterPath": "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python3",
+    "python.terminal.activateEnvironment": true,
+}
