@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -63,10 +64,11 @@ def _debug(message: str, **fields: Any) -> None:
     try:
         print(
             f"[lm-proxy:memory_summary] {json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False)}",
+            file=sys.stderr,
             flush=True,
         )
     except Exception:
-        print(f"[lm-proxy:memory_summary] {message} {fields}", flush=True)
+        print(f"[lm-proxy:memory_summary] {message} {fields}", file=sys.stderr, flush=True)
 
 
 # ---------------------------------------------------------------------------

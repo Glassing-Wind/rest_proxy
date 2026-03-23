@@ -126,3 +126,34 @@ def _parse_regex_fallback(code: str) -> str:
             decl += ' ...'
         lines.append(decl)
     return "\n".join(lines)
+def get_swift_docs(code: str, symbol_name: str) -> str:
+    """Use SourceKitten to find documentation for a specific symbol."""
+    try:
+        proc = subprocess.run(
+            ["sourcekitten", "structure", "--text", code],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if proc.returncode != 0:
+            return ""
+            
+        ast_data = json.loads(proc.stdout)
+        substructure = ast_data.get("key.substructure", [])
+        
+        # Deep search for the symbol and its doc comment
+        def find_doc(nodes):
+            for node in nodes:
+                if node.get("key.name") == symbol_name:
+                    doc = node.get("key.doc.comment")
+                    if doc:
+                        return doc
+                res = find_doc(node.get("key.substructure", []))
+                if res:
+                    return res
+            return None
+            
+        return find_doc(substructure) or ""
+    except Exception as e:
+        logger.warning(f"Error extracting Swift docs: {e}")
+        return ""

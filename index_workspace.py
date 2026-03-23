@@ -31,15 +31,12 @@ memory_retrieval._EMBEDDING_BASE_URL = os.getenv("LM_BASE", "http://127.0.0.1:12
 memory_retrieval._ENABLE_EMBEDDINGS = True
 
 import memory_store
-
 memory_store._ENABLE_EMBEDDINGS = True
 memory_store._ENABLE_PERSISTENCE = True
-memory_store._PG_DSN = os.getenv("LM_PROXY_PG_DSN", "")
 
 import memory_bootstrap
 memory_bootstrap._ENABLE_EMBEDDINGS = True
 memory_bootstrap._ENABLE_PERSISTENCE = True
-memory_bootstrap._PG_DSN = os.getenv("LM_PROXY_PG_DSN", "")
 
 # We'll use skeleton_extractor's SourceKitten hooks to try to chunk Swift smartly
 # if we wanted, but for V1 we can also just do line-based chunking with overlap
@@ -53,7 +50,7 @@ async def chunk_file(filepath: str) -> List[str]:
         with open(filepath, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except Exception as e:
-        print(f"Skipping {filepath}: {e}")
+        print(f"Skipping {filepath}: {e}", file=sys.stderr)
         return []
 
     chunks = []
@@ -71,24 +68,28 @@ async def chunk_file(filepath: str) -> List[str]:
     return chunks
 
 async def index_project(target_dir: str, project_id: str):
-    print(f"Bootstrapping database...")
+    print(f"Bootstrapping Graph database...", file=sys.stderr)
     await memory_bootstrap.bootstrap_schema()
-    
-    # We must open the connection pool explicitly since we're not running the FastAPI app
-    print("Opening postgres pool...")
-    await memory_store.open_pool()
 
     files_to_index = []
-    for root, _, files in os.walk(target_dir):
+    for root, dirs, files in os.walk(target_dir):
         # basic skips
-        if ".git" in root or "build" in root or "Pods" in root or ".build" in root:
-            continue
+        # Skip common non-source and data directories
+        dirs[:] = [d for d in dirs if d not in {".git", "build", "Pods", ".build", "models", "weights", "checkpoints", "venv", "node_modules", "DerivedData"}]
             
         for name in files:
-            if name.endswith((".swift", ".py", ".js", ".ts", ".jsx", ".tsx", ".md")):
-                files_to_index.append(os.path.join(root, name))
+            # Expanded coverage for config, docs, and diverse source types
+            if name.endswith((".swift", ".py", ".js", ".ts", ".jsx", ".tsx", ".md", ".json", ".yaml", ".yml", ".toml", ".ini", ".txt", ".c", ".cpp", ".h", ".hpp", ".sh", ".sql")):
+                filepath = os.path.join(root, name)
+                try:
+                    # Skip files larger than 1MB (likely datasets, binaries, or large generated files)
+                    if os.path.getsize(filepath) > 1 * 1024 * 1024:
+                        continue
+                    files_to_index.append(filepath)
+                except OSError:
+                    continue
 
-    print(f"Found {len(files_to_index)} files to index.")
+    print(f"Found {len(files_to_index)} files to index.", file=sys.stderr)
     
     total_chunks = 0
     # Process up to 10 chunks concurrently so we don't overwhelm LM Studio
@@ -99,20 +100,23 @@ async def index_project(target_dir: str, project_id: str):
         async with sem:
             vector = await get_embedding(chunk_text)
             if not vector:
-                print(f"  Warning: Failed to get embedding for {rel_path} chunk {chunk_idx}")
+                print(f"  Warning: Failed to get embedding for {rel_path} chunk {chunk_idx}", file=sys.stderr)
                 return False
                 
-            await memory_store.insert_codebase_embedding(
-                project_id=project_id,
-                file_path=rel_path,
-                chunk_index=chunk_idx,
-                content=chunk_text,
+            # Use Neo4j vector store instead of Postgres
+            await memory_store.insert_embedding(
+                session_id=project_id,
+                ref_id=f"{project_id}:{rel_path}::{chunk_idx}",
+                ref_type="code_chunk",
+                compact_text=chunk_text,
                 vector=vector,
+                project_path=target_dir,
+                metadata={"file": rel_path, "project_id": project_id}
             )
             return True
 
     tasks = []
-    print(f"Queueing {len(files_to_index)} files for parallel embedding...")
+    print(f"Queueing {len(files_to_index)} files for parallel embedding...", file=sys.stderr)
     for filepath in files_to_index:
         chunks = await chunk_file(filepath)
         if not chunks:
@@ -122,16 +126,16 @@ async def index_project(target_dir: str, project_id: str):
         for i, chunk in enumerate(chunks):
             tasks.append(process_chunk(project_id, rel_path, i, chunk))
 
-    print(f"Executing {len(tasks)} embedding tasks concurrently...")
+    print(f"Executing {len(tasks)} embedding tasks concurrently...", file=sys.stderr)
     results = await asyncio.gather(*tasks)
     total_chunks = sum(1 for r in results if r)
             
-    print(f"Done! Indexed {total_chunks} total chunks into codebase_embeddings for project {project_id}.")
+    print(f"Done! Indexed {total_chunks} total chunks into codebase_embeddings for project {project_id}.", file=sys.stderr)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python index_workspace.py <target_directory> [project_id]")
+        print("Usage: python index_workspace.py <target_directory> [project_id]", file=sys.stderr)
         sys.exit(1)
         
     target = os.path.abspath(sys.argv[1])

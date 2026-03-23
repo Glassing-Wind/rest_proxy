@@ -3,7 +3,7 @@
 Responsibilities:
   1. Embedding provider abstraction (LM Studio/OpenAI endpoint or no-op stub).
   2. Assemble compact memory augmentation (rolling summary + structured state + recent turns
-     + optional pgvector retrieved snippets) for future prompt injection.
+     + optional Neo4j retrieved snippets) for future prompt injection.
 
 All operations are best-effort and degrade gracefully when services are unavailable.
 """
@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import os
+import sys
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -69,8 +70,10 @@ def _rerank_by_recency(hits: List[Dict[str, Any]]) -> List[str]:
         created_at = h.get("created_at")
         if created_at is not None:
             try:
-                # psycopg returns timezone-aware datetimes; handle naive too
-                if isinstance(created_at, datetime.datetime):
+                # Neo4j returns float timestamps; handle datetime too just in case
+                if isinstance(created_at, (int, float)):
+                    age_secs = max(0.0, now.timestamp() - created_at)
+                elif isinstance(created_at, datetime.datetime):
                     if created_at.tzinfo is None:
                         created_at = created_at.replace(tzinfo=datetime.timezone.utc)
                     age_secs = max(0.0, (now - created_at).total_seconds())
@@ -95,10 +98,11 @@ def _debug(message: str, **fields: Any) -> None:
     try:
         print(
             f"[lm-proxy:memory_retrieval] {json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False)}",
+            file=sys.stderr,
             flush=True,
         )
     except Exception:
-        print(f"[lm-proxy:memory_retrieval] {message} {fields}", flush=True)
+        print(f"[lm-proxy:memory_retrieval] {message} {fields}", file=sys.stderr, flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +119,7 @@ async def get_embedding(text: str) -> Optional[List[float]]:
     Returns None if embeddings are disabled or the provider is unavailable.
     The caller must handle None gracefully.
     """
-    if not _ENABLE_EMBEDDINGS or not _EMBEDDING_MODEL:
+    if not _ENABLE_EMBEDDINGS:
         return None
     if not text or not text.strip():
         return None
@@ -127,13 +131,27 @@ async def get_embedding(text: str) -> Optional[List[float]]:
         return _embed_cache[cache_key]
 
     try:
-        payload = {"model": _EMBEDDING_MODEL, "input": text[:4000]}
+        payload = {"input": text[:4000]}
+        if _EMBEDDING_MODEL:
+            payload["model"] = _EMBEDDING_MODEL
+        
         timeout = httpx.Timeout(20.0, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.post(f"{_EMBEDDING_BASE_URL}/v1/embeddings", json=payload)
             if r.status_code >= 400:
-                _debug("embedding_request_error", status=r.status_code, body=r.text[:200])
-                return None
+                error_body = r.text[:200]
+                _debug("embedding_request_error", status=r.status_code, body=error_body)
+                
+                # SELF-HEALING: If no models are loaded, try to load the configured model
+                if "No models loaded" in error_body or r.status_code == 404:
+                    _debug("attempting_self_healing_load", model=_EMBEDDING_MODEL)
+                    await _load_model_explicitly()
+                    # Retry once
+                    r = await client.post(f"{_EMBEDDING_BASE_URL}/v1/embeddings", json=payload)
+                    if r.status_code >= 400:
+                        return None
+                else:
+                    return None
             data = r.json()
             embedding_data = data.get("data", [])
             if embedding_data and isinstance(embedding_data[0], dict):
@@ -148,6 +166,23 @@ async def get_embedding(text: str) -> Optional[List[float]]:
     except Exception as exc:
         _debug("embedding_exception", error=str(exc))
     return None
+
+async def _load_model_explicitly() -> bool:
+    """Trigger the LM Studio /api/v1/models/load endpoint."""
+    if not _EMBEDDING_MODEL:
+        return False
+    try:
+        payload = {"model": _EMBEDDING_MODEL, "context_length": 8192}
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            # Note the /api prefix from newer LM Studio documentation
+            r = await client.post(f"{_EMBEDDING_BASE_URL}/api/v1/models/load", json=payload)
+            if r.status_code == 200:
+                _debug("model_load_triggered_success", model=_EMBEDDING_MODEL)
+                return True
+            _debug("model_load_triggered_failed", status=r.status_code, response=r.text[:200])
+    except Exception as e:
+        _debug("model_load_exception", error=str(e))
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +209,7 @@ def _format_working_memory(wm: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _format_recent_turns(turns: List[Dict[str, Any]], max_turns: int = 6) -> str:
+def _format_recent_turns(turns: List[Dict[str, Any]], max_turns: int = 12) -> str:
     """Render recent turns as compact text."""
     if not turns:
         return ""
@@ -199,13 +234,14 @@ def _format_retrieved_snippets(snippets: List[str]) -> str:
 async def assemble_memory(
     session_id: str,
     query_text: Optional[str] = None,
+    global_search: bool = False,
 ) -> AssembledMemory:
     """
     Assemble compact memory augmentation for *session_id*.
 
     - Pulls rolling summary and working memory from Redis (via memory_store).
     - Pulls recent turns from Redis.
-    - Optionally retrieves similar snippets via pgvector.
+    - Optionally retrieves similar snippets via Neo4j vector search.
     - Returns an AssembledMemory with an assembled_text field ready for prompt injection.
 
     This function swallows all errors to stay non-blocking.
@@ -215,6 +251,8 @@ async def assemble_memory(
         get_recent_turns,
         get_session_state,
         search_similar_memory,
+        get_project_preferences,
+        get_global_instructions,
     )
 
     rolling_summary = ""
@@ -245,24 +283,39 @@ async def assemble_memory(
             query_vec = await get_embedding(query_text)
             if query_vec:
                 hits = await search_similar_memory(
-                    session_id, query_vec, k=_RETRIEVAL_K, query_text=query_text
+                    session_id, 
+                    query_vec, 
+                    k=_RETRIEVAL_K, 
+                    query_text=query_text,
+                    global_search=global_search
                 )
-                # Recency-weighted rerank; returns compact_text strings
-                retrieved_snippets = _rerank_by_recency(hits)
-                # --- NEW: deduplicate + cap retrieved snippets ---
-                seen = set()
-                deduped = []
-                for s in retrieved_snippets:
-                    key = s[:120]
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    deduped.append(s)
-
-                # cap to top 3 to prevent prompt bloat
-                retrieved_snippets = deduped[:3]
+                if hits:
+                    # Recency-weighted rerank; returns compact_text strings
+                    raw_snippets = _rerank_by_recency(hits)
+                    # deduplicate + cap retrieved snippets
+                    seen = set()
+                    deduped = []
+                    for s in raw_snippets:
+                        key = s[:120]
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        deduped.append(s)
+                    retrieved_snippets = deduped[:3]
         except Exception as exc:
             _debug("assemble_retrieval_error", error=str(exc))
+
+    # Project and Global Preferences
+    project_prefs = []
+    global_ins = []
+    if _ENABLE_RETRIEVAL:
+        try:
+            # Extract project_id from session_id
+            project_id = session_id.split(":")[0] if ":" in session_id else session_id
+            project_prefs = await get_project_preferences(project_id)
+            global_ins = await get_global_instructions()
+        except Exception as exc:
+            _debug("assemble_preferences_error", error=str(exc))
 
     # Build the assembled text block
     sections: List[str] = []
@@ -277,6 +330,14 @@ async def assemble_memory(
     snippets_text = _format_retrieved_snippets(retrieved_snippets)
     if snippets_text:
         sections.append(snippets_text)
+
+    if project_prefs or global_ins:
+        pref_lines = ["## User Instructions"]
+        for i in global_ins:
+            pref_lines.append(f"- [GLOBAL] {i}")
+        for p in project_prefs:
+            pref_lines.append(f"- [PROJECT] {p}")
+        sections.append("\n".join(pref_lines))
 
     assembled_text = "\n\n".join(sections)
 

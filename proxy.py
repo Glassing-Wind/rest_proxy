@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import sys
 import asyncio
 import hashlib
 import json
@@ -21,9 +20,9 @@ load_dotenv()
 # Memory layer feature flags (loaded once; all optional)
 # ---------------------------------------------------------------------------
 _MEMORY_ENABLED = os.getenv("LM_PROXY_MEMORY_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
-_MEMORY_ENABLE_PERSISTENCE = os.getenv("LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1").strip().lower() in {"1", "true", "yes", "on"}
-_MEMORY_ENABLE_REDIS = os.getenv("LM_PROXY_MEMORY_ENABLE_REDIS", "1").strip().lower() in {"1", "true", "yes", "on"}
-_MEMORY_ENABLE_EMBEDDINGS = os.getenv("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_PERSISTENCE = os.getenv("LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1").strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_REDIS = os.getenv("LM_PROXY_MEMORY_ENABLE_REDIS", "1").strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_EMBEDDINGS = os.getenv("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes", "on"}
 _MEMORY_SESSION_NAMESPACE = os.getenv("LM_PROXY_MEMORY_SESSION_NAMESPACE", "lmproxy")
 # Memory injection into prompts: prepend rolling summary + trim old turns before forwarding.
 _MEMORY_ENABLE_INJECT = os.getenv("LM_PROXY_MEMORY_ENABLE_INJECT", "1").strip().lower() in {"1", "true", "yes", "on"}
@@ -52,7 +51,7 @@ if _MEMORY_ENABLED:
         import skeleton_extractor as _skeleton_extractor  # type: ignore
     except ImportError as _mem_import_err:
         # Memory modules not available; proxy runs normally without them.
-        print(f"[lm-proxy] memory_import_failed error={_mem_import_err}", flush=True)
+        print(f"[lm-proxy] memory_import_failed error={_mem_import_err}", file=sys.stderr, flush=True)
         _memory_store = None
         _memory_summary = None
         _memory_retrieval = None
@@ -86,20 +85,12 @@ app = FastAPI(title="LM Studio Stateful Chat Proxy")
 @app.on_event("startup")
 async def _startup_event() -> None:
     """Run idempotent schema bootstrap and open the Postgres connection pool on startup."""
-    if _MEMORY_ENABLED and _memory_store is not None and _MEMORY_ENABLE_PERSISTENCE:
-        # Open connection pool first so bootstrap (and all later inserts) can use it.
+    if _MEMORY_ENABLED and _memory_store is not None and _ENABLE_PERSISTENCE:
+        # Open Neo4j connection / bootstrap schema
         try:
             await _memory_store.open_pool()
         except Exception as _pool_exc:
-            print(f"[lm-proxy] memory_pool_error error={_pool_exc}", flush=True)
-
-    if _MEMORY_ENABLED and _memory_bootstrap is not None and _MEMORY_ENABLE_PERSISTENCE:
-        try:
-            ok = await _memory_bootstrap.bootstrap_schema()
-            if ok:
-                print("[lm-proxy] memory_bootstrap_ok", flush=True)
-        except Exception as _bs_exc:
-            print(f"[lm-proxy] memory_bootstrap_error error={_bs_exc}", flush=True)
+            print(f"[lm-proxy] memory_init_error error={_pool_exc}", file=sys.stderr, flush=True)
 
 # history-hash -> LM Studio response id
 STATE: Dict[str, str] = {}
@@ -131,21 +122,21 @@ def debug_log(message: str, **fields: Any) -> None:
     payload.update(fields)
     try:
         log_str = f"[lm-proxy] {stable_json(payload)}"
-        print(log_str, flush=True)
+        print(log_str, file=sys.stderr, flush=True)
         with open("proxy_debug.log", "a") as f:
             f.write(log_str + "\n")
     except Exception as e:
         log_str = f"[lm-proxy] {message} {fields} - Exception: {e}"
-        print(log_str, flush=True)
+        print(log_str, file=sys.stderr, flush=True)
         with open("proxy_debug.log", "a") as f:
             f.write(log_str + "\n")
 
 
-load_state()
-
-
 def stable_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+load_state()
 
 
 # --- Model aliasing and fallback helpers

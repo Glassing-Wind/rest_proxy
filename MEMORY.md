@@ -13,7 +13,7 @@ proxy.py  (unchanged routes)
 ├── memory_summary.py    – Summarization (LLM or deterministic) + tool-output compaction
 ├── memory_store.py      – Redis hot-state + Postgres durable storage
 ├── memory_retrieval.py  – Embedding provider interface + memory assembly
-└── memory_bootstrap.py  – Idempotent Postgres schema (run at startup)
+└── memory_bootstrap.py  – Neo4j GraphRAG initialization (run at startup)
 ```
 
 ### Data Flow
@@ -40,8 +40,11 @@ POST /v1/chat/completions
 | Variable | Default | Description |
 |---|---|---|
 | `LM_PROXY_MEMORY_ENABLED` | `0` | Master switch – set to `1` to enable |
+| `LM_PROXY_NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt connection URI |
+| `LM_PROXY_NEO4J_USER` | `neo4j` | Neo4j username |
+| `LM_PROXY_NEO4J_PASSWORD` | - | Neo4j password |
+| `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `0` | Enable Neo4j durable persistence |
 | `LM_PROXY_MEMORY_ENABLE_REDIS` | `0` | Enable Redis hot session state |
-| `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `0` | Enable Postgres durable persistence |
 | `LM_PROXY_MEMORY_ENABLE_EMBEDDINGS` | `0` | Enable embedding + pgvector retrieval |
 | `LM_PROXY_MEMORY_ENABLE_RETRIEVAL` | `0` | Enable vector similarity retrieval |
 | `LM_PROXY_PG_DSN` | _(empty)_ | Postgres connection string (psycopg v3 format) |

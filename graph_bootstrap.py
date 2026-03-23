@@ -2,10 +2,11 @@
 
 import os
 import json
+import sys
 from typing import Optional, Any
 from neo4j import AsyncGraphDatabase
 
-_ENABLE_GRAPH = os.getenv("LM_PROXY_GRAPH_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+_NEO4J_ENABLED = os.getenv("LM_PROXY_GRAPH_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 _NEO4J_URI = os.getenv("LM_PROXY_NEO4J_URI", "bolt://localhost:7687")
 _NEO4J_USER = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
 _NEO4J_PASSWORD = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
@@ -22,15 +23,16 @@ def _debug(message: str, **fields: Any) -> None:
     try:
         print(
             f"[lm-proxy:graph_bootstrap] {json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False)}",
+            file=sys.stderr,
             flush=True,
         )
     except Exception:
-        print(f"[lm-proxy:graph_bootstrap] {message} {fields}", flush=True)
+        print(f"[lm-proxy:graph_bootstrap] {message} {fields}", file=sys.stderr, flush=True)
 
 async def init_graph_db() -> None:
     """Initialize Neo4j driver and ensure basic schema constraints exist."""
     global _driver
-    if not _ENABLE_GRAPH:
+    if not _NEO4J_ENABLED:
         _debug("graph_disabled")
         return
     if _driver is not None:
@@ -53,6 +55,7 @@ async def init_graph_db() -> None:
                 "CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:File) REQUIRE f.id IS UNIQUE",
                 "CREATE CONSTRAINT class_id_unique IF NOT EXISTS FOR (c:Class) REQUIRE c.id IS UNIQUE",
                 "CREATE CONSTRAINT function_id_unique IF NOT EXISTS FOR (func:Function) REQUIRE func.id IS UNIQUE",
+                "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (chk:Chunk) REQUIRE chk.id IS UNIQUE",
             ]
             
             for query in constraints:
@@ -60,11 +63,28 @@ async def init_graph_db() -> None:
                     await session.run(query)
                 except Exception as e:
                     _debug("constraint_creation_warning", error=str(e), query=query)
+
+            # 3. Vector Index for Codebase Search
+            vector_index_query = """
+            CREATE VECTOR INDEX `codebase_chunks_vector` IF NOT EXISTS
+            FOR (n:Chunk)
+            ON (n.embedding)
+            OPTIONS {indexConfig: {
+              `vector.dimensions`: 768,
+              `vector.similarity_function`: 'cosine'
+            }}
+            """
+            try:
+                await session.run(vector_index_query)
+                _debug("neo4j_vector_index_initialized")
+            except Exception as e:
+                _debug("vector_index_creation_error", error=str(e))
                     
             _debug("neo4j_schema_initialized")
             
     except Exception as exc:
-        _debug("neo4j_connection_failed", error=str(exc))
+        print(f"[lm-proxy:graph_bootstrap] CRITICAL: Neo4j connection failure: {exc}", file=sys.stderr)
+        _debug("neo4j_connection_error", error=str(exc))
         _driver = None
 
 async def close_graph_db() -> None:
