@@ -6,7 +6,7 @@ import os
 URI = "bolt://localhost:7687"
 USER = "neo4j"
 PASS = "nilBog1768@N"
-PROJECT_ID = "ts-pack-native-test"
+PROJECT_ID = "6f8dead37cb2"
 WORKSPACE_ROOT = "/Users/michaelmarler/Projects/rest_proxy"
 
 print(f"Starting Rust-native indexing for {WORKSPACE_ROOT}...")

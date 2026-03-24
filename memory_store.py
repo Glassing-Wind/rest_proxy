@@ -433,6 +433,85 @@ async def insert_checkpoint(
         return None
 
 
+async def insert_embeddings_batch(
+    session_id: str,
+    project_id: str,
+    batch: List[Dict[str, Any]],
+    project_path: Optional[str] = None,
+) -> int:
+    """
+    Insert a batch of vector embeddings into Neo4j in a single transaction.
+    Batch items should contain: ref_id, ref_type, text, vector, metadata
+    """
+    if not _ENABLE_EMBEDDINGS or not _pool_available() or not batch:
+        return 0
+
+    try:
+        driver = graph_bootstrap.get_driver()
+        if not driver: return 0
+        
+        # Consistent Project ID calculation
+        import hashlib
+        if project_path and not project_id:
+            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+
+        cypher = """
+        UNWIND $items as item
+        MERGE (m:Node {id: item.ref_id})
+        SET m:Chunk,
+            m:MemoryEmbedding,
+            m.session_id = $session_id,
+            m.project_id = $project_id,
+            m.ref_type = item.ref_type,
+            m.text = item.text,
+            m.embedding = item.vector,
+            m.metadata = item.metadata,
+            m.created_at = $created_at
+        WITH m, item
+        MERGE (s:Session {id: $session_id})
+        MERGE (s)-[:HAS_EMBEDDING]->(m)
+        WITH m, item
+        WHERE $project_id IS NOT NULL
+        MERGE (p:Project {id: $project_id})
+        MERGE (p)-[:HAS_EMBEDDING]->(m)
+        WITH m, item, p
+        // Link to File if metadata contains it
+        FOREACH (_ IN CASE WHEN item.file_path IS NOT NULL THEN [1] ELSE [] END |
+            MERGE (f:Node {id: $project_id + ":file:" + item.file_path})
+            SET f:File
+            MERGE (p)-[:HAS_FILE]->(f)
+            MERGE (f)-[:HAS_CHUNK]->(m)
+        )
+        """
+        
+        created_at = time.time()
+        # Prepare data for UNWIND
+        items = []
+        for b in batch:
+            items.append({
+                "ref_id": b["ref_id"],
+                "ref_type": b.get("ref_type", "code_chunk"),
+                "text": b["text"],
+                "vector": b["vector"],
+                "metadata": json.dumps(b.get("metadata", {})),
+                "file_path": b.get("metadata", {}).get("file")
+            })
+
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+            await session.run(
+                cypher,
+                items=items,
+                session_id=session_id,
+                project_id=project_id,
+                created_at=created_at
+            )
+        
+        _debug("graph_insert_embeddings_batch", session_id=session_id, count=len(batch))
+        return len(batch)
+    except Exception as exc:
+        _debug("graph_insert_embeddings_batch_error", session_id=session_id, error=str(exc))
+        return 0
+
 async def insert_embedding(
     session_id: str,
     ref_id: str,

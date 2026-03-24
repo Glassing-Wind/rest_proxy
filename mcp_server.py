@@ -395,39 +395,128 @@ async def get_code_communities(project_path: str) -> str:
 async def index_workspace(project_path: str) -> str:
     """
     Trigger a full re-index (semantic and structural) of a directory into the graph.
-    Use this when you enter a new project that hasn't been indexed yet.
+    Uses unified discovery and parallel execution for maximum performance.
     
     Args:
         project_path: Absolute path to the project root.
     """
     try:
-        if not os.path.isdir(project_path):
-            return f"Error: '{project_path}' is not a valid directory."
-            
         import hashlib
+        import time
+        import json
+        from pathlib import Path
+        
+        start_total = time.time()
         project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
         base_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # 1. Run Semantic Indexer
-        sem_cmd = [sys.executable, os.path.join(base_dir, "index_workspace.py"), project_path]
-        print(f"Running semantic indexer: {' '.join(sem_cmd)}", file=sys.stderr)
-        sem_proc = subprocess.run(sem_cmd, capture_output=True, text=True)
+        # 1. Unified Discovery
+        discovery_start = time.time()
+        manifest = []
+        root = Path(project_path)
         
-        # 2. Run Structural Indexer
-        graph_cmd = [sys.executable, os.path.join(base_dir, "graph_indexer.py"), project_path]
-        print(f"Running structural indexer: {' '.join(graph_cmd)}", file=sys.stderr)
-        graph_proc = subprocess.run(graph_cmd, capture_output=True, text=True)
+        # Consistent filtering rules
+        skip_dirs = {'.git', 'node_modules', '__pycache__', 'venv', '.venv', 'target', 'build', 'dist', '.gemini', '.agents', '.agent', '.cache', 'Pods'}
+        skip_exts = {'.png', '.jpg', '.jpeg', '.gif', '.pdf', '.zip', '.tar', '.gz', '.mp4', '.mp3', '.bin', '.exe', '.dll', '.so', '.pyc', '.lock', '.dylib', '.a', '.o', '.dSYM', '.wasm'}
         
-        output = [f"Successfully indexed project: {project_id}"]
-        output.append("\nSemantic Indexing Output:")
-        output.append(sem_proc.stderr or sem_proc.stdout)
-        output.append("\nStructural Indexing Output:")
-        output.append(graph_proc.stderr or graph_proc.stdout)
+        MAX_FILE_SIZE = 1 * 1024 * 1024 # 1MB limit for semantic/structural indexing
         
-        return "\n".join(output)
+        for path in root.rglob('*'):
+            if any(part in skip_dirs for part in path.parts):
+                continue
+            if path.is_file() and path.suffix.lower() not in skip_exts:
+                try:
+                    stats = path.stat()
+                    if stats.st_size > MAX_FILE_SIZE:
+                        continue
+                        
+                    manifest.append({
+                        "abs_path": str(path.absolute()),
+                        "rel_path": str(path.relative_to(root)),
+                        "ext": path.suffix.lower().lstrip('.'),
+                        "size": stats.st_size
+                    })
+                except Exception:
+                    continue
+        
+        discovery_time = time.time() - discovery_start
+        manifest_path = os.path.join(base_dir, f"{project_id}_manifest.json")
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f)
+            
+        # 2. Parallel Orchestration
+        neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+        neo4j_pass = os.getenv("NEO4J_PASSWORD", "nilBog1768@N")
+        
+        # Structural Indexing (Rust-native script)
+        # Note: ts_pack will be updated to consume JSON manifest
+        struct_script = f"""
+import tree_sitter_language_pack as ts_pack
+import os
+import sys
+import json
+
+project_path = "{project_path}"
+project_id = "{project_id}"
+neo4j_uri = "{neo4j_uri}"
+neo4j_user = "{neo4j_user}"
+neo4j_pass = "{neo4j_pass}"
+manifest_path = "{manifest_path}"
+
+# Launch structural indexer
+# (Rust will be updated to look for --manifest-file)
+ts_pack.index_workspace(
+    path=project_path,
+    project_id=project_id,
+    neo4j_uri=neo4j_uri,
+    neo4j_user=neo4j_user,
+    neo4j_pass=neo4j_pass,
+    manifest_file=manifest_path
+)
+"""
+        
+        # Start both phases in parallel
+        struct_start = time.time()
+        struct_proc = subprocess.Popen([sys.executable, "-c", struct_script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        sem_start = time.time()
+        sem_cmd = [sys.executable, os.path.join(base_dir, "index_workspace.py"), project_path, project_id, "--manifest-file", manifest_path]
+        sem_proc = subprocess.Popen(sem_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        # Wait for both to complete
+        s_out, s_err = struct_proc.communicate()
+        sem_out, sem_err = sem_proc.communicate()
+        
+        struct_time = time.time() - struct_start
+        sem_time = time.time() - sem_start
+        
+        # Cleanup manifest
+        if os.path.exists(manifest_path):
+            os.remove(manifest_path)
+            
+        total_time = time.time() - start_total
+        
+        # Formatting instrumentation summary
+        summary = [
+            f"Indexing Complete: {project_id}",
+            f"----------------------------------------",
+            f"Discovery Phase: {discovery_time:.2f}s (Files: {len(manifest)})",
+            f"Structural Phase: {struct_time:.2f}s",
+            f"Semantic Phase: {sem_time:.2f}s",
+            f"Total End-to-End: {total_time:.2f}s",
+            f"----------------------------------------"
+        ]
+        
+        if struct_proc.returncode != 0:
+            summary.append(f"WARNING: Structural phase failed (see logs for details)")
+        if sem_proc.returncode != 0:
+            summary.append(f"WARNING: Semantic phase failed (see logs for details)")
+            
+        return "\n".join(summary)
             
     except Exception as e:
-        return f"Error during indexing: {str(e)}"
+        return f"Error during indexing orchestration: {str(e)}"
 
 @mcp.tool()
 async def find_definitions(symbol_name: str) -> str:

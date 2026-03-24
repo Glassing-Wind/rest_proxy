@@ -51,11 +51,9 @@ async def init_graph_db() -> None:
         # Use single-property uniqueness (node.id) since Neo4j Community Edition 
         # doesn't support composite uniqueness constraints.
         async with _driver.session(database=_NEO4J_DB) as session:
+            # Single global identity constraint
             constraints = [
-                "CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:File) REQUIRE f.id IS UNIQUE",
-                "CREATE CONSTRAINT class_id_unique IF NOT EXISTS FOR (c:Class) REQUIRE c.id IS UNIQUE",
-                "CREATE CONSTRAINT function_id_unique IF NOT EXISTS FOR (func:Function) REQUIRE func.id IS UNIQUE",
-                "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (chk:Chunk) REQUIRE chk.id IS UNIQUE",
+                "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE",
             ]
             
             for query in constraints:
