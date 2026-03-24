@@ -8,6 +8,7 @@ import json
 import sys
 import hashlib
 import subprocess
+import threading
 import graph_bootstrap
 from typing import Optional, List, Dict, Any
 
@@ -19,17 +20,93 @@ _REAL_STDOUT = sys.stdout
 sys.stdout = sys.stderr
 # --------------------------
 
-from mcp.server.fastmcp import FastMCP
 
-# Import existing functionality from rest_proxy
-import memory_store
-import memory_retrieval
-import memory_summary
-import skeleton_extractor
-import proxy
+def _stream_stderr(proc: subprocess.Popen, prefix: str) -> None:
+    """Forward a subprocess's stderr line-by-line to our stderr.
+
+    Run this in a daemon thread so both subprocesses are streamed
+    concurrently without blocking the main thread.
+    """
+    assert proc.stderr is not None
+    for line in proc.stderr:
+        print(f"{prefix} {line.rstrip()}", file=sys.stderr, flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Background index job registry
+# ---------------------------------------------------------------------------
+# Each entry: {status, struct_rc, sem_rc, logs[], started_at, finished_at}
+_JOBS: Dict[str, Dict[str, Any]] = {}
+_JOBS_LOCK = threading.Lock()
+_MAX_LOG_LINES = 200   # ring-buffer size per job
+
+
+def _drain_proc_output(
+    proc: subprocess.Popen,
+    job_id: str,
+    prefix: str,
+    rc_key: str,
+) -> None:
+    """Drain stdout+stderr of *proc* into the job log ring-buffer.
+
+    Runs in a daemon thread. When the process exits, stores its return code.
+    """
+    import time as _time
+    assert proc.stderr is not None
+    for raw_line in proc.stderr:
+        line = f"{prefix} {raw_line.rstrip()}"
+        print(line, file=sys.stderr, flush=True)
+        with _JOBS_LOCK:
+            if job_id in _JOBS:
+                logs = _JOBS[job_id]["logs"]
+                logs.append(line)
+                if len(logs) > _MAX_LOG_LINES:
+                    del logs[0]
+    proc.wait()
+    with _JOBS_LOCK:
+        if job_id in _JOBS:
+            _JOBS[job_id][rc_key] = proc.returncode
+
+
+def _finalize_job(job_id: str, manifest_path: str) -> None:
+    """Watch for both phases to complete, then set status and clean up."""
+    import time as _time
+    # Poll until both return codes are recorded
+    while True:
+        _time.sleep(0.5)
+        with _JOBS_LOCK:
+            job = _JOBS.get(job_id, {})
+            struct_rc = job.get("struct_rc")
+            sem_rc    = job.get("sem_rc")
+        if struct_rc is not None and sem_rc is not None:
+            break
+    # Cleanup manifest
+    try:
+        if os.path.exists(manifest_path):
+            os.remove(manifest_path)
+    except OSError:
+        pass
+    import time as _t
+    with _JOBS_LOCK:
+        if job_id in _JOBS:
+            ok = (struct_rc == 0 and sem_rc == 0)
+            _JOBS[job_id]["status"]      = "done" if ok else "failed"
+            _JOBS[job_id]["finished_at"] = _t.time()
+
+from mcp.server.fastmcp import FastMCP
 
 # Initialize FastMCP server
 mcp = FastMCP("rest_proxy")
+
+# --- Helper for lazy-loading internal modules ---
+def _get_memory_modules():
+    """Lazy-load memory and proxy modules to speed up startup and prevent shutdown errors."""
+    import memory_store
+    import memory_retrieval
+    import memory_summary
+    import skeleton_extractor
+    import proxy
+    return memory_store, memory_retrieval, memory_summary, skeleton_extractor, proxy
 
 @mcp.tool()
 async def search_memory(session_id: str, query: str, global_search: bool = False) -> str:
@@ -43,6 +120,7 @@ async def search_memory(session_id: str, query: str, global_search: bool = False
         global_search: Whether to search across all sessions/projects.
     """
     try:
+        memory_store, memory_retrieval, _, _, _ = _get_memory_modules()
         # Ensure pool is open if using Neo4j/Redis
         if memory_store._ENABLE_PERSISTENCE:
             await memory_store.open_pool()
@@ -66,6 +144,7 @@ async def add_memory(session_id: str, text: str, is_global: bool = False) -> str
         is_global: If True, this memory is not tied to a project and will be visible everywhere.
     """
     try:
+        memory_store, _, _, _, _ = _get_memory_modules()
         if memory_store._ENABLE_PERSISTENCE:
             await memory_store.open_pool()
             
@@ -85,6 +164,7 @@ async def get_session_summary(session_id: str) -> str:
         session_id: The unique identifier for the session.
     """
     try:
+        memory_store, _, _, _, _ = _get_memory_modules()
         summary = await memory_store.get_rolling_summary(session_id)
         if summary:
             return summary
@@ -102,6 +182,7 @@ async def code_skeleton(file_path: str) -> str:
         file_path: Absolute path to the source file.
     """
     try:
+        _, _, _, skeleton_extractor, _ = _get_memory_modules()
         if not os.path.exists(file_path):
             return f"File not found: {file_path}"
             
@@ -128,6 +209,7 @@ async def search_codebase(project_path: str, query: str, k: int = 5) -> str:
     """
     try:
         import hashlib
+        memory_store, memory_retrieval, _, _, _ = _get_memory_modules()
         project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
         
         # Get embedding for the query
@@ -395,32 +477,34 @@ async def get_code_communities(project_path: str) -> str:
 async def index_workspace(project_path: str) -> str:
     """
     Trigger a full re-index (semantic and structural) of a directory into the graph.
-    Uses unified discovery and parallel execution for maximum performance.
-    
+    Returns immediately with a job_id. Use get_index_status(job_id) to monitor progress.
+
     Args:
         project_path: Absolute path to the project root.
     """
     try:
-        import hashlib
         import time
         import json
+        import uuid
         from pathlib import Path
-        
-        start_total = time.time()
+
         project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # 1. Unified Discovery
-        discovery_start = time.time()
+        base_dir   = os.path.dirname(os.path.abspath(__file__))
+
+        # 1. Unified Discovery (fast — stays synchronous, ~0.1s)
         manifest = []
         root = Path(project_path)
-        
-        # Consistent filtering rules
-        skip_dirs = {'.git', 'node_modules', '__pycache__', 'venv', '.venv', 'target', 'build', 'dist', '.gemini', '.agents', '.agent', '.cache', 'Pods'}
-        skip_exts = {'.png', '.jpg', '.jpeg', '.gif', '.pdf', '.zip', '.tar', '.gz', '.mp4', '.mp3', '.bin', '.exe', '.dll', '.so', '.pyc', '.lock', '.dylib', '.a', '.o', '.dSYM', '.wasm'}
-        
-        MAX_FILE_SIZE = 1 * 1024 * 1024 # 1MB limit for semantic/structural indexing
-        
+        skip_dirs = {
+            '.git', 'node_modules', '__pycache__', 'venv', '.venv',
+            'target', 'build', 'dist', '.build', '.gemini', '.agents',
+            '.agent', '.cache', 'Pods',
+        }
+        skip_exts = {
+            '.png', '.jpg', '.jpeg', '.gif', '.pdf', '.zip', '.tar', '.gz',
+            '.mp4', '.mp3', '.bin', '.exe', '.dll', '.so', '.pyc', '.lock',
+            '.dylib', '.a', '.o', '.dSYM', '.wasm',
+        }
+        MAX_FILE_SIZE = 1 * 1024 * 1024
         for path in root.rglob('*'):
             if any(part in skip_dirs for part in path.parts):
                 continue
@@ -429,94 +513,149 @@ async def index_workspace(project_path: str) -> str:
                     stats = path.stat()
                     if stats.st_size > MAX_FILE_SIZE:
                         continue
-                        
                     manifest.append({
                         "abs_path": str(path.absolute()),
                         "rel_path": str(path.relative_to(root)),
-                        "ext": path.suffix.lower().lstrip('.'),
-                        "size": stats.st_size
+                        "ext":      path.suffix.lower().lstrip('.'),
+                        "size":     stats.st_size,
                     })
                 except Exception:
                     continue
-        
-        discovery_time = time.time() - discovery_start
+
         manifest_path = os.path.join(base_dir, f"{project_id}_manifest.json")
         with open(manifest_path, "w") as f:
             json.dump(manifest, f)
-            
-        # 2. Parallel Orchestration
-        neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-        neo4j_pass = os.getenv("NEO4J_PASSWORD", "nilBog1768@N")
-        
-        # Structural Indexing (Rust-native script)
-        # Note: ts_pack will be updated to consume JSON manifest
-        struct_script = f"""
-import tree_sitter_language_pack as ts_pack
-import os
-import sys
-import json
 
-project_path = "{project_path}"
-project_id = "{project_id}"
-neo4j_uri = "{neo4j_uri}"
-neo4j_user = "{neo4j_user}"
-neo4j_pass = "{neo4j_pass}"
-manifest_path = "{manifest_path}"
+        # 2. Register job
+        job_id = str(uuid.uuid4())[:8]
+        with _JOBS_LOCK:
+            _JOBS[job_id] = {
+                "status":      "running",
+                "project_id":  project_id,
+                "project_path": project_path,
+                "file_count":  len(manifest),
+                "struct_rc":   None,
+                "sem_rc":      None,
+                "logs":        [],
+                "started_at":  time.time(),
+                "finished_at": None,
+            }
 
-# Launch structural indexer
-# (Rust will be updated to look for --manifest-file)
-ts_pack.index_workspace(
-    path=project_path,
-    project_id=project_id,
-    neo4j_uri=neo4j_uri,
-    neo4j_user=neo4j_user,
-    neo4j_pass=neo4j_pass,
-    manifest_file=manifest_path
-)
-"""
-        
-        # Start both phases in parallel
-        struct_start = time.time()
-        struct_proc = subprocess.Popen([sys.executable, "-c", struct_script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
-        sem_start = time.time()
-        sem_cmd = [sys.executable, os.path.join(base_dir, "index_workspace.py"), project_path, project_id, "--manifest-file", manifest_path]
-        sem_proc = subprocess.Popen(sem_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
-        # Wait for both to complete
-        s_out, s_err = struct_proc.communicate()
-        sem_out, sem_err = sem_proc.communicate()
-        
-        struct_time = time.time() - struct_start
-        sem_time = time.time() - sem_start
-        
-        # Cleanup manifest
-        if os.path.exists(manifest_path):
-            os.remove(manifest_path)
-            
-        total_time = time.time() - start_total
-        
-        # Formatting instrumentation summary
-        summary = [
-            f"Indexing Complete: {project_id}",
-            f"----------------------------------------",
-            f"Discovery Phase: {discovery_time:.2f}s (Files: {len(manifest)})",
-            f"Structural Phase: {struct_time:.2f}s",
-            f"Semantic Phase: {sem_time:.2f}s",
-            f"Total End-to-End: {total_time:.2f}s",
-            f"----------------------------------------"
+        neo4j_uri  = os.getenv("LM_PROXY_NEO4J_URI",      "bolt://localhost:7687")
+        neo4j_user = os.getenv("LM_PROXY_NEO4J_USER",     "neo4j")
+        neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+
+        struct_cmd = [
+            sys.executable,
+            os.path.join(base_dir, "run_struct_index.py"),
+            project_path, project_id,
+            "--manifest-file", manifest_path,
+            "--neo4j-uri",  neo4j_uri,
+            "--neo4j-user", neo4j_user,
+            "--neo4j-pass", neo4j_pass,
         ]
-        
-        if struct_proc.returncode != 0:
-            summary.append(f"WARNING: Structural phase failed (see logs for details)")
-        if sem_proc.returncode != 0:
-            summary.append(f"WARNING: Semantic phase failed (see logs for details)")
-            
-        return "\n".join(summary)
-            
+        sem_cmd = [
+            sys.executable,
+            os.path.join(base_dir, "index_workspace.py"),
+            project_path, project_id,
+            "--manifest-file", manifest_path,
+        ]
+
+        # 3. Launch both phases in background (non-blocking)
+        struct_proc = subprocess.Popen(
+            struct_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        sem_proc = subprocess.Popen(
+            sem_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+
+        # Daemon threads — drain output and record exit codes
+        threading.Thread(
+            target=_drain_proc_output,
+            args=(struct_proc, job_id, "[struct]", "struct_rc"),
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=_drain_proc_output,
+            args=(sem_proc, job_id, "[semantic]", "sem_rc"),
+            daemon=True,
+        ).start()
+        # Finalize job (cleanup manifest, set status) when both phases done
+        threading.Thread(
+            target=_finalize_job,
+            args=(job_id, manifest_path),
+            daemon=True,
+        ).start()
+
+        return (
+            f"Indexing started in background.\n"
+            f"  job_id:      {job_id}\n"
+            f"  project_id:  {project_id}\n"
+            f"  files found: {len(manifest)}\n"
+            f"\nUse get_index_status('{job_id}') to monitor progress."
+        )
+
     except Exception as e:
-        return f"Error during indexing orchestration: {str(e)}"
+        return f"Error starting indexing: {e}"
+
+
+@mcp.tool()
+async def get_index_status(job_id: str) -> str:
+    """
+    Check the status of a background indexing job started by index_workspace.
+
+    Args:
+        job_id: The job ID returned by index_workspace.
+    """
+    import time
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            # Try to find by project partial match (convenience)
+            for jid, j in _JOBS.items():
+                if jid.startswith(job_id) or j.get("project_id", "").startswith(job_id):
+                    job = j
+                    job_id = jid
+                    break
+
+    if job is None:
+        active = list(_JOBS.keys())
+        return (
+            f"No job found for id '{job_id}'.\n"
+            f"Active jobs: {active if active else 'none'}"
+        )
+
+    status    = job["status"]
+    elapsed   = time.time() - job["started_at"]
+    finished  = job.get("finished_at")
+    struct_rc = job.get("struct_rc")
+    sem_rc    = job.get("sem_rc")
+    logs      = job.get("logs", [])
+
+    lines = [
+        f"Job {job_id}: {status.upper()}",
+        f"  project:    {job['project_path']}",
+        f"  project_id: {job['project_id']}",
+        f"  files:      {job['file_count']}",
+        f"  elapsed:    {elapsed:.1f}s",
+    ]
+    if struct_rc is not None:
+        lines.append(f"  struct:     exit {struct_rc} ({'ok' if struct_rc == 0 else 'FAILED'})")
+    else:
+        lines.append("  struct:     running…")
+    if sem_rc is not None:
+        lines.append(f"  semantic:   exit {sem_rc} ({'ok' if sem_rc == 0 else 'FAILED'})")
+    else:
+        lines.append("  semantic:   running…")
+    if finished:
+        lines.append(f"  finished:   {(finished - job['started_at']):.1f}s total")
+
+    if logs:
+        lines.append("\nRecent log lines (last 20):")
+        lines.extend(logs[-20:])
+
+    return "\n".join(lines)
+
 
 @mcp.tool()
 async def find_definitions(symbol_name: str) -> str:
@@ -679,22 +818,30 @@ async def get_graph_usage_guide() -> str:
     return """
 # GraphRAG MCP Usage Guide (Self-Documentation)
 
-This MCP provides a unified structural and semantic interface for your codebases, now powered entirely by Neo4j. 
+This MCP provides a unified structural and semantic interface for your codebases.
+Architecture: **Postgres/pgvector** handles semantic chunk storage and RRF hybrid search;
+**Neo4j** handles the structural graph (files, symbols, call relationships).
 
 ### Recommended Workflow for New Projects:
-1. **Onboarding**: If an agent enters a new repository, first call `index_workspace(project_path)`. This bootstraps both the structural graph and semantic embeddings.
-2. **Health Check**: Call `get_project_health(project_path)` to ensure indexing is 100% complete.
-3. **Initial Discovery**: Use `get_code_importance(project_path)` to find the PageRank-central files. These are your "Core" architectural files.
-4. **Memory Recall**: Use `search_memory(session_id, query, global_search=True)` to pull in relevant facts or history from across ALL indexed projects. Highly useful for cross-workspace context.
-5. **Cross-Project Search**: Use `find_definitions(symbol_name)` to locate code across ALL indexed projects. Highly useful for shared libraries or SDKs.
-6. **Modular Understanding**: Use `get_code_communities(project_path)` to see how the code is grouped into logical modules (Louvain Clustering).
-7. **Targeted Search**: Use `search_codebase(project_path, query)` for semantic retrieval of structural nodes.
-8. **Deep Dive**: Use `get_code_summary(project_path, symbol_name)` for a dense summary of a specific symbol.
+1. **Onboarding**: Call `index_workspace(project_path)` — returns immediately with a `job_id`.
+   - Monitor progress: `get_index_status(job_id)` — shows phase status and recent log lines.
+   - You can continue working while indexing runs in the background.
+2. **Health Check**: Call `get_project_health(project_path)` to verify indexing coverage.
+3. **Initial Discovery**: Use `get_code_importance(project_path)` for PageRank-central files.
+4. **Memory Recall**: Use `search_memory(session_id, query, global_search=True)` for cross-project context.
+5. **Cross-Project Search**: Use `find_definitions(symbol_name)` to locate symbols across all projects.
+6. **Modular Understanding**: Use `get_code_communities(project_path)` for Louvain-clustered module groups.
+7. **Targeted Search**: Use `search_codebase(project_path, query)` — Postgres RRF hybrid (cosine + BM25).
+8. **Deep Dive**: Use `get_code_summary(project_path, symbol_name)` for a dense symbol summary.
+
+### Background Indexing:
+- `index_workspace(project_path)` → non-blocking, returns `job_id` in ~1s
+- `get_index_status(job_id)` → poll for `RUNNING` / `DONE` / `FAILED` + last 20 log lines
 
 ### Pro Tips:
-- **Global Search**: `search_memory` can now bridge contexts between your different projects if you enable `global_search`.
-- **Graph Visualization**: Use `visualize_subgraph(project_path, symbol_name)` for Mermaid diagrams of relationships.
-- **Related Files**: Use `get_related_files(project_path, file_path)` for structural neighbors (who calls who).
+- **Graph Visualization**: `visualize_subgraph(project_path, symbol_name)` → Mermaid relationship diagram.
+- **Related Files**: `get_related_files(project_path, file_path)` → structural neighbors.
+- **Raw Graph**: `query_graph(cypher)` for arbitrary Neo4j Cypher queries.
 """
 
 @mcp.tool()
@@ -799,6 +946,7 @@ async def list_available_models() -> str:
     List models currently available in LM Studio via the proxy.
     """
     try:
+        _, _, _, _, proxy = _get_memory_modules()
         models_data = await proxy.fetch_lmstudio_models()
         keys = proxy.extract_model_keys(models_data)
         if keys:
@@ -918,13 +1066,68 @@ async def unwatch_project(project_path: str) -> str:
         return f"Stopped watching project: {abs_path}"
     return f"Project is not currently being watched: {abs_path}"
 
+# Global reference to the background task to allow cancellation
+_WATCHER_TASK: Optional[asyncio.Task] = None
+
+async def main():
+    """Main entrypoint with lifecycle management."""
+    global _WATCHER_TASK
+    
+    # 1. Startup phase: Restore watched projects
+    await _load_watched_config()
+    
+    # 2. Start background task manually
+    _WATCHER_TASK = asyncio.create_task(_poll_watcher())
+    print("[lm-proxy:watcher] Lifecycle startup complete.", file=sys.stderr)
+    
+    try:
+        # 3. Run MCP server using its async stdio transport
+        # Important: restore stdout just before starting the protocol
+        sys.stdout = _REAL_STDOUT
+        await mcp.run_stdio_async()
+    finally:
+        # 4. Shutdown phase: cancel background tasks and close pools
+        if _WATCHER_TASK:
+            print("[lm-proxy:watcher] Cancelling background task...", file=sys.stderr)
+            _WATCHER_TASK.cancel()
+            try:
+                await _WATCHER_TASK
+            except asyncio.CancelledError:
+                pass
+        
+        # Ensure we close Neo4j/Redis pools if initialized
+        try:
+            import memory_store
+            await memory_store.close_pool()
+        except ImportError:
+            pass
+        print("[lm-proxy:watcher] Lifecycle shutdown complete.", file=sys.stderr)
+
 if __name__ == "__main__":
-    # Restore stdout just before running the MCP server
-    sys.stdout = _REAL_STDOUT
+    import argparse
+    parser = argparse.ArgumentParser(description="GraphRAG MCP Server")
+    parser.add_argument("command", nargs="?", choices=["index_workspace"], help="Command to run")
+    parser.add_argument("path", nargs="?", help="Project path for indexing")
     
-    # Start the background watcher task
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(_load_watched_config())
-    loop.create_task(_poll_watcher())
+    args = parser.parse_args()
     
-    mcp.run()
+    if args.command == "index_workspace" and args.path:
+        # Run indexing directly
+        try:
+            from mcp.server.fastmcp import FastMCP
+            # We need to manually run the async tool
+            async def run_indexing():
+                print(f"Direct Indexing Triggered: {args.path}", file=sys.stderr)
+                result = await index_workspace(args.path)
+                print(result)
+                
+            asyncio.run(run_indexing())
+        except Exception as e:
+            print(f"Indexing Error: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Standard MCP server mode
+        try:
+            asyncio.run(main())
+        except (KeyboardInterrupt, SystemExit):
+            pass

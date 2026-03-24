@@ -51,9 +51,19 @@ async def init_graph_db() -> None:
         # Use single-property uniqueness (node.id) since Neo4j Community Edition 
         # doesn't support composite uniqueness constraints.
         async with _driver.session(database=_NEO4J_DB) as session:
-            # Single global identity constraint
+            # Uniqueness constraints — ensure all MERGE operations use NodeUniqueIndexSeek.
+            # Without these, Session/Project/Chunk MERGE falls back to NodeByLabelScan
+            # (confirmed by PROFILE: full label scan + Eager on Session).
             constraints = [
+                # Global structural node identity (already exists, kept for safety)
                 "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE",
+                # Session/Project: MERGE'd on every semantic batch — must use index
+                "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.id IS UNIQUE",
+                "CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE",
+                # Chunk: dedicated label constraint for vector index alignment
+                "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE",
+                # Relationship index: eliminates O(degree) edge scan in CONTAINS MERGE
+                "CREATE INDEX contains_idx IF NOT EXISTS FOR ()-[r:CONTAINS]-() ON (r.project_id)",
             ]
             
             for query in constraints:
