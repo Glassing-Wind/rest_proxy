@@ -763,7 +763,8 @@ async def _poll_watcher():
                         continue
                         
                     for f in files:
-                        if not f.endswith((".py", ".swift", ".js", ".ts", ".jsx", ".tsx", ".md")):
+                        # Watch all languages supported by the new TreeSitterGraphBuilder
+                        if not f.endswith((".py", ".swift", ".js", ".ts", ".jsx", ".tsx", ".md", ".rs", ".go", ".cpp", ".c", ".h", ".java", ".rb", ".php", ".cs", ".json", ".toml", ".yaml", ".yml")):
                             continue
                             
                         fpath = os.path.join(root, f)

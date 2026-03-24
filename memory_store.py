@@ -477,7 +477,7 @@ async def insert_embedding(
             m.project_id = $project_id,
             m.ref_type = $ref_type,
             m.text = $text,
-            m.vector = $vector,
+            m.embedding = $vector,
             m.metadata = $metadata,
             m.created_at = $created_at
         WITH m
@@ -809,8 +809,8 @@ async def search_codebase(
         // Find outgoing calls from this file's members to other symbols
         OPTIONAL MATCH (structural)-[:CALLS|INHERITS]->(neighbor)
         
-        RETURN node.file_path AS file_path, 
-               node.chunk_index AS chunk_index, 
+        RETURN f.rel_path AS file_path, 
+               node.metadata AS metadata_json,
                node.text AS content, 
                score AS rrf_score,
                collect(DISTINCT structural.name) AS file_symbols,
@@ -822,6 +822,14 @@ async def search_codebase(
             res = await session.run(cypher, k=k*3, vec=query_vector, pid=project_id)
             async for record in res:
                 data = record.data()
+                
+                # Extract chunk_index from metadata_json if missing on node
+                meta = {}
+                try:
+                    meta = json.loads(data.get("metadata_json", "{}"))
+                except: pass
+                data["chunk_index"] = meta.get("chunk_idx", 0)
+                
                 # Enriched content with structural hints
                 symbols = data.get("file_symbols", []) + data.get("neighboring_symbols", [])
                 if symbols:
