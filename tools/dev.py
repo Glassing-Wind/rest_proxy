@@ -452,16 +452,19 @@ def register(mcp: FastMCP) -> None:
             if not node:
                 return f"`{symbol_name}` not found in `{os.path.basename(file_path)}`."
 
-            sl = node.get("start_line")
-            el = node.get("end_line")
+            # ts-pack stores line info in span dict, 0-indexed
+            span = node.get("span") or {}
+            sl = span.get("start_line")
+            el = span.get("end_line")
             if sl is None or el is None:
                 return f"Found `{symbol_name}` but line range not available."
 
-            # ts-pack uses 1-indexed lines
-            body = "\n".join(lines_list[sl - 1 : el])
+            # Convert to 1-indexed for display and slicing
+            sl1, el1 = sl + 1, el + 1
+            body = "\n".join(lines_list[sl : el1])
             kind = node.get("kind", "")
             return (
-                f"## `{symbol_name}` ({kind})  —  L{sl}–{el}\n"
+                f"## `{symbol_name}` ({kind})  —  L{sl1}–{el1}\n"
                 f"```{lang}\n{body}\n```"
             )
         except Exception as e:
@@ -505,18 +508,19 @@ def register(mcp: FastMCP) -> None:
                 return f"Class/struct `{class_name}` not found in `{os.path.basename(file_path)}`."
 
             kind = cls_node.get("kind", "")
-            sl   = cls_node.get("start_line", "?")
-            el   = cls_node.get("end_line", "?")
+            cls_span = cls_node.get("span") or {}
+            sl   = (cls_span.get("start_line") or 0) + 1
+            el   = (cls_span.get("end_line")   or 0) + 1
             out  = [f"## `{class_name}` ({kind})  L{sl}–{el}\n"]
 
             for child in cls_node.get("children") or []:
                 child_kind = child.get("kind") or ""
                 if child_kind in ("Method", "Function", "Property", "Variable",
                                   "Const", "Enum", "Struct", "Class"):
-                    sig  = child.get("signature") or child.get("name") or "?"
-                    csl  = child.get("start_line", "")
-                    loc  = f"  (L{csl})" if csl else ""
-                    out.append(f"  {sig}{loc}")
+                    name = child.get("name") or "?"
+                    cspan = child.get("span") or {}
+                    csl   = (cspan.get("start_line") or 0) + 1
+                    out.append(f"  {name}  (L{csl})")
 
             if len(out) == 1:
                 out.append("  (no public members found)")
