@@ -1,159 +1,140 @@
-import subprocess
-import json
+"""skeleton_extractor — structural skeleton using ts_pack.
+
+Previously used SourceKitten (subprocess), Python's ast module, and a regex
+fallback. Now uses ts_pack.process() for all 156 supported languages with a
+single code path. Falls back to the regex heuristic for unknown file types.
+"""
 import logging
-import ast
 
 logger = logging.getLogger("lm_proxy.skeleton")
 
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def extract_skeleton(code: str, file_path: str) -> str:
-    """Extract structural skeleton based on file extension."""
-    if file_path.endswith(".swift"):
-        return _parse_swift(code)
-    elif file_path.endswith(".py"):
-        return _parse_python(code)
-    elif file_path.endswith((".js", ".ts", ".jsx", ".tsx")):
-        return _parse_regex_fallback(code)
-    return ""
+    """Extract a structural skeleton (classes, functions, etc.) from *code*.
 
-def _parse_swift(code: str) -> str:
-    """Use SourceKitten for perfect Swift AST parsing."""
+    Uses ts_pack.detect_language() for automatic language detection across
+    156 languages.  Returns a human-readable outline of top-level and nested
+    declarations.  Returns empty string if the file type is not supported or
+    the file is empty.
+    """
     try:
-        proc = subprocess.run(
-            ["sourcekitten", "structure", "--text", code],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if proc.returncode != 0:
-            logger.warning(f"SourceKitten failed: {proc.stderr[:200]}")
-            return _parse_regex_fallback(code)  # fall back if SK fails
-            
-        ast_data = json.loads(proc.stdout)
-        substructure = ast_data.get("key.substructure", [])
-        return _format_swift_ast(substructure, code)
+        import tree_sitter_language_pack as ts_pack
+
+        lang = ts_pack.detect_language(file_path)
+        if not lang:
+            return _parse_regex_fallback(code)
+
+        config = ts_pack.ProcessConfig(lang)
+        result = ts_pack.process(code, config)
+        structure = result.get("structure", [])
+        if not structure:
+            return ""
+
+        return _format_structure(structure)
+
     except Exception as e:
-        logger.warning(f"Error parsing Swift: {e}")
+        logger.warning(f"ts_pack skeleton extraction failed for {file_path}: {e}")
         return _parse_regex_fallback(code)
 
-def _format_swift_ast(nodes: list, code: str, indent: int = 0) -> str:
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+def _format_structure(items: list, indent: int = 0) -> str:
+    """Recursively format structure items as a readable skeleton."""
     lines = []
     prefix = "    " * indent
-    
-    for node in nodes:
-        kind = node.get("key.kind", "")
-        
-        # We care about classes, structs, enums, protocols, funcs, and vars.
-        # Ignore parameters inside functions
-        is_var = kind == "source.lang.swift.decl.var.instance" or kind == "source.lang.swift.decl.var.static"
-        is_type = kind in (
-            "source.lang.swift.decl.class", 
-            "source.lang.swift.decl.struct",
-            "source.lang.swift.decl.enum",
-            "source.lang.swift.decl.protocol",
-            "source.lang.swift.decl.extension"
-        )
-        is_func = kind.startswith("source.lang.swift.decl.function")
-        
-        if is_type or is_func or is_var:
-            # Extract the raw declaration text using byte offsets if available
-            offset = node.get("key.offset")
-            length = node.get("key.length")
-            body_offset = node.get("key.bodyoffset")
-            
-            if offset is not None and body_offset is not None:
-                # Capture just the signature (everything before the { body)
-                sig_len = body_offset - offset
-                sig = _extract_bytes(code, offset, sig_len).strip()
-                if sig.endswith("{"):
-                    sig = sig[:-1].strip()
-                
-                # Only recurse if it's a type (class/struct/etc). We don't want local vars inside funcs.
-                children = node.get("key.substructure", []) if is_type else []
-                
-                if children:
-                    lines.append(f"{prefix}{sig} {{")
-                    lines.append(_format_swift_ast(children, code, indent + 1))
-                    lines.append(f"{prefix}}}")
-                else:
-                    lines.append(f"{prefix}{sig} {{ ... }}")
-            elif offset is not None and length is not None:
-                # E.g. properties without bodies
-                sig = _extract_bytes(code, offset, length).strip()
-                lines.append(f"{prefix}{sig}")
-                
-    return "\n".join(lines)
 
-def _extract_bytes(s: str, offset: int, length: int) -> str:
-    """SourceKitten uses utf-8 byte offsets, not python string indices."""
-    return s.encode('utf-8')[offset:offset+length].decode('utf-8', errors='ignore')
+    for item in items:
+        kind     = item.get("kind", "")
+        name     = item.get("name", "?")
+        sig      = item.get("signature") or ""
+        children = item.get("children") or []
 
-def _parse_python(code: str) -> str:
-    """Use python's built-in AST module."""
-    try:
-        tree = ast.parse(code)
-        lines = []
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                lines.append(f"class {node.name}:")
-                for subnode in node.body:
-                    if isinstance(subnode, ast.FunctionDef):
-                        args = [a.arg for a in subnode.args.args]
-                        lines.append(f"    def {subnode.name}({', '.join(args)}): ...")
-                    elif isinstance(subnode, ast.AnnAssign) and isinstance(subnode.target, ast.Name):
-                        # Class attributes
-                        lines.append(f"    {subnode.target.id}: ...")
-            elif isinstance(node, ast.FunctionDef):
-                args = [a.arg for a in node.args.args]
-                lines.append(f"def {node.name}({', '.join(args)}): ...")
-        return "\n".join(lines)
-    except Exception as e:
-        logger.warning(f"Error parsing Python AST: {e}")
-        return _parse_regex_fallback(code)
+        # Build declaration line
+        if sig:
+            decl = sig
+        else:
+            # Synthesize a minimal declaration from kind + name
+            kind_kw = _KIND_KEYWORD.get(kind, kind.lower())
+            decl = f"{kind_kw} {name}"
+
+        if children:
+            lines.append(f"{prefix}{decl}:")
+            lines.append(_format_structure(children, indent + 1))
+        else:
+            lines.append(f"{prefix}{decl}: ...")
+
+    return "\n".join(l for l in lines if l)
+
+
+# Map ts_pack kind strings → more idiomatic keyword
+_KIND_KEYWORD: dict[str, str] = {
+    "Function": "def",
+    "Method":   "def",
+    "Class":    "class",
+    "Struct":   "struct",
+    "Enum":     "enum",
+    "Trait":    "trait",
+    "Interface":"interface",
+    "Module":   "mod",
+    "Const":    "const",
+    "Variable": "var",
+    "Type":     "type",
+}
+
+
+# ---------------------------------------------------------------------------
+# Regex fallback (kept for truly unknown file types)
+# ---------------------------------------------------------------------------
 
 def _parse_regex_fallback(code: str) -> str:
-    """A fast heuristic fallback for JS/TS/others."""
+    """Heuristic fallback for languages ts_pack cannot detect."""
     import re
-    lines = []
-    # Match basic structural declarations: class, func, const, let
     pattern = re.compile(
-        r'^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?'
-        r'(?:class\s+\w+|function\s+\w+\s*\(.*?\)|const\s+\w+\s*=|let\s+\w+\s*=)',
-        re.MULTILINE
+        r"^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?"
+        r"(?:class\s+\w+|function\s+\w+\s*\(.*?\)|const\s+\w+\s*=|let\s+\w+\s*=)",
+        re.MULTILINE,
     )
+    lines = []
     for match in pattern.finditer(code):
         decl = match.group(0).strip()
-        if decl.endswith('='):
-            decl += ' ...'
+        if decl.endswith("="):
+            decl += " ..."
         lines.append(decl)
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Legacy Swift doc lookup (kept for backward compat, now falls back to ts_pack)
+# ---------------------------------------------------------------------------
+
 def get_swift_docs(code: str, symbol_name: str) -> str:
-    """Use SourceKitten to find documentation for a specific symbol."""
+    """Find documentation for a Swift symbol.
+
+    Tries ts_pack structure first; previously used SourceKitten subprocess.
+    """
     try:
-        proc = subprocess.run(
-            ["sourcekitten", "structure", "--text", code],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if proc.returncode != 0:
-            return ""
-            
-        ast_data = json.loads(proc.stdout)
-        substructure = ast_data.get("key.substructure", [])
-        
-        # Deep search for the symbol and its doc comment
-        def find_doc(nodes):
-            for node in nodes:
-                if node.get("key.name") == symbol_name:
-                    doc = node.get("key.doc.comment")
+        import tree_sitter_language_pack as ts_pack
+        config = ts_pack.ProcessConfig("swift")
+        result = ts_pack.process(code, config)
+
+        def find_doc(items):
+            for item in items:
+                if item.get("name") == symbol_name:
+                    doc = item.get("doc_comment") or ""
                     if doc:
                         return doc
-                res = find_doc(node.get("key.substructure", []))
-                if res:
-                    return res
+                sub = find_doc(item.get("children") or [])
+                if sub:
+                    return sub
             return None
-            
-        return find_doc(substructure) or ""
+
+        return find_doc(result.get("structure", [])) or ""
     except Exception as e:
         logger.warning(f"Error extracting Swift docs: {e}")
         return ""

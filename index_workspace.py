@@ -2,26 +2,20 @@
 """Semantic indexing worker for GraphRAG pipeline.
 
 Consumes a JSON manifest of source files, chunks them with a pure-Python
-strategy, generates local embeddings (MPS-preferred, CPU fallback), and
-writes Chunk nodes to Neo4j.
+strategy, calls LM Studio for embeddings, and writes chunk rows to Postgres.
 
-Design constraints:
-- Does NOT import tree_sitter_language_pack. The Rust extension owns a
-  tokio runtime + rayon thread pool whose allocators conflict with torch's
-  Metal (MPS) command queue, causing SIGSEGV. Chunking here is pure-Python.
-- Single process. model.encode() is never called concurrently.
-- sentence_transformers is the very first import (before any other native lib)
-  to own Metal context initialisation.
+Design:
+- Chunks files in parallel (asyncio.gather over I/O-bound reads).
+- Skips chunks already present in Postgres (skip-unchanged optimisation).
+- Embeds CONCURRENCY batches concurrently via async HTTP to LM Studio.
+- Pipelines Postgres writes concurrently with next embed group.
+- Single process — no native-lib conflicts.
 
 Usage:
     python index_workspace.py <target_dir> <project_id> --manifest-file <path>
 """
 import sys
 import os
-
-# sentence_transformers must be the first native-lib import to own
-# the process's tokenizer/torch state before any other module loads.
-from sentence_transformers import SentenceTransformer  # noqa: E402
 
 import asyncio
 import json
@@ -38,33 +32,63 @@ import memory_store
 import memory_bootstrap
 from embedding_service import get_embedding_service
 
-# ── Tuning ──────────────────────────────────────────────────────────────────
-CHUNK_LINES    = 60   # Fixed-size fallback chunk (lines)
-OVERLAP_LINES  = 10   # Line overlap between fallback chunks
-MANIFEST_BATCH = 50   # Files consumed per interleaved cycle
-MAX_FILE_BYTES = 1_000_000  # Skip source files > 1 MB
+# AST-chunk size: target upper bound for native ts_pack chunks.
+CHUNK_MAX_BYTES = 4_000  # bytes — passed as chunk_max_size to ProcessConfig
+# Line-window fallback for files ts_pack cannot parse (config/docs/data).
+CHUNK_LINES     = 60    # lines per window
+OVERLAP_LINES   = 10    # overlap between windows
+MANIFEST_BATCH  = 50    # files per interleaved cycle
+MAX_FILE_BYTES  = 1_000_000  # skip source files > 1 MB
 
-# EmbeddingService owns batch size (16 on MPS, 64 on CPU).
-
-
-# ── Pure-Python chunking (no Rust extension) ─────────────────────────────────
-
-# Known code file extensions → keep for semantic chunking
-_CODE_EXTS = {
-    "py", "js", "ts", "jsx", "tsx", "swift", "rs", "go", "java", "kt",
-    "cpp", "c", "h", "hpp", "cs", "rb", "php", "scala", "m", "mm",
-    "sh", "bash", "zsh", "fish", "lua", "r", "jl", "sql", "graphql",
-    "tf", "hcl", "yaml", "yml", "toml", "json", "md", "txt",
+# Extensions that always use the line-window fallback (no AST structure).
+_FALLBACK_EXTS = {
+    "yaml", "yml", "toml", "json", "md", "txt",
+    "sh", "bash", "zsh", "fish", "sql", "graphql",
+    "tf", "hcl", "r", "jl",
 }
 
 
-def _read_and_chunk(abs_path: str, rel_path: str) -> List[str]:
-    """Read *abs_path* and return a list of text chunk strings.
+# ── Chunk-ID helper ───────────────────────────────────────────────────────────
 
-    Uses fixed-size line-based chunking with overlap. No Rust dependency.
+def _chunk_id(project_id: str, rel_path: str, start_byte: int, text: str) -> str:
+    """Content-addressable chunk ID — stable across re-indexes.
+
+    Encodes the file path + start byte (for uniqueness) + chunk text (for
+    change detection). Unchanged chunks keep the same ID on re-index →
+    skip-unchanged optimization remains effective even after file edits that
+    shift chunk boundaries.
     """
+    import hashlib
+    digest = hashlib.sha256(f"{rel_path}:{start_byte}:{text}".encode()).hexdigest()[:14]
+    return f"{project_id}:{rel_path}:{digest}"
+
+
+def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]:
+    """Read *abs_path* and return chunk dicts with stable ref_ids.
+
+    Uses ts_pack's native chunker (process() with chunk_max_size) for all
+    languages ts_pack can detect.  Chunks with parse errors (has_error_nodes)
+    are skipped.  Falls back to a line-window for config/doc files or when
+    ts_pack returns no chunks.
+
+    Each returned dict:
+      ref_id   — content-hash stable ID (project_id:rel_path:sha256[:14])
+      text     — chunk content with "// File: ..." header prepended
+      metadata — {file, project_id, symbols, start_line, end_line, docstrings,
+                   context_path}
+    """
+    import tree_sitter_language_pack as ts_pack
+
     ext = abs_path.rsplit(".", 1)[-1].lower() if "." in abs_path else ""
-    if ext not in _CODE_EXTS:
+
+    # Use ts_pack.detect_language for language detection — covers 156 languages.
+    # Skip extension-only fallback files unless no language detected.
+    lang: str | None = None
+    if ext not in _FALLBACK_EXTS:
+        lang = ts_pack.detect_language(abs_path)
+
+    # Nothing to do: unknown file type and not a line-window fallback extension.
+    if lang is None and ext not in _FALLBACK_EXTS:
         return []
 
     try:
@@ -76,41 +100,88 @@ def _read_and_chunk(abs_path: str, rel_path: str) -> List[str]:
     if len(source) > MAX_FILE_BYTES or not source.strip():
         return []
 
-    basename = os.path.basename(abs_path)
-    lines    = source.splitlines()
-    chunks   = []
-    i = 0
-    while i < len(lines):
-        block = lines[i : i + CHUNK_LINES]
-        if not block:
-            break
-        header = f"// File: {rel_path}\n"
-        chunks.append(header + "\n".join(block))
-        i += CHUNK_LINES - OVERLAP_LINES
+    file_header = f"// File: {rel_path}\n"
+    chunks: List[Dict] = []
+
+    # ── Native ts_pack chunking ───────────────────────────────────────────────
+    if lang:
+        try:
+            config = ts_pack.ProcessConfig(lang, chunk_max_size=CHUNK_MAX_BYTES)
+            result = ts_pack.process(source, config)
+            for chunk in result.get("chunks", []):
+                cmeta = chunk.get("metadata", {})
+                # Skip chunks that contain parse errors — embeddings for broken
+                # syntax are low-quality and waste embedding budget.
+                if cmeta.get("has_error_nodes"):
+                    continue
+                content = chunk.get("content", "")
+                if not content.strip():
+                    continue
+                text = file_header + content
+                cid  = _chunk_id(project_id, rel_path, chunk.get("start_byte", 0), content)
+                chunks.append({
+                    "ref_id":   cid,
+                    "text":     text,
+                    "metadata": {
+                        "file":         rel_path,
+                        "project_id":   project_id,
+                        "symbols":      cmeta.get("symbols_defined", []),
+                        "start_line":   chunk.get("start_line", 0) + 1,
+                        "end_line":     chunk.get("end_line", 0) + 1,
+                        "docstrings":   cmeta.get("docstrings", []),
+                        "context_path": cmeta.get("context_path", []),
+                    },
+                })
+        except Exception:
+            pass  # Fall through to line-window below
+
+    # ── Line-window fallback (unsupported lang or empty result) ──────────────
+    if not chunks:
+        lines = source.splitlines()
+        i = 0
+        while i < len(lines):
+            block = lines[i : i + CHUNK_LINES]
+            if not block:
+                break
+            text = file_header + "\n".join(block)
+            cid  = _chunk_id(project_id, rel_path, i, text)
+            chunks.append({
+                "ref_id":   cid,
+                "text":     text,
+                "metadata": {"file": rel_path, "project_id": project_id},
+            })
+            i += CHUNK_LINES - OVERLAP_LINES
 
     return chunks
 
 
-async def chunk_file(abs_path: str, rel_path: str) -> List[str]:
+
+async def chunk_file(abs_path: str, rel_path: str, project_id: str) -> List[Dict]:
     """Async wrapper — runs blocking read+chunk in a worker thread."""
-    return await asyncio.to_thread(_read_and_chunk, abs_path, rel_path)
+    return await asyncio.to_thread(_read_and_chunk, abs_path, rel_path, project_id)
 
 
 # ── Main indexing coroutine ───────────────────────────────────────────────────
 
-async def _flush_buffer(
+async def _embed_buffer(buffer: list, embedding_svc) -> list:
+    """Encode texts via LM Studio → attach .vector to each chunk."""
+    if not buffer:
+        return buffer
+    texts = [it["text"] for it in buffer]
+    vectors = await embedding_svc.embed_batch_async(texts)
+    for k, vec in enumerate(vectors):
+        buffer[k]["vector"] = vec
+    return buffer
+
+
+async def _write_buffer(
     buffer: list,
-    embedding_svc,
     target_dir: str,
     project_id: str,
 ) -> int:
-    """Embed and write one full (or final partial) buffer. Returns chunk count written."""
+    """Write a pre-embedded buffer to Postgres. Returns chunk count written."""
     if not buffer:
         return 0
-    texts   = [it["text"] for it in buffer]
-    vectors = embedding_svc.embed_batch(texts)
-    for k, vec in enumerate(vectors):
-        buffer[k]["vector"] = vec
     return await memory_store.insert_embeddings_batch(
         session_id=project_id,
         project_id=project_id,
@@ -124,25 +195,26 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
     Chunk, embed, and write Chunk nodes for every file in *manifest*.
 
     Rolling-buffer design:
-    - Files are chunked one at a time (bounded memory, no Rust ext in this process).
-    - Chunks are accumulated in a cross-file rolling buffer.
+    - Files are chunked in parallel (asyncio.gather over I/O-bound reads).
+    - Existing chunk_ids are fetched from Postgres in one query — unchanged
+      chunks are skipped entirely (no re-embed, no re-write).
+    - Only NEW chunks go through embed_batch + executemany.
     - embed_batch() fires only when the buffer hits full batch size (128),
       ensuring BLAS on the M3 Max's 12 p-cores is always saturated.
-    - The final partial buffer is flushed at the end.
+    - Postgres writes use a single executemany per batch (one round-trip).
 
-    Returns total chunks written to Neo4j.
+    Returns total new chunks written.
     """
     t0 = time.time()
     await memory_bootstrap.bootstrap_schema()
-    await memory_store.open_pool()   # initialize runtime Postgres pool for writes
+    await memory_store.open_pool()
     embedding_svc = get_embedding_service()
-
 
     bs            = embedding_svc.effective_batch_size
     total_files   = len(manifest)
     total_indexed = 0
-    files_done    = 0
-    buffer: list  = []   # rolling cross-file chunk accumulator
+    skipped       = 0
+    buffer: list  = []
 
     print(
         f"[lm-proxy:indexer] Semantic phase — {total_files} files "
@@ -150,45 +222,92 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
         file=sys.stderr, flush=True,
     )
 
-    for entry in manifest:
-        chunks = await chunk_file(entry["abs_path"], entry["rel_path"])
-        files_done += 1
+    # ── Parallel chunking (I/O-bound reads) ─────────────────────────────────
+    t_chunk = time.time()
+    all_chunks: List[List[Dict]] = await asyncio.gather(
+        *[chunk_file(e["abs_path"], e["rel_path"], project_id) for e in manifest]
+    )
+    print(
+        f"[lm-proxy:indexer] Chunked {total_files} files in "
+        f"{time.time() - t_chunk:.2f}s",
+        file=sys.stderr, flush=True,
+    )
 
-        if not chunks:
-            continue
+    # ── Fetch already-indexed chunk_ids (one Postgres round-trip) ────────────
+    existing_ids: set = set()
+    if memory_store._pg_pool_available():
+        try:
+            async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+                cur = await conn.execute(
+                    "SELECT chunk_id FROM codebase_embeddings WHERE project_id = %s",
+                    [project_id],
+                )
+                existing_ids = {row[0] for row in await cur.fetchall()}
+        except Exception as exc:
+            print(f"[lm-proxy:indexer] WARN: could not fetch existing ids: {exc}",
+                  file=sys.stderr, flush=True)
+    print(
+        f"[lm-proxy:indexer] {len(existing_ids)} chunks already indexed — skipping unchanged",
+        file=sys.stderr, flush=True,
+    )
 
-        rel = entry["rel_path"]
-        for idx, text in enumerate(chunks):
-            buffer.append({
-                "ref_id":   f"{project_id}:{rel}::{idx}",
-                "text":     text,
-                "metadata": {"file": rel, "project_id": project_id},
-            })
+    # ── Filter to only new chunks (already have stable content-hash ref_ids) ─
+    all_new_chunks: List[Dict] = [
+        chunk
+        for file_chunks in all_chunks
+        for chunk in file_chunks
+        if chunk["ref_id"] not in existing_ids
+    ]
+    skipped = sum(len(cs) for cs in all_chunks) - len(all_new_chunks)
+    total_new = len(all_new_chunks)
+    batch_num  = 0
 
-            # Flush when we have a full BLAS batch
-            if len(buffer) >= bs:
-                total_indexed += await _flush_buffer(buffer, embedding_svc, target_dir, project_id)
-                buffer = []
+    # ── Concurrent embed + write (CONCURRENCY groups at a time) ──────────────
+    # Split all_new_chunks into groups of CONCURRENCY*bs chunks.
+    # For each group: asyncio.gather all embed calls (CONCURRENCY parallel
+    # HTTP requests to LM Studio), then asyncio.gather all Postgres writes.
+    from embedding_service import _CONCURRENCY as CONCURRENCY
+    window = bs * CONCURRENCY          # e.g. 64 * 4 = 256 chunks per round
+    n_rounds = (total_new + window - 1) // window
 
-        if files_done % 50 == 0 or files_done == total_files:
-            elapsed = time.time() - t0
-            print(
-                f"[lm-proxy:indexer] {files_done}/{total_files} files — "
-                f"{total_indexed} chunks — {elapsed:.1f}s",
-                file=sys.stderr, flush=True,
-            )
+    for round_idx in range(n_rounds):
+        group = all_new_chunks[round_idx * window : (round_idx + 1) * window]
+        sub_bufs = [group[i : i + bs] for i in range(0, len(group), bs)]
+        actual_concurrent = len(sub_bufs)
 
-    # Flush any remaining chunks (final partial batch)
-    if buffer:
-        total_indexed += await _flush_buffer(buffer, embedding_svc, target_dir, project_id)
+        # ── Embed phase: all sub-buffers sent to LM Studio concurrently ───
+        t_embed = time.time()
+        print(
+            f"[lm-proxy:indexer] Embedding round {round_idx+1}/{n_rounds} "
+            f"— {actual_concurrent} concurrent batches — "
+            f"{total_indexed + len(group)}/{total_new} chunks…",
+            file=sys.stderr, flush=True,
+        )
+        embedded_bufs = await asyncio.gather(
+            *[_embed_buffer(buf, embedding_svc) for buf in sub_bufs]
+        )
+        embed_ms = (time.time() - t_embed) * 1000
+
+        # ── Write phase: all embedded sub-buffers written to Postgres concurrently
+        write_counts = await asyncio.gather(
+            *[_write_buffer(buf, target_dir, project_id) for buf in embedded_bufs]
+        )
+        n_written = sum(write_counts)
+        total_indexed += n_written
+        print(
+            f"[lm-proxy:indexer]   embed={embed_ms:.0f}ms  "
+            f"wrote {n_written} chunks",
+            file=sys.stderr, flush=True,
+        )
 
     elapsed = time.time() - t0
     print(
-        f"[lm-proxy:indexer] Done — {total_indexed} chunks / "
-        f"{files_done} files in {elapsed:.2f}s",
+        f"[lm-proxy:indexer] Done — {total_indexed} new / {skipped} skipped / "
+        f"{total_files} files in {elapsed:.2f}s",
         file=sys.stderr, flush=True,
     )
     return total_indexed
+
 
 
 

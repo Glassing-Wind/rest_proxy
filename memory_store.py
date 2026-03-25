@@ -525,11 +525,11 @@ async def insert_embeddings_batch(
     Insert a batch of codebase chunks.
 
     PRIMARY STORE: Postgres codebase_embeddings
+      Single executemany call per batch — one round-trip instead of N.
       ON CONFLICT (chunk_id) DO NOTHING — safe for re-index.
 
     SECONDARY: Neo4j lightweight Chunk reference node
       No embedding, no text — just id + project_id for graph traversal.
-      Session/Project linking in Neo4j also kept for graph queries.
     """
     if not _ENABLE_EMBEDDINGS or not batch:
         return 0
@@ -539,26 +539,43 @@ async def insert_embeddings_batch(
         if project_path and not project_id:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
 
-        # ── Phase 1: Postgres (primary) ──────────────────────────────────────
+        # ── Phase 1: Postgres batch upsert (single connection, one round-trip) ─
         written = 0
         if _pg_pool_available():
+            _now = time.time()
+            rows = []
             for item in batch:
                 chunk_id  = item["ref_id"]
                 meta      = item.get("metadata", {})
                 file_path = meta.get("file", "") if isinstance(meta, dict) else ""
                 chunk_idx = int(chunk_id.split("::")[-1]) if "::" in chunk_id else 0
-                ok = await insert_codebase_embedding(
-                    chunk_id    = chunk_id,
-                    project_id  = project_id,
-                    file_path   = file_path,
-                    chunk_index = chunk_idx,
-                    content     = item["text"],
-                    vector      = item["vector"],
-                    ref_type    = item.get("ref_type", "code_chunk"),
-                    metadata    = meta if isinstance(meta, dict) else {},
-                )
-                if ok:
-                    written += 1
+                vec       = item.get("vector", [])
+
+                if not isinstance(vec, list) or len(vec) != _EXPECTED_EMBEDDING_DIM:
+                    continue  # skip malformed vectors
+
+                vec_str   = "[" + ",".join(str(v) for v in vec) + "]"
+                meta_json = json.dumps(meta if isinstance(meta, dict) else {})
+                rows.append((
+                    chunk_id, project_id, file_path,
+                    item.get("ref_type", "code_chunk"), chunk_idx,
+                    item["text"], vec_str, meta_json, _now,
+                ))
+
+            if rows:
+                async with _pg_pool.connection() as conn:  # type: ignore[union-attr]
+                    async with conn.cursor() as cur:
+                        await cur.executemany(
+                            """
+                            INSERT INTO codebase_embeddings
+                              (chunk_id, project_id, file_path, ref_type, chunk_index,
+                               content, embedding, metadata, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s::vector, %s::jsonb, to_timestamp(%s))
+                            ON CONFLICT (chunk_id) DO NOTHING
+                            """,
+                            rows,
+                        )
+                written = len(rows)
         else:
             # No Postgres — fall back to Neo4j full write
             return await _neo4j_insert_embeddings_batch(session_id, project_id, batch)
@@ -604,6 +621,7 @@ MERGE (p)-[:HAS_EMBEDDING]->(m)
     except Exception as exc:
         _debug("insert_embeddings_batch_error", session_id=session_id, error=str(exc))
         return 0
+
 
 
 async def _neo4j_insert_embeddings_batch(
@@ -947,7 +965,7 @@ async def insert_codebase_embedding_graph(
 
         # Generate a stable ID for the chunk
         chunk_id = f"{project_id}:{file_path}:{chunk_index}"
-        # File ID follows the existing graph_indexer.py convention (project_id:file:path)
+        # File ID: project_id:file:path (matches structural graph convention)
         file_id = f"{project_id}:file:{file_path}"
         
         cypher = """
