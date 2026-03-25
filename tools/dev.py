@@ -364,54 +364,6 @@ def register(mcp: FastMCP) -> None:
         except Exception as e:
             return f"Error looking up docs: {str(e)}"
 
-    # ── ts-pack AST tools (no Neo4j required) ────────────────────────────────
-
-    @mcp.tool()
-    async def get_file_outline(file_path: str) -> str:
-        """
-        Generate a structural outline of any source file using tree-sitter AST.
-
-        Faster than describe_file — works on unindexed files, no Neo4j required.
-        Returns a hierarchical list of classes, functions, structs, and methods
-        with their line ranges.
-
-        Args:
-            file_path: Absolute path to any source file.
-        """
-        try:
-            import tree_sitter_language_pack as ts_pack
-            if not os.path.exists(file_path):
-                return "File not found."
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
-                code = fh.read()
-            lang = ts_pack.detect_language(file_path)
-            if not lang:
-                return f"Language not supported for `{os.path.basename(file_path)}`."
-            cfg    = ts_pack.ProcessConfig(lang)
-            result = ts_pack.process(code, config=cfg)
-
-            def _fmt(items: list, indent: int = 0) -> list[str]:
-                out = []
-                pad = "  " * indent
-                for item in items:
-                    name = item.get("name") or "?"
-                    kind = item.get("kind") or ""
-                    sig  = item.get("signature") or ""
-                    sl   = item.get("start_line", "")
-                    el   = item.get("end_line", "")
-                    loc  = f"  L{sl}–{el}" if sl else ""
-                    label = sig if sig else f"{kind} {name}"
-                    out.append(f"{pad}{label}{loc}")
-                    out.extend(_fmt(item.get("children") or [], indent + 1))
-                return out
-
-            lines = _fmt(result.get("structure") or [])
-            if not lines:
-                return f"No symbols found in `{os.path.basename(file_path)}`."
-            header = f"## {os.path.basename(file_path)}  ({lang})\n"
-            return header + "\n".join(lines)
-        except Exception as e:
-            return f"Error generating outline: {str(e)}"
 
     @mcp.tool()
     async def extract_function_body(file_path: str, symbol_name: str) -> str:

@@ -13,6 +13,18 @@ _JOBS: Dict[str, Dict[str, Any]] = {}
 _JOBS_LOCK = threading.Lock()
 _MAX_LOG_LINES = 200  # ring-buffer size per job
 
+# The main asyncio event loop, captured at server startup.
+# _finalize_job runs in a worker thread and must schedule async work
+# (import graph build) back onto this loop — not create a new one —
+# because the Neo4j async driver is bound to it.
+_MAIN_LOOP = None
+
+
+def register_main_loop(loop) -> None:
+    """Called once at server startup to store the running event loop."""
+    global _MAIN_LOOP
+    _MAIN_LOOP = loop
+
 
 def _drain_proc_output(proc, job_id: str, prefix: str, rc_key: str) -> None:
     """Drain stdout+stderr of *proc* into the job log ring-buffer.
@@ -58,3 +70,25 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
             ok = (struct_rc == 0 and sem_rc == 0)
             _JOBS[job_id]["status"]      = "done" if ok else "failed"
             _JOBS[job_id]["finished_at"] = _t.time()
+            project_path = _JOBS[job_id].get("project_path", "")
+
+    # Auto-build import graph after a successful index so IMPORTS edges
+    # are always fresh without requiring a manual follow-up call.
+    if ok and project_path and not project_path.startswith("docs://"):
+        try:
+            import asyncio
+            from tools.project import _build_import_graph_impl
+            if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    _build_import_graph_impl(project_path), _MAIN_LOOP
+                )
+                result = future.result(timeout=300)
+            else:
+                result = "Import graph skipped: main loop not available"
+            with _JOBS_LOCK:
+                if job_id in _JOBS:
+                    _JOBS[job_id]["logs"].append(f"[import-graph] {result}")
+        except Exception as e:
+            with _JOBS_LOCK:
+                if job_id in _JOBS:
+                    _JOBS[job_id]["logs"].append(f"[import-graph] skipped: {e}")

@@ -91,6 +91,81 @@ def register(mcp: FastMCP) -> None:
             return f"Error getting symbol context: {str(e)}"
 
     @mcp.tool()
+    async def get_call_chain(
+        project_path: str, symbol_name: str, depth: int = 3, direction: str = "down"
+    ) -> str:
+        """
+        Trace a call chain N hops deep from a starting symbol.
+
+        Unlike get_symbol_context (single hop), this recursively follows
+        CALLS edges to build a full call tree — ideal for understanding
+        execution paths and gRPC handler flows.
+
+        Args:
+            project_path: Absolute path to the project root.
+            symbol_name:  Starting symbol name.
+            depth:        How many hops to follow (default 3, max 5).
+            direction:    'down' (what this calls) or 'up' (what calls this).
+        """
+        try:
+            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            depth = min(int(depth), 5)
+            import graph_bootstrap
+            await graph_bootstrap.init_graph_db()
+            driver = graph_bootstrap.get_driver()
+
+            if direction == "up":
+                hop_label = "caller"
+                cypher = (
+                    f"MATCH path = (start {{name: $name, project_id: $pid}})"
+                    f"<-[:CALLS*1..{depth}]-(hop)"
+                    " WHERE (hop:Function OR hop:Method OR hop:Class)"
+                    " RETURN [n IN nodes(path) | n.name] AS chain,"
+                    "        [n IN nodes(path) | n.filepath] AS files"
+                    " LIMIT 40"
+                )
+            else:
+                hop_label = "callee"
+                cypher = (
+                    f"MATCH path = (start {{name: $name, project_id: $pid}})"
+                    f"-[:CALLS*1..{depth}]->(hop)"
+                    " WHERE (hop:Function OR hop:Method OR hop:Class)"
+                    " RETURN [n IN nodes(path) | n.name] AS chain,"
+                    "        [n IN nodes(path) | n.filepath] AS files"
+                    " LIMIT 40"
+                )
+
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                result = await session.run(cypher, name=symbol_name, pid=project_id)
+                rows = [rec async for rec in result]
+
+            if not rows:
+                return (
+                    f"`{symbol_name}` not found or no {hop_label}s within {depth} hops.\n"
+                    f"Make sure the project is indexed and the symbol name is exact."
+                )
+
+            # Build tree from chain paths — deduplicate and indent by depth
+            seen: set[str] = set()
+            out   = [f"## Call chain: `{symbol_name}` ({direction}, depth={depth})\n"]
+            for rec in rows:
+                chain = rec["chain"]
+                files = rec["files"]
+                for i in range(1, len(chain)):
+                    key = "→".join(chain[:i+1])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    pad  = "  " * i
+                    name = chain[i]
+                    fp   = (files[i] or "").split("/")[-1] if files[i] else "?"
+                    out.append(f"{pad}{'└─' if i > 1 else '  '} `{name}`  ({fp})")
+
+            return "\n".join(out)
+        except Exception as e:
+            return f"Error tracing call chain: {str(e)}"
+
+    @mcp.tool()
     async def get_code_importance(project_path: str) -> str:
         """
         Identify the most important files in a project by symbol density.
@@ -226,39 +301,194 @@ def register(mcp: FastMCP) -> None:
         of its most representative semantic chunk. Much faster than reading the
         raw file for orientation.
 
+        Replaces get_file_outline — works in two modes:
+        1. Fast outline (no index required):
+               describe_file("", "/abs/path/to/file.swift")
+               describe_file("", "relative/path.swift")   ← relative to cwd
+        2. Full description (ts-pack + Neo4j + Postgres semantic preview):
+               describe_file("/project/root", "relative/path.swift")
+
         Args:
-            project_path: Absolute path to the project root.
-            file_path: Relative path to the file within the project.
+            project_path: Absolute path to project root, or "" for abs-path-only mode.
+            file_path:    Relative path within project, or absolute path when project_path="".
         """
+        import os as _os
+
+        # Resolve absolute path
+        if not project_path:
+            abs_path  = _os.path.abspath(file_path)
+            file_path = abs_path  # use abs for display too
+        else:
+            abs_path = _os.path.join(project_path, file_path) if not _os.path.isabs(file_path) else file_path
+
+        basename = _os.path.basename(abs_path)
+        lines = [f"=== {file_path} ==="]
+
+        # ── 1. ts-pack on-disk AST (works even for unindexed files) ──────────
+        ts_symbols: list[str] = []
+        try:
+            import tree_sitter_language_pack as ts_pack
+            if _os.path.exists(abs_path):
+                with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    code = fh.read()
+                lang = ts_pack.detect_language(abs_path)
+                if lang:
+                    cfg = ts_pack.ProcessConfig(lang)
+                    cfg.diagnostics = True
+                    result = ts_pack.process(code, config=cfg)
+                    error_count = (result.get("metrics") or {}).get("error_count", 0)
+                    lang_label = f"  [{lang}]"
+                    if error_count:
+                        lang_label += f"  ⚠ {error_count} syntax error(s)"
+                    lines.append(lang_label)
+
+                    def _fmt(items: list, depth: int = 0) -> None:
+                        pad = "  " * depth
+                        for item in items:
+                            name = item.get("name") or "?"
+                            kind = item.get("kind") or ""
+                            sig  = item.get("signature") or ""
+                            span = item.get("span") or {}
+                            sl   = (span.get("start_line") or 0) + 1
+                            el   = (span.get("end_line") or 0) + 1
+                            loc  = f"  L{sl}–{el}" if sl else ""
+                            label = sig if sig else f"{kind} {name}"
+                            ts_symbols.append(f"{pad}  {label}{loc}")
+                            _fmt(item.get("children") or [], depth + 1)
+
+                    _fmt(result.get("structure") or [])
+        except Exception:
+            pass
+
+        # ── 2. Neo4j symbols (richer — includes signatures) ───────────────────
+        # Skip if no project context
+        use_syms = ts_symbols
+        if project_path:
+            try:
+                project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+                rel_path   = _os.path.relpath(abs_path, project_path) if project_path else file_path
+                file_id    = f"{project_id}:file:{rel_path}"
+                import graph_bootstrap
+                await graph_bootstrap.init_graph_db()
+                driver = graph_bootstrap.get_driver()
+                sym_cypher = """
+                MATCH (f:File {id: $fid})-[:CONTAINS]->(s)
+                WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Module
+                RETURN labels(s)[0] AS kind, s.name AS name,
+                       s.start_line AS start, s.end_line AS end,
+                       s.signature AS sig
+                ORDER BY s.start_line
+                """
+                neo_symbols: list[str] = []
+                async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                    result_q = await session.run(sym_cypher, fid=file_id)
+                    async for rec in result_q:
+                        loc = f":{rec['start']}-{rec['end']}" if rec["start"] else ""
+                        sig = f"  →  {rec['sig']}" if rec["sig"] else ""
+                        neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
+                use_syms = neo_symbols or ts_symbols
+            except Exception:
+                use_syms = ts_symbols
+
+        if use_syms:
+            lines.append(f"Symbols ({len(use_syms)}):")
+            lines.extend(use_syms[:40])
+        else:
+            lines.append("No symbols found.")
+
+        # ── 3. Postgres semantic preview (only in full mode) ──────────────────
+        if project_path:
+            try:
+                project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+                rel_path   = _os.path.relpath(abs_path, project_path)
+                memory_store, _, _, _, _ = get_memory_modules()
+                await memory_store.open_pool()
+                async with memory_store._pg_pool.connection() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.execute(
+                            "SELECT content FROM codebase_embeddings "
+                            "WHERE project_id = %s AND file_path = %s "
+                            "ORDER BY chunk_index LIMIT 1",
+                            (project_id, rel_path)
+                        )
+                        row = await cur.fetchone()
+                    if row:
+                        lines.append(f"\nFirst chunk preview:\n{row[0][:500].rstrip()}")
+            except Exception:
+                pass
+
+        return "\n".join(lines)
+
+
+        # ── 1. ts-pack on-disk AST (works even for unindexed files) ──────────
+        ts_symbols: list[str] = []
+        error_count = 0
+        try:
+            import tree_sitter_language_pack as ts_pack
+            if _os.path.exists(abs_path):
+                with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    code = fh.read()
+                lang = ts_pack.detect_language(abs_path)
+                if lang:
+                    cfg = ts_pack.ProcessConfig(lang)
+                    cfg.diagnostics = True
+                    result = ts_pack.process(code, config=cfg)
+                    error_count = (result.get("metrics") or {}).get("error_count", 0)
+                    lang_label = f"  [{lang}]"
+                    if error_count:
+                        lang_label += f"  ⚠ {error_count} syntax error(s)"
+                    lines.append(lang_label)
+
+                    def _collect(items: list, depth: int = 0) -> None:
+                        for item in items:
+                            span = item.get("span") or {}
+                            sl = (span.get("start_line") or 0) + 1
+                            el = (span.get("end_line") or 0) + 1
+                            prefix = "  " * depth
+                            ts_symbols.append(
+                                f"{prefix}  [{item.get('kind','')}] {item.get('name','?')}  L{sl}–{el}"
+                            )
+                            _collect(item.get("children") or [], depth + 1)
+
+                    _collect(result.get("structure") or [])
+        except Exception:
+            pass
+
+        # ── 2. Neo4j symbols (richer — includes signatures, imports) ─────────
         try:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             file_id = f"{project_id}:file:{file_path}"
             import graph_bootstrap
             await graph_bootstrap.init_graph_db()
             driver = graph_bootstrap.get_driver()
-
             sym_cypher = """
             MATCH (f:File {id: $fid})-[:CONTAINS]->(s)
             WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Module
             RETURN labels(s)[0] AS kind, s.name AS name,
                    s.start_line AS start, s.end_line AS end,
-                   s.signature AS sig, s.is_exported AS exported
+                   s.signature AS sig
             ORDER BY s.start_line
             """
-            lines = [f"=== {file_path} ==="]
+            neo_symbols: list[str] = []
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await session.run(sym_cypher, fid=file_id)
-                symbols = []
-                async for rec in result:
+                result_q = await session.run(sym_cypher, fid=file_id)
+                async for rec in result_q:
                     loc = f":{rec['start']}-{rec['end']}" if rec["start"] else ""
-                    sig = f"  →  {rec['sig']}" if rec['sig'] else ""
-                    symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
-                if symbols:
-                    lines.append(f"Symbols ({len(symbols)}):")
-                    lines.extend(symbols[:30])
-                else:
-                    lines.append("No symbols indexed for this file.")
+                    sig = f"  →  {rec['sig']}" if rec["sig"] else ""
+                    neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
+            use_syms = neo_symbols or ts_symbols
+        except Exception:
+            use_syms = ts_symbols
 
+        if use_syms:
+            lines.append(f"Symbols ({len(use_syms)}):")
+            lines.extend(use_syms[:30])
+        elif not ts_symbols:
+            lines.append("No symbols indexed for this file.")
+
+        # ── 3. Postgres semantic preview ─────────────────────────────────────
+        try:
+            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             memory_store, _, _, _, _ = get_memory_modules()
             await memory_store.open_pool()
             async with memory_store._pg_pool.connection() as conn:
@@ -272,10 +502,10 @@ def register(mcp: FastMCP) -> None:
                     row = await cur.fetchone()
                 if row:
                     lines.append(f"\nFirst chunk preview:\n{row[0][:500].rstrip()}")
+        except Exception:
+            pass
 
-            return "\n".join(lines)
-        except Exception as e:
-            return f"Error describing file: {str(e)}"
+        return "\n".join(lines)
 
     @mcp.tool()
     async def visualize_subgraph(project_path: str, symbol_name: str) -> str:

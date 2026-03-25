@@ -35,6 +35,8 @@ register_all(mcp)
 async def main() -> None:
     """Main entrypoint: restore watched projects, start watcher, run MCP server."""
     import tools.indexing as _idx
+    import _jobs
+    _jobs.register_main_loop(asyncio.get_running_loop())
 
     await _idx.load_watched_config()
 
