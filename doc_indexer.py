@@ -99,46 +99,85 @@ async def discover_pages(seed_url: str) -> List[str]:
     return pages
 
 
-# ── Crawl ────────────────────────────────────────────────────────────────────
+# Known JS-heavy domains that need a headless browser.
+# Static sites (GitHub raw, readthedocs plain, etc.) use the fast HTTP crawler.
+_JS_DOMAINS = {
+    "neo4j.com", "developer.apple.com", "reactnative.dev",
+    "docs.swift.org", "swift.org", "developer.mozilla.org",
+    "learn.microsoft.com", "docs.microsoft.com",
+}
+
 
 async def crawl_pages(urls: List[str]) -> List[Dict]:
-    """Crawl each URL with Crawl4AI. Returns list of {url, html, title}."""
-    import fcntl, tempfile
-    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+    """Crawl each URL using crawlee. Returns list of {url, markdown, title}.
 
-    browser_cfg = BrowserConfig(headless=True, verbose=False)
-    run_cfg     = CrawlerRunConfig(
-        page_timeout=20_000,        # ms
-        wait_until="domcontentloaded",
-        exclude_external_links=True,
+    Routes URLs to the right engine:
+    - ParselCrawler  (fast HTTP)      for plain/static sites
+    - PlaywrightCrawler (JS headless) for JS-rendered domains in _JS_DOMAINS
+    """
+    import trafilatura
+    from crawlee.crawlers import (
+        ParselCrawler, ParselCrawlingContext,
+        PlaywrightCrawler, PlaywrightCrawlingContext,
     )
 
-    # crawl4ai's RobotsParser opens a shared SQLite DB in __init__.
-    # Serialize that init across concurrent doc-crawl subprocesses with a
-    # file-based exclusive lock so only one process runs it at a time.
-    lock_path = os.path.join(tempfile.gettempdir(), "crawl4ai_init.lock")
-    with open(lock_path, "w") as _lf:
-        fcntl.flock(_lf.fileno(), fcntl.LOCK_EX)
-        try:
-            crawler_cm = AsyncWebCrawler(config=browser_cfg)
-        finally:
-            fcntl.flock(_lf.fileno(), fcntl.LOCK_UN)
+    results: List[Dict] = []
 
-    results = []
-    async with crawler_cm as crawler:
-        for url in urls:
-            try:
-                r = await crawler.arun(url=url, config=run_cfg)
-                md = r.markdown or ""
-                if r.success and md:
-                    if len(md) > MAX_PAGE_BYTES:
-                        print(f"[doc-indexer] skip (too large): {url}", flush=True)
-                        continue
-                    title = r.metadata.get("title", "") if r.metadata else ""
-                    results.append({"url": url, "markdown": md, "title": title})
-            except Exception as e:
-                print(f"[doc-indexer] crawl error {url}: {e}", file=sys.stderr, flush=True)
+    js_urls   = [u for u in urls if any(d in u for d in _JS_DOMAINS)]
+    http_urls = [u for u in urls if u not in set(js_urls)]
+
+    # ── Fast HTTP crawl (ParselCrawler) ───────────────────────────────────────
+    if http_urls:
+        http_crawler = ParselCrawler(max_requests_per_crawl=len(http_urls))
+
+        @http_crawler.router.default_handler
+        async def _http_handler(context: ParselCrawlingContext) -> None:
+            html  = context.parsel.css("body").get("") or ""
+            md    = trafilatura.extract(
+                html, include_links=False, output_format="markdown",
+                favor_precision=True,
+            ) or ""
+            title = context.parsel.css("title::text").get("") or ""
+            if md.strip():
+                results.append({"url": context.request.url, "markdown": md, "title": title})
+                print(f"[doc-indexer] crawled (http) {context.request.url} — {len(md)} chars", flush=True)
+
+        try:
+            await http_crawler.run(http_urls)
+        except Exception as e:
+            print(f"[doc-indexer] HTTP crawler error: {e}", file=sys.stderr, flush=True)
+
+    # ── JS headless crawl (PlaywrightCrawler) ─────────────────────────────────
+    if js_urls:
+        pw_crawler = PlaywrightCrawler(
+            max_requests_per_crawl=len(js_urls),
+            headless=True,
+        )
+
+        @pw_crawler.router.default_handler
+        async def _pw_handler(context: PlaywrightCrawlingContext) -> None:
+            # Wait for JS to settle, then grab full rendered HTML
+            await context.page.wait_for_load_state("networkidle", timeout=20_000)
+            html  = await context.page.content()
+            md    = trafilatura.extract(
+                html, include_links=False, output_format="markdown",
+                favor_precision=True,
+            ) or ""
+            title = await context.page.title()
+            if md.strip():
+                if len(md.encode()) > MAX_PAGE_BYTES:
+                    print(f"[doc-indexer] skip (too large): {context.request.url}", flush=True)
+                    return
+                results.append({"url": context.request.url, "markdown": md, "title": title})
+                print(f"[doc-indexer] crawled (js) {context.request.url} — {len(md)} chars", flush=True)
+
+        try:
+            await pw_crawler.run(js_urls)
+        except Exception as e:
+            print(f"[doc-indexer] Playwright crawler error: {e}", file=sys.stderr, flush=True)
+
     return results
+
 
 
 # ── Extract ──────────────────────────────────────────────────────────────────

@@ -1,0 +1,12 @@
+{
+  "sequence_counter": 1,
+  "forefront_sequence_counter": 0,
+  "forefront_requests": {},
+  "regular_requests": {
+    "https://raw.githubusercontent.com/neo4j/neo4j-python-driver/5.x/readme.rst": 0
+  },
+  "in_progress_requests": [],
+  "handled_requests": [
+    "https://raw.githubusercontent.com/neo4j/neo4j-python-driver/5.x/readme.rst"
+  ]
+}
