@@ -16,6 +16,9 @@ venv.bak/
 *.log
 lm_proxy_state.json
 
+# Crawlee runtime storage (request queues, statistics — never commit)
+storage/
+
 # VS Code
 .vscode/
 

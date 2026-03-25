@@ -116,6 +116,12 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
     - PlaywrightCrawler (JS headless) for JS-rendered domains in _JS_DOMAINS
     """
     import trafilatura
+    # Crawlee writes request queues + datasets to ./storage/ by default.
+    # In subprocess context cwd may be read-only, so redirect to /tmp.
+    _storage = f"/tmp/crawlee_{os.getpid()}"
+    os.makedirs(_storage, exist_ok=True)
+    os.environ["CRAWLEE_STORAGE_DIR"] = _storage
+
     from crawlee.crawlers import (
         ParselCrawler, ParselCrawlingContext,
         PlaywrightCrawler, PlaywrightCrawlingContext,
@@ -127,8 +133,12 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
     http_urls = [u for u in urls if u not in set(js_urls)]
 
     # ── Fast HTTP crawl (ParselCrawler) ───────────────────────────────────────
+    http_urls = [u for u in http_urls if not u.lower().endswith(".pdf")]  # ParselCrawler can't parse binary PDFs
     if http_urls:
-        http_crawler = ParselCrawler(max_requests_per_crawl=len(http_urls))
+        http_crawler = ParselCrawler(
+            max_requests_per_crawl=len(http_urls),
+            max_request_retries=1,
+        )
 
         @http_crawler.router.default_handler
         async def _http_handler(context: ParselCrawlingContext) -> None:
@@ -149,15 +159,32 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
 
     # ── JS headless crawl (PlaywrightCrawler) ─────────────────────────────────
     if js_urls:
+        from datetime import timedelta
         pw_crawler = PlaywrightCrawler(
             max_requests_per_crawl=len(js_urls),
             headless=True,
+            max_request_retries=1,
+            request_handler_timeout=timedelta(seconds=45),
         )
+
+        # Set navigation options BEFORE crawlee navigates (avoids double-navigate deadlock).
+        @pw_crawler.pre_navigation_hook
+        async def _pre_nav(context: PlaywrightCrawlingContext) -> None:
+            context.page.set_default_navigation_timeout(60_000)
+            # Block bandwidth-heavy assets that don't affect text content
+            await context.page.route(
+                "**/*.{png,jpg,jpeg,gif,svg,ico,woff,woff2,ttf,eot,mp4,webm}",
+                lambda route: route.abort(),
+            )
+            await context.page.route(
+                "**/{gtm,analytics,hotjar,segment,intercom,drift,hubspot}*",
+                lambda route: route.abort(),
+            )
+
 
         @pw_crawler.router.default_handler
         async def _pw_handler(context: PlaywrightCrawlingContext) -> None:
-            # Wait for JS to settle, then grab full rendered HTML
-            await context.page.wait_for_load_state("networkidle", timeout=20_000)
+            # Page is already navigated by crawlee at this point — just read content.
             html  = await context.page.content()
             md    = trafilatura.extract(
                 html, include_links=False, output_format="markdown",
@@ -175,6 +202,7 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
             await pw_crawler.run(js_urls)
         except Exception as e:
             print(f"[doc-indexer] Playwright crawler error: {e}", file=sys.stderr, flush=True)
+
 
     return results
 
