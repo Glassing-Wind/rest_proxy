@@ -30,9 +30,10 @@ Architecture: **Postgres/pgvector** handles semantic chunk storage and RRF hybri
 2. **Health + Overview**: Call `get_project_overview(project_path)` — health, architecture clusters, and key files in one shot.
 3. **Initial Discovery**: Use `get_code_importance(project_path)` for PageRank-central files.
 4. **Memory Recall**: Use `search_memory(session_id, query, global_search=True)` for cross-project context.
+   - Use `list_memories(session_id, include_global=True)` to audit what's already stored.
 5. **Cross-Project Search**: Use `find_definitions(symbol_name)` to locate symbols across all projects.
 6. **Modular Understanding**: Use `get_code_communities(project_path)` for Louvain-clustered module groups.
-7. **Targeted Search**: Use `search_codebase(project_path, query)` — Postgres RRF hybrid (cosine + BM25).
+7. **Targeted Search**: Use `search_codebase([project_path], query)` — pass a list; single-element for one project, multi-element for cross-project (results annotated with source).
 8. **Deep Dive**: Use `get_symbol_context(project_path, symbol_name)` — definition + callers + callees + source.
 
 ### Call Graph Traversal (multi-hop):
@@ -71,6 +72,26 @@ Architecture: **Postgres/pgvector** handles semantic chunk storage and RRF hybri
 - **Raw Graph**: `query_graph(cypher)` for arbitrary Neo4j Cypher queries.
 - **Cross-Project Trace**: `trace_symbol_cross_project(symbol, source_project, target_project)` → gRPC service → client.
 - **Test Coverage**: `get_test_coverage_for(project_path, file_path)` → find which tests cover a file.
+
+### Proactive Memory Management:
+You are expected to proactively add memories when you make significant technical discoveries,
+not just when the user explicitly asks you to. After any session where you:
+- Discover a non-obvious configuration requirement (e.g. env var, flag, path convention)
+- Fix a subtle bug or identify a known gotcha in a library
+- Decide on an architectural pattern for this project
+- Confirm an API works (or doesn't work) in a specific way
+
+→ Call `add_memory(session_id, text)` to persist the finding.
+→ Call `list_memories(session_id, include_global=True)` first to avoid storing duplicates.
+→ Keep memories concise (1–2 sentences max) and factual — avoid storing process notes.
+
+Examples of GOOD memories:
+  "github.com requires PlaywrightCrawler (JS-rendered) — ParselCrawler gets only HTML shell"
+  "crawlee CRAWLEE_STORAGE_DIR must be /tmp/crawlee_<pid> in subprocess to avoid read-only errors"
+  "PlaywrightCrawler.pre_navigation_hook confirmed supported in crawlee 1.6.0"
+
+Examples of BAD memories (too vague or ephemeral):
+  "We discussed crawlee today" / "Fixed a bug" / "User wants better performance"
 """
 
 

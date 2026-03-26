@@ -1254,11 +1254,11 @@ async def add_durable_memory(session_id: str, text: str, is_global: bool = False
             cypher = "CREATE (i:Instruction {text: $text, created_at: timestamp()})"
             params = {"text": text}
         else:
-            # Create preference and link to project
+            # MERGE project so memories work even for non-indexed project IDs
             cypher = """
-            MATCH (proj:Project {id: $pid})
+            MERGE (proj:Project {id: $pid})
             CREATE (pref:UserPreference {
-                instruction: $text, 
+                instruction: $text,
                 name: 'User Added Memory',
                 created_at: timestamp()
             })
@@ -1273,3 +1273,64 @@ async def add_durable_memory(session_id: str, text: str, is_global: bool = False
     except Exception as e:
         _debug("add_durable_memory_error", error=str(e))
         return False
+
+
+async def list_durable_memories(
+    session_id: str,
+    include_global: bool = False,
+) -> list[dict]:
+    """
+    List all durable memories stored for a session/project.
+
+    Returns a list of dicts with keys: text, is_global, created_at.
+    Sorted newest-first.
+    """
+    try:
+        import graph_bootstrap
+        if not graph_bootstrap._NEO4J_ENABLED:
+            return []
+        driver = graph_bootstrap.get_driver()
+        if not driver:
+            return []
+
+        project_id = session_id.split(":")[0] if ":" in session_id else session_id
+        memories: list[dict] = []
+
+        # Session-scoped memories (UserPreference nodes)
+        pref_cypher = """
+        MATCH (proj:Project {id: $pid})-[:PREFERS_ENV]->(pref:UserPreference)
+        RETURN pref.instruction AS text, pref.created_at AS created_at
+        ORDER BY pref.created_at DESC
+        """
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
+            res = await s.run(pref_cypher, pid=project_id)
+            async for record in res:
+                memories.append({
+                    "text": record["text"],
+                    "is_global": False,
+                    "created_at": record["created_at"],
+                })
+
+        # Global memories (Instruction nodes)
+        if include_global:
+            inst_cypher = """
+            MATCH (i:Instruction)
+            RETURN i.text AS text, i.created_at AS created_at
+            ORDER BY i.created_at DESC
+            """
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
+                res = await s.run(inst_cypher)
+                async for record in res:
+                    memories.append({
+                        "text": record["text"],
+                        "is_global": True,
+                        "created_at": record["created_at"],
+                    })
+
+        # Sort newest-first across both sources
+        memories.sort(key=lambda m: m.get("created_at") or 0, reverse=True)
+        return memories
+
+    except Exception as e:
+        _debug("list_durable_memories_error", error=str(e))
+        return []

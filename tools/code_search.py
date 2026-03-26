@@ -8,52 +8,19 @@ from _helpers import get_memory_modules
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def search_codebase(project_path: str, query: str, k: int = 5) -> str:
+    async def search_codebase(project_paths: list, query: str, k: int = 5) -> str:
         """
-        Perform a hybrid semantic search over the codebase.
-        Returns the most relevant code chunks with graph context.
+        Perform a hybrid semantic search over one or more codebases simultaneously.
+        Results are ranked by relevance using RRF (vector + full-text).
 
-        Args:
-            project_path: Absolute path to the project root.
-            query: The search query (natural language or code snippet).
-            k: Number of results to return (default 5).
-        """
-        try:
-            from embedding_service import get_embedding_service
-            memory_store, _, _, _, _ = get_memory_modules()
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
-            svc = get_embedding_service()
-            vecs = await svc.embed_batch_async([query])
-            query_vector = vecs[0]
-            if not query_vector:
-                return "Error: Could not generate embedding for query."
-            await memory_store.open_pool()
-            results = await memory_store.search_codebase(
-                project_id=project_id, query_vector=query_vector, query_text=query, k=k
-            )
-            if not results:
-                return "No matching code found."
-            output = []
-            for r in results:
-                output.append(f"--- {r['file_path']} (Score: {r['rrf_score']:.4f}) ---\n{r['content']}")
-            return "\n\n".join(output)
-        except Exception as e:
-            return f"Error searching codebase: {str(e)}"
-
-    @mcp.tool()
-    async def search_multi_project(project_paths: list, query: str, k: int = 5) -> str:
-        """
-        Perform a hybrid semantic search across multiple codebases simultaneously.
-        Results are merged and ranked by relevance, each annotated with its source project.
-
-        Ideal for cross-project work: e.g. finding how a gRPC service is defined
-        server-side (draw-things-community) and consumed client-side (FrameCreator)
-        in a single call.
+        Pass a single-element list for single-project search, or multiple paths
+        for cross-project search — results are merged and annotated with their
+        source project in the multi-project case.
 
         Args:
             project_paths: List of absolute paths to project roots to search across.
             query: Natural language or code snippet to search for.
-            k: Total number of results to return across all projects (default 5).
+            k: Total number of results to return (default 5).
         """
         try:
             import asyncio
@@ -63,7 +30,8 @@ def register(mcp: FastMCP) -> None:
             if not project_paths:
                 return "Error: provide at least one project path."
 
-            # Embed query once
+            multi = len(project_paths) > 1
+
             svc = get_embedding_service()
             vecs = await svc.embed_batch_async([query])
             query_vector = vecs[0]
@@ -71,21 +39,19 @@ def register(mcp: FastMCP) -> None:
                 return "Error: Could not generate embedding for query."
 
             vec_str = "[" + ",".join(str(v) for v in query_vector) + "]"
-            fetch   = min(k * 5, 80)  # over-fetch per project before merging
+            fetch   = min(k * 5, 80)
 
             await memory_store.open_pool()
 
-            # Build project_id → short project name mapping
             pid_to_name: dict[str, str] = {}
             for p in project_paths:
                 pid = hashlib.md5(p.encode()).hexdigest()[:12]
                 pid_to_name[pid] = p.rstrip("/").split("/")[-1]
 
-            # Query each project in parallel
             async def _search_project(pid: str) -> list[dict]:
                 async with memory_store._pg_pool.connection() as conn:
                     async with conn.cursor() as cur:
-                        await cur.execute("""
+                        await cur.execute("""\
                             WITH semantic AS (
                                 SELECT file_path, chunk_index, content, project_id,
                                        ROW_NUMBER() OVER (
@@ -130,21 +96,28 @@ def register(mcp: FastMCP) -> None:
 
             if not all_results:
                 projects = ", ".join(f"'{n}'" for n in pid_to_name.values())
-                return f"No matching code found across {projects}.\nEnsure projects are indexed with index_workspace()."
+                return f"No matching code found in {projects}.\nEnsure projects are indexed with index_workspace()."
 
-            # Global RRF re-rank across projects
             all_results.sort(key=lambda r: r["rrf"], reverse=True)
             top = all_results[:k]
 
-            lines = [f"Cross-project search: '{query}'  ({len(pid_to_name)} projects)\n"]
+            lines = []
+            if multi:
+                lines.append(f"Cross-project search: '{query}'  ({len(pid_to_name)} projects)\n")
+
             for i, r in enumerate(top, 1):
                 proj = pid_to_name.get(r["project_id"], r["project_id"])
-                lines.append(f"[{i}] [{proj}] {r['file_path']}  (score: {r['rrf']:.4f})")
+                if multi:
+                    lines.append(f"[{i}] [{proj}] {r['file_path']}  (score: {r['rrf']:.4f})")
+                else:
+                    lines.append(f"--- {r['file_path']} (Score: {r['rrf']:.4f}) ---")
                 lines.append(r["content"].strip())
                 lines.append("")
+
             return "\n".join(lines)
         except Exception as e:
-            return f"Error in multi-project search: {str(e)}"
+            return f"Error searching codebase: {str(e)}"
+
 
     @mcp.tool()
     async def trace_symbol_cross_project(

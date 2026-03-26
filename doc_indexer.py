@@ -105,6 +105,8 @@ _JS_DOMAINS = {
     "neo4j.com", "developer.apple.com", "reactnative.dev",
     "docs.swift.org", "swift.org", "developer.mozilla.org",
     "learn.microsoft.com", "docs.microsoft.com",
+    "github.com",           # issues/PRs/discussions are fully JS-rendered
+    "stackoverflow.com",    # question pages are JS-rendered
 }
 
 
@@ -137,20 +139,27 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
     if http_urls:
         http_crawler = ParselCrawler(
             max_requests_per_crawl=len(http_urls),
-            max_request_retries=1,
+            max_request_retries=2,
+            use_session_pool=True,              # manage cookies/sessions to avoid bot detection
+            additional_http_error_status_codes=[429, 503],  # treat rate-limits as retryable errors
         )
 
         @http_crawler.router.default_handler
         async def _http_handler(context: ParselCrawlingContext) -> None:
-            html  = context.parsel.css("body").get("") or ""
+            # context.selector is the Parsel Selector for the crawled page
+            html  = context.selector.get() or ""
             md    = trafilatura.extract(
                 html, include_links=False, output_format="markdown",
                 favor_precision=True,
             ) or ""
-            title = context.parsel.css("title::text").get("") or ""
+            title = context.selector.css("title::text").get("") or ""
             if md.strip():
                 results.append({"url": context.request.url, "markdown": md, "title": title})
                 print(f"[doc-indexer] crawled (http) {context.request.url} — {len(md)} chars", flush=True)
+
+        @http_crawler.failed_request_handler
+        async def _http_error(context: ParselCrawlingContext, error: Exception) -> None:
+            print(f"[doc-indexer] HTTP failed (all retries): {context.request.url} — {error}", file=sys.stderr, flush=True)
 
         try:
             await http_crawler.run(http_urls)
@@ -163,8 +172,14 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
         pw_crawler = PlaywrightCrawler(
             max_requests_per_crawl=len(js_urls),
             headless=True,
-            max_request_retries=1,
+            max_request_retries=2,
             request_handler_timeout=timedelta(seconds=45),
+            retry_on_blocked=True,              # auto-bypass bot protections
+            use_session_pool=True,              # manage cookies/sessions across requests
+            additional_http_error_status_codes=[429, 503],  # retry rate-limits automatically
+            browser_launch_options={
+                "args": ["--disable-dev-shm-usage"],  # prevent Chromium OOM in subprocess
+            },
         )
 
         # Set navigation options BEFORE crawlee navigates (avoids double-navigate deadlock).
@@ -197,6 +212,10 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
                     return
                 results.append({"url": context.request.url, "markdown": md, "title": title})
                 print(f"[doc-indexer] crawled (js) {context.request.url} — {len(md)} chars", flush=True)
+
+        @pw_crawler.failed_request_handler
+        async def _pw_error(context: PlaywrightCrawlingContext, error: Exception) -> None:
+            print(f"[doc-indexer] JS failed (all retries): {context.request.url} — {error}", file=sys.stderr, flush=True)
 
         try:
             await pw_crawler.run(js_urls)

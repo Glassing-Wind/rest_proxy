@@ -246,7 +246,7 @@ def register(mcp: FastMCP) -> None:
                     lines.append(f"    Path:  {' > '.join(ctx)}")
                 lines.append(f"    Score: {r['rrf_score']:.4f}")
                 lines.append("")
-                lines.append(f"    {r['content'][:400].strip().replace(chr(10), ' ')}…")
+                lines.append(f"    {r['content'][:600].strip().replace(chr(10), ' ')}…")
                 lines.append("")
             return "\n".join(lines)
 

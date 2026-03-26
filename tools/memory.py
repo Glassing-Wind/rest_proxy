@@ -33,6 +33,14 @@ def register(mcp: FastMCP) -> None:
         Store a durable memory or instruction. This is NOT for temporary conversation turns,
         but for persistent facts or rules that should guide the agent's behavior.
 
+        YOU (the agent) should call this proactively — not just when the user asks.
+        After discovering a non-obvious config requirement, a library gotcha, an API
+        confirmation, or an architectural decision, store it here so future sessions
+        on this project benefit immediately.
+
+        Before adding, call list_memories() to check for duplicates.
+        Keep text concise (1–2 sentences), factual, and actionable.
+
         Args:
             session_id: The unique identifier for the session/project.
             text: The instruction or fact to remember.
@@ -65,3 +73,38 @@ def register(mcp: FastMCP) -> None:
             return "No summary available for this session."
         except Exception as e:
             return f"Error retrieving summary: {str(e)}"
+
+    @mcp.tool()
+    async def list_memories(session_id: str, include_global: bool = False) -> str:
+        """
+        List all durable memories stored for a session/project.
+        Useful for auditing what has been remembered, or deciding what to prune.
+
+        Args:
+            session_id:      The session or project identifier.
+            include_global:  If True, also include global Instruction memories
+                             (visible across all sessions/projects).
+        """
+        try:
+            memory_store, _, _, _, _ = get_memory_modules()
+            if memory_store._ENABLE_PERSISTENCE:
+                await memory_store.open_pool()
+            memories = await memory_store.list_durable_memories(
+                session_id, include_global=include_global
+            )
+            if not memories:
+                scope = "session + global" if include_global else "session"
+                return f"No memories found for {scope} '{session_id}'."
+            lines = [f"Memories for '{session_id}' ({len(memories)} total):\n"]
+            for i, m in enumerate(memories, 1):
+                tag = "[GLOBAL]" if m["is_global"] else "[SESSION]"
+                ts = m.get("created_at")
+                if ts:
+                    from datetime import datetime
+                    ts_str = f"  ({datetime.fromtimestamp(ts / 1000).strftime('%Y-%m-%d %H:%M:%S')})"
+                else:
+                    ts_str = ""
+                lines.append(f"{i}. {tag} {m['text']}{ts_str}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error listing memories: {str(e)}"
