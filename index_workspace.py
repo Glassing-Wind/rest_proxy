@@ -63,6 +63,137 @@ def _chunk_id(project_id: str, rel_path: str, start_byte: int, text: str) -> str
     return f"{project_id}:{rel_path}:{digest}"
 
 
+def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
+    """Chunk Swift source at declaration boundaries using a direct AST walk.
+
+    ts_pack's process(chunk_max_size=N) recurses into child AST nodes when a
+    declaration body exceeds N.  For SwiftUI trailing-closure DSL this produces
+    hundreds of brace/expression micro-fragments (6-80 bytes each).
+
+    Instead, we walk the tree-sitter AST directly:
+    - Collect computed_property / function_declaration / variable_declaration
+      nodes that are direct members of type containers.
+    - Emit one chunk per member.  Members that exceed CHUNK_MAX_BYTES are
+      split with a line-window (never by recursing into sub-expressions).
+    - Type containers (struct/class/extension/enum/protocol) are NOT emitted
+      as a single chunk; we recurse into their members so each gets its own
+      semantic context.
+
+    Returns [] on any error so _read_and_chunk falls through to line-window.
+    """
+    import tree_sitter_language_pack as ts_pack
+
+    # Member nodes: one chunk each.
+    # Note: Swift var/let are wrapped in property_declaration (which contains
+    # computed_property as a child).  We chunk at property_declaration level
+    # to capture the name from the sibling `pattern` node.
+    _MEMBER_TYPES = {
+        "property_declaration",     # var x: T { ... } and var x: T = value
+        "function_declaration",
+        "subscript_declaration",
+        "typealias_declaration",
+        "init_declaration",
+        "deinit_declaration",
+        "protocol_function_declaration",
+        "protocol_property_declaration",
+    }
+    # Type containers: recurse into children, don't emit as a single block.
+    _CONTAINER_TYPES = {
+        "class_declaration",
+        "struct_declaration",
+        "enum_declaration",
+        "protocol_declaration",
+        "extension_declaration",
+    }
+
+    try:
+        parser = ts_pack.get_parser("swift")
+        src_b  = source.encode("utf-8")
+        tree   = parser.parse(src_b)
+    except Exception:
+        return []
+
+    file_header = f"// File: {rel_path}\n"
+    chunks: List[Dict] = []
+
+    def _name_of(node) -> str:
+        for child in node.children:
+            # Swift property names live in a `pattern` child node;
+            # function names live in a bare `simple_identifier` child.
+            if child.type == "pattern":
+                return src_b[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+            if child.type in ("simple_identifier", "type_identifier"):
+                return src_b[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+        return ""
+
+    def _emit_text(text: str, sb: int, name: str, sl: int, el: int,
+                   ctx_path: List[str]) -> None:
+        text = text.strip()
+        if not text:
+            return
+        if len(text.encode("utf-8")) <= CHUNK_MAX_BYTES:
+            cid = _chunk_id(project_id, rel_path, sb, text)
+            chunks.append({
+                "ref_id": cid,
+                "text":   file_header + text,
+                "metadata": {
+                    "file":         rel_path,
+                    "project_id":   project_id,
+                    "symbols":      [name] if name else [],
+                    "start_line":   sl,
+                    "end_line":     el,
+                    "context_path": ctx_path,
+                },
+            })
+        else:
+            # Too large — line-window, keeping symbol context.
+            lines = text.splitlines()
+            i = 0
+            while i < len(lines):
+                block = "\n".join(lines[i : i + CHUNK_LINES])
+                if block.strip():
+                    cid = _chunk_id(project_id, rel_path, sb + i, block)
+                    chunks.append({
+                        "ref_id": cid,
+                        "text":   file_header + block,
+                        "metadata": {
+                            "file":         rel_path,
+                            "project_id":   project_id,
+                            "symbols":      [name] if name else [],
+                            "start_line":   sl + i,
+                            "end_line":     sl + min(i + CHUNK_LINES, len(lines)) - 1,
+                            "context_path": ctx_path,
+                        },
+                    })
+                i += CHUNK_LINES - OVERLAP_LINES
+
+
+    def _walk(node, ctx_path: List[str]) -> None:
+        if node.type in _MEMBER_TYPES:
+            name = _name_of(node)
+            text = src_b[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+            _emit_text(text, node.start_byte, name,
+                       node.start_point[0] + 1, node.end_point[0] + 1,
+                       ctx_path + ([name] if name else []))
+            # Don't recurse into member bodies — avoids sub-expression chunks.
+
+        elif node.type in _CONTAINER_TYPES:
+            name    = _name_of(node)
+            new_ctx = ctx_path + ([name] if name else [])
+            for child in node.children:
+                _walk(child, new_ctx)
+
+        else:
+            # Transparent node — pass through (source_file, statements, etc.)
+            for child in node.children:
+                _walk(child, ctx_path)
+
+    _walk(tree.root_node, [])
+    return chunks
+
+
+
+
 def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]:
     """Read *abs_path* and return chunk dicts with stable ref_ids.
 
@@ -103,8 +234,15 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
     file_header = f"// File: {rel_path}\n"
     chunks: List[Dict] = []
 
+    # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
+    if lang == 'swift':
+        swift_chunks = _chunk_swift(source, rel_path, project_id)
+        if swift_chunks:
+            return swift_chunks
+        # fall through to ts_pack / line-window if structure[] was empty
+
     # ── Native ts_pack chunking ───────────────────────────────────────────────
-    if lang:
+    if lang and lang != 'swift':
         try:
             config = ts_pack.ProcessConfig(lang, chunk_max_size=CHUNK_MAX_BYTES)
             result = ts_pack.process(source, config)

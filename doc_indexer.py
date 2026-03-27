@@ -62,10 +62,22 @@ async def discover_pages(seed_url: str) -> List[str]:
     """Given a seed URL, try llms.txt then sitemap.xml to get related doc pages.
 
     Returns a deduplicated list of URLs to crawl (includes seed_url itself).
+
+    URL scope: discovered URLs are pinned to the seed URL's path prefix so that
+    a seed of https://crawlee.dev/python/docs/ never pulls in /js/ or /blog/ pages.
     """
-    parsed = urlparse(seed_url)
-    root   = f"{parsed.scheme}://{parsed.netloc}"
-    pages  = [seed_url]
+    parsed      = urlparse(seed_url)
+    root        = f"{parsed.scheme}://{parsed.netloc}"
+    # Normalise the prefix: strip trailing filename so /foo/bar.html → /foo/
+    seed_path   = parsed.path
+    if not seed_path.endswith("/"):
+        seed_path = seed_path.rsplit("/", 1)[0] + "/"
+    pages = [seed_url]
+
+    def _in_scope(url: str) -> bool:
+        """True iff url is on the same host and starts with the seed path prefix."""
+        u = urlparse(url)
+        return u.netloc == parsed.netloc and u.path.startswith(seed_path)
 
     # 1. llms.txt
     llms_txt = await _fetch_url_text(f"{root}/llms.txt")
@@ -73,26 +85,25 @@ async def discover_pages(seed_url: str) -> List[str]:
         for line in llms_txt.splitlines():
             line = line.strip()
             if line.startswith("http"):
-                pages.append(line)
+                candidate = line
             elif line.startswith("/"):
-                pages.append(urljoin(root, line))
-        print(f"[doc-indexer] llms.txt found at {root} — {len(pages)} pages", flush=True)
+                candidate = urljoin(root, line)
+            else:
+                continue
+            if _in_scope(candidate):
+                pages.append(candidate)
+        print(f"[doc-indexer] llms.txt: {len(pages)} in-scope pages (prefix={seed_path})", flush=True)
         return list(dict.fromkeys(pages))  # deduplicate, preserve order
 
     # 2. sitemap.xml (very lightweight parse — just grab <loc> tags)
     sitemap = await _fetch_url_text(f"{root}/sitemap.xml")
     if sitemap:
         locs = re.findall(r"<loc>(https?://[^<]+)</loc>", sitemap)
-        # Filter to same domain + paths that look like docs
-        doc_hints = {"/docs", "/api", "/reference", "/guide", "/manual", "/learn"}
-        filtered  = [
-            u for u in locs
-            if urlparse(u).netloc == parsed.netloc
-            and any(h in u for h in doc_hints)
-        ]
+        # Keep only URLs within the seed path prefix (already implies same domain)
+        filtered = [u for u in locs if _in_scope(u)]
         if filtered:
             pages.extend(filtered[:200])  # cap at 200 from sitemap
-            print(f"[doc-indexer] sitemap.xml — {len(filtered)} doc pages found", flush=True)
+            print(f"[doc-indexer] sitemap.xml — {len(filtered)} in-scope pages (prefix={seed_path})", flush=True)
             return list(dict.fromkeys(pages))
 
     # 3. Just crawl the seed URL itself
@@ -140,7 +151,7 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
         http_crawler = ParselCrawler(
             max_requests_per_crawl=len(http_urls),
             max_request_retries=2,
-            use_session_pool=True,              # manage cookies/sessions to avoid bot detection
+            use_session_pool=False,             # no proxies configured — session pooling adds no benefit and looks like a bot
             additional_http_error_status_codes=[429, 503],  # treat rate-limits as retryable errors
         )
 
@@ -174,8 +185,8 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
             headless=True,
             max_request_retries=2,
             request_handler_timeout=timedelta(seconds=45),
-            retry_on_blocked=True,              # auto-bypass bot protections
-            use_session_pool=True,              # manage cookies/sessions across requests
+            retry_on_blocked=False,             # disabled: retrying from same IP signals bot behavior and flags the IP
+            use_session_pool=False,             # no proxies configured — session pooling only helps when paired with proxy rotation
             additional_http_error_status_codes=[429, 503],  # retry rate-limits automatically
             browser_launch_options={
                 "args": ["--disable-dev-shm-usage"],  # prevent Chromium OOM in subprocess
@@ -192,7 +203,7 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
                 lambda route: route.abort(),
             )
             await context.page.route(
-                "**/{gtm,analytics,hotjar,segment,intercom,drift,hubspot}*",
+                "**/{gtm,analytics,googletagmanager,google-analytics,doubleclick,googlesyndication,hotjar,segment,intercom,drift,hubspot}*",
                 lambda route: route.abort(),
             )
 
@@ -284,6 +295,20 @@ async def index_docs(urls: List[str], topic: str) -> int:
     await memory_bootstrap.bootstrap_schema()
     await memory_store.open_pool()
     embedding_svc = get_embedding_service()
+
+    # ── Fast-fail: verify embedding service is reachable before crawling ──────
+    try:
+        probe = await embedding_svc.embed_batch_async(["ping"])
+        if not probe or not probe[0]:
+            raise ValueError("embedding service returned empty vector")
+    except Exception as exc:
+        print(
+            f"[doc-indexer] FATAL: embedding service unavailable — {exc}\n"
+            "  Make sure LM Studio (or your configured embedding server) is running "
+            "before starting a doc index job.",
+            file=sys.stderr, flush=True,
+        )
+        return 0
 
     t0          = time.time()
     total_chunks = 0
