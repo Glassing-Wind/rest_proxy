@@ -109,7 +109,12 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_call_chain(
-        project_path: str, symbol_name: str, depth: int = 3, direction: str = "down"
+        project_path: str,
+        symbol_name: str,
+        depth: int = 3,
+        direction: str = "down",
+        file_path: str | None = None,
+        signature: str | None = None,
     ) -> str:
         """
         Trace a call chain N hops deep from a starting symbol.
@@ -123,6 +128,8 @@ def register(mcp: FastMCP) -> None:
             symbol_name:  Starting symbol name.
             depth:        How many hops to follow (default 3, max 5).
             direction:    'down' (what this calls) or 'up' (what calls this).
+            file_path:    Optional file path to disambiguate symbols.
+            signature:    Optional signature substring to disambiguate symbols.
         """
         try:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
@@ -135,6 +142,8 @@ def register(mcp: FastMCP) -> None:
             resolve_cypher = """
                 MATCH (s {project_id: $pid})
                 WHERE s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum
+                  AND ($file_path IS NULL OR s.filepath = $file_path)
+                  AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
                 OPTIONAL MATCH (s)<-[:CALLS]-(caller)
                 WITH s,
                      CASE
@@ -186,7 +195,11 @@ def register(mcp: FastMCP) -> None:
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 res = await session.run(
-                    resolve_cypher, name=symbol_name, pid=project_id
+                    resolve_cypher,
+                    name=symbol_name,
+                    pid=project_id,
+                    file_path=file_path,
+                    signature=signature,
                 )
                 candidates = [rec async for rec in res]
                 if not candidates:
@@ -634,9 +647,51 @@ def register(mcp: FastMCP) -> None:
                     related.append(
                         f"- {record['related_file']} (Strength: {record['shared_imports']})"
                     )
-            if not related:
+            if related:
+                return "Related Files:\n" + "\n".join(related)
+
+            # Fallback: semantic co-mentions based on top symbols in the file
+            symbol_query = """
+                MATCH (f:File {id: $fid})-[:CONTAINS]->(s)
+                WHERE s.name IS NOT NULL
+                  AND (s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait
+                       OR s:Enum OR s:Protocol OR s:Extension OR s:TypeAlias OR s:AssociatedType)
+                RETURN s.name AS name
+                LIMIT 10
+            """
+
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                result = await session.run(symbol_query, fid=file_id)
+                symbols = [rec["name"] async for rec in result if rec.get("name")]
+
+            symbols = [s for s in symbols if isinstance(s, str) and s.strip()]
+            if not symbols:
                 return "No structurally related files found."
-            return "Related Files:\n" + "\n".join(related)
+
+            memory_store, _, _, _, _ = get_memory_modules()
+            await memory_store.open_pool()
+            async with memory_store._pg_pool.connection() as conn:
+                async with conn.cursor() as cur:
+                    ors = " OR ".join(["content ILIKE %s"] * len(symbols))
+                    sql = (
+                        "SELECT file_path, count(*) AS hits "
+                        "FROM codebase_embeddings "
+                        "WHERE project_id = %s AND file_path <> %s AND (" + ors + ") "
+                        "GROUP BY file_path "
+                        "ORDER BY hits DESC "
+                        "LIMIT 10"
+                    )
+                    params = [project_id, file_path] + [f"%{s}%" for s in symbols]
+                    await cur.execute(sql, params)
+                    rows = await cur.fetchall()
+
+            if not rows:
+                return "No structurally related files found."
+
+            output = ["Related Files (semantic co-mentions):"]
+            for fp, hits in rows:
+                output.append(f"- {fp} (Mentions: {hits})")
+            return "\n".join(output)
         except Exception as e:
             return f"Error finding related files: {str(e)}"
 
