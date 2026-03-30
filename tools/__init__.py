@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 
 def register_all(mcp: FastMCP) -> None:
-    from tools import memory, code_search, code_intel, dev, documentation, indexing, project
+    from tools import memory, code_search, code_intel, dev, documentation, indexing, project, layout
     memory.register(mcp)
     code_search.register(mcp)
     code_intel.register(mcp)
@@ -15,3 +15,4 @@ def register_all(mcp: FastMCP) -> None:
     documentation.register(mcp)
     indexing.register(mcp)
     project.register(mcp)
+    layout.register(mcp)

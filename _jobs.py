@@ -4,6 +4,7 @@ Background index-job registry.
 Shared between tools/indexing.py and tools/documentation.py.
 Each entry: {status, struct_rc, sem_rc, logs[], started_at, finished_at}
 """
+
 import os
 import sys
 import threading
@@ -32,6 +33,7 @@ def _drain_proc_output(proc, job_id: str, prefix: str, rc_key: str) -> None:
     Runs in a daemon thread. When the process exits, stores its return code.
     """
     import time as _time
+
     assert proc.stderr is not None
     for raw_line in proc.stderr:
         line = f"{prefix} {raw_line.rstrip()}"
@@ -51,12 +53,13 @@ def _drain_proc_output(proc, job_id: str, prefix: str, rc_key: str) -> None:
 def _finalize_job(job_id: str, manifest_path: str) -> None:
     """Watch for both phases to complete, then set status and clean up."""
     import time as _time
+
     while True:
         _time.sleep(0.5)
         with _JOBS_LOCK:
             job = _JOBS.get(job_id, {})
             struct_rc = job.get("struct_rc")
-            sem_rc    = job.get("sem_rc")
+            sem_rc = job.get("sem_rc")
         if struct_rc is not None and sem_rc is not None:
             break
     try:
@@ -65,30 +68,36 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
     except OSError:
         pass
     import time as _t
+
     with _JOBS_LOCK:
         if job_id in _JOBS:
-            ok = (struct_rc == 0 and sem_rc == 0)
-            _JOBS[job_id]["status"]      = "done" if ok else "failed"
+            ok = struct_rc == 0 and sem_rc == 0
+            _JOBS[job_id]["status"] = "done" if ok else "failed"
             _JOBS[job_id]["finished_at"] = _t.time()
             project_path = _JOBS[job_id].get("project_path", "")
 
-    # Auto-build import graph after a successful index so IMPORTS edges
-    # are always fresh without requiring a manual follow-up call.
+    # Auto-build import/symbol graphs after a successful index so edges
+    # are always fresh without blocking latency-sensitive tool calls.
     if ok and project_path and not project_path.startswith("docs://"):
         try:
             import asyncio
-            from tools.project import _build_import_graph_impl
+            from tools.project import enqueue_graph_build
+
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
                 future = asyncio.run_coroutine_threadsafe(
-                    _build_import_graph_impl(project_path), _MAIN_LOOP
+                    enqueue_graph_build(
+                        project_path, run_imports=True, run_symbols=True
+                    ),
+                    _MAIN_LOOP,
                 )
-                result = future.result(timeout=300)
+                future.result(timeout=2)
+                queued = "enqueued"
             else:
-                result = "Import graph skipped: main loop not available"
+                queued = "skipped: main loop not available"
             with _JOBS_LOCK:
                 if job_id in _JOBS:
-                    _JOBS[job_id]["logs"].append(f"[import-graph] {result}")
+                    _JOBS[job_id]["logs"].append(f"[graph-build] {queued}")
         except Exception as e:
             with _JOBS_LOCK:
                 if job_id in _JOBS:
-                    _JOBS[job_id]["logs"].append(f"[import-graph] skipped: {e}")
+                    _JOBS[job_id]["logs"].append(f"[graph-build] enqueue failed: {e}")

@@ -6,14 +6,25 @@ import sys
 from typing import Optional, Any
 from neo4j import AsyncGraphDatabase
 
-_NEO4J_ENABLED = os.getenv("LM_PROXY_GRAPH_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+_NEO4J_ENABLED = os.getenv("LM_PROXY_GRAPH_ENABLED", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 _NEO4J_URI = os.getenv("LM_PROXY_NEO4J_URI", "bolt://localhost:7687")
 _NEO4J_USER = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
 _NEO4J_PASSWORD = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
 _NEO4J_DB = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
-_ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 _driver: Optional[Any] = None
+
 
 def _debug(message: str, **fields: Any) -> None:
     if not _ENABLE_DEBUG:
@@ -27,7 +38,12 @@ def _debug(message: str, **fields: Any) -> None:
             flush=True,
         )
     except Exception:
-        print(f"[lm-proxy:graph_bootstrap] {message} {fields}", file=sys.stderr, flush=True)
+        print(
+            f"[lm-proxy:graph_bootstrap] {message} {fields}",
+            file=sys.stderr,
+            flush=True,
+        )
+
 
 async def init_graph_db() -> None:
     """Initialize Neo4j driver and ensure basic schema constraints exist."""
@@ -40,15 +56,14 @@ async def init_graph_db() -> None:
 
     try:
         _driver = AsyncGraphDatabase.driver(
-            _NEO4J_URI,
-            auth=(_NEO4J_USER, _NEO4J_PASSWORD)
+            _NEO4J_URI, auth=(_NEO4J_USER, _NEO4J_PASSWORD)
         )
         # Verify connection
         await _driver.verify_connectivity()
         _debug("neo4j_connected", uri=_NEO4J_URI, db=_NEO4J_DB)
-        
+
         # Apply Schema Constraints using a session
-        # Use single-property uniqueness (node.id) since Neo4j Community Edition 
+        # Use single-property uniqueness (node.id) since Neo4j Community Edition
         # doesn't support composite uniqueness constraints.
         async with _driver.session(database=_NEO4J_DB) as session:
             # Uniqueness constraints — ensure all MERGE operations use NodeUniqueIndexSeek.
@@ -57,6 +72,8 @@ async def init_graph_db() -> None:
             constraints = [
                 # Global structural node identity (already exists, kept for safety)
                 "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE",
+                # Per-project lookup index for read-heavy queries
+                "CREATE INDEX node_project_id IF NOT EXISTS FOR (n:Node) ON (n.project_id)",
                 # Session/Project: MERGE'd on every semantic batch — must use index
                 "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.id IS UNIQUE",
                 "CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE",
@@ -65,7 +82,7 @@ async def init_graph_db() -> None:
                 # Relationship index: eliminates O(degree) edge scan in CONTAINS MERGE
                 "CREATE INDEX contains_idx IF NOT EXISTS FOR ()-[r:CONTAINS]-() ON (r.project_id)",
             ]
-            
+
             for query in constraints:
                 try:
                     await session.run(query)
@@ -87,13 +104,17 @@ async def init_graph_db() -> None:
                 _debug("neo4j_vector_index_initialized")
             except Exception as e:
                 _debug("vector_index_creation_error", error=str(e))
-                    
+
             _debug("neo4j_schema_initialized")
-            
+
     except Exception as exc:
-        print(f"[lm-proxy:graph_bootstrap] CRITICAL: Neo4j connection failure: {exc}", file=sys.stderr)
+        print(
+            f"[lm-proxy:graph_bootstrap] CRITICAL: Neo4j connection failure: {exc}",
+            file=sys.stderr,
+        )
         _debug("neo4j_connection_error", error=str(exc))
         _driver = None
+
 
 async def close_graph_db() -> None:
     """Close the Neo4j driver connection."""
@@ -102,6 +123,7 @@ async def close_graph_db() -> None:
         await _driver.close()
         _driver = None
         _debug("neo4j_disconnected")
+
 
 def get_driver():
     """Return the active Neo4j Async Driver instance."""

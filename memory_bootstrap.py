@@ -4,6 +4,7 @@ Schema:
   Postgres: conversation_turns, memory_embeddings, codebase_embeddings, tool_outputs, etc.
   Neo4j:    structural graph (files, symbols, relationships)
 """
+
 from __future__ import annotations
 
 import os
@@ -12,17 +13,31 @@ from typing import Any
 
 import graph_bootstrap
 
-_ENABLE_PERSISTENCE = os.getenv("LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1").strip().lower() in {"1", "true", "yes", "on"}
-_ENABLE_EMBEDDINGS  = os.getenv("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS",  "0").strip().lower() in {"1", "true", "yes", "on"}
-_ENABLE_DEBUG       = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {"1", "true", "yes", "on"}
-_PG_DSN             = os.getenv("LM_PROXY_PG_DSN", "")
-_DIM                = int(os.getenv("LM_PROXY_MEMORY_EMBEDDING_DIM", "768"))
+_ENABLE_PERSISTENCE = os.getenv(
+    "LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1"
+).strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_EMBEDDINGS = os.getenv(
+    "LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+_PG_DSN = os.getenv("LM_PROXY_PG_DSN", "")
+_DIM = int(os.getenv("LM_PROXY_MEMORY_EMBEDDING_DIM", "768"))
 
 
 def _debug(msg: str, **kw: Any) -> None:
     if _ENABLE_DEBUG:
         import json
-        print(f"[lm-proxy:memory_bootstrap] {json.dumps({'message': msg, **kw})}", file=sys.stderr, flush=True)
+
+        print(
+            f"[lm-proxy:memory_bootstrap] {json.dumps({'message': msg, **kw})}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 # ── Postgres schema DDL ───────────────────────────────────────────────────────
@@ -30,7 +45,7 @@ def _debug(msg: str, **kw: Any) -> None:
 _CODEBASE_EMBEDDINGS_DDL = f"""
 CREATE TABLE IF NOT EXISTS codebase_embeddings (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    chunk_id    TEXT        UNIQUE,           -- stable ID: "project_id:rel_path::idx"
+    chunk_id    TEXT        UNIQUE,           -- stable ID: "project_id:version:rel_path:hash"
     project_id  TEXT        NOT NULL,
     file_path   TEXT        NOT NULL,
     ref_type    TEXT        NOT NULL DEFAULT 'code_chunk',
@@ -88,6 +103,7 @@ async def _pg_bootstrap() -> bool:
         return False
     try:
         from psycopg_pool import AsyncConnectionPool  # type: ignore
+
         pool = AsyncConnectionPool(_PG_DSN, min_size=1, max_size=2, open=False)
         await pool.open(wait=True, timeout=15)
 

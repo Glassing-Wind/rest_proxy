@@ -1,4 +1,5 @@
 """tools/code_search.py — codebase search and cross-reference tools."""
+
 import hashlib
 import json
 from mcp.server.fastmcp import FastMCP
@@ -8,7 +9,19 @@ from _helpers import get_memory_modules
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def search_codebase(project_paths: list, query: str, k: int = 5) -> str:
+    async def search_codebase(
+        project_paths: list,
+        query: str,
+        k: int = 5,
+        include_metadata: bool = False,
+        languages: list | None = None,
+        min_imports: int = 0,
+        min_symbols: int = 0,
+        require_diagnostics: bool = False,
+        require_context: bool = False,
+        include_paths: list | None = None,
+        exclude_paths: list | None = None,
+    ) -> str:
         """
         Perform a hybrid semantic search over one or more codebases simultaneously.
         Results are ranked by relevance using RRF (vector + full-text).
@@ -21,10 +34,20 @@ def register(mcp: FastMCP) -> None:
             project_paths: List of absolute paths to project roots to search across.
             query: Natural language or code snippet to search for.
             k: Total number of results to return (default 5).
+            include_metadata: Show metadata lines in results (default False).
+            languages: Optional allowlist of languages to include.
+            min_imports: Require at least N file imports in metadata.
+            min_symbols: Require at least N file symbols in metadata.
+            require_diagnostics: Only return chunks with diagnostics.
+            require_context: Only return chunks with a non-empty context_path.
+            include_paths: Optional list of glob patterns to include (file_path).
+            exclude_paths: Optional list of glob patterns to exclude (file_path).
         """
         try:
             import asyncio
+            import fnmatch
             from embedding_service import get_embedding_service
+
             memory_store, _, _, _, _ = get_memory_modules()
 
             if not project_paths:
@@ -39,7 +62,7 @@ def register(mcp: FastMCP) -> None:
                 return "Error: Could not generate embedding for query."
 
             vec_str = "[" + ",".join(str(v) for v in query_vector) + "]"
-            fetch   = min(k * 5, 80)
+            fetch = min(k * 10, 150)
 
             await memory_store.open_pool()
 
@@ -48,12 +71,57 @@ def register(mcp: FastMCP) -> None:
                 pid = hashlib.md5(p.encode()).hexdigest()[:12]
                 pid_to_name[pid] = p.rstrip("/").split("/")[-1]
 
+            def _format_meta(meta: dict) -> list[str]:
+                if not isinstance(meta, dict):
+                    return []
+                parts: list[str] = []
+                language = meta.get("language")
+                if language:
+                    parts.append(f"lang={language}")
+                imports = meta.get("file_imports")
+                if isinstance(imports, list) and imports:
+                    parts.append(f"imports={len(imports)}")
+                symbols = meta.get("file_symbols")
+                if isinstance(symbols, list) and symbols:
+                    parts.append(f"symbols={len(symbols)}")
+                node_types = meta.get("node_types")
+                if isinstance(node_types, list) and node_types:
+                    parts.append(f"node_types={len(node_types)}")
+                diagnostics = meta.get("file_diagnostics") or {}
+                if isinstance(diagnostics, dict):
+                    diag_count = diagnostics.get("count")
+                    if isinstance(diag_count, int) and diag_count > 0:
+                        parts.append(f"diagnostics={diag_count}")
+                metrics = meta.get("file_metrics") or {}
+                if isinstance(metrics, dict):
+                    lines = metrics.get("total_lines")
+                    if isinstance(lines, int):
+                        parts.append(f"lines={lines}")
+                ctx = meta.get("context_path")
+                ctx_line = ""
+                if isinstance(ctx, list) and ctx:
+                    ctx_line = "context=" + " > ".join(str(c) for c in ctx[:6])
+                out = []
+                if parts:
+                    out.append("meta: " + ", ".join(parts))
+                if ctx_line:
+                    out.append(ctx_line)
+                return out
+
             async def _search_project(pid: str) -> list[dict]:
                 async with memory_store._pg_pool.connection() as conn:
+                    await conn.execute("BEGIN")
                     async with conn.cursor() as cur:
-                        await cur.execute("""\
+                        await cur.execute(
+                            "SET LOCAL hnsw.ef_search = 100"
+                        )  # resets when connection returns to pool
+                        await cur.execute(
+                            "SET LOCAL hnsw.iterative_scan = relaxed_order"
+                        )  # auto-expands past project_id filter
+                        await cur.execute(
+                            """\
                             WITH semantic AS (
-                                SELECT file_path, chunk_index, content, project_id,
+                                SELECT file_path, chunk_index, content, project_id, metadata,
                                        ROW_NUMBER() OVER (
                                            ORDER BY embedding <=> %(vec)s::vector
                                        ) AS sem_rank
@@ -65,29 +133,97 @@ def register(mcp: FastMCP) -> None:
                                 SELECT file_path, chunk_index,
                                        ROW_NUMBER() OVER (
                                            ORDER BY ts_rank(search_vec,
-                                               plainto_tsquery('english', %(qt)s)) DESC
+                                               websearch_to_tsquery('english', %(qt)s)) DESC
                                        ) AS kw_rank
                                 FROM codebase_embeddings
                                 WHERE project_id = %(pid)s
-                                  AND search_vec @@ plainto_tsquery('english', %(qt)s)
+                                  AND search_vec @@ websearch_to_tsquery('english', %(qt)s)
                                 LIMIT %(fetch)s
                             )
-                            SELECT s.file_path, s.chunk_index, s.content, s.project_id,
-                                   (1.0/(60+s.sem_rank)
+                            SELECT s.file_path, s.chunk_index, s.content, s.project_id, s.metadata,
+                                   (2.0/(60+s.sem_rank)
                                     + COALESCE(1.0/(60+k.kw_rank), 0.0)) AS rrf
                             FROM semantic s
                             LEFT JOIN keyword k
                               ON s.file_path = k.file_path
-                             AND s.chunk_index = k.chunk_index
+                              AND s.chunk_index = k.chunk_index
                             ORDER BY rrf DESC
                             LIMIT %(fetch)s
-                        """, {"vec": vec_str, "pid": pid, "qt": query, "fetch": fetch})
+                        """,
+                            {"vec": vec_str, "pid": pid, "qt": query, "fetch": fetch},
+                        )
                         rows = await cur.fetchall()
                         return [
-                            {"file_path": r[0], "chunk_index": r[1],
-                             "content": r[2], "project_id": r[3], "rrf": r[4]}
+                            {
+                                "file_path": r[0],
+                                "chunk_index": r[1],
+                                "content": r[2],
+                                "project_id": r[3],
+                                "metadata": r[4],
+                                "rrf": r[5],
+                            }
                             for r in rows
                         ]
+
+            def _meta_score(meta: dict) -> int:
+                if not isinstance(meta, dict):
+                    return 0
+                score = 0
+                for key in (
+                    "file_imports",
+                    "file_symbols",
+                    "node_types",
+                    "file_metrics",
+                    "file_diagnostics",
+                    "context_path",
+                ):
+                    val = meta.get(key)
+                    if isinstance(val, list) and val:
+                        score += 1
+                    elif isinstance(val, dict) and val:
+                        score += 1
+                return score
+
+            def _passes_filters(meta: dict) -> bool:
+                if not isinstance(meta, dict):
+                    return False
+                if languages:
+                    lang = meta.get("language")
+                    if not lang or lang not in languages:
+                        return False
+                if min_imports > 0:
+                    imports = meta.get("file_imports")
+                    if not isinstance(imports, list) or len(imports) < min_imports:
+                        return False
+                if min_symbols > 0:
+                    symbols = meta.get("file_symbols")
+                    if not isinstance(symbols, list) or len(symbols) < min_symbols:
+                        return False
+                if require_diagnostics:
+                    diagnostics = meta.get("file_diagnostics") or {}
+                    if (
+                        not isinstance(diagnostics, dict)
+                        or diagnostics.get("count", 0) <= 0
+                    ):
+                        return False
+                if require_context:
+                    ctx = meta.get("context_path")
+                    if not isinstance(ctx, list) or not ctx:
+                        return False
+                return True
+
+            def _path_allowed(file_path: str) -> bool:
+                if not file_path:
+                    return True
+                if include_paths:
+                    if not any(
+                        fnmatch.fnmatch(file_path, pat) for pat in include_paths
+                    ):
+                        return False
+                if exclude_paths:
+                    if any(fnmatch.fnmatch(file_path, pat) for pat in exclude_paths):
+                        return False
+                return True
 
             all_results: list[dict] = []
             batch = await asyncio.gather(*[_search_project(pid) for pid in pid_to_name])
@@ -98,26 +234,75 @@ def register(mcp: FastMCP) -> None:
                 projects = ", ".join(f"'{n}'" for n in pid_to_name.values())
                 return f"No matching code found in {projects}.\nEnsure projects are indexed with index_workspace()."
 
-            all_results.sort(key=lambda r: r["rrf"], reverse=True)
+            filters_active = any(
+                [
+                    languages,
+                    min_imports > 0,
+                    min_symbols > 0,
+                    require_diagnostics,
+                    require_context,
+                    include_paths,
+                    exclude_paths,
+                ]
+            )
+            if filters_active:
+                include_metadata = True
+
+            if include_metadata:
+                for r in all_results:
+                    meta = r.get("metadata")
+                    if isinstance(meta, str):
+                        try:
+                            meta = json.loads(meta)
+                        except Exception:
+                            meta = {}
+                    r_meta = meta if isinstance(meta, dict) else {}
+                    r["_meta"] = r_meta
+                    r["meta_score"] = _meta_score(r_meta)
+                if filters_active:
+                    all_results = [
+                        r
+                        for r in all_results
+                        if _passes_filters(r.get("_meta", {}))
+                        and _path_allowed(r.get("file_path", ""))
+                    ]
+                all_results.sort(
+                    key=lambda r: (r["rrf"], r.get("meta_score", 0)), reverse=True
+                )
+            else:
+                all_results.sort(key=lambda r: r["rrf"], reverse=True)
             top = all_results[:k]
 
             lines = []
             if multi:
-                lines.append(f"Cross-project search: '{query}'  ({len(pid_to_name)} projects)\n")
+                lines.append(
+                    f"Cross-project search: '{query}'  ({len(pid_to_name)} projects)\n"
+                )
 
             for i, r in enumerate(top, 1):
                 proj = pid_to_name.get(r["project_id"], r["project_id"])
                 if multi:
-                    lines.append(f"[{i}] [{proj}] {r['file_path']}  (score: {r['rrf']:.4f})")
+                    lines.append(
+                        f"[{i}] [{proj}] {r['file_path']}  (score: {r['rrf']:.4f})"
+                    )
                 else:
                     lines.append(f"--- {r['file_path']} (Score: {r['rrf']:.4f}) ---")
+                if include_metadata:
+                    meta = r.get("_meta")
+                    if not isinstance(meta, dict):
+                        meta = r.get("metadata")
+                        if isinstance(meta, str):
+                            try:
+                                meta = json.loads(meta)
+                            except Exception:
+                                meta = {}
+                    lines.extend(_format_meta(meta if isinstance(meta, dict) else {}))
                 lines.append(r["content"].strip())
                 lines.append("")
 
             return "\n".join(lines)
         except Exception as e:
             return f"Error searching codebase: {str(e)}"
-
 
     @mcp.tool()
     async def trace_symbol_cross_project(
@@ -143,21 +328,24 @@ def register(mcp: FastMCP) -> None:
         try:
             import asyncio
             from embedding_service import get_embedding_service
+
             memory_store, _, _, _, _ = get_memory_modules()
 
-            src_id  = hashlib.md5(source_project.encode()).hexdigest()[:12]
-            tgt_id  = hashlib.md5(target_project.encode()).hexdigest()[:12]
+            src_id = hashlib.md5(source_project.encode()).hexdigest()[:12]
+            tgt_id = hashlib.md5(target_project.encode()).hexdigest()[:12]
             src_name = source_project.rstrip("/").split("/")[-1]
             tgt_name = target_project.rstrip("/").split("/")[-1]
 
             import graph_bootstrap
+
             await graph_bootstrap.init_graph_db()
             driver = graph_bootstrap.get_driver()
 
             # ── 1. Definition in source project ──────────────────────────────
             definition: dict = {}
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                r = await session.run("""
+                r = await session.run(
+                    """
                     MATCH (s {name: $name, project_id: $pid})
                     WHERE s:Function OR s:Class OR s:Struct OR s:Trait
                        OR s:Enum OR s:Method OR s:Protocol
@@ -168,7 +356,10 @@ def register(mcp: FastMCP) -> None:
                            s.end_line    AS end_line,
                            s.signature   AS signature
                     LIMIT 1
-                """, name=symbol_name, pid=src_id)
+                """,
+                    name=symbol_name,
+                    pid=src_id,
+                )
                 rec = await r.single()
                 if rec:
                     definition = dict(rec)
@@ -176,7 +367,8 @@ def register(mcp: FastMCP) -> None:
             # ── 2. Call-graph usages in target project ────────────────────────
             graph_usages: list[str] = []
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                r2 = await session.run("""
+                r2 = await session.run(
+                    """
                     MATCH (target {name: $name})
                     WHERE target:Function OR target:Class OR target:Struct
                        OR target:Method   OR target:Trait OR target:Protocol
@@ -188,10 +380,13 @@ def register(mcp: FastMCP) -> None:
                            labels(caller)[0] AS caller_kind
                     ORDER BY caller.filepath, caller.start_line
                     LIMIT 20
-                """, name=symbol_name, tpid=tgt_id)
+                """,
+                    name=symbol_name,
+                    tpid=tgt_id,
+                )
                 async for rec in r2:
                     name = rec["caller_name"] or "(file scope)"
-                    fp   = rec["caller_file"]  or "?"
+                    fp = rec["caller_file"] or "?"
                     line = f":{rec['caller_line']}" if rec["caller_line"] else ""
                     graph_usages.append(
                         f"  {name}{line}  [{rec['caller_kind'] or 'Node'}]  in {fp}"
@@ -209,7 +404,8 @@ def register(mcp: FastMCP) -> None:
                 vec_str = "[" + ",".join(str(v) for v in query_vector) + "]"
                 async with memory_store._pg_pool.connection() as conn:
                     async with conn.cursor() as cur:
-                        await cur.execute("""
+                        await cur.execute(
+                            """
                             WITH sem AS (
                                 SELECT file_path, chunk_index, content,
                                        ROW_NUMBER() OVER (
@@ -236,10 +432,14 @@ def register(mcp: FastMCP) -> None:
                               ON s.file_path = k.file_path AND s.chunk_index = k.chunk_index
                             WHERE s.content ILIKE %(ilike)s
                             ORDER BY rrf DESC LIMIT 5
-                        """, {
-                            "vec": vec_str, "pid": tgt_id,
-                            "qt": symbol_name, "ilike": f"%{symbol_name}%",
-                        })
+                        """,
+                            {
+                                "vec": vec_str,
+                                "pid": tgt_id,
+                                "qt": symbol_name,
+                                "ilike": f"%{symbol_name}%",
+                            },
+                        )
                         return await cur.fetchall()
 
             async def _fetch_src_preview():
@@ -247,11 +447,14 @@ def register(mcp: FastMCP) -> None:
                     return []
                 async with memory_store._pg_pool.connection() as conn:
                     async with conn.cursor() as cur:
-                        await cur.execute("""
+                        await cur.execute(
+                            """
                             SELECT content FROM codebase_embeddings
                             WHERE project_id = %s AND file_path = %s
                             ORDER BY chunk_index LIMIT 2
-                        """, (src_id, definition["filepath"]))
+                        """,
+                            (src_id, definition["filepath"]),
+                        )
                         return await cur.fetchall()
 
             sem_rows, src_rows = await asyncio.gather(
@@ -285,7 +488,9 @@ def register(mcp: FastMCP) -> None:
                     lines += ["", f"```\n{preview.strip()}\n```"]
             else:
                 lines.append(f"⚠️  `{symbol_name}` not found in Neo4j for [{src_name}].")
-                lines.append("   (Symbol may be in an un-indexed file or a different casing.)")
+                lines.append(
+                    "   (Symbol may be in an un-indexed file or a different casing.)"
+                )
 
             lines += ["", f"### Usages  [{tgt_name}]"]
 
@@ -305,7 +510,7 @@ def register(mcp: FastMCP) -> None:
                 lines += [
                     "",
                     f"💡 `{symbol_name}` appears to be defined in [{src_name}] but not yet referenced in [{tgt_name}].",
-                    f"   Try `search_multi_project` with a broader semantic query."
+                    f"   Try `search_multi_project` with a broader semantic query.",
                 ]
 
             return "\n".join(lines)
@@ -323,6 +528,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import graph_bootstrap
+
             await graph_bootstrap.init_graph_db()
             driver = graph_bootstrap.get_driver()
             if not driver:
@@ -339,89 +545,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error querying graph: {str(e)}"
 
     @mcp.tool()
-    async def find_references(project_path: str, symbol_name: str) -> str:
-        """
-        Find all locations that reference a symbol — function calls, type usages,
-        and any code chunk that mentions the name.
-
-        Combines two sources:
-        1. Neo4j [:CALLS] edges (precise call-site graph hits)
-        2. Postgres full-text search over codebase_embeddings (catches type references,
-           field accesses, generic bounds, and string literals that the graph misses)
-
-        Use this before renaming or deleting a symbol to find every location that
-        must be updated.
-
-        Args:
-            project_path: Absolute path to the project root.
-            symbol_name:  Exact name of the symbol to find references for.
-        """
-        try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
-            import graph_bootstrap
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
-
-            graph_refs: list[str] = []
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                r = await session.run("""
-                    MATCH (target {name: $name, project_id: $pid})
-                    WHERE target:Function OR target:Class OR target:Struct
-                       OR target:Trait   OR target:Enum    OR target:Method
-                    MATCH (caller)-[:CALLS]->(target)
-                    RETURN DISTINCT
-                           caller.name      AS caller_name,
-                           caller.filepath  AS caller_file,
-                           caller.start_line AS caller_line,
-                           labels(caller)[0] AS caller_kind
-                    ORDER BY caller.filepath, caller.start_line
-                    LIMIT 40
-                """, name=symbol_name, pid=project_id)
-                async for rec in r:
-                    name = rec["caller_name"] or "(file scope)"
-                    fp   = rec["caller_file"]  or "?"
-                    line = f":{rec['caller_line']}" if rec["caller_line"] else ""
-                    graph_refs.append(f"  {name}{line}  in {fp}")
-
-            pg_refs: list[str] = []
-            try:
-                memory_store, _, _, _, _ = get_memory_modules()
-                await memory_store.open_pool()
-                async with memory_store._pg_pool.connection() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute("""
-                            SELECT file_path, chunk_index, LEFT(content, 120)
-                            FROM   codebase_embeddings
-                            WHERE  project_id = %s AND content ILIKE %s
-                            ORDER  BY file_path, chunk_index
-                            LIMIT  30
-                        """, (project_id, f"%{symbol_name}%"))
-                        rows = await cur.fetchall()
-                        seen: set[str] = set()
-                        for fp, idx, _ in rows:
-                            key = f"{fp}:{idx}"
-                            if key not in seen:
-                                seen.add(key)
-                                pg_refs.append(f"  chunk {idx}  in {fp}")
-            except Exception:
-                pass
-
-            if not graph_refs and not pg_refs:
-                return (f"No references found for '{symbol_name}'.\n"
-                        "Ensure the project is indexed with index_workspace().")
-
-            parts = [f"## References to `{symbol_name}`\n"]
-            if graph_refs:
-                parts.append(f"### Call-graph hits ({len(graph_refs)})")
-                parts.extend(graph_refs)
-            if pg_refs:
-                parts.append(f"\n### Code-chunk text hits ({len(pg_refs)})")
-                parts.extend(pg_refs)
-            return "\n".join(parts)
-        except Exception as e:
-            return f"Error finding references: {str(e)}"
-
-    @mcp.tool()
     async def find_definitions(symbol_name: str) -> str:
         """
         Search for the definition of a class, function, or struct across ALL indexed projects.
@@ -432,6 +555,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import graph_bootstrap
+
             await graph_bootstrap.init_graph_db()
             driver = graph_bootstrap.get_driver()
             cypher = """
@@ -444,10 +568,12 @@ def register(mcp: FastMCP) -> None:
                 result = await session.run(cypher, name=symbol_name)
                 output = [f"Found {symbol_name} in the following locations:"]
                 async for record in result:
-                    loc = record['file'] or 'unknown'
-                    line = record['line']
+                    loc = record["file"] or "unknown"
+                    line = record["line"]
                     loc_str = f"{loc}:{line}" if line is not None else loc
-                    output.append(f"- [{record['type']}] Project: {record['project']}, File: {loc_str}")
+                    output.append(
+                        f"- [{record['type']}] Project: {record['project']}, File: {loc_str}"
+                    )
             if len(output) == 1:
                 return f"Symbol '{symbol_name}' not found in any indexed project."
             return "\n".join(output)

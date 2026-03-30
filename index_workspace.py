@@ -14,12 +14,14 @@ Design:
 Usage:
     python index_workspace.py <target_dir> <project_id> --manifest-file <path>
 """
+
 import sys
 import os
 
 import asyncio
 import json
 import time
+import threading
 from typing import List, Dict
 from dotenv import load_dotenv
 
@@ -34,21 +36,89 @@ from embedding_service import get_embedding_service
 
 # AST-chunk size: target upper bound for native ts_pack chunks.
 CHUNK_MAX_BYTES = 4_000  # bytes — passed as chunk_max_size to ProcessConfig
+# Overlap between adjacent AST chunks (bytes). Keep small to avoid duplication.
+CHUNK_OVERLAP_BYTES = 200
+# Chunk id version for forward-compatible re-indexing.
+CHUNK_ID_VERSION = "v6"
 # Line-window fallback for files ts_pack cannot parse (config/docs/data).
-CHUNK_LINES     = 60    # lines per window
-OVERLAP_LINES   = 10    # overlap between windows
-MANIFEST_BATCH  = 50    # files per interleaved cycle
-MAX_FILE_BYTES  = 1_000_000  # skip source files > 1 MB
+CHUNK_LINES = 60  # lines per window
+OVERLAP_LINES = 10  # overlap between windows
+MANIFEST_BATCH = 50  # files per interleaved cycle
+MAX_FILE_BYTES = 1_000_000  # skip source files > 1 MB
+TS_PACK_AUTO_DOWNLOAD = os.getenv("LM_PROXY_TS_PACK_AUTO_DOWNLOAD", "1") == "1"
+TS_PACK_CACHE_DIR = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
+
+_TS_PACK_INIT_DONE = False
+_TS_PACK_INIT_LOCK = threading.Lock()
 
 # Extensions that always use the line-window fallback (no AST structure).
 _FALLBACK_EXTS = {
-    "yaml", "yml", "toml", "json", "md", "txt",
-    "sh", "bash", "zsh", "fish", "sql", "graphql",
-    "tf", "hcl", "r", "jl",
+    "yaml",
+    "yml",
+    "toml",
+    "json",
+    "md",
+    "txt",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "sql",
+    "graphql",
+    "tf",
+    "hcl",
+    "r",
+    "jl",
+}
+
+# Minimal extraction patterns for languages where queries are stable.
+# Extractions: keep small and stable (query syntax varies by grammar).
+_EXTRACTIONS_BY_LANG = {
+    "python": {
+        "calls": {
+            "query": "(call function: (identifier) @name)",
+            "capture_output": "Text",
+        },
+        "decorators": {
+            "query": "(decorator (identifier) @name)",
+            "capture_output": "Text",
+        },
+    },
+    "javascript": {
+        "calls": {
+            "query": "(call_expression function: (identifier) @name)",
+            "capture_output": "Text",
+        },
+        "decorators": {
+            "query": "(decorator (identifier) @name)",
+            "capture_output": "Text",
+        },
+    },
+    "typescript": {
+        "calls": {
+            "query": "(call_expression function: (identifier) @name)",
+            "capture_output": "Text",
+        },
+        "decorators": {
+            "query": "(decorator (identifier) @name)",
+            "capture_output": "Text",
+        },
+    },
+    "tsx": {
+        "calls": {
+            "query": "(call_expression function: (identifier) @name)",
+            "capture_output": "Text",
+        },
+        "decorators": {
+            "query": "(decorator (identifier) @name)",
+            "capture_output": "Text",
+        },
+    },
 }
 
 
 # ── Chunk-ID helper ───────────────────────────────────────────────────────────
+
 
 def _chunk_id(project_id: str, rel_path: str, start_byte: int, text: str) -> str:
     """Content-addressable chunk ID — stable across re-indexes.
@@ -59,8 +129,109 @@ def _chunk_id(project_id: str, rel_path: str, start_byte: int, text: str) -> str
     shift chunk boundaries.
     """
     import hashlib
+
     digest = hashlib.sha256(f"{rel_path}:{start_byte}:{text}".encode()).hexdigest()[:14]
-    return f"{project_id}:{rel_path}:{digest}"
+    return f"{project_id}:{CHUNK_ID_VERSION}:{rel_path}:{digest}"
+
+
+def _compact_list(items: list, limit: int) -> list:
+    if not items:
+        return []
+    if len(items) <= limit:
+        return items
+    return items[:limit]
+
+
+def _compact_imports(imports: list) -> list:
+    out: list = []
+    for item in imports or []:
+        source = item.get("source") or item.get("module")
+        names = item.get("names") or []
+        if source:
+            out.append({"source": source, "names": _compact_list(names, 10)})
+    return _compact_list(out, 80)
+
+
+def _compact_exports(exports: list) -> list:
+    out: list = []
+    for item in exports or []:
+        name = None
+        kind = None
+        if isinstance(item, dict):
+            name = item.get("name")
+            kind = item.get("kind")
+        if name:
+            out.append({"name": name, "kind": kind})
+    return _compact_list(out, 80)
+
+
+def _compact_symbols(symbols: list) -> list:
+    if not symbols:
+        return []
+    unique: list[str] = []
+    seen: set[str] = set()
+    for s in symbols:
+        name = None
+        if isinstance(s, dict):
+            name = s.get("name") or s.get("symbol") or s.get("text")
+        elif isinstance(s, str):
+            name = s
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        unique.append(name)
+        if len(unique) >= 200:
+            break
+    return unique
+
+
+def _compact_diagnostics(diagnostics: list) -> dict:
+    if not diagnostics:
+        return {"count": 0, "items": []}
+    items = []
+    for d in diagnostics[:10]:
+        items.append(
+            {
+                "message": d.get("message"),
+                "start_line": d.get("start_line") or d.get("span", {}).get("start_row"),
+                "start_col": d.get("start_col") or d.get("span", {}).get("start_col"),
+            }
+        )
+    return {"count": len(diagnostics), "items": items}
+
+
+def _extract_metrics(metrics: dict) -> dict:
+    if not metrics:
+        return {}
+    return {
+        "total_lines": metrics.get("total_lines") or metrics.get("totalLines"),
+        "code_lines": metrics.get("code_lines") or metrics.get("codeLines"),
+        "comment_lines": metrics.get("comment_lines") or metrics.get("commentLines"),
+        "blank_lines": metrics.get("blank_lines") or metrics.get("blankLines"),
+        "error_count": metrics.get("error_count") or metrics.get("errorCount"),
+        "complexity": metrics.get("complexity"),
+    }
+
+
+def _compact_extractions(extractions: dict) -> dict:
+    if not extractions:
+        return {}
+    out: dict = {}
+    for name, payload in (extractions or {}).items():
+        matches = payload.get("matches") or []
+        values: list = []
+        for m in matches:
+            for cap in m.get("captures", []):
+                text = cap.get("text") or cap.get("name")
+                if text:
+                    values.append(text)
+                if len(values) >= 200:
+                    break
+            if len(values) >= 200:
+                break
+        if values:
+            out[name] = _compact_symbols(values)
+    return out
 
 
 def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
@@ -88,7 +259,7 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
     # computed_property as a child).  We chunk at property_declaration level
     # to capture the name from the sibling `pattern` node.
     _MEMBER_TYPES = {
-        "property_declaration",     # var x: T { ... } and var x: T = value
+        "property_declaration",  # var x: T { ... } and var x: T = value
         "function_declaration",
         "subscript_declaration",
         "typealias_declaration",
@@ -96,6 +267,7 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
         "deinit_declaration",
         "protocol_function_declaration",
         "protocol_property_declaration",
+        "enum_entry",  # case first, case second(Int)
     }
     # Type containers: recurse into children, don't emit as a single block.
     _CONTAINER_TYPES = {
@@ -108,8 +280,8 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
 
     try:
         parser = ts_pack.get_parser("swift")
-        src_b  = source.encode("utf-8")
-        tree   = parser.parse(src_b)
+        src_b = source.encode("utf-8")
+        tree = parser.parse(src_b)
     except Exception:
         return []
 
@@ -121,30 +293,38 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
             # Swift property names live in a `pattern` child node;
             # function names live in a bare `simple_identifier` child.
             if child.type == "pattern":
-                return src_b[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+                return src_b[child.start_byte : child.end_byte].decode(
+                    "utf-8", errors="replace"
+                )
             if child.type in ("simple_identifier", "type_identifier"):
-                return src_b[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+                return src_b[child.start_byte : child.end_byte].decode(
+                    "utf-8", errors="replace"
+                )
         return ""
 
-    def _emit_text(text: str, sb: int, name: str, sl: int, el: int,
-                   ctx_path: List[str]) -> None:
+    def _emit_text(
+        text: str, sb: int, name: str, sl: int, el: int, ctx_path: List[str]
+    ) -> None:
         text = text.strip()
         if not text:
             return
         if len(text.encode("utf-8")) <= CHUNK_MAX_BYTES:
             cid = _chunk_id(project_id, rel_path, sb, text)
-            chunks.append({
-                "ref_id": cid,
-                "text":   file_header + text,
-                "metadata": {
-                    "file":         rel_path,
-                    "project_id":   project_id,
-                    "symbols":      [name] if name else [],
-                    "start_line":   sl,
-                    "end_line":     el,
-                    "context_path": ctx_path,
-                },
-            })
+            chunks.append(
+                {
+                    "ref_id": cid,
+                    "text": file_header + text,
+                    "metadata": {
+                        "file": rel_path,
+                        "project_id": project_id,
+                        "language": "swift",
+                        "symbols": [name] if name else [],
+                        "start_line": sl,
+                        "end_line": el,
+                        "context_path": ctx_path,
+                    },
+                }
+            )
         else:
             # Too large — line-window, keeping symbol context.
             lines = text.splitlines()
@@ -153,32 +333,41 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
                 block = "\n".join(lines[i : i + CHUNK_LINES])
                 if block.strip():
                     cid = _chunk_id(project_id, rel_path, sb + i, block)
-                    chunks.append({
-                        "ref_id": cid,
-                        "text":   file_header + block,
-                        "metadata": {
-                            "file":         rel_path,
-                            "project_id":   project_id,
-                            "symbols":      [name] if name else [],
-                            "start_line":   sl + i,
-                            "end_line":     sl + min(i + CHUNK_LINES, len(lines)) - 1,
-                            "context_path": ctx_path,
-                        },
-                    })
+                    chunks.append(
+                        {
+                            "ref_id": cid,
+                            "text": file_header + block,
+                            "metadata": {
+                                "file": rel_path,
+                                "project_id": project_id,
+                                "language": "swift",
+                                "symbols": [name] if name else [],
+                                "start_line": sl + i,
+                                "end_line": sl + min(i + CHUNK_LINES, len(lines)) - 1,
+                                "context_path": ctx_path,
+                            },
+                        }
+                    )
                 i += CHUNK_LINES - OVERLAP_LINES
-
 
     def _walk(node, ctx_path: List[str]) -> None:
         if node.type in _MEMBER_TYPES:
             name = _name_of(node)
-            text = src_b[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
-            _emit_text(text, node.start_byte, name,
-                       node.start_point[0] + 1, node.end_point[0] + 1,
-                       ctx_path + ([name] if name else []))
+            text = src_b[node.start_byte : node.end_byte].decode(
+                "utf-8", errors="replace"
+            )
+            _emit_text(
+                text,
+                node.start_byte,
+                name,
+                node.start_point[0] + 1,
+                node.end_point[0] + 1,
+                ctx_path + ([name] if name else []),
+            )
             # Don't recurse into member bodies — avoids sub-expression chunks.
 
         elif node.type in _CONTAINER_TYPES:
-            name    = _name_of(node)
+            name = _name_of(node)
             new_ctx = ctx_path + ([name] if name else [])
             for child in node.children:
                 _walk(child, new_ctx)
@@ -192,8 +381,6 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
     return chunks
 
 
-
-
 def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]:
     """Read *abs_path* and return chunk dicts with stable ref_ids.
 
@@ -203,20 +390,64 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
     ts_pack returns no chunks.
 
     Each returned dict:
-      ref_id   — content-hash stable ID (project_id:rel_path:sha256[:14])
+      ref_id   — content-hash stable ID (project_id:version:rel_path:sha256[:14])
       text     — chunk content with "// File: ..." header prepended
       metadata — {file, project_id, symbols, start_line, end_line, docstrings,
                    context_path}
     """
     import tree_sitter_language_pack as ts_pack
 
+    def _ensure_ts_pack_initialized() -> None:
+        global _TS_PACK_INIT_DONE
+        if _TS_PACK_INIT_DONE:
+            return
+        with _TS_PACK_INIT_LOCK:
+            if _TS_PACK_INIT_DONE:
+                return
+            if TS_PACK_CACHE_DIR:
+                try:
+                    ts_pack.init({"cache_dir": TS_PACK_CACHE_DIR})
+                except Exception as exc:
+                    print(
+                        f"[lm-proxy:indexer] ts_pack init failed ({exc})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            _TS_PACK_INIT_DONE = True
+
+    _ensure_ts_pack_initialized()
+
+    def _ensure_language_available(lang_name: str) -> bool:
+        try:
+            if ts_pack.has_language(lang_name):
+                return True
+            if not TS_PACK_AUTO_DOWNLOAD:
+                return False
+            ts_pack.download([lang_name])
+            return ts_pack.has_language(lang_name)
+        except Exception as exc:
+            print(
+                f"[lm-proxy:indexer] ts_pack download failed: {lang_name} ({exc})",
+                file=sys.stderr,
+                flush=True,
+            )
+            return False
+
     ext = abs_path.rsplit(".", 1)[-1].lower() if "." in abs_path else ""
 
     # Use ts_pack.detect_language for language detection — covers 156 languages.
-    # Skip extension-only fallback files unless no language detected.
+    # Prefer extension-based detection when available to avoid mis-detection.
     lang: str | None = None
     if ext not in _FALLBACK_EXTS:
-        lang = ts_pack.detect_language(abs_path)
+        try:
+            lang = ts_pack.detect_language_from_extension(ext)
+        except Exception:
+            lang = None
+        if not lang:
+            lang = ts_pack.detect_language(abs_path)
+
+    if lang and not _ensure_language_available(lang):
+        lang = None
 
     # Nothing to do: unknown file type and not a line-window fallback extension.
     if lang is None and ext not in _FALLBACK_EXTS:
@@ -233,19 +464,97 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
 
     file_header = f"// File: {rel_path}\n"
     chunks: List[Dict] = []
+    file_meta: dict = {}
 
     # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
-    if lang == 'swift':
+    if lang == "swift":
+        # Try to enrich file-level metadata from ts_pack.
+        try:
+            try:
+                cfg = ts_pack.ProcessConfig(
+                    "swift",
+                    structure=True,
+                    imports=True,
+                    exports=True,
+                    comments=True,
+                    docstrings=True,
+                    symbols=True,
+                    diagnostics=True,
+                )
+            except TypeError:
+                cfg = ts_pack.ProcessConfig("swift")
+            result = ts_pack.process(source, cfg)
+            file_meta = {
+                "file_imports": _compact_imports(result.get("imports", [])),
+                "file_exports": _compact_exports(result.get("exports", [])),
+                "file_symbols": _compact_symbols(result.get("symbols", [])),
+                "file_diagnostics": _compact_diagnostics(result.get("diagnostics", [])),
+                "file_metrics": _extract_metrics(result.get("metrics", {})),
+                "file_extractions": _compact_extractions(result.get("extractions", {})),
+            }
+            if os.getenv("LM_PROXY_SKIP_DIAGNOSTIC_FILES", "").lower() in (
+                "1",
+                "true",
+                "yes",
+            ):
+                if file_meta.get("file_diagnostics", {}).get("count", 0) > 0:
+                    return []
+        except Exception:
+            file_meta = {}
+
         swift_chunks = _chunk_swift(source, rel_path, project_id)
         if swift_chunks:
+            for ch in swift_chunks:
+                if isinstance(ch.get("metadata"), dict):
+                    ch["metadata"].update(file_meta)
             return swift_chunks
         # fall through to ts_pack / line-window if structure[] was empty
 
     # ── Native ts_pack chunking ───────────────────────────────────────────────
-    if lang and lang != 'swift':
+    if lang and lang != "swift":
         try:
-            config = ts_pack.ProcessConfig(lang, chunk_max_size=CHUNK_MAX_BYTES)
+            try:
+                config = ts_pack.ProcessConfig(
+                    lang,
+                    structure=True,
+                    imports=True,
+                    exports=True,
+                    comments=True,
+                    docstrings=True,
+                    symbols=True,
+                    diagnostics=True,
+                    chunk_max_size=CHUNK_MAX_BYTES,
+                    chunk_overlap=CHUNK_OVERLAP_BYTES,
+                    extractions=_EXTRACTIONS_BY_LANG.get(lang),
+                )
+            except TypeError:
+                config = ts_pack.ProcessConfig(
+                    lang,
+                    structure=True,
+                    imports=True,
+                    exports=True,
+                    comments=True,
+                    docstrings=True,
+                    symbols=True,
+                    diagnostics=True,
+                    chunk_max_size=CHUNK_MAX_BYTES,
+                )
             result = ts_pack.process(source, config)
+            file_meta = {
+                "file_imports": _compact_imports(result.get("imports", [])),
+                "file_exports": _compact_exports(result.get("exports", [])),
+                "file_symbols": _compact_symbols(result.get("symbols", [])),
+                "file_diagnostics": _compact_diagnostics(result.get("diagnostics", [])),
+                "file_metrics": _extract_metrics(result.get("metrics", {})),
+                "file_extractions": _compact_extractions(result.get("extractions", {})),
+            }
+            if os.getenv("LM_PROXY_SKIP_DIAGNOSTIC_FILES", "").lower() in (
+                "1",
+                "true",
+                "yes",
+            ):
+                if file_meta.get("file_diagnostics", {}).get("count", 0) > 0:
+                    return []
             for chunk in result.get("chunks", []):
                 cmeta = chunk.get("metadata", {})
                 # Skip chunks that contain parse errors — embeddings for broken
@@ -256,20 +565,29 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
                 if not content.strip():
                     continue
                 text = file_header + content
-                cid  = _chunk_id(project_id, rel_path, chunk.get("start_byte", 0), content)
-                chunks.append({
-                    "ref_id":   cid,
-                    "text":     text,
-                    "metadata": {
-                        "file":         rel_path,
-                        "project_id":   project_id,
-                        "symbols":      cmeta.get("symbols_defined", []),
-                        "start_line":   chunk.get("start_line", 0) + 1,
-                        "end_line":     chunk.get("end_line", 0) + 1,
-                        "docstrings":   cmeta.get("docstrings", []),
-                        "context_path": cmeta.get("context_path", []),
-                    },
-                })
+                cid = _chunk_id(
+                    project_id, rel_path, chunk.get("start_byte", 0), content
+                )
+                chunks.append(
+                    {
+                        "ref_id": cid,
+                        "text": text,
+                        "metadata": {
+                            "file": rel_path,
+                            "project_id": project_id,
+                            "language": lang,
+                            "symbols": cmeta.get("symbols_defined", []),
+                            "start_line": chunk.get("start_line", 0) + 1,
+                            "end_line": chunk.get("end_line", 0) + 1,
+                            "docstrings": cmeta.get("docstrings", []),
+                            "context_path": cmeta.get("context_path", []),
+                            "node_types": cmeta.get("node_types", []),
+                            "comments": cmeta.get("comments", []),
+                            "has_error_nodes": bool(cmeta.get("has_error_nodes")),
+                            **file_meta,
+                        },
+                    }
+                )
         except Exception:
             pass  # Fall through to line-window below
 
@@ -282,16 +600,22 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
             if not block:
                 break
             text = file_header + "\n".join(block)
-            cid  = _chunk_id(project_id, rel_path, i, text)
-            chunks.append({
-                "ref_id":   cid,
-                "text":     text,
-                "metadata": {"file": rel_path, "project_id": project_id},
-            })
+            cid = _chunk_id(project_id, rel_path, i, text)
+            chunks.append(
+                {
+                    "ref_id": cid,
+                    "text": text,
+                    "metadata": {
+                        "file": rel_path,
+                        "project_id": project_id,
+                        "language": lang,
+                        **file_meta,
+                    },
+                }
+            )
             i += CHUNK_LINES - OVERLAP_LINES
 
     return chunks
-
 
 
 async def chunk_file(abs_path: str, rel_path: str, project_id: str) -> List[Dict]:
@@ -300,6 +624,7 @@ async def chunk_file(abs_path: str, rel_path: str, project_id: str) -> List[Dict
 
 
 # ── Main indexing coroutine ───────────────────────────────────────────────────
+
 
 async def _embed_buffer(buffer: list, embedding_svc) -> list:
     """Encode texts via LM Studio → attach .vector to each chunk."""
@@ -348,16 +673,17 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
     await memory_store.open_pool()
     embedding_svc = get_embedding_service()
 
-    bs            = embedding_svc.effective_batch_size
-    total_files   = len(manifest)
+    bs = embedding_svc.effective_batch_size
+    total_files = len(manifest)
     total_indexed = 0
-    skipped       = 0
-    buffer: list  = []
+    skipped = 0
+    buffer: list = []
 
     print(
         f"[lm-proxy:indexer] Semantic phase — {total_files} files "
         f"(device={embedding_svc._device}, embed_batch={bs})",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     # ── Parallel chunking (I/O-bound reads) ─────────────────────────────────
@@ -368,7 +694,8 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
     print(
         f"[lm-proxy:indexer] Chunked {total_files} files in "
         f"{time.time() - t_chunk:.2f}s",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     # ── Fetch already-indexed chunk_ids (one Postgres round-trip) ────────────
@@ -382,11 +709,15 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
                 )
                 existing_ids = {row[0] for row in await cur.fetchall()}
         except Exception as exc:
-            print(f"[lm-proxy:indexer] WARN: could not fetch existing ids: {exc}",
-                  file=sys.stderr, flush=True)
+            print(
+                f"[lm-proxy:indexer] WARN: could not fetch existing ids: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
     print(
         f"[lm-proxy:indexer] {len(existing_ids)} chunks already indexed — skipping unchanged",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     # ── Filter to only new chunks (already have stable content-hash ref_ids) ─
@@ -398,14 +729,15 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
     ]
     skipped = sum(len(cs) for cs in all_chunks) - len(all_new_chunks)
     total_new = len(all_new_chunks)
-    batch_num  = 0
+    batch_num = 0
 
     # ── Concurrent embed + write (CONCURRENCY groups at a time) ──────────────
     # Split all_new_chunks into groups of CONCURRENCY*bs chunks.
     # For each group: asyncio.gather all embed calls (CONCURRENCY parallel
     # HTTP requests to LM Studio), then asyncio.gather all Postgres writes.
     from embedding_service import _CONCURRENCY as CONCURRENCY
-    window = bs * CONCURRENCY          # e.g. 64 * 4 = 256 chunks per round
+
+    window = bs * CONCURRENCY  # e.g. 64 * 4 = 256 chunks per round
     n_rounds = (total_new + window - 1) // window
 
     for round_idx in range(n_rounds):
@@ -416,10 +748,11 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
         # ── Embed phase: all sub-buffers sent to LM Studio concurrently ───
         t_embed = time.time()
         print(
-            f"[lm-proxy:indexer] Embedding round {round_idx+1}/{n_rounds} "
+            f"[lm-proxy:indexer] Embedding round {round_idx + 1}/{n_rounds} "
             f"— {actual_concurrent} concurrent batches — "
             f"{total_indexed + len(group)}/{total_new} chunks…",
-            file=sys.stderr, flush=True,
+            file=sys.stderr,
+            flush=True,
         )
         embedded_bufs = await asyncio.gather(
             *[_embed_buffer(buf, embedding_svc) for buf in sub_bufs]
@@ -433,20 +766,19 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
         n_written = sum(write_counts)
         total_indexed += n_written
         print(
-            f"[lm-proxy:indexer]   embed={embed_ms:.0f}ms  "
-            f"wrote {n_written} chunks",
-            file=sys.stderr, flush=True,
+            f"[lm-proxy:indexer]   embed={embed_ms:.0f}ms  wrote {n_written} chunks",
+            file=sys.stderr,
+            flush=True,
         )
 
     elapsed = time.time() - t0
     print(
         f"[lm-proxy:indexer] Done — {total_indexed} new / {skipped} skipped / "
         f"{total_files} files in {elapsed:.2f}s",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
     return total_indexed
-
-
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -455,8 +787,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="GraphRAG semantic indexer")
-    parser.add_argument("target",          help="Absolute project root path")
-    parser.add_argument("project_id",      help="12-char project hash ID")
+    parser.add_argument("target", help="Absolute project root path")
+    parser.add_argument("project_id", help="12-char project hash ID")
     parser.add_argument("--manifest-file", required=True, help="Path to JSON manifest")
     args = parser.parse_args()
 
@@ -472,7 +804,8 @@ if __name__ == "__main__":
 
     print(
         f"[lm-proxy:indexer] Manifest loaded — {len(manifest_data)} entries",
-        file=sys.stderr, flush=True,
+        file=sys.stderr,
+        flush=True,
     )
 
     asyncio.run(index_project(args.target, args.project_id, manifest_data))
