@@ -139,16 +139,22 @@ def register(mcp: FastMCP) -> None:
                 WITH s,
                      CASE
                        WHEN s.name = $name THEN 0
+                       WHEN s.qualified_name = $name THEN 0
                        WHEN s.name ENDS WITH ('.' + $name) THEN 1
+                       WHEN s.qualified_name ENDS WITH ('.' + $name) THEN 1
                        WHEN s.name STARTS WITH ($name + '(') THEN 2
+                       WHEN s.qualified_name STARTS WITH ($name + '(') THEN 2
                        WHEN s.name CONTAINS ('.' + $name + '(') THEN 3
+                       WHEN s.qualified_name CONTAINS ('.' + $name + '(') THEN 3
                        WHEN s.signature IS NOT NULL AND s.signature CONTAINS $name THEN 4
+                       WHEN s.qualified_name IS NOT NULL AND s.qualified_name CONTAINS $name THEN 5
                        ELSE 99
                      END AS rank,
                      count(DISTINCT caller) AS callers_in
                 WHERE rank < 99
-                RETURN elementId(s) AS eid, s.name AS name, s.filepath AS filepath, rank
-                ORDER BY rank ASC, callers_in DESC, size(s.name) ASC
+                RETURN elementId(s) AS eid, s.name AS name, s.qualified_name AS qualified_name,
+                       s.filepath AS filepath, rank
+                ORDER BY rank ASC, callers_in DESC, size(coalesce(s.qualified_name, s.name)) ASC
                 LIMIT 5
             """
 
@@ -190,7 +196,11 @@ def register(mcp: FastMCP) -> None:
                     )
 
                 resolved_eid = candidates[0]["eid"]
-                resolved_name = candidates[0]["name"] or symbol_name
+                resolved_name = (
+                    candidates[0]["qualified_name"]
+                    or candidates[0]["name"]
+                    or symbol_name
+                )
 
                 result = await session.run(cypher, eid=resolved_eid)
                 rows = [rec async for rec in result]
