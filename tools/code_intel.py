@@ -162,7 +162,7 @@ def register(mcp: FastMCP) -> None:
                      count(DISTINCT caller) AS callers_in
                 WHERE rank < 99
                 RETURN elementId(s) AS eid, s.name AS name, s.qualified_name AS qualified_name,
-                       s.filepath AS filepath, rank
+                       s.signature AS signature, s.filepath AS filepath, rank
                 ORDER BY rank ASC, callers_in DESC, size(coalesce(s.qualified_name, s.name)) ASC
                 LIMIT 5
             """
@@ -208,16 +208,25 @@ def register(mcp: FastMCP) -> None:
                         "Try a fully qualified name like `Type.method` or include argument labels."
                     )
 
-                filtered = candidates
+                matches_by_file = []
+                matches_by_signature = []
                 if file_path:
-                    filtered = [c for c in candidates if c.get("filepath") == file_path]
+                    matches_by_file = [
+                        c for c in candidates if c.get("filepath") == file_path
+                    ]
                 if signature:
-                    filtered = [
+                    matches_by_signature = [
                         c
-                        for c in filtered
+                        for c in candidates
                         if c.get("signature") and signature in c.get("signature")
                     ]
-                picked = filtered[0] if filtered else candidates[0]
+
+                if matches_by_file:
+                    picked = matches_by_file[0]
+                elif matches_by_signature:
+                    picked = matches_by_signature[0]
+                else:
+                    picked = candidates[0]
 
                 resolved_eid = picked["eid"]
                 resolved_name = (
