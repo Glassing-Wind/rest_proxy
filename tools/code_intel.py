@@ -208,11 +208,20 @@ def register(mcp: FastMCP) -> None:
                         "Try a fully qualified name like `Type.method` or include argument labels."
                     )
 
-                resolved_eid = candidates[0]["eid"]
+                filtered = candidates
+                if file_path:
+                    filtered = [c for c in candidates if c.get("filepath") == file_path]
+                if signature:
+                    filtered = [
+                        c
+                        for c in filtered
+                        if c.get("signature") and signature in c.get("signature")
+                    ]
+                picked = filtered[0] if filtered else candidates[0]
+
+                resolved_eid = picked["eid"]
                 resolved_name = (
-                    candidates[0]["qualified_name"]
-                    or candidates[0]["name"]
-                    or symbol_name
+                    picked.get("qualified_name") or picked.get("name") or symbol_name
                 )
 
                 result = await session.run(cypher, eid=resolved_eid)
