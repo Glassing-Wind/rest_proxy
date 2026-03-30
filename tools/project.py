@@ -142,13 +142,13 @@ def register(mcp: FastMCP) -> None:
 1. `index_workspace(project_path)` → returns immediately with a `job_id`
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_project_overview(project_path)` → health, architecture clusters, key files
-4. `get_code_importance(project_path)` → PageRank-ranked files
+4. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
 5. `search_codebase([project_path], query, include_metadata=False, languages?, min_imports=0, min_symbols=0, require_diagnostics=False, require_context=False, include_paths?, exclude_paths?)` → semantic search + metadata filters
 6. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
 ### Call Graph Traversal:
-- `get_call_chain(project_path, symbol_name, depth=3, direction='down')` → trace CALLS N hops
-- `get_call_chain(project_path, symbol_name, depth=3, direction='up')` → trace callers N hops
+- `get_call_chain(project_path, symbol_name, depth=3, direction='down', file_path=None, signature=None)` → trace CALLS N hops
+- `get_call_chain(project_path, symbol_name, depth=3, direction='up', file_path=None, signature=None)` → trace callers N hops
 
 ### File & Symbol Inspection (no indexing required):
 - `describe_file("", "/abs/path/file.swift")` → fast outline
@@ -185,6 +185,7 @@ Doc indexing tips:
 - `get_test_coverage_for(project_path, file_path)` → tests that cover a file
 - `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
+- `get_language_pack_status()` → available vs manifest languages (auto-download status)
 
 ### Memory Tools:
 - `search_memory(session_id, query, global_search=True)` → cross-project recall
