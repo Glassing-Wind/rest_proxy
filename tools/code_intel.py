@@ -38,7 +38,9 @@ def register(mcp: FastMCP) -> None:
         return await _tx(session)
 
     @mcp.tool()
-    async def get_symbol_context(project_path: str, symbol_name: str) -> str:
+    async def get_symbol_context(
+        project_path: str, symbol_name: str, include_source_preview: bool = True
+    ) -> str:
         """
         Single-call deep dive into a symbol: definition location, signature,
         what it calls, what calls it, and the actual source code chunk.
@@ -112,38 +114,41 @@ def register(mcp: FastMCP) -> None:
                 for c in callees:
                     out.append(f"  - `{c['name']}`  in {c.get('file', '?')}")
 
-            try:
-                abs_path = os.path.join(project_path, rec["filepath"])
-                if os.path.exists(abs_path):
-                    with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
-                        lines_list = fh.read().splitlines()
-                    start_line = max(1, int(rec["start_line"] or 1))
-                    end_line = max(start_line, int(rec["end_line"] or start_line))
-                    snippet = "\n".join(lines_list[start_line - 1 : end_line])
-                    if snippet.strip():
-                        out += [f"\n**Source preview:**\n```ts\n{snippet}\n```"]
-                else:
-                    raise FileNotFoundError(abs_path)
-            except Exception:
+            if include_source_preview:
                 try:
-                    memory_store, _, _, _, _ = get_memory_modules()
-                    await memory_store.open_pool()
-                    async with memory_store._pg_pool.connection() as conn:
-                        async with conn.cursor() as cur:
-                            await cur.execute(
-                                """
-                                SELECT content FROM codebase_embeddings
-                                WHERE  project_id = %s AND file_path = %s
-                                ORDER  BY chunk_index LIMIT 2
-                            """,
-                                (project_id, rec["filepath"]),
-                            )
-                            rows = await cur.fetchall()
-                            if rows:
-                                src = "\n\n".join(r[0][:600] for r in rows)
-                                out += [f"\n**Source preview:**\n```\n{src}\n```"]
+                    abs_path = os.path.join(project_path, rec["filepath"])
+                    if os.path.exists(abs_path):
+                        with open(
+                            abs_path, "r", encoding="utf-8", errors="ignore"
+                        ) as fh:
+                            lines_list = fh.read().splitlines()
+                        start_line = max(1, int(rec["start_line"] or 1))
+                        end_line = max(start_line, int(rec["end_line"] or start_line))
+                        snippet = "\n".join(lines_list[start_line - 1 : end_line])
+                        if snippet.strip():
+                            out += [f"\n**Source preview:**\n```ts\n{snippet}\n```"]
+                    else:
+                        raise FileNotFoundError(abs_path)
                 except Exception:
-                    pass
+                    try:
+                        memory_store, _, _, _, _ = get_memory_modules()
+                        await memory_store.open_pool()
+                        async with memory_store._pg_pool.connection() as conn:
+                            async with conn.cursor() as cur:
+                                await cur.execute(
+                                    """
+                                    SELECT content FROM codebase_embeddings
+                                    WHERE  project_id = %s AND file_path = %s
+                                    ORDER  BY chunk_index LIMIT 2
+                                """,
+                                    (project_id, rec["filepath"]),
+                                )
+                                rows = await cur.fetchall()
+                                if rows:
+                                    src = "\n\n".join(r[0][:600] for r in rows)
+                                    out += [f"\n**Source preview:**\n```\n{src}\n```"]
+                    except Exception:
+                        pass
 
             return "\n".join(out)
         except Exception as e:
@@ -685,7 +690,6 @@ def register(mcp: FastMCP) -> None:
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await _execute_read(
                     session,
-                    session,
                     cypher_louvain,
                     pid=project_id,
                     op="get_code_communities_louvain",
@@ -694,7 +698,6 @@ def register(mcp: FastMCP) -> None:
 
                 if not using_louvain:
                     records = await _execute_read(
-                        session,
                         session,
                         cypher_dir,
                         pid=project_id,
@@ -1127,6 +1130,7 @@ def register(mcp: FastMCP) -> None:
 async def find_references_impl(project_path: str | list[str], symbol_name: str) -> str:
     """Implementation of find_references shared by tool and test runner."""
     import hashlib
+    import os
 
     try:
         if isinstance(project_path, str):
@@ -1137,6 +1141,32 @@ async def find_references_impl(project_path: str | list[str], symbol_name: str) 
         pids = [hashlib.md5(p.encode()).hexdigest()[:12] for p in project_paths]
 
         import graph_bootstrap
+
+        _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+        _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+        _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "code_intel"}
+
+        async def _execute_read(
+            session,
+            cypher: str,
+            timeout: float | None = None,
+            op: str | None = None,
+            **params,
+        ):
+            metadata = dict(_TX_METADATA_BASE)
+            op_value = op or "read"
+            if _TX_OP_PREFIX:
+                op_value = f"{_TX_OP_PREFIX}.{op_value}"
+            metadata["op"] = op_value
+
+            @unit_of_work(timeout=timeout or _TX_TIMEOUT, metadata=metadata)
+            async def _tx(tx):
+                result = await tx.run(cypher, **params)
+                return await result.data()
+
+            if hasattr(session, "execute_read"):
+                return await session.execute_read(_tx)
+            return await _tx(session)
 
         driver = await graph_bootstrap.require_driver()
 

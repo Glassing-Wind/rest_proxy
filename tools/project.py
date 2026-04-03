@@ -407,11 +407,14 @@ Doc indexing tips:
 - `query_graph(cypher)` → raw Neo4j Cypher
 - `trace_symbol_cross_project(symbol, source_project, target_project)` → cross-project trace
 - `get_test_coverage_for(project_path, file_path)` → tests that cover a file
-- `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges
+- `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges (deprecated; use get_symbol_imports_overview)
+- `get_symbol_imports_overview(project_path, limit=20, include_implicit=true)` → summarize explicit + implicit symbol import edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
 - `rebuild_symbol_graph(project_path)` → rebuild symbol-level IMPORTS/EXPORTS graph
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
+- `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)
+- `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI or backend flow (auto tries UI then backend)
   Example:
   `get_app_flow_summary("/Users/michaelmarler/Projects/rental", ui_contains="lease-detail", model_contains="Lease", service_contains="Lease", limit=50, as_table=true)`
  - `get_language_pack_status()` → available vs manifest languages (auto-download status)
@@ -720,6 +723,148 @@ Doc indexing tips:
             return f"Error summarizing symbol imports: {str(e)}"
 
     @mcp.tool()
+    async def get_symbol_imports_overview(
+        project_path: str, limit: int = 20, include_implicit: bool = True
+    ) -> str:
+        """
+        Summarize explicit (IMPORTS_SYMBOL) and implicit (IMPLICIT_IMPORTS_SYMBOL)
+        symbol import edges for a project.
+
+        Args:
+            project_path: Absolute path to the project root.
+            limit: Max rows to return per section (default 20).
+            include_implicit: Include IMPLICIT_IMPORTS_SYMBOL edges when true.
+        """
+        try:
+            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            import graph_bootstrap
+
+            driver = await graph_bootstrap.require_driver()
+
+            limit = max(1, min(int(limit), 100))
+
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                r_exp_count = await _execute_read(
+                    session,
+                    "MATCH (:File {project_id:$p})-[r:IMPORTS_SYMBOL]->() RETURN count(r) AS n",
+                    p=project_id,
+                    op="get_symbol_imports_overview_exp_count",
+                )
+                exp_count = r_exp_count[0]["n"] if r_exp_count else 0
+
+                imp_count = 0
+                if include_implicit:
+                    r_imp_count = await _execute_read(
+                        session,
+                        "MATCH (:File {project_id:$p})-[r:IMPLICIT_IMPORTS_SYMBOL]->() RETURN count(r) AS n",
+                        p=project_id,
+                        op="get_symbol_imports_overview_imp_count",
+                    )
+                    imp_count = r_imp_count[0]["n"] if r_imp_count else 0
+
+                r_exp_symbols = await _execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
+                    RETURN s.name AS symbol, count(*) AS n
+                    ORDER BY n DESC
+                    LIMIT $limit
+                    """,
+                    p=project_id,
+                    limit=limit,
+                    op="get_symbol_imports_overview_exp_symbols",
+                )
+                exp_symbols = [(rec["symbol"], rec["n"]) for rec in r_exp_symbols]
+
+                r_exp_files = await _execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
+                    WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
+                    ORDER BY n DESC
+                    LIMIT $limit
+                    RETURN file, n, symbols
+                    """,
+                    p=project_id,
+                    limit=limit,
+                    op="get_symbol_imports_overview_exp_files",
+                )
+                exp_files = [
+                    (rec["file"], rec["n"], rec["symbols"]) for rec in r_exp_files
+                ]
+
+                imp_symbols = []
+                imp_files = []
+                if include_implicit:
+                    r_imp_symbols = await _execute_read(
+                        session,
+                        """
+                        MATCH (f:File {project_id:$p})-[:IMPLICIT_IMPORTS_SYMBOL]->(s)
+                        RETURN s.name AS symbol, count(*) AS n
+                        ORDER BY n DESC
+                        LIMIT $limit
+                        """,
+                        p=project_id,
+                        limit=limit,
+                        op="get_symbol_imports_overview_imp_symbols",
+                    )
+                    imp_symbols = [(rec["symbol"], rec["n"]) for rec in r_imp_symbols]
+
+                    r_imp_files = await _execute_read(
+                        session,
+                        """
+                        MATCH (f:File {project_id:$p})-[:IMPLICIT_IMPORTS_SYMBOL]->(s)
+                        WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
+                        ORDER BY n DESC
+                        LIMIT $limit
+                        RETURN file, n, symbols
+                        """,
+                        p=project_id,
+                        limit=limit,
+                        op="get_symbol_imports_overview_imp_files",
+                    )
+                    imp_files = [
+                        (rec["file"], rec["n"], rec["symbols"]) for rec in r_imp_files
+                    ]
+
+            if not exp_symbols and not exp_files and not imp_symbols and not imp_files:
+                return "No symbol import edges found."
+
+            lines = [f"# Symbol import overview: {project_path.split('/')[-1]}", ""]
+            lines.append("## Counts")
+            lines.append(f"IMPORTS_SYMBOL: {exp_count}")
+            if include_implicit:
+                lines.append(f"IMPLICIT_IMPORTS_SYMBOL: {imp_count}")
+
+            if exp_symbols:
+                lines.append("")
+                lines.append("## Top explicit imported symbols")
+                for name, n in exp_symbols:
+                    lines.append(f"- {name}  ({n})")
+            if exp_files:
+                lines.append("")
+                lines.append("## Files with most explicit symbol imports")
+                for file, n, symbols in exp_files[:limit]:
+                    sample = ", ".join(symbols[:6])
+                    lines.append(f"- {file}  ({n})  [{sample}]")
+
+            if include_implicit and imp_symbols:
+                lines.append("")
+                lines.append("## Top implicit imported symbols")
+                for name, n in imp_symbols:
+                    lines.append(f"- {name}  ({n})")
+            if include_implicit and imp_files:
+                lines.append("")
+                lines.append("## Files with most implicit symbol imports")
+                for file, n, symbols in imp_files[:limit]:
+                    sample = ", ".join(symbols[:6])
+                    lines.append(f"- {file}  ({n})  [{sample}]")
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error summarizing symbol imports overview: {str(e)}"
+
+    @mcp.tool()
     async def get_symbol_exports_summary(
         project_path: str,
         limit: int = 20,
@@ -961,6 +1106,160 @@ Doc indexing tips:
             return "\n".join(rows)
         except Exception as exc:
             return f"Error building flow summary: {str(exc)}"
+
+    @mcp.tool()
+    async def get_backend_flow_summary(
+        project_path: str,
+        api_contains: str | None = None,
+        model_contains: str | None = None,
+        service_contains: str | None = None,
+        include_tests: bool = False,
+        limit: int = 20,
+        as_table: bool = False,
+    ) -> str:
+        """
+        Summarize API → Service → DB paths for a project.
+        """
+        try:
+            import graph_bootstrap
+
+            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            query_limit = limit
+            if model_contains:
+                query_limit = max(limit * 10, 200)
+            driver = await graph_bootstrap.require_driver()
+            rows = []
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                result = await _execute_read(
+                    session,
+                    """
+                    MATCH (api:File {project_id:$p})
+                    OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
+                    OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
+                    OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
+                    OPTIONAL MATCH (api)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+                    WHERE ($api_filter IS NULL OR api.filepath CONTAINS $api_filter)
+                      AND ($service_filter IS NULL OR svc.filepath CONTAINS $service_filter)
+                      AND ($model_filter IS NULL OR model.name CONTAINS $model_filter)
+                      AND (svc IS NOT NULL OR model IS NOT NULL OR schema IS NOT NULL OR ext IS NOT NULL)
+                      AND ($include_tests OR (
+                        NOT api.filepath STARTS WITH 'tests/'
+                        AND NOT api.filepath CONTAINS '/tests/'
+                        AND NOT api.filepath CONTAINS '__tests__'
+                        AND NOT api.filepath CONTAINS '.test.'
+                        AND (svc IS NULL OR (
+                          NOT svc.filepath STARTS WITH 'tests/'
+                          AND NOT svc.filepath CONTAINS '/tests/'
+                          AND NOT svc.filepath CONTAINS '__tests__'
+                          AND NOT svc.filepath CONTAINS '.test.'
+                        ))
+                      ))
+                    RETURN api.filepath AS api,
+                       svc.filepath AS svc,
+                       model.name AS model,
+                       schema.filepath AS schema,
+                       ext.url AS external
+                    LIMIT $limit
+                    """,
+                    p=project_id,
+                    api_filter=api_contains,
+                    service_filter=service_contains,
+                    model_filter=model_contains,
+                    include_tests=include_tests,
+                    limit=query_limit,
+                    op="get_backend_flow_summary",
+                )
+                for row in result:
+                    rows.append(
+                        (
+                            row.get("api"),
+                            row.get("svc"),
+                            row.get("model"),
+                            row.get("schema"),
+                            row.get("external"),
+                        )
+                    )
+
+            rows = [r for r in rows if r[1] or r[2] or r[3] or r[4]]
+            if not rows:
+                return "No API → Service → DB paths found."
+
+            if as_table:
+                output = [
+                    "| API | Service | Model | Schema | External |",
+                    "| --- | --- | --- | --- | --- |",
+                ]
+                for api, svc, model, schema, external in rows[:limit]:
+                    output.append(
+                        f"| {api or ''} | {svc or ''} | {model or ''} | {schema or ''} | {external or ''} |"
+                    )
+            else:
+                output = [
+                    " -> ".join([v for v in [api, svc, model, schema, external] if v])
+                    for api, svc, model, schema, external in rows
+                ]
+
+            output = list(dict.fromkeys(output))
+            if limit and len(output) > limit:
+                output = output[:limit]
+            return "\n".join(output)
+        except Exception as exc:
+            return f"Error building backend flow summary: {str(exc)}"
+
+    @mcp.tool()
+    async def get_flow_summary(
+        project_path: str,
+        mode: str = "auto",
+        ui_contains: str | None = None,
+        api_contains: str | None = None,
+        model_contains: str | None = None,
+        service_contains: str | None = None,
+        include_tests: bool = False,
+        limit: int = 20,
+        as_table: bool = False,
+    ) -> str:
+        """
+        Summarize UI → API → Service → DB paths or API → Service → DB paths.
+
+        Args:
+            mode: 'auto', 'ui', or 'backend'.
+            ui_contains: Filter UI files (ui mode only).
+            api_contains: Filter API files (backend mode only).
+            model_contains: Filter model names.
+            service_contains: Filter service files.
+            include_tests: Include test files.
+            limit: Max rows.
+            as_table: Render as table when supported.
+        """
+        mode_norm = (mode or "auto").strip().lower()
+        if mode_norm not in {"auto", "ui", "backend"}:
+            return "Invalid mode. Use 'auto', 'ui', or 'backend'."
+
+        if mode_norm in {"auto", "ui"}:
+            ui_result = await get_app_flow_summary(
+                project_path,
+                ui_contains=ui_contains,
+                model_contains=model_contains,
+                service_contains=service_contains,
+                include_tests=include_tests,
+                limit=limit,
+                as_table=as_table,
+            )
+            if mode_norm == "ui":
+                return ui_result
+            if not ui_result.startswith("No UI → API → Service → DB paths found"):
+                return ui_result
+
+        backend_result = await get_backend_flow_summary(
+            project_path,
+            api_contains=api_contains,
+            model_contains=model_contains,
+            service_contains=service_contains,
+            include_tests=include_tests,
+            limit=limit,
+            as_table=as_table,
+        )
+        return backend_result
 
 
 async def _build_import_graph_impl(project_path: str) -> str:
