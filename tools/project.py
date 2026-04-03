@@ -364,7 +364,7 @@ def register(mcp: FastMCP) -> None:
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_project_overview(project_path)` → health, architecture clusters, key files
 4. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
-5. `search_codebase([project_path], query, include_metadata=False, languages?, min_imports=0, min_symbols=0, require_diagnostics=False, require_context=False, include_paths?, exclude_paths?)` → semantic search + metadata filters
+5. `search_codebase([project_path], query, include_metadata=False, dedupe_files=True, include_debug=False, max_per_dir=2, meta_boost=0.005, mode="precise", fallback="none", fallback_ratio=0.4, fallback_max=12, fallback_glob="", languages?, min_imports=0, min_symbols=0, require_diagnostics=False, require_context=False, include_paths?, exclude_paths?)` → semantic search + metadata filters
 6. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
 ### Call Graph Traversal:
@@ -407,6 +407,8 @@ Doc indexing tips:
 - `get_related_files(project_path, file_path)` → structural neighbors
 - `visualize_subgraph(project_path, symbol_name)` → Mermaid subgraph
 - `query_graph(cypher)` → raw Neo4j Cypher
+- Cypher tip: most relationships do not carry `project_id`; filter on nodes instead (e.g., `MATCH (a {project_id:$pid})-[r]->(b {project_id:$pid})`)
+  - Fallback grep uses `rg`; set `LM_PROXY_RG_PATH` if MCP does not inherit your shell PATH
 - `trace_symbol_cross_project(symbol, source_project, target_project)` → cross-project trace
 - `get_test_coverage_for(project_path, file_path)` → tests that cover a file
 - `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges (deprecated; use get_symbol_imports_overview)
@@ -417,6 +419,7 @@ Doc indexing tips:
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
 - `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)
 - `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI or backend flow (auto tries UI then backend)
+  - Tip: set `include_tests=true` when you want coverage paths from test files too
   Example:
   `get_app_flow_summary("/Users/michaelmarler/Projects/rental", ui_contains="lease-detail", model_contains="Lease", service_contains="Lease", limit=50, as_table=true)`
 - Launch edges: enable `TS_PACK_LAUNCH_EDGES=1` to emit `LAUNCHES` file edges; set `TS_PACK_DEBUG_LAUNCH=1` to log launch resolution counts per file during indexing

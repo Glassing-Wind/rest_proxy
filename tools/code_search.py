@@ -36,6 +36,15 @@ def register(mcp: FastMCP) -> None:
         query: str,
         k: int = 5,
         include_metadata: bool = False,
+        dedupe_files: bool = True,
+        include_debug: bool = False,
+        max_per_dir: int = 2,
+        meta_boost: float = 0.005,
+        mode: str = "precise",
+        fallback: str = "none",
+        fallback_ratio: float = 0.4,
+        fallback_max: int = 12,
+        fallback_glob: str = "",
         languages: list | None = None,
         min_imports: int = 0,
         min_symbols: int = 0,
@@ -57,6 +66,15 @@ def register(mcp: FastMCP) -> None:
             query: Natural language or code snippet to search for.
             k: Total number of results to return (default 5).
             include_metadata: Show metadata lines in results (default False).
+            dedupe_files: Collapse results to one chunk per file (default True).
+            include_debug: Include clone-dedup debug entry in output (default False).
+            max_per_dir: Max results per top-level directory (default 2, 0=disable).
+            meta_boost: Additive boost per metadata field present (default 0.005).
+            mode: "precise" (default) or "broad" to expand coverage when query is exploratory.
+            fallback: "none" (default) or "grep" to add exact-match paths when results are overly concentrated.
+            fallback_ratio: Trigger fallback when unique files / results <= ratio (default 0.4).
+            fallback_max: Maximum fallback file paths to show (default 12).
+            fallback_glob: Optional glob filter for fallback grep (e.g., "*.ts").
             languages: Optional allowlist of languages to include.
             min_imports: Require at least N file imports in metadata.
             min_symbols: Require at least N file symbols in metadata.
@@ -67,6 +85,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import asyncio
+            import sys
             import fnmatch
             from embedding_service import get_embedding_service
 
@@ -89,9 +108,11 @@ def register(mcp: FastMCP) -> None:
             await memory_store.open_pool()
 
             pid_to_name: dict[str, str] = {}
+            pid_to_path: dict[str, str] = {}
             for p in project_paths:
                 pid = hashlib.md5(p.encode()).hexdigest()[:12]
                 pid_to_name[pid] = p.rstrip("/").split("/")[-1]
+                pid_to_path[pid] = p
 
             def _format_meta(meta: dict) -> list[str]:
                 if not isinstance(meta, dict):
@@ -256,6 +277,18 @@ def register(mcp: FastMCP) -> None:
                 projects = ", ".join(f"'{n}'" for n in pid_to_name.values())
                 return f"No matching code found in {projects}.\nEnsure projects are indexed with index_workspace()."
 
+            if mode not in {"precise", "broad"}:
+                mode = "precise"
+
+            if mode == "broad":
+                dedupe_files = False
+                if max_per_dir == 2:
+                    max_per_dir = 4
+                if meta_boost == 0.005:
+                    meta_boost = 0.0
+                if fallback == "none":
+                    fallback = "grep"
+
             filters_active = any(
                 [
                     languages,
@@ -273,7 +306,7 @@ def register(mcp: FastMCP) -> None:
                 "yes",
                 "on",
             }
-            if filters_active or clone_dedup:
+            if filters_active or clone_dedup or meta_boost > 0:
                 include_metadata = True
 
             if include_metadata:
@@ -294,8 +327,24 @@ def register(mcp: FastMCP) -> None:
                         if _passes_filters(r.get("_meta", {}))
                         and _path_allowed(r.get("file_path", ""))
                     ]
+                for r in all_results:
+                    base_score = r.get("rrf", 0.0)
+                    try:
+                        base_score = float(base_score)
+                    except (TypeError, ValueError):
+                        base_score = 0.0
+                    if meta_boost > 0:
+                        r["rank_score"] = base_score + (
+                            r.get("meta_score", 0) * meta_boost
+                        )
+                    else:
+                        r["rank_score"] = base_score
                 all_results.sort(
-                    key=lambda r: (r["rrf"], r.get("meta_score", 0)), reverse=True
+                    key=lambda r: (
+                        r.get("rank_score", r["rrf"]),
+                        r.get("meta_score", 0),
+                    ),
+                    reverse=True,
                 )
             else:
                 all_results.sort(key=lambda r: r["rrf"], reverse=True)
@@ -467,7 +516,7 @@ def register(mcp: FastMCP) -> None:
                                 seen_gids.add(gid)
                             deduped.append(r)
                         all_results = deduped
-                        if debug_clone and debug_lines:
+                        if debug_clone and debug_lines and include_debug:
                             all_results.insert(
                                 0,
                                 {
@@ -479,7 +528,92 @@ def register(mcp: FastMCP) -> None:
                             )
                 except Exception:
                     pass
+
+            if dedupe_files:
+                seen_files: set[str] = set()
+                deduped_files: list[dict] = []
+                for r in all_results:
+                    fp = r.get("file_path")
+                    if not fp or fp in seen_files:
+                        continue
+                    seen_files.add(fp)
+                    deduped_files.append(r)
+                all_results = deduped_files
+
+            if max_per_dir and max_per_dir > 0:
+                dir_counts: dict[str, int] = {}
+                diversified: list[dict] = []
+                for r in all_results:
+                    fp = r.get("file_path") or ""
+                    norm = fp.replace("\\", "/")
+                    top = (
+                        norm.split("/")[0]
+                        if "/" in norm
+                        else os.path.dirname(norm) or "."
+                    )
+                    if dir_counts.get(top, 0) >= max_per_dir:
+                        continue
+                    dir_counts[top] = dir_counts.get(top, 0) + 1
+                    diversified.append(r)
+                all_results = diversified
             top = all_results[:k]
+
+            def _extract_fallback_tokens(text: str) -> list[str]:
+                import re
+
+                tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]+", text)
+                return [t for t in tokens if len(t) >= 3]
+
+            async def _run_fallback_grep(project_root: str) -> tuple[list[str], dict]:
+                import asyncio
+                import shutil
+
+                tokens = _extract_fallback_tokens(query)
+                if not tokens:
+                    return [], {"error": "no_tokens"}
+                pattern = "|".join(sorted(set(tokens)))
+                rg_path = os.getenv("LM_PROXY_RG_PATH") or shutil.which("rg")
+                if not rg_path:
+                    return [], {"error": "rg_not_found"}
+                cmd = [rg_path, "-l", pattern]
+                if fallback_glob:
+                    root = fallback_glob
+                    if any(ch in fallback_glob for ch in "*?["):
+                        root = fallback_glob.split("*")[0]
+                        if root.endswith("/"):
+                            root = root[:-1]
+                        if not root:
+                            root = "."
+                    cmd.append(root)
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        cwd=project_root,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    try:
+                        stdout, stderr = await asyncio.wait_for(
+                            proc.communicate(), timeout=8.0
+                        )
+                    except asyncio.TimeoutError:
+                        proc.kill()
+                        return [], {"error": "timeout"}
+                except Exception:
+                    return [], {"error": "spawn_failed"}
+                if proc.returncode not in (0, 1):
+                    err_text = stderr.decode("utf-8", errors="ignore")
+                    return [], {
+                        "error": "rg_failed",
+                        "code": proc.returncode,
+                        "stderr": err_text[:200],
+                    }
+                output = stdout.decode("utf-8", errors="ignore")
+                paths = [p.strip() for p in output.splitlines() if p.strip()]
+                return paths[: max(0, fallback_max)], {
+                    "code": proc.returncode,
+                    "count": len(paths),
+                }
 
             lines = []
             if multi:
@@ -507,6 +641,49 @@ def register(mcp: FastMCP) -> None:
                     lines.extend(_format_meta(meta if isinstance(meta, dict) else {}))
                 lines.append(r["content"].strip())
                 lines.append("")
+
+            if fallback == "grep" and top:
+                unique_files = len(
+                    {r.get("file_path") for r in top if r.get("file_path")}
+                )
+                ratio = unique_files / max(1, len(top))
+                if unique_files <= 1 or ratio <= fallback_ratio:
+                    fallback_lines: list[str] = []
+                    debug_tokens = (
+                        _extract_fallback_tokens(query) if include_debug else []
+                    )
+                    for pid, proj_name in pid_to_name.items():
+                        proj_root = pid_to_path.get(pid)
+                        if not proj_root:
+                            continue
+                        matches, dbg = await _run_fallback_grep(proj_root)
+                        if include_debug and dbg:
+                            dbg_info = ", ".join(
+                                f"{k}={v}" for k, v in dbg.items() if v is not None
+                            )
+                            if dbg_info:
+                                fallback_lines.append(f"- [debug] {dbg_info}")
+                        if not matches:
+                            continue
+                        for fp in matches:
+                            label = f"[{proj_name}] {fp}" if multi else fp
+                            fallback_lines.append(f"- {label}")
+                    if include_debug:
+                        token_text = (
+                            ", ".join(debug_tokens) if debug_tokens else "(none)"
+                        )
+                        lines.append(f"Fallback grep tokens: {token_text}")
+                        if fallback_glob:
+                            lines.append(f"Fallback grep glob: {fallback_glob}")
+                        rg_hint = os.getenv("LM_PROXY_RG_PATH") or "(auto)"
+                        lines.append(f"Fallback grep rg path: {rg_hint}")
+                        lines.append(f"Debug sys.executable: {sys.executable}")
+                        lines.append(f"Debug PATH: {os.getenv('PATH', '')}")
+                    if fallback_lines:
+                        lines.append("Fallback (grep):")
+                        lines.extend(fallback_lines)
+                    if include_debug or fallback_lines:
+                        lines.append("")
 
             return "\n".join(lines)
         except Exception as e:

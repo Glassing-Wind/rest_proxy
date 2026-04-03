@@ -951,8 +951,13 @@ def register(mcp: FastMCP) -> None:
                 use_syms = ts_symbols
 
         if use_syms:
-            lines.append(f"Symbols ({len(use_syms)}):")
-            lines.extend(use_syms[:40])
+            preview_count = min(10, len(use_syms))
+            lines.append(f"Top symbols ({preview_count} of {len(use_syms)}):")
+            lines.extend(use_syms[:preview_count])
+            if len(use_syms) > preview_count:
+                lines.append(f"More symbols available: {len(use_syms) - preview_count}")
+                lines.append(f"Symbols (up to 40):")
+                lines.extend(use_syms[:40])
         else:
             lines.append("No symbols found.")
 
@@ -1172,6 +1177,7 @@ async def find_references_impl(project_path: str | list[str], symbol_name: str) 
 
         # 1. Graph References (Neo4j)
         graph_refs = []
+        graph_ref_keys: set[tuple[str, str | None]] = set()
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
             records = await _execute_read(
                 session,
@@ -1209,6 +1215,7 @@ async def find_references_impl(project_path: str | list[str], symbol_name: str) 
                 graph_refs.append(
                     f"- {rec['fp']}{line_part} ({rec['cn']}) [Project: {rec['tpid']}]"
                 )
+                graph_ref_keys.add((rec["fp"], str(line) if line else None))
 
         # 2. Semantic/Literal References (Postgres)
         semantic_refs = []
@@ -1230,7 +1237,7 @@ async def find_references_impl(project_path: str | list[str], symbol_name: str) 
                 )
                 async for row in cur:
                     fp, sl, pid, text = row
-                    if any(fp in gr for gr in graph_refs):
+                    if (fp, str(sl) if sl else None) in graph_ref_keys:
                         continue
                     preview = text.strip().splitlines()[0][:80]
                     semantic_refs.append(
