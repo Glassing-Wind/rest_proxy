@@ -552,6 +552,7 @@ def register(mcp: FastMCP) -> None:
             definition: dict = {}
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await _execute_read(
+                    session,
                     """
                     MATCH (s {name: $name, project_id: $pid})
                     WHERE s:Function OR s:Class OR s:Struct OR s:Trait
@@ -575,6 +576,7 @@ def register(mcp: FastMCP) -> None:
             graph_usages: list[str] = []
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await _execute_read(
+                    session,
                     """
                     MATCH (target {name: $name})
                     WHERE target:Function OR target:Class OR target:Struct
@@ -731,6 +733,8 @@ def register(mcp: FastMCP) -> None:
         min_similarity: float = 0.92,
         max_pairs: int = 50,
         min_tokens: int = 80,
+        same_file_min_tokens: int = 20,
+        max_same_file_pairs_per_file: int = 8,
         per_chunk: int = 5,
         sample_size: int = 500,
         exclude_paths: list | None = None,
@@ -772,6 +776,8 @@ def register(mcp: FastMCP) -> None:
             min_similarity: Cosine similarity threshold (default 0.92).
             max_pairs: Max duplicate pairs to return (default 50).
             min_tokens: Minimum token estimate per chunk (approx by chars/4).
+            same_file_min_tokens: Minimum token estimate for same-file pairs (default 20).
+            max_same_file_pairs_per_file: Max same-file pairs per file (default 8).
             per_chunk: Nearest neighbors per chunk (default 5).
             sample_size: Base chunk sample size (default 500).
             exclude_paths: Optional glob patterns to exclude by file_path.
@@ -820,6 +826,20 @@ def register(mcp: FastMCP) -> None:
             winnow_min_chars = max(0, int(winnow_min_tokens) * 4)
             per_chunk = max(1, int(per_chunk))
             max_pairs = max(1, int(max_pairs))
+            same_file_min_tokens = int(
+                os.getenv(
+                    "LM_PROXY_DUPLICATION_SAME_FILE_MIN_TOKENS",
+                    same_file_min_tokens,
+                )
+            )
+            same_file_min_tokens = max(1, same_file_min_tokens)
+            max_same_file_pairs_per_file = int(
+                os.getenv(
+                    "LM_PROXY_DUPLICATION_MAX_SAME_FILE_PAIRS_PER_FILE",
+                    max_same_file_pairs_per_file,
+                )
+            )
+            max_same_file_pairs_per_file = max(1, max_same_file_pairs_per_file)
             sample_size = max(50, int(sample_size))
             winnow_k = max(2, int(winnow_k))
             winnow_window = max(1, int(winnow_window))
@@ -1124,8 +1144,29 @@ def register(mcp: FastMCP) -> None:
                                 return group[i], group[j]
                 return group[0], group[1]
 
+            def _tokenize(text: str) -> list[str]:
+                if not text:
+                    return []
+                return re.findall(
+                    r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]",
+                    text,
+                )
+
+            def _same_file_allowed(
+                file_path: str, content: str, counts: dict[str, int]
+            ) -> bool:
+                if counts.get(file_path, 0) >= max_same_file_pairs_per_file:
+                    return False
+                if same_file_min_tokens > 0:
+                    if len(_tokenize(content)) < same_file_min_tokens:
+                        return False
+                return True
+
             def _emit_pairs(
-                title: str, groups: list[list[dict]], cross_file: bool
+                title: str,
+                groups: list[list[dict]],
+                cross_file: bool,
+                same_file_counts: dict[str, int] | None = None,
             ) -> None:
                 if not groups:
                     lines.append(f"{title}: none")
@@ -1137,6 +1178,12 @@ def register(mcp: FastMCP) -> None:
                     if not pair:
                         continue
                     a, b = pair
+                    if not cross_file and same_file_counts is not None:
+                        file_key = a["file_path"]
+                        if not _same_file_allowed(
+                            file_key, a.get("content") or "", same_file_counts
+                        ):
+                            continue
                     meta_a = a.get("metadata") or {}
                     meta_b = b.get("metadata") or {}
                     a_start = meta_a.get("start_line")
@@ -1150,17 +1197,13 @@ def register(mcp: FastMCP) -> None:
                     )
                     lines.append(f"  A: {preview_a}")
                     lines.append(f"  B: {preview_b}")
+                    if not cross_file and same_file_counts is not None:
+                        same_file_counts[file_key] = (
+                            same_file_counts.get(file_key, 0) + 1
+                        )
                     count += 1
                     if count >= max_pairs:
                         break
-
-            def _tokenize(text: str) -> list[str]:
-                if not text:
-                    return []
-                return re.findall(
-                    r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]",
-                    text,
-                )
 
             def _node_type_jaccard(meta_a: dict, meta_b: dict) -> float:
                 types_a = meta_a.get("node_types") or []
@@ -1258,15 +1301,26 @@ def register(mcp: FastMCP) -> None:
                 same_items = [
                     g for g in exact_items if len({r["file_path"] for r in g}) == 1
                 ]
+                same_file_counts: dict[str, int] = {}
                 lines.append("Exact duplicate chunks")
                 if cross_file_only:
                     _emit_pairs("Cross-file", cross_items, cross_file=True)
                 else:
                     if prefer_cross_file:
                         _emit_pairs("Cross-file", cross_items, cross_file=True)
-                        _emit_pairs("Same-file", same_items, cross_file=False)
+                        _emit_pairs(
+                            "Same-file",
+                            same_items,
+                            cross_file=False,
+                            same_file_counts=same_file_counts,
+                        )
                     else:
-                        _emit_pairs("Same-file", same_items, cross_file=False)
+                        _emit_pairs(
+                            "Same-file",
+                            same_items,
+                            cross_file=False,
+                            same_file_counts=same_file_counts,
+                        )
                         _emit_pairs("Cross-file", cross_items, cross_file=True)
 
             if include_normalized:
@@ -1277,15 +1331,26 @@ def register(mcp: FastMCP) -> None:
                 same_items = [
                     g for g in norm_items if len({r["file_path"] for r in g}) == 1
                 ]
+                same_file_counts: dict[str, int] = {}
                 lines.append("\nNormalized duplicates (identifiers/numbers collapsed)")
                 if cross_file_only:
                     _emit_pairs("Cross-file", cross_items, cross_file=True)
                 else:
                     if prefer_cross_file:
                         _emit_pairs("Cross-file", cross_items, cross_file=True)
-                        _emit_pairs("Same-file", same_items, cross_file=False)
+                        _emit_pairs(
+                            "Same-file",
+                            same_items,
+                            cross_file=False,
+                            same_file_counts=same_file_counts,
+                        )
                     else:
-                        _emit_pairs("Same-file", same_items, cross_file=False)
+                        _emit_pairs(
+                            "Same-file",
+                            same_items,
+                            cross_file=False,
+                            same_file_counts=same_file_counts,
+                        )
                         _emit_pairs("Cross-file", cross_items, cross_file=True)
 
             if include_semantic:
@@ -1521,7 +1586,9 @@ def register(mcp: FastMCP) -> None:
                     ]
 
                     def _emit_winnow(
-                        title: str, pairs: list[tuple[dict, dict, float, float]]
+                        title: str,
+                        pairs: list[tuple[dict, dict, float, float]],
+                        same_file_counts: dict[str, int] | None = None,
                     ) -> None:
                         if not pairs:
                             lines.append(f"{title}: none")
@@ -1531,6 +1598,16 @@ def register(mcp: FastMCP) -> None:
                         for row_a, row_b, overlap, struct_score in pairs:
                             if count >= max_pairs:
                                 break
+                            if same_file_counts is not None and row_a.get(
+                                "file_path"
+                            ) == row_b.get("file_path"):
+                                file_key = row_a.get("file_path") or ""
+                                if not _same_file_allowed(
+                                    file_key,
+                                    row_a.get("content") or "",
+                                    same_file_counts,
+                                ):
+                                    continue
                             meta_a = row_a.get("metadata") or {}
                             meta_b = row_b.get("metadata") or {}
                             a_start = meta_a.get("start_line")
@@ -1553,6 +1630,12 @@ def register(mcp: FastMCP) -> None:
                             )
                             lines.append(f"  A: {preview_a}")
                             lines.append(f"  B: {preview_b}")
+                            if same_file_counts is not None and row_a.get(
+                                "file_path"
+                            ) == row_b.get("file_path"):
+                                same_file_counts[file_key] = (
+                                    same_file_counts.get(file_key, 0) + 1
+                                )
                             count += 1
 
                     if cross_file_only:
@@ -1560,9 +1643,17 @@ def register(mcp: FastMCP) -> None:
                     else:
                         if prefer_cross_file:
                             _emit_winnow("Cross-file", cross_pairs)
-                            _emit_winnow("Same-file", same_pairs)
+                            _emit_winnow(
+                                "Same-file",
+                                same_pairs,
+                                same_file_counts={},
+                            )
                         else:
-                            _emit_winnow("Same-file", same_pairs)
+                            _emit_winnow(
+                                "Same-file",
+                                same_pairs,
+                                same_file_counts={},
+                            )
                             _emit_winnow("Cross-file", cross_pairs)
                 else:
                     lines.append("\nNo winnowed duplicate chunks found.")

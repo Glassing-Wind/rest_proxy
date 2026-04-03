@@ -12,6 +12,7 @@ Config (via env or .env):
   LM_EMBED_BATCH_SIZE              Chunks per HTTP request (default: 64)
   LM_EMBED_CONCURRENCY             Max parallel requests (default: 4)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,15 +21,15 @@ import sys
 from typing import List
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_BASE_URL   = os.getenv("LM_BASE", "http://127.0.0.1:1234").rstrip("/")
-_MODEL      = os.getenv(
+_BASE_URL = os.getenv("LM_BASE", "http://127.0.0.1:1234").rstrip("/")
+_MODEL = os.getenv(
     "LM_PROXY_MEMORY_EMBEDDING_MODEL",
     "text-embedding-jina-embeddings-v2-base-code",
 )
-_BATCH_SIZE   = int(os.getenv("LM_EMBED_BATCH_SIZE",   "64"))
-_CONCURRENCY  = int(os.getenv("LM_EMBED_CONCURRENCY",  "4"))
-_EMBED_URL    = f"{_BASE_URL}/v1/embeddings"
-_TIMEOUT      = 120  # seconds per HTTP request
+_BATCH_SIZE = int(os.getenv("LM_EMBED_BATCH_SIZE", "64"))
+_CONCURRENCY = int(os.getenv("LM_EMBED_CONCURRENCY", "4"))
+_EMBED_URL = f"{_BASE_URL}/v1/embeddings"
+_TIMEOUT = 120  # seconds per HTTP request
 
 
 async def _post_batch(client, texts: List[str]) -> List[List[float]]:
@@ -68,6 +69,7 @@ class EmbeddingService:
     def _get_client(self):
         """Return the shared AsyncClient, creating it on first call."""
         import httpx
+
         if self._client is None:
             # Size the pool to exactly CONCURRENCY so every concurrent
             # request reuses an existing keep-alive connection.
@@ -132,7 +134,7 @@ class EmbeddingService:
         """Synchronous wrapper — runs the async version in a new event loop.
 
         Used by doc_indexer.py and any other sync callers.
-        For async callers (index_workspace.py), use embed_batch_async() directly.
+        For async callers (scripts/index_workspace.py), use embed_batch_async() directly.
         """
         return asyncio.run(self.embed_batch_async(texts, batch_size))
 

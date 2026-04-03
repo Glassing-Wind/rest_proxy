@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""run_struct_index.py – Thin wrapper that calls the Rust-native ts-pack structural indexer.
+"""scripts/run_struct_index.py – Thin wrapper that calls the Rust-native ts-pack structural indexer.
 
 Called by mcp_server.py as a subprocess so it runs in its own process with
 a clean import namespace. This avoids mixing torch/sentence-transformer state
 with the Rust extension's tokio runtime in the same process.
 
 Usage:
-    python run_struct_index.py <project_path> <project_id> \
+    python scripts/run_struct_index.py <project_path> <project_id> \
         --manifest-file <path> [--neo4j-uri ...] [--neo4j-user ...] [--neo4j-pass ...]
 """
 
-import sys
 import os
+import sys
 import argparse
 import uuid
 import json
@@ -19,8 +19,10 @@ from neo4j import unit_of_work
 
 from dotenv import load_dotenv
 
-_base_dir = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(_base_dir, ".env"))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 import tree_sitter_language_pack as ts_pack
 
@@ -790,6 +792,13 @@ def main() -> int:
     )
     parser.add_argument("--neo4j-db", default=os.getenv("LM_PROXY_NEO4J_DB", "proxy"))
     args = parser.parse_args()
+
+    print(
+        "[ts-pack:struct] NOTE: For aligned indexing, run the MCP tool "
+        "index_workspace() which generates a shared manifest for struct/semantic.",
+        file=sys.stderr,
+        flush=True,
+    )
 
     if not os.path.exists(args.manifest_file):
         print(

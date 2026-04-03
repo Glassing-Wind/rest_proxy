@@ -12,12 +12,11 @@ Design:
 - Single process — no native-lib conflicts.
 
 Usage:
-    python index_workspace.py <target_dir> <project_id> --manifest-file <path>
+    python scripts/index_workspace.py <target_dir> <project_id> --manifest-file <path>
 """
 
-import sys
 import os
-
+import sys
 import asyncio
 import json
 import time
@@ -26,11 +25,12 @@ from collections import Counter
 from typing import List, Dict, Tuple
 from dotenv import load_dotenv
 
-_base_dir = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(_base_dir, ".env"))
-sys.path.insert(0, _base_dir)
-
 # Import memory/embedding modules AFTER env vars are set
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 import memory_store
 import memory_bootstrap
 from embedding_service import get_embedding_service
@@ -934,6 +934,13 @@ if __name__ == "__main__":
     parser.add_argument("project_id", help="12-char project hash ID")
     parser.add_argument("--manifest-file", required=True, help="Path to JSON manifest")
     args = parser.parse_args()
+
+    print(
+        "[lm-proxy:indexer] NOTE: For aligned indexing, run the MCP tool "
+        "index_workspace() which generates a shared manifest for struct/semantic.",
+        file=sys.stderr,
+        flush=True,
+    )
 
     if not os.path.exists(args.manifest_file):
         print(

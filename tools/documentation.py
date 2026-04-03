@@ -198,20 +198,25 @@ def register(mcp: FastMCP) -> None:
             vec_str = "[" + ",".join(str(v) for v in query_vec) + "]"
             fetch = min(k * 10, 200)
             topic_sql = "AND source = %(topic)s" if topic else ""
-            test_exclusion_sql = (
-                ""
-                if topic
-                else (
-                    "AND source NOT ILIKE '%test%' "
-                    "AND source NOT ILIKE '%tmp%' "
-                    "AND source NOT ILIKE '%scratch%' "
-                    "AND source NOT ILIKE '%demo%' "
-                    "AND source NOT ILIKE '%sample%' "
-                    "AND source NOT ILIKE '%experimental%' "
-                    "AND source NOT ILIKE '%staging%' "
-                    "AND source NOT ILIKE '%draft%'"
-                )
-            )
+            test_exclusion_sql = ""
+            test_exclusion_params: dict[str, str] = {}
+            if not topic:
+                excluded = [
+                    "%test%",
+                    "%tmp%",
+                    "%scratch%",
+                    "%demo%",
+                    "%sample%",
+                    "%experimental%",
+                    "%staging%",
+                    "%draft%",
+                ]
+                clauses = []
+                for idx, pattern in enumerate(excluded):
+                    key = f"ex{idx}"
+                    clauses.append(f"source NOT ILIKE %({key})s")
+                    test_exclusion_params[key] = pattern
+                test_exclusion_sql = "AND " + " AND ".join(clauses)
 
             if query.strip():
                 sql = f"""
@@ -244,6 +249,7 @@ def register(mcp: FastMCP) -> None:
                     "k": k,
                     "pool": k * 3,
                 }
+                params.update(test_exclusion_params)
             else:
                 sql = f"""
                     SELECT url, metadata->>'title' AS title, chunk_index, content,
@@ -253,6 +259,7 @@ def register(mcp: FastMCP) -> None:
                     ORDER BY embedding <=> %(vec)s::vector LIMIT %(pool)s
                 """
                 params = {"vec": vec_str, "k": k, "pool": k * 3}
+                params.update(test_exclusion_params)
 
             if topic:
                 params["topic"] = topic

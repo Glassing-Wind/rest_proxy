@@ -384,7 +384,7 @@ def register(mcp: FastMCP) -> None:
 - `research_and_index(topic, query, max_urls=5)` → search + crawl + index in one call
 - `research_documentation(topic, query)` → web search for doc URLs
 - `download_documentation(urls, topic)` → crawl + embed + index
-- `search_documentation(query, topic?)` → RRF hybrid search over indexed docs
+- `search_documentation(query, topic?)` → RRF hybrid search over indexed docs (topic optional; global search is supported)
 - `delete_documentation(topic, url_patterns?, allow_all=False, dry_run=False)` → delete doc chunks
 - `list_documentation_sources(topic?, limit=20)` → list topics or domains
 - `llms.txt` is validated; invalid links fall back to sitemap discovery
@@ -399,9 +399,10 @@ Doc indexing tips:
 - `get_changed_symbols(project_path, since='HEAD~1')` → which functions changed
 - `grep_codebase(project_path, pattern)` → exact text search (ripgrep)
 - `find_references(project_path, symbol_name)` → graph + text references
-- `find_code_duplication(project_path, min_similarity=0.92, max_pairs=50, min_tokens=80, per_chunk=5, sample_size=500, include_paths?, exclude_paths?)` → duplicate detection with exact/normalized hashes, winnowing + small-input fallback, and semantic similarity
+- `find_code_duplication(project_path, min_similarity=0.92, max_pairs=50, min_tokens=80, same_file_min_tokens=20, max_same_file_pairs_per_file=8, per_chunk=5, sample_size=500, include_paths?, exclude_paths?)` → duplicate detection with exact/normalized hashes, winnowing + small-input fallback, and semantic similarity
   - Winnowing guarantee: matches shorter than `t = w + k − 1` are not guaranteed; small blocks use k-gram/token fallback
   - Tune with `winnow_*` parameters to balance recall vs noise
+  - Same-file output can be capped per file and filtered by `same_file_min_tokens`
   - Clone group relationships are `MEMBER_OF_CLONE_GROUP` and `MEMBER_OF_FILE_CLONE_GROUP` (not `IN_*`), and symbol file path is stored on `filepath`
 - `get_related_files(project_path, file_path)` → structural neighbors
 - `visualize_subgraph(project_path, symbol_name)` → Mermaid subgraph
@@ -418,8 +419,9 @@ Doc indexing tips:
 - `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI or backend flow (auto tries UI then backend)
   Example:
   `get_app_flow_summary("/Users/michaelmarler/Projects/rental", ui_contains="lease-detail", model_contains="Lease", service_contains="Lease", limit=50, as_table=true)`
- - `get_language_pack_status()` → available vs manifest languages (auto-download status)
- - `get_indexed_projects(query?)` → list indexed repo paths (filters by id prefix or path substring)
+- Launch edges: enable `TS_PACK_LAUNCH_EDGES=1` to emit `LAUNCHES` file edges; set `TS_PACK_DEBUG_LAUNCH=1` to log launch resolution counts per file during indexing
+- `get_language_pack_status()` → available vs manifest languages (auto-download status)
+- `get_indexed_projects(query?)` → list indexed repo paths (filters by id prefix or path substring)
 
 ### Memory Tools:
 - `search_memory(session_id, query, global_search=True)` → cross-project recall

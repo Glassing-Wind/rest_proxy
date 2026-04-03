@@ -530,7 +530,7 @@ async def index_workspace(project_path: str) -> str:
 
         struct_cmd = [
             sys.executable,
-            os.path.join(base_dir, "run_struct_index.py"),
+            os.path.join(base_dir, "scripts", "run_struct_index.py"),
             project_path,
             project_id,
             "--manifest-file",
@@ -544,7 +544,7 @@ async def index_workspace(project_path: str) -> str:
         ]
         sem_cmd = [
             sys.executable,
-            os.path.join(base_dir, "index_workspace.py"),
+            os.path.join(base_dir, "scripts", "index_workspace.py"),
             project_path,
             project_id,
             "--manifest-file",

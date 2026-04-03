@@ -17,6 +17,7 @@
 # - Optional: create .env from .env.example if present and set credentials.
 # - Python version:      3.11+ recommended (match production runtime).
 # - Dev loop:            run one service at a time; both are standalone.
+# - Quick sanity check:  python3 -m py_compile proxy.py
 #
 # Run the MCP server (tooling / indexing)
 # - Start MCP server:    python3 mcp_server.py
@@ -37,6 +38,7 @@
 # - Run a single script: python3 test_native_index.py
 # - Run a single script: python3 verify_streaming.py
 # - Pattern for one test: python3 test_<name>.py  (scripts live at repo root)
+# - Single test example: python3 test_native_index.py
 #
 # Notes on tests
 # - These test_*.py files are executable scripts; they are not wired to pytest.
@@ -89,6 +91,8 @@
 # - Never raise in the memory persistence path; use best-effort behavior.
 # - Use debug_log() for structured logging when LM_PROXY_DEBUG is enabled.
 # - Prefer returning safe defaults instead of throwing on request paths.
+# - Neo4j sessions/transactions: use session.execute_read/execute_write with
+#   @unit_of_work to apply timeouts/metadata and get automatic retry/commit.
 #
 # Async / I/O
 # - Prefer async functions when interacting with network or storage.
@@ -109,13 +113,17 @@
 # - Treat all integrations as optional; check flags before using.
 # - Keep defaults safe; make enabling behavior explicit via env vars.
 # - Avoid adding new required env vars; provide sensible fallbacks.
+# - ts-pack usage: init/configure cache dir, auto-download missing parsers,
+#   and use detect_language + process for chunking.
+# - Launch edges: TS_PACK_LAUNCH_EDGES=1 emits LAUNCHES file edges; enable
+#   TS_PACK_DEBUG_LAUNCH=1 for per-file launch resolution debug logs.
 
 # Structure & File Layout
 # - Core proxy:            proxy.py
 # - MCP server entry:      mcp_server.py
 # - Memory layer:          memory_store.py, memory_summary.py,
 #                          memory_retrieval.py, memory_types.py
-# - Indexing tools:        tools/indexing.py, index_workspace.py
+# - Indexing tools:        tools/indexing.py, scripts/index_workspace.py
 # - Helper utilities:      _helpers.py, _jobs.py
 # - Tool registry:         tools/__init__.py
 # - Developer tooling:     tools/dev.py
