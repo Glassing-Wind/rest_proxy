@@ -656,13 +656,6 @@ async def get_index_status(job_id: str) -> str:
         if sem_rc is not None
         else "  semantic:   running…",
     ]
-    clone_status = job.get("clone_enrich_status")
-    if clone_status:
-        clone_msg = job.get("clone_enrich_msg")
-        if clone_msg:
-            lines.append(f"  clone_enrich: {clone_status} ({clone_msg})")
-        else:
-            lines.append(f"  clone_enrich: {clone_status}")
     if last_build:
         lines.append(
             "  graph_build: "

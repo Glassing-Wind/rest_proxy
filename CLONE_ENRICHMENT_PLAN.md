@@ -22,8 +22,8 @@ Optional debug edge (disabled by default):
 - `(:Function)-[:NEAR_CLONE_OF {score, method}]->(:Function)`
 
 File-level clone groups (secondary, retrieval hygiene only):
-- Current source (implemented): chunk duplication pairs (winnow candidates)
-- Planned preferred source: derived from function clone-group overlap
+- Derived from function clone-group overlap (source of truth)
+- Chunk-only file similarity is legacy/debug and should not drive grouping
 - Stored in Neo4j:
   - `(:FileCloneGroup {id, size, method, score_min, score_max, score_avg, created_at})`
   - `(:File)-[:MEMBER_OF_FILE_CLONE_GROUP]->(:FileCloneGroup)`
@@ -31,7 +31,6 @@ File-level clone groups (secondary, retrieval hygiene only):
 
 ## Feature flags
 
-- `LM_PROXY_CLONE_ENRICH=1` enable clone grouping during indexing.
 - `LM_PROXY_CLONE_DEDUP=1` enable retrieval-time dedup/collapse.
 - `LM_PROXY_CLONE_NEAR_EDGE=1` optionally write pairwise edges for inspection.
 - `LM_PROXY_CLONE_DEBUG=1` inject debug output into search results (dev only).
@@ -64,12 +63,11 @@ Structural rerank (Stage 2):
 
 ## Write path (indexing)
 
-- Implemented: clone enrichment runs after indexing (async/non-blocking) and is
-  tracked on the same job ID via `get_index_status`.
-- Reads candidate pairs from Postgres embeddings
+- Rust indexing writes clone groups during the same run (authoritative path)
+- Reads candidate pairs from struct/winnow signals
 - Clusters into groups (union-find)
 - Writes CloneGroup nodes and edges
-- Writes FileCloneGroup nodes and edges (chunk-based)
+- Derives FileCloneGroup nodes/edges from function overlap
 - Optionally writes NEAR_CLONE_OF edges
 
 ## Retrieval behavior (opt-in)
@@ -85,9 +83,7 @@ When `LM_PROXY_CLONE_DEDUP=1`:
   - file_key = file_clone_group_id || canonical file id || file path
   - func_key = function_clone_group_id || canonical function id || symbol id || (file path + start_line)
 - Collapse results by clone group.
-- File-level suppression uses:
-  - chunk-derived file group (implemented)
-  - function-derived file group (planned preference)
+- File-level suppression uses function-derived file groups
 - Keep canonical only unless:
   - query explicitly asks for variants or differences
   - canonical is filtered out by path/language
@@ -111,3 +107,15 @@ Debug instrumentation (dev only):
 - Canonical selection is deterministic.
 - Retrieval with `LM_PROXY_CLONE_DEDUP=1` reduces redundant items.
 - Graph size stays stable (no pairwise edges unless explicitly enabled).
+
+## Rust migration plan (phased)
+
+1. Emit per-symbol fingerprints in Rust (done)
+2. Port grouping to Rust (done)
+3. Retire Python clone grouping (next)
+   - Keep retrieval dedup in Python (or move it to Rust once stable)
+
+## Current state
+
+- Rust is the authoritative writer for clone groups
+- Python clone-enrich should be disabled and eventually removed

@@ -402,6 +402,7 @@ Doc indexing tips:
 - `find_code_duplication(project_path, min_similarity=0.92, max_pairs=50, min_tokens=80, per_chunk=5, sample_size=500, include_paths?, exclude_paths?)` → duplicate detection with exact/normalized hashes, winnowing + small-input fallback, and semantic similarity
   - Winnowing guarantee: matches shorter than `t = w + k − 1` are not guaranteed; small blocks use k-gram/token fallback
   - Tune with `winnow_*` parameters to balance recall vs noise
+  - Clone group relationships are `MEMBER_OF_CLONE_GROUP` and `MEMBER_OF_FILE_CLONE_GROUP` (not `IN_*`), and symbol file path is stored on `filepath`
 - `get_related_files(project_path, file_path)` → structural neighbors
 - `visualize_subgraph(project_path, symbol_name)` → Mermaid subgraph
 - `query_graph(cypher)` → raw Neo4j Cypher

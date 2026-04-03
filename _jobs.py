@@ -8,6 +8,8 @@ Each entry: {status, struct_rc, sem_rc, logs[], started_at, finished_at}
 import os
 import sys
 import threading
+import asyncio
+import time
 from typing import Dict, Any
 
 _JOBS: Dict[str, Dict[str, Any]] = {}
@@ -19,6 +21,29 @@ _MAX_LOG_LINES = 200  # ring-buffer size per job
 # (import graph build) back onto this loop — not create a new one —
 # because the Neo4j async driver is bound to it.
 _MAIN_LOOP = None
+
+
+async def _execute_read(
+    session, cypher: str, timeout: float | None = None, op: str | None = None, **params
+):
+    from neo4j import unit_of_work
+
+    tx_timeout = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+    op_prefix = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+    metadata = {"source": "lm_proxy", "tool": "jobs"}
+    op_value = op or "read"
+    if op_prefix:
+        op_value = f"{op_prefix}.{op_value}"
+    metadata["op"] = op_value
+
+    @unit_of_work(timeout=timeout or tx_timeout, metadata=metadata)
+    async def _tx(tx):
+        result = await tx.run(cypher, **params)
+        return await result.data()
+
+    if hasattr(session, "execute_read"):
+        return await session.execute_read(_tx)
+    return await _tx(session)
 
 
 def register_main_loop(loop) -> None:
@@ -129,63 +154,21 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                     project_path, run_imports=True, run_symbols=True
                 )
 
-                if os.getenv("LM_PROXY_CLONE_ENRICH", "0").strip().lower() in {
-                    "1",
-                    "true",
-                    "yes",
-                    "on",
-                }:
-                    try:
-                        import asyncio
-                        from tools.code_search import build_clone_groups
-
-                        async def _run_clone_enrich():
-                            with _JOBS_LOCK:
-                                if job_id in _JOBS:
-                                    _JOBS[job_id]["clone_enrich_status"] = "running"
-                            try:
-                                result = await build_clone_groups(
-                                    project_path, project_id
-                                )
-                                status = "done"
-                            except Exception as exc:
-                                result = f"clone_enrich: error {exc}"
-                                status = "failed"
-                            with _JOBS_LOCK:
-                                if job_id in _JOBS:
-                                    _JOBS[job_id]["clone_enrich_status"] = status
-                                    _JOBS[job_id]["clone_enrich_msg"] = result
-                                    _JOBS[job_id]["logs"].append(
-                                        f"[clone-enrich] {result}"
-                                    )
-
-                        asyncio.create_task(_run_clone_enrich())
-                        with _JOBS_LOCK:
-                            if job_id in _JOBS:
-                                _JOBS[job_id]["clone_enrich_status"] = "pending"
-                        return "clone_enrich: scheduled"
-                    except Exception as exc:
-                        return f"clone_enrich: error {exc}"
-                return "clone_enrich: skipped"
-
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
                 future = asyncio.run_coroutine_threadsafe(
                     _post_index_maintenance(),
                     _MAIN_LOOP,
                 )
-                clone_msg = None
                 try:
-                    clone_msg = future.result(timeout=10)
+                    future.result(timeout=10)
                 except Exception:
-                    clone_msg = "clone_enrich: timeout"
+                    pass
                 queued = "enqueued + timestamps refreshed"
             else:
                 queued = "skipped: main loop not available"
             with _JOBS_LOCK:
                 if job_id in _JOBS:
                     _JOBS[job_id]["logs"].append(f"[graph-build] {queued}")
-                    if clone_msg:
-                        _JOBS[job_id]["logs"].append(f"[clone-enrich] {clone_msg}")
         except Exception as e:
             with _JOBS_LOCK:
                 if job_id in _JOBS:
