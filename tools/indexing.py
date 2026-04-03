@@ -554,6 +554,16 @@ async def index_workspace(project_path: str) -> str:
         struct_env = dict(os.environ)
         struct_env.setdefault("TS_PACK_SERIAL_PARSE", "1")
         struct_env.setdefault("TS_PACK_INCLUDE_INTRA_FILE_CALLS", "1")
+        cache_dir = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
+        if cache_dir:
+            struct_env.setdefault("TS_PACK_CACHE_DIR", cache_dir)
+        if os.getenv("LM_PROXY_TS_PACK_AUTO_DOWNLOAD", "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            struct_env.setdefault("TS_PACK_AUTO_DOWNLOAD", "1")
         struct_proc = subprocess.Popen(
             struct_cmd,
             stdout=subprocess.PIPE,
@@ -646,6 +656,13 @@ async def get_index_status(job_id: str) -> str:
         if sem_rc is not None
         else "  semantic:   running…",
     ]
+    clone_status = job.get("clone_enrich_status")
+    if clone_status:
+        clone_msg = job.get("clone_enrich_msg")
+        if clone_msg:
+            lines.append(f"  clone_enrich: {clone_status} ({clone_msg})")
+        else:
+            lines.append(f"  clone_enrich: {clone_status}")
     if last_build:
         lines.append(
             "  graph_build: "

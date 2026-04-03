@@ -98,7 +98,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
             import graph_bootstrap
             from tools.project import enqueue_graph_build
 
-            async def _post_index_maintenance() -> None:
+            async def _post_index_maintenance() -> str | None:
                 from neo4j import unit_of_work
 
                 driver = await graph_bootstrap.require_driver()
@@ -129,18 +129,63 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                     project_path, run_imports=True, run_symbols=True
                 )
 
+                if os.getenv("LM_PROXY_CLONE_ENRICH", "0").strip().lower() in {
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                }:
+                    try:
+                        import asyncio
+                        from tools.code_search import build_clone_groups
+
+                        async def _run_clone_enrich():
+                            with _JOBS_LOCK:
+                                if job_id in _JOBS:
+                                    _JOBS[job_id]["clone_enrich_status"] = "running"
+                            try:
+                                result = await build_clone_groups(
+                                    project_path, project_id
+                                )
+                                status = "done"
+                            except Exception as exc:
+                                result = f"clone_enrich: error {exc}"
+                                status = "failed"
+                            with _JOBS_LOCK:
+                                if job_id in _JOBS:
+                                    _JOBS[job_id]["clone_enrich_status"] = status
+                                    _JOBS[job_id]["clone_enrich_msg"] = result
+                                    _JOBS[job_id]["logs"].append(
+                                        f"[clone-enrich] {result}"
+                                    )
+
+                        asyncio.create_task(_run_clone_enrich())
+                        with _JOBS_LOCK:
+                            if job_id in _JOBS:
+                                _JOBS[job_id]["clone_enrich_status"] = "pending"
+                        return "clone_enrich: scheduled"
+                    except Exception as exc:
+                        return f"clone_enrich: error {exc}"
+                return "clone_enrich: skipped"
+
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
                 future = asyncio.run_coroutine_threadsafe(
                     _post_index_maintenance(),
                     _MAIN_LOOP,
                 )
-                future.result(timeout=2)
+                clone_msg = None
+                try:
+                    clone_msg = future.result(timeout=10)
+                except Exception:
+                    clone_msg = "clone_enrich: timeout"
                 queued = "enqueued + timestamps refreshed"
             else:
                 queued = "skipped: main loop not available"
             with _JOBS_LOCK:
                 if job_id in _JOBS:
                     _JOBS[job_id]["logs"].append(f"[graph-build] {queued}")
+                    if clone_msg:
+                        _JOBS[job_id]["logs"].append(f"[clone-enrich] {clone_msg}")
         except Exception as e:
             with _JOBS_LOCK:
                 if job_id in _JOBS:

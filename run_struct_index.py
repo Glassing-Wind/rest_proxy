@@ -548,31 +548,46 @@ def _ensure_manifest_file_nodes(
                     }
                 )
 
-            if not missing:
-                return 0
-
-            BATCH = 200
             total = 0
-            for i in range(0, len(missing), BATCH):
-                batch = missing[i : i + BATCH]
-                _execute_write(
-                    session,
-                    """
-                    UNWIND $batch AS row
-                    MERGE (f:File {id: row.id})
-                    ON CREATE SET
-                        f.project_id = $pid,
-                        f.filepath = row.filepath,
-                        f.name = row.name,
-                        f.indexed_at = timestamp(),
-                        f.parsed = false
-                    """,
-                    batch=batch,
-                    pid=project_id,
-                    timeout=_NEO4J_WRITE_TIMEOUT_S,
-                    op="ensure_manifest_files",
-                )
-                total += len(batch)
+            if missing:
+                BATCH = 200
+                for i in range(0, len(missing), BATCH):
+                    batch = missing[i : i + BATCH]
+                    _execute_write(
+                        session,
+                        """
+                        UNWIND $batch AS row
+                        MERGE (f {id: row.id})
+                        SET f:Node, f:File
+                        ON CREATE SET
+                            f.project_id = $pid,
+                            f.filepath = row.filepath,
+                            f.name = row.name,
+                            f.indexed_at = timestamp(),
+                            f.parsed = false
+                        """,
+                        batch=batch,
+                        pid=project_id,
+                        timeout=_NEO4J_WRITE_TIMEOUT_S,
+                        op="ensure_manifest_files",
+                    )
+                    total += len(batch)
+
+            # Ensure all manifest File nodes have Node label (for CONTAINS match).
+            _execute_write(
+                session,
+                """
+                MATCH (f:File {project_id:$pid})
+                WHERE f.filepath IN $paths
+                SET f:Node
+                """,
+                pid=project_id,
+                paths=[
+                    entry.get("rel_path") for entry in manifest if entry.get("rel_path")
+                ],
+                timeout=_NEO4J_WRITE_TIMEOUT_S,
+                op="ensure_manifest_node_label",
+            )
             return total
     finally:
         driver.close()
@@ -580,7 +595,7 @@ def _ensure_manifest_file_nodes(
 
 def _mark_manifest_parsed(
     project_id: str,
-    manifest_file: str,
+    parsed_paths: list[str],
     neo4j_uri: str,
     neo4j_user: str,
     neo4j_pass: str,
@@ -588,17 +603,7 @@ def _mark_manifest_parsed(
 ) -> int:
     import neo4j as _neo4j
 
-    try:
-        with open(manifest_file, "r") as fh:
-            manifest = json.load(fh)
-    except OSError:
-        return 0
-
-    if not manifest:
-        return 0
-
-    paths = [entry.get("rel_path") for entry in manifest if entry.get("rel_path")]
-    if not paths:
+    if not parsed_paths:
         return 0
 
     driver = _neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
@@ -608,12 +613,12 @@ def _mark_manifest_parsed(
                 session,
                 """
                 MATCH (f:File {project_id:$pid})
-                WHERE f.filepath IN $paths AND f.parsed IS NULL
+                WHERE f.filepath IN $paths AND (f.parsed IS NULL OR f.parsed = false)
                 SET f.parsed = true
                 RETURN count(f) AS updated
                 """,
                 pid=project_id,
-                paths=paths,
+                paths=parsed_paths,
                 timeout=_NEO4J_WRITE_TIMEOUT_S,
                 op="mark_manifest_parsed",
             )
@@ -833,9 +838,21 @@ def main() -> int:
                 file=sys.stderr,
                 flush=True,
             )
+        parsed_paths = []
+        try:
+            root = os.path.abspath(args.project_path)
+            for fp in files:
+                try:
+                    rel = os.path.relpath(str(fp), root)
+                    parsed_paths.append(rel.replace(os.sep, "/"))
+                except Exception:
+                    continue
+        except Exception:
+            parsed_paths = []
+
         updated = _mark_manifest_parsed(
             project_id=args.project_id,
-            manifest_file=args.manifest_file,
+            parsed_paths=parsed_paths,
             neo4j_uri=args.neo4j_uri,
             neo4j_user=args.neo4j_user,
             neo4j_pass=args.neo4j_pass,

@@ -267,7 +267,13 @@ def register(mcp: FastMCP) -> None:
                     exclude_paths,
                 ]
             )
-            if filters_active:
+            clone_dedup = os.getenv("LM_PROXY_CLONE_DEDUP", "0").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if filters_active or clone_dedup:
                 include_metadata = True
 
             if include_metadata:
@@ -293,6 +299,190 @@ def register(mcp: FastMCP) -> None:
                 )
             else:
                 all_results.sort(key=lambda r: r["rrf"], reverse=True)
+
+            if clone_dedup:
+                try:
+                    import graph_bootstrap
+
+                    driver = await graph_bootstrap.require_driver()
+                    if driver:
+                        for r in all_results:
+                            meta = r.get("_meta")
+                            if not isinstance(meta, dict):
+                                raw = r.get("metadata")
+                                if isinstance(raw, str):
+                                    try:
+                                        meta = json.loads(raw)
+                                    except Exception:
+                                        meta = {}
+                                elif isinstance(raw, dict):
+                                    meta = raw
+                                else:
+                                    meta = {}
+                                r["_meta"] = meta
+
+                        by_project: dict[str, list[dict]] = {}
+                        for idx, r in enumerate(all_results):
+                            fp = r.get("file_path")
+                            line = (r.get("_meta") or {}).get("start_line")
+                            pid = r.get("project_id")
+                            if not fp or not isinstance(line, int) or not pid:
+                                continue
+                            by_project.setdefault(pid, []).append(
+                                {"idx": idx, "fp": fp, "line": line}
+                            )
+
+                        clone_map: dict[int, str | None] = {}
+                        for pid, items in by_project.items():
+                            async with driver.session(
+                                database=graph_bootstrap._NEO4J_DB
+                            ) as session:
+                                records = await _execute_read(
+                                    session,
+                                    """
+                                    UNWIND $items AS item
+                                    MATCH (f:File {project_id:$pid, filepath:item.fp})-[:CONTAINS]->(s)
+                                    WHERE (s:Function OR s:Method OR s:Class OR s:Struct)
+                                      AND s.start_line <= item.line AND s.end_line >= item.line
+                                    OPTIONAL MATCH (s)-[:MEMBER_OF_CLONE_GROUP]->(g:CloneGroup)
+                                    WITH item, s, g
+                                    ORDER BY (s.end_line - s.start_line) ASC
+                                    WITH item, collect(g.id)[0] AS gid
+                                    RETURN item.idx AS idx, gid
+                                    """,
+                                    items=items,
+                                    pid=pid,
+                                    op="clone_dedup_map",
+                                )
+                            for rec in records:
+                                clone_map[int(rec["idx"])] = rec.get("gid")
+
+                        file_group_map: dict[str, str] = {}
+                        file_group_source = (
+                            os.getenv("LM_PROXY_FILE_CLONE_SOURCE", "chunk")
+                            .strip()
+                            .lower()
+                        )
+                        if file_group_source not in {"chunk", "function", "hybrid"}:
+                            file_group_source = "chunk"
+
+                        for pid, items in by_project.items():
+                            async with driver.session(
+                                database=graph_bootstrap._NEO4J_DB
+                            ) as session:
+                                file_records = []
+                                if file_group_source in {"chunk", "hybrid"}:
+                                    file_records = await _execute_read(
+                                        session,
+                                        """
+                                        UNWIND $items AS item
+                                        MATCH (f:File {project_id:$pid, filepath:item.fp})
+                                        OPTIONAL MATCH (f)-[:MEMBER_OF_FILE_CLONE_GROUP]->(g:FileCloneGroup)
+                                        RETURN item.fp AS fp, collect(g.id)[0] AS gid
+                                        """,
+                                        items=items,
+                                        pid=pid,
+                                        op="clone_dedup_file_map",
+                                    )
+
+                                func_records = []
+                                if file_group_source in {"function", "hybrid"}:
+                                    func_records = await _execute_read(
+                                        session,
+                                        """
+                                        UNWIND $items AS item
+                                        MATCH (f:File {project_id:$pid, filepath:item.fp})-[:CONTAINS]->(s)
+                                        WHERE (s:Function OR s:Method OR s:Class OR s:Struct)
+                                          AND s.start_line <= item.line AND s.end_line >= item.line
+                                        OPTIONAL MATCH (s)-[:MEMBER_OF_CLONE_GROUP]->(g:CloneGroup)
+                                        WITH item, collect(DISTINCT g.id) AS gids
+                                        RETURN item.fp AS fp, gids
+                                        """,
+                                        items=items,
+                                        pid=pid,
+                                        op="clone_dedup_file_map_function",
+                                    )
+
+                                func_group_map: dict[str, str] = {}
+                                for row in func_records:
+                                    fp = row.get("fp")
+                                    gids = [g for g in (row.get("gids") or []) if g]
+                                    if not fp or not gids:
+                                        continue
+                                    gids.sort()
+                                    gid = hashlib.md5(
+                                        "|".join(gids).encode()
+                                    ).hexdigest()[:12]
+                                    func_group_map[fp] = gid
+
+                                for row in file_records:
+                                    fp = row.get("fp")
+                                    gid = row.get("gid")
+                                    if fp and gid:
+                                        file_group_map[fp] = gid
+
+                                if func_group_map:
+                                    for fp, gid in func_group_map.items():
+                                        if (
+                                            file_group_source == "function"
+                                            or fp not in file_group_map
+                                        ):
+                                            file_group_map[fp] = gid
+
+                        debug_clone = os.getenv(
+                            "LM_PROXY_CLONE_DEBUG", "0"
+                        ).strip().lower() in {
+                            "1",
+                            "true",
+                            "yes",
+                            "on",
+                        }
+
+                        debug_lines: list[str] = []
+                        if debug_clone:
+                            debug_lines.append(
+                                f"clone_dedup file_groups={len(file_group_map)}"
+                            )
+
+                        if file_group_map:
+                            seen_file_gids: set[str] = set()
+                            deduped_by_file: list[dict] = []
+                            for r in all_results:
+                                fp = r.get("file_path")
+                                file_gid = file_group_map.get(fp) if fp else None
+                                if debug_clone and fp:
+                                    debug_lines.append(
+                                        f"clone_dedup file={fp} gid={file_gid}"
+                                    )
+                                if file_gid:
+                                    if file_gid in seen_file_gids:
+                                        continue
+                                    seen_file_gids.add(file_gid)
+                                deduped_by_file.append(r)
+                            all_results = deduped_by_file
+
+                        seen_gids: set[str] = set()
+                        deduped: list[dict] = []
+                        for idx, r in enumerate(all_results):
+                            gid = clone_map.get(idx)
+                            if gid:
+                                if gid in seen_gids:
+                                    continue
+                                seen_gids.add(gid)
+                            deduped.append(r)
+                        all_results = deduped
+                        if debug_clone and debug_lines:
+                            all_results.insert(
+                                0,
+                                {
+                                    "file_path": "[clone_dedup_debug]",
+                                    "content": "\n".join(debug_lines[:20]),
+                                    "rrf": 1.0,
+                                    "project_id": pid,
+                                },
+                            )
+                except Exception:
+                    pass
             top = all_results[:k]
 
             lines = []
@@ -790,6 +980,13 @@ def register(mcp: FastMCP) -> None:
                   AND char_length(content) >= %(min_chars)s
                   {include_filter_sql}
             """
+            winnow_count_sql = f"""
+                SELECT count(*) AS n
+                FROM codebase_embeddings
+                WHERE project_id = %(pid)s
+                  AND char_length(content) >= %(min_chars)s
+                  {include_filter_sql}
+            """
 
             exact_groups: dict[str, list[dict]] = {}
             normalized_groups: dict[str, list[dict]] = {}
@@ -862,13 +1059,60 @@ def register(mcp: FastMCP) -> None:
                         }
                         if include_like_patterns:
                             params["include_paths"] = include_like_patterns
-                        if winnow_sample_size > 0:
+                        total_chunks = None
+                        try:
+                            await cur.execute(winnow_count_sql, params)
+                            row = await cur.fetchone()
+                            total_chunks = row[0] if row else None
+                        except Exception:
+                            total_chunks = None
+
+                        effective_winnow_sample = winnow_sample_size
+                        if total_chunks is not None and total_chunks <= 5000:
+                            effective_winnow_sample = 0
+
+                        if effective_winnow_sample and effective_winnow_sample > 0:
                             winnow_sql = f"{winnow_sql} LIMIT %(limit)s"
-                            params["limit"] = max(100, winnow_sample_size)
+                            params["limit"] = max(100, effective_winnow_sample)
                         await cur.execute(winnow_sql, params)
                         rows = await cur.fetchall()
                         col_names = [desc[0] for desc in cur.description]
                         winnow_rows = [dict(zip(col_names, row)) for row in rows]
+
+                        if effective_winnow_sample and effective_winnow_sample > 0:
+                            try:
+                                await cur.execute(
+                                    f"""
+                                    SELECT id, file_path, chunk_index, content, metadata
+                                    FROM codebase_embeddings
+                                    WHERE project_id = %(pid)s
+                                      AND char_length(content) >= %(min_chars)s
+                                      AND char_length(content) <= %(max_chars)s
+                                      {include_filter_sql}
+                                    """,
+                                    {
+                                        "pid": project_id,
+                                        "min_chars": winnow_min_chars,
+                                        "max_chars": max(winnow_min_chars, 600),
+                                        **(
+                                            {"include_paths": include_like_patterns}
+                                            if include_like_patterns
+                                            else {}
+                                        ),
+                                    },
+                                )
+                                small_rows = await cur.fetchall()
+                                col_names = [desc[0] for desc in cur.description]
+                                small_rows = [
+                                    dict(zip(col_names, row)) for row in small_rows
+                                ]
+                                if small_rows:
+                                    seen_ids = {r["id"] for r in winnow_rows}
+                                    for row in small_rows:
+                                        if row.get("id") not in seen_ids:
+                                            winnow_rows.append(row)
+                            except Exception:
+                                pass
 
             lines: list[str] = []
 
@@ -921,6 +1165,18 @@ def register(mcp: FastMCP) -> None:
                     r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]",
                     text,
                 )
+
+            def _node_type_jaccard(meta_a: dict, meta_b: dict) -> float:
+                types_a = meta_a.get("node_types") or []
+                types_b = meta_b.get("node_types") or []
+                if not types_a or not types_b:
+                    return 0.0
+                set_a = set(types_a)
+                set_b = set(types_b)
+                denom = len(set_a | set_b)
+                if denom == 0:
+                    return 0.0
+                return len(set_a & set_b) / denom
 
             def _winnow_fingerprints(
                 tokens: list[str], k: int, window: int
@@ -1080,7 +1336,7 @@ def register(mcp: FastMCP) -> None:
                     lines.append("\nNo near-duplicate chunks found.")
 
             if include_winnow:
-                winnow_pairs: list[tuple[dict, dict, float]] = []
+                winnow_pairs: list[tuple[dict, dict, float, float]] = []
                 chunk_meta: dict[int, dict] = {}
                 chunk_tokens: dict[int, list[str]] = {}
                 chunk_token_set: dict[int, set[str]] = {}
@@ -1131,6 +1387,11 @@ def register(mcp: FastMCP) -> None:
                         fp_counts.setdefault(label, {})
                         for h in fps:
                             fp_counts[label][h] = fp_counts[label].get(h, 0) + 1
+
+                    if not chunk_fps_by_scale[cid]:
+                        kgrams = _kgrams(tokens, min(winnow_small_k, len(tokens)))
+                        if kgrams:
+                            chunk_kgrams[cid] = kgrams
 
                 kgram_index: dict[tuple[str, ...], set[int]] = {}
                 for cid, grams in chunk_kgrams.items():
@@ -1227,11 +1488,15 @@ def register(mcp: FastMCP) -> None:
                     ):
                         continue
 
-                    score = max(max_overlap, token_jaccard, kgram_jaccard)
+                    base_score = max(max_overlap, token_jaccard, kgram_jaccard)
+                    struct_score = _node_type_jaccard(
+                        row_a.get("metadata") or {}, row_b.get("metadata") or {}
+                    )
+                    score = base_score * (0.5 + 0.5 * struct_score)
                     pair_key = tuple(sorted([key_a, key_b]))
                     existing = best_pairs.get(pair_key)
                     if not existing or score > existing[2]:
-                        best_pairs[pair_key] = (row_a, row_b, score)
+                        best_pairs[pair_key] = (row_a, row_b, score, struct_score)
 
                 winnow_pairs = list(best_pairs.values())
                 winnow_pairs.sort(
@@ -1260,14 +1525,14 @@ def register(mcp: FastMCP) -> None:
                     ]
 
                     def _emit_winnow(
-                        title: str, pairs: list[tuple[dict, dict, float]]
+                        title: str, pairs: list[tuple[dict, dict, float, float]]
                     ) -> None:
                         if not pairs:
                             lines.append(f"{title}: none")
                             return
                         lines.append(f"{title} ({len(pairs)})")
                         count = 0
-                        for row_a, row_b, overlap in pairs:
+                        for row_a, row_b, overlap, struct_score in pairs:
                             if count >= max_pairs:
                                 break
                             meta_a = row_a.get("metadata") or {}
@@ -1287,7 +1552,8 @@ def register(mcp: FastMCP) -> None:
                                 .splitlines()[0][:200]
                             )
                             lines.append(
-                                f"- {row_a['file_path']}{a_line} ↔ {row_b['file_path']}{b_line}  (score={overlap:.2f})"
+                                f"- {row_a['file_path']}{a_line} ↔ {row_b['file_path']}{b_line}  "
+                                f"(score={overlap:.2f}, struct={struct_score:.2f})"
                             )
                             lines.append(f"  A: {preview_a}")
                             lines.append(f"  B: {preview_b}")
@@ -1401,3 +1667,716 @@ def register(mcp: FastMCP) -> None:
             return "\n".join(output)
         except Exception as e:
             return f"Error finding definition: {str(e)}"
+
+
+async def build_clone_groups(
+    project_path: str,
+    project_id: str | None = None,
+    min_score: float = 0.85,
+    max_pairs: int = 5000,
+) -> str:
+    """
+    Build clone groups for a project and write them to Neo4j.
+
+    Uses winnow + token/structural rerank to generate candidate pairs,
+    clusters them via union-find, then writes CloneGroup nodes.
+    """
+    try:
+        import fnmatch
+        import hashlib as _hashlib
+        import itertools
+        import re
+        import sys
+        from datetime import datetime
+        import graph_bootstrap
+
+        memory_store, _, _, _, _ = get_memory_modules()
+        await memory_store.open_pool()
+        if not memory_store._pg_pool_available():
+            return "clone_enrich: Postgres pool not available"
+
+        pid = project_id or _hashlib.md5(project_path.encode()).hexdigest()[:12]
+
+        winnow_min_tokens = 20
+        winnow_min_chars = max(0, int(winnow_min_tokens) * 4)
+        winnow_small_token_threshold = 50
+        winnow_small_k = 5
+        winnow_small_w = 3
+        winnow_medium_k = 9
+        winnow_medium_w = 5
+        winnow_large_k = 15
+        winnow_large_w = 7
+        winnow_min_fingerprints = 12
+        winnow_bucket_limit = 40
+        winnow_fallback_hashes = 6
+        winnow_force_all_hashes_max_fps = 25
+        winnow_min_overlap = 0.6
+        winnow_token_sim_threshold = 0.65
+        winnow_kgram_sim_threshold = 0.7
+
+        winnow_sample_size = 2000
+
+        token_re = re.compile(
+            r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]"
+        )
+
+        def _tokenize(text: str) -> list[str]:
+            if not text:
+                return []
+            return token_re.findall(text)
+
+        def _normalize_tokens(tokens: list[str]) -> list[str]:
+            out = []
+            for t in tokens:
+                if re.fullmatch(r"\d+", t):
+                    out.append("<num>")
+                elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", t):
+                    out.append("<id>")
+                else:
+                    out.append(t)
+            return out
+
+        def _kgrams(tokens: list[str], k: int) -> set[tuple[str, ...]]:
+            if k <= 0 or len(tokens) < k:
+                return set()
+            return {tuple(tokens[i : i + k]) for i in range(len(tokens) - k + 1)}
+
+        def _winnow_fingerprints(tokens: list[str], k: int, window: int) -> set[int]:
+            if len(tokens) < k:
+                return set()
+            hashes = []
+            for i in range(len(tokens) - k + 1):
+                gram = " ".join(tokens[i : i + k])
+                h = int(_hashlib.md5(gram.encode()).hexdigest()[:16], 16)
+                hashes.append(h)
+            if not hashes:
+                return set()
+            if len(hashes) <= window:
+                return {min(hashes)}
+            fps = set()
+            for i in range(len(hashes) - window + 1):
+                fps.add(min(hashes[i : i + window]))
+            return fps
+
+        def _node_type_jaccard(meta_a: dict, meta_b: dict) -> float:
+            types_a = meta_a.get("node_types") or []
+            types_b = meta_b.get("node_types") or []
+            if not types_a or not types_b:
+                return 0.0
+            set_a = set(types_a)
+            set_b = set(types_b)
+            denom = len(set_a | set_b)
+            if denom == 0:
+                return 0.0
+            return len(set_a & set_b) / denom
+
+        winnow_sql_base = """
+            SELECT id, file_path, chunk_index, content, metadata
+            FROM codebase_embeddings
+            WHERE project_id = %(pid)s
+              AND char_length(content) >= %(min_chars)s
+        """
+        winnow_count_sql = """
+            SELECT count(*) AS n
+            FROM codebase_embeddings
+            WHERE project_id = %(pid)s
+              AND char_length(content) >= %(min_chars)s
+        """
+
+        async with memory_store._pg_pool.connection() as conn:
+            async with conn.cursor() as cur:
+                params = {"pid": pid, "min_chars": winnow_min_chars}
+                total_chunks = None
+                try:
+                    await cur.execute(winnow_count_sql, params)
+                    row = await cur.fetchone()
+                    total_chunks = row[0] if row else None
+                except Exception:
+                    total_chunks = None
+
+                effective_winnow_sample = winnow_sample_size
+                if total_chunks is not None and total_chunks <= 5000:
+                    effective_winnow_sample = 0
+
+                winnow_sql = winnow_sql_base
+                if effective_winnow_sample and effective_winnow_sample > 0:
+                    winnow_sql = f"{winnow_sql} LIMIT %(limit)s"
+                    params["limit"] = max(100, effective_winnow_sample)
+                await cur.execute(winnow_sql, params)
+                rows = await cur.fetchall()
+                col_names = [desc[0] for desc in cur.description]
+                winnow_rows = [dict(zip(col_names, row)) for row in rows]
+
+                if effective_winnow_sample and effective_winnow_sample > 0:
+                    try:
+                        await cur.execute(
+                            """
+                            SELECT id, file_path, chunk_index, content, metadata
+                            FROM codebase_embeddings
+                            WHERE project_id = %(pid)s
+                              AND char_length(content) >= %(min_chars)s
+                              AND char_length(content) <= %(max_chars)s
+                            """,
+                            {
+                                "pid": pid,
+                                "min_chars": winnow_min_chars,
+                                "max_chars": max(winnow_min_chars, 600),
+                            },
+                        )
+                        small_rows = await cur.fetchall()
+                        col_names = [desc[0] for desc in cur.description]
+                        small_rows = [dict(zip(col_names, row)) for row in small_rows]
+                        if small_rows:
+                            seen_ids = {r["id"] for r in winnow_rows}
+                            for row in small_rows:
+                                if row.get("id") not in seen_ids:
+                                    winnow_rows.append(row)
+                    except Exception:
+                        pass
+
+        debug = os.getenv("LM_PROXY_CLONE_DEBUG", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+        if not winnow_rows:
+            return "clone_enrich: no chunks available"
+
+        chunk_meta: dict[int, dict] = {}
+        chunk_tokens: dict[int, list[str]] = {}
+        chunk_token_set: dict[int, set[str]] = {}
+        chunk_kgrams: dict[int, set[tuple[str, ...]]] = {}
+        chunk_fps_by_scale: dict[int, dict[str, set[int]]] = {}
+        fp_counts: dict[str, dict[int, int]] = {}
+
+        scales: list[tuple[str, int, int]] = [
+            ("small", winnow_small_k, winnow_small_w),
+            ("medium", winnow_medium_k, winnow_medium_w),
+            ("large", winnow_large_k, winnow_large_w),
+        ]
+
+        for row in winnow_rows:
+            fp = row.get("file_path")
+            if not fp:
+                continue
+            if "id" in row:
+                row["id"] = str(row["id"])
+            content = row.get("content") or ""
+            content = re.sub(r"^// File: .*?\n", "", content)
+            tokens = _normalize_tokens(_tokenize(content))
+            if not tokens:
+                continue
+
+            cid = row["id"]
+            chunk_meta[cid] = row
+            chunk_tokens[cid] = tokens
+            chunk_token_set[cid] = set(tokens)
+
+            if len(tokens) < winnow_small_token_threshold:
+                kgrams = _kgrams(tokens, min(winnow_small_k, len(tokens)))
+                if kgrams:
+                    chunk_kgrams[cid] = kgrams
+                continue
+
+            chunk_fps_by_scale[cid] = {}
+            for label, k, window in scales:
+                if len(tokens) < k:
+                    continue
+                fps = _winnow_fingerprints(tokens, k, window)
+                if not fps or len(fps) < winnow_min_fingerprints:
+                    continue
+                chunk_fps_by_scale[cid][label] = fps
+                fp_counts.setdefault(label, {})
+                for h in fps:
+                    fp_counts[label][h] = fp_counts[label].get(h, 0) + 1
+
+            if not chunk_fps_by_scale[cid]:
+                kgrams = _kgrams(tokens, min(winnow_small_k, len(tokens)))
+                if kgrams:
+                    chunk_kgrams[cid] = kgrams
+
+        kgram_index: dict[tuple[str, ...], set[int]] = {}
+        for cid, grams in chunk_kgrams.items():
+            for gram in grams:
+                kgram_index.setdefault(gram, set()).add(cid)
+
+        candidate_pairs: dict[tuple[int, int], dict] = {}
+        for gram, ids in kgram_index.items():
+            if len(ids) < 2:
+                continue
+            for a, b in itertools.combinations(sorted(ids), 2):
+                candidate_pairs.setdefault((a, b), {"kgram": True})
+
+        fp_index_selected: dict[str, dict[int, set[int]]] = {}
+        for label, _k, _w in scales:
+            for cid, fps in chunk_fps_by_scale.items():
+                fps_set = fps.get(label)
+                if not fps_set:
+                    continue
+                if (
+                    winnow_force_all_hashes_max_fps > 0
+                    and len(fps_set) <= winnow_force_all_hashes_max_fps
+                ):
+                    filtered = set(fps_set)
+                else:
+                    filtered = {
+                        h
+                        for h in fps_set
+                        if fp_counts.get(label, {}).get(h, 0) <= winnow_bucket_limit
+                    }
+                    if not filtered and winnow_fallback_hashes > 0:
+                        filtered = set(sorted(fps_set)[:winnow_fallback_hashes])
+                for h in filtered:
+                    fp_index_selected.setdefault(label, {}).setdefault(h, set()).add(
+                        cid
+                    )
+
+            pair_counts: dict[tuple[int, int], int] = {}
+            for h, ids in fp_index_selected.get(label, {}).items():
+                ids = sorted(ids)
+                if len(ids) < 2:
+                    continue
+                for a, b in itertools.combinations(ids, 2):
+                    pair_counts[(a, b)] = pair_counts.get((a, b), 0) + 1
+            for (a, b), shared in pair_counts.items():
+                entry = candidate_pairs.setdefault((a, b), {"winnow": {}})
+                entry.setdefault("winnow", {})[label] = shared
+
+        scored_pairs: list[tuple[int, int, float]] = []
+        for (a, b), info in candidate_pairs.items():
+            row_a = chunk_meta.get(a)
+            row_b = chunk_meta.get(b)
+            if not row_a or not row_b:
+                continue
+
+            token_jaccard = 0.0
+            if winnow_token_sim_threshold > 0:
+                ta = chunk_token_set.get(a, set())
+                tb = chunk_token_set.get(b, set())
+                if ta and tb:
+                    token_jaccard = len(ta & tb) / max(1, len(ta | tb))
+
+            kgram_jaccard = 0.0
+            if info.get("kgram"):
+                ga = chunk_kgrams.get(a, set())
+                gb = chunk_kgrams.get(b, set())
+                if ga and gb:
+                    kgram_jaccard = len(ga & gb) / max(1, len(ga | gb))
+
+            max_overlap = 0.0
+            for label, shared in info.get("winnow", {}).items():
+                fps_a = chunk_fps_by_scale.get(a, {}).get(label)
+                fps_b = chunk_fps_by_scale.get(b, {}).get(label)
+                if not fps_a or not fps_b:
+                    continue
+                denom = min(len(fps_a), len(fps_b))
+                if denom == 0:
+                    continue
+                overlap = shared / denom
+                if overlap > max_overlap:
+                    max_overlap = overlap
+
+            if (
+                max_overlap < winnow_min_overlap
+                and token_jaccard < winnow_token_sim_threshold
+                and kgram_jaccard < winnow_kgram_sim_threshold
+            ):
+                continue
+
+            base_score = max(max_overlap, token_jaccard, kgram_jaccard)
+            struct_score = _node_type_jaccard(
+                row_a.get("metadata") or {}, row_b.get("metadata") or {}
+            )
+            score = base_score * (0.5 + 0.5 * struct_score)
+            if score >= min_score:
+                scored_pairs.append((a, b, score))
+            if len(scored_pairs) >= max_pairs:
+                break
+
+        if debug:
+            print(
+                f"[clone-enrich] winnow_rows={len(winnow_rows)} candidate_pairs={len(candidate_pairs)} scored_pairs={len(scored_pairs)}",
+                file=sys.stderr,
+            )
+
+        if not scored_pairs:
+            return "clone_enrich: no candidate pairs"
+
+        driver = await graph_bootstrap.require_driver()
+        if not driver:
+            return "clone_enrich: Neo4j unavailable"
+
+        items = []
+        for cid in {p for pair in scored_pairs for p in pair[:2]}:
+            meta = (chunk_meta.get(cid) or {}).get("metadata") or {}
+            fp = (chunk_meta.get(cid) or {}).get("file_path")
+            line = meta.get("start_line")
+            if fp and isinstance(line, int):
+                items.append({"fp": fp, "line": line, "cid": cid})
+
+        if debug:
+            print(
+                f"[clone-enrich] mapped_items={len(items)}",
+                file=sys.stderr,
+            )
+
+        if not items:
+            return "clone_enrich: no mappable chunks"
+
+        tx_timeout = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+        op_prefix = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+        meta_base = {"source": "lm_proxy", "tool": "code_search"}
+
+        def _meta(op: str) -> dict:
+            op_value = f"{op_prefix}.{op}" if op_prefix else op
+            out = dict(meta_base)
+            out["op"] = op_value
+            return out
+
+        @unit_of_work(timeout=tx_timeout, metadata=_meta("clone_map"))
+        async def _tx(tx):
+            res = await tx.run(
+                """
+                UNWIND $items AS item
+                MATCH (f:File {project_id:$pid, filepath:item.fp})-[:CONTAINS]->(s)
+                WHERE (s:Function OR s:Method OR s:Class OR s:Struct)
+                  AND s.start_line <= item.line AND s.end_line >= item.line
+                WITH item, s
+                ORDER BY (s.end_line - s.start_line) ASC
+                WITH item, collect(s.id)[0] AS sid
+                RETURN item.cid AS cid, sid
+                """,
+                items=items,
+                pid=pid,
+            )
+            return await res.data()
+
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+            if hasattr(session, "execute_read"):
+                rows = await session.execute_read(_tx)
+            else:
+                rows = await _tx(session)
+
+        cid_to_sid = {row["cid"]: row["sid"] for row in rows if row.get("sid")}
+
+        parent: dict[str, str] = {}
+
+        def _find(x: str) -> str:
+            parent.setdefault(x, x)
+            if parent[x] != x:
+                parent[x] = _find(parent[x])
+            return parent[x]
+
+        def _union(a: str, b: str) -> None:
+            ra = _find(a)
+            rb = _find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        for a, b, _score in scored_pairs:
+            sa = cid_to_sid.get(a)
+            sb = cid_to_sid.get(b)
+            if sa and sb and sa != sb:
+                _union(sa, sb)
+
+        groups: dict[str, list[str]] = {}
+        for sid in list(parent.keys()):
+            root = _find(sid)
+            groups.setdefault(root, []).append(sid)
+
+        groups = {k: v for k, v in groups.items() if len(v) > 1}
+        if debug:
+            print(
+                f"[clone-enrich] groups={len(groups)} total_sids={len(parent)}",
+                file=sys.stderr,
+            )
+
+        if not groups:
+            return "clone_enrich: no clone groups"
+
+        all_sids = [sid for group in groups.values() for sid in group]
+        meta_rows = []
+
+        @unit_of_work(timeout=tx_timeout, metadata=_meta("clone_meta"))
+        async def _tx_meta(tx):
+            res = await tx.run(
+                """
+                UNWIND $ids AS sid
+                MATCH (s {id: sid})
+                OPTIONAL MATCH (c)-[:CALLS|CALLS_INFERRED]->(s)
+                RETURN s.id AS id,
+                       s.filepath AS fp,
+                       s.start_line AS start_line,
+                       s.end_line AS end_line,
+                       count(c) AS callers
+                """,
+                ids=all_sids,
+            )
+            return await res.data()
+
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+            if hasattr(session, "execute_read"):
+                meta_rows = await session.execute_read(_tx_meta)
+            else:
+                meta_rows = await _tx_meta(session)
+
+        meta_by_id = {r["id"]: r for r in meta_rows}
+
+        def _canonical(sids: list[str]) -> str:
+            def _score(sid: str):
+                r = meta_by_id.get(sid) or {}
+                callers = r.get("callers") or 0
+                start = r.get("start_line") or 0
+                end = r.get("end_line") or 0
+                span = max(0, end - start)
+                fp = r.get("fp") or ""
+                return (callers, span, fp, start)
+
+            return sorted(sids, key=_score, reverse=True)[0]
+
+        group_rows = []
+        member_rows = []
+        canon_rows = []
+        for root, sids in groups.items():
+            sid_sorted = [sid for sid in sorted(sids) if sid in meta_by_id]
+            if len(sid_sorted) < 2:
+                continue
+            gid = _hashlib.md5("|".join(sid_sorted).encode()).hexdigest()[:12]
+            canon = _canonical(sid_sorted)
+            group_rows.append(
+                {
+                    "id": gid,
+                    "project_id": pid,
+                    "size": len(sids),
+                    "method": "winnow+struct",
+                    "score_min": min_score,
+                    "score_max": 1.0,
+                    "score_avg": min_score,
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+            )
+            for sid in sid_sorted:
+                member_rows.append({"gid": gid, "sid": sid})
+            canon_rows.append({"gid": gid, "sid": canon})
+
+        # Build file-level clone groups from chunk pairs.
+        file_parent: dict[str, str] = {}
+        file_scores: dict[str, int] = {}
+
+        def _f_find(x: str) -> str:
+            file_parent.setdefault(x, x)
+            if file_parent[x] != x:
+                file_parent[x] = _f_find(file_parent[x])
+            return file_parent[x]
+
+        def _f_union(a: str, b: str) -> None:
+            ra = _f_find(a)
+            rb = _f_find(b)
+            if ra != rb:
+                file_parent[rb] = ra
+
+        for a, b, _score in scored_pairs:
+            row_a = chunk_meta.get(a) or {}
+            row_b = chunk_meta.get(b) or {}
+            fp_a = row_a.get("file_path")
+            fp_b = row_b.get("file_path")
+            if not fp_a or not fp_b or fp_a == fp_b:
+                continue
+            _f_union(fp_a, fp_b)
+            file_scores[fp_a] = file_scores.get(fp_a, 0) + 1
+            file_scores[fp_b] = file_scores.get(fp_b, 0) + 1
+
+        file_groups: dict[str, list[str]] = {}
+        for fp in list(file_parent.keys()):
+            root = _f_find(fp)
+            file_groups.setdefault(root, []).append(fp)
+        file_groups = {k: v for k, v in file_groups.items() if len(v) > 1}
+
+        file_group_rows = []
+        file_member_rows = []
+        file_canon_rows = []
+        for root, fps in file_groups.items():
+            fps_sorted = sorted(fps)
+            gid = _hashlib.md5("|".join(fps_sorted).encode()).hexdigest()[:12]
+            canon = sorted(
+                fps_sorted, key=lambda fp: (file_scores.get(fp, 0), fp), reverse=True
+            )[0]
+            file_group_rows.append(
+                {
+                    "id": gid,
+                    "project_id": pid,
+                    "size": len(fps_sorted),
+                    "method": "winnow+struct",
+                    "score_min": min_score,
+                    "score_max": 1.0,
+                    "score_avg": min_score,
+                    "created_at": datetime.utcnow().isoformat(),
+                }
+            )
+            for fp in fps_sorted:
+                file_member_rows.append({"gid": gid, "fp": fp})
+            file_canon_rows.append({"gid": gid, "fp": canon})
+
+        async def _write():
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+
+                @unit_of_work(timeout=tx_timeout, metadata=_meta("clone_write_clean"))
+                async def _tx_clean(tx):
+                    res = await tx.run(
+                        "MATCH (g:CloneGroup {project_id:$pid}) DETACH DELETE g",
+                        pid=pid,
+                    )
+                    await res.consume()
+
+                    res = await tx.run(
+                        "MATCH (g:FileCloneGroup {project_id:$pid}) DETACH DELETE g",
+                        pid=pid,
+                    )
+                    await res.consume()
+
+                if hasattr(session, "execute_write"):
+                    await session.execute_write(_tx_clean)
+                else:
+                    await _tx_clean(session)
+
+                @unit_of_work(timeout=tx_timeout, metadata=_meta("clone_write_groups"))
+                async def _tx_groups(tx):
+                    res = await tx.run(
+                        """
+                        UNWIND $groups AS g
+                        MERGE (cg:CloneGroup {id: g.id})
+                        SET cg.project_id = g.project_id,
+                            cg.size = g.size,
+                            cg.method = g.method,
+                            cg.score_min = g.score_min,
+                            cg.score_max = g.score_max,
+                            cg.score_avg = g.score_avg,
+                            cg.created_at = g.created_at
+                        """,
+                        groups=group_rows,
+                    )
+                    await res.consume()
+
+                    if file_group_rows:
+                        res = await tx.run(
+                            """
+                            UNWIND $groups AS g
+                            MERGE (cg:FileCloneGroup {id: g.id})
+                            SET cg.project_id = g.project_id,
+                                cg.size = g.size,
+                                cg.method = g.method,
+                                cg.score_min = g.score_min,
+                                cg.score_max = g.score_max,
+                                cg.score_avg = g.score_avg,
+                                cg.created_at = g.created_at
+                            """,
+                            groups=file_group_rows,
+                        )
+                        await res.consume()
+
+                if hasattr(session, "execute_write"):
+                    await session.execute_write(_tx_groups)
+                else:
+                    await _tx_groups(session)
+
+                @unit_of_work(timeout=tx_timeout, metadata=_meta("clone_write_members"))
+                async def _tx_members(tx):
+                    res = await tx.run(
+                        """
+                        UNWIND $members AS m
+                        MATCH (cg:CloneGroup {id: m.gid})
+                        MATCH (s {id: m.sid})
+                        MERGE (s)-[:MEMBER_OF_CLONE_GROUP]->(cg)
+                        """,
+                        members=member_rows,
+                    )
+                    await res.consume()
+
+                    if file_member_rows:
+                        res = await tx.run(
+                            """
+                            UNWIND $members AS m
+                            MATCH (cg:FileCloneGroup {id: m.gid})
+                            MATCH (f:File {project_id:$pid, filepath: m.fp})
+                            MERGE (f)-[:MEMBER_OF_FILE_CLONE_GROUP]->(cg)
+                            """,
+                            members=file_member_rows,
+                            pid=pid,
+                        )
+                        await res.consume()
+
+                if hasattr(session, "execute_write"):
+                    await session.execute_write(_tx_members)
+                else:
+                    await _tx_members(session)
+
+                @unit_of_work(timeout=tx_timeout, metadata=_meta("clone_write_canon"))
+                async def _tx_canon(tx):
+                    res = await tx.run(
+                        """
+                        UNWIND $canon AS c
+                        MATCH (cg:CloneGroup {id: c.gid})
+                        MATCH (s {id: c.sid})
+                        MERGE (cg)-[:HAS_CANONICAL]->(s)
+                        """,
+                        canon=canon_rows,
+                    )
+                    await res.consume()
+
+                    if file_canon_rows:
+                        res = await tx.run(
+                            """
+                            UNWIND $canon AS c
+                            MATCH (cg:FileCloneGroup {id: c.gid})
+                            MATCH (f:File {project_id:$pid, filepath: c.fp})
+                            MERGE (cg)-[:HAS_CANONICAL]->(f)
+                            """,
+                            canon=file_canon_rows,
+                            pid=pid,
+                        )
+                        await res.consume()
+
+                if hasattr(session, "execute_write"):
+                    await session.execute_write(_tx_canon)
+                else:
+                    await _tx_canon(session)
+
+        await _write()
+
+        if os.getenv("LM_PROXY_CLONE_NEAR_EDGE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            edge_rows = []
+            for a, b, score in scored_pairs:
+                sa = cid_to_sid.get(a)
+                sb = cid_to_sid.get(b)
+                if sa and sb and sa != sb:
+                    edge_rows.append({"a": sa, "b": sb, "score": score})
+
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+
+                @unit_of_work(timeout=tx_timeout, metadata=_meta("clone_edges"))
+                async def _tx_edges(tx):
+                    res = await tx.run(
+                        """
+                        UNWIND $edges AS e
+                        MATCH (a {id: e.a})
+                        MATCH (b {id: e.b})
+                        MERGE (a)-[:NEAR_CLONE_OF {score: e.score, method: 'winnow+struct'}]->(b)
+                        """,
+                        edges=edge_rows,
+                    )
+                    await res.consume()
+
+                if hasattr(session, "execute_write"):
+                    await session.execute_write(_tx_edges)
+                else:
+                    await _tx_edges(session)
+
+        return f"clone_enrich: groups={len(groups)} members={len(member_rows)}"
+    except Exception as exc:
+        return f"clone_enrich: error {exc}"
