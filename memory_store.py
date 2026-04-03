@@ -19,25 +19,52 @@ import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import graph_bootstrap
+from neo4j import unit_of_work
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-_ENABLE_MEMORY      = os.getenv("LM_PROXY_MEMORY_ENABLED",           "1").strip().lower() in {"1","true","yes","on"}
-_ENABLE_REDIS       = os.getenv("LM_PROXY_MEMORY_ENABLE_REDIS",       "1").strip().lower() in {"1","true","yes","on"}
-_ENABLE_PERSISTENCE = os.getenv("LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1").strip().lower() in {"1","true","yes","on"}
-_ENABLE_RETRIEVAL   = os.getenv("LM_PROXY_MEMORY_ENABLE_RETRIEVAL",   "1").strip().lower() in {"1","true","yes","on"}
-_ENABLE_EMBEDDINGS  = os.getenv("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS",  "0").strip().lower() in {"1","true","yes","on"}
+_ENABLE_MEMORY = os.getenv("LM_PROXY_MEMORY_ENABLED", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+_ENABLE_REDIS = os.getenv("LM_PROXY_MEMORY_ENABLE_REDIS", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+_ENABLE_PERSISTENCE = os.getenv(
+    "LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1"
+).strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_RETRIEVAL = os.getenv(
+    "LM_PROXY_MEMORY_ENABLE_RETRIEVAL", "1"
+).strip().lower() in {"1", "true", "yes", "on"}
+_ENABLE_EMBEDDINGS = os.getenv(
+    "LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
 _EXPECTED_EMBEDDING_DIM = int(os.getenv("LM_PROXY_MEMORY_EMBEDDING_DIM", "768"))
+_NEO4J_TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+_NEO4J_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+_NEO4J_META_BASE = {"source": "lm_proxy", "tool": "memory_store"}
 
-_REDIS_URL         = os.getenv("LM_PROXY_REDIS_URL",         "redis://localhost:6379/0")
-_PG_DSN            = os.getenv("LM_PROXY_PG_DSN",            "")
-_PG_POOL_MIN       = int(os.getenv("LM_PROXY_PG_POOL_MIN",  "1"))
-_PG_POOL_MAX       = int(os.getenv("LM_PROXY_PG_POOL_MAX",  "6"))
+_REDIS_URL = os.getenv("LM_PROXY_REDIS_URL", "redis://localhost:6379/0")
+_PG_DSN = os.getenv("LM_PROXY_PG_DSN", "")
+_PG_POOL_MIN = int(os.getenv("LM_PROXY_PG_POOL_MIN", "1"))
+_PG_POOL_MAX = int(os.getenv("LM_PROXY_PG_POOL_MAX", "6"))
 _SESSION_NAMESPACE = os.getenv("LM_PROXY_MEMORY_SESSION_NAMESPACE", "lmproxy")
-_MAX_RECENT_TURNS  = int(os.getenv("LM_PROXY_MEMORY_MAX_RECENT_TURNS", "20"))
+_MAX_RECENT_TURNS = int(os.getenv("LM_PROXY_MEMORY_MAX_RECENT_TURNS", "20"))
 _FACTS_PER_SUMMARY_SECTION = int(os.getenv("LM_PROXY_MEMORY_FACTS_PER_SECTION", "4"))
-_ENABLE_DEBUG      = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {"1","true","yes","on"}
+_ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+_NEO4J_WRITE_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_WRITE_TIMEOUT", "15.0"))
 
 # Redis key TTL (seconds) – 7 days
 _REDIS_TTL = 60 * 60 * 24 * 7
@@ -55,7 +82,44 @@ def _debug(message: str, **fields: Any) -> None:
             flush=True,
         )
     except Exception:
-        print(f"[lm-proxy:memory_store] {message} {fields}", file=sys.stderr, flush=True)
+        print(
+            f"[lm-proxy:memory_store] {message} {fields}", file=sys.stderr, flush=True
+        )
+
+
+async def _neo4j_write(session, cypher: str, op: str, **params) -> None:
+    metadata = dict(_NEO4J_META_BASE)
+    op_value = op or "write"
+    if _NEO4J_OP_PREFIX:
+        op_value = f"{_NEO4J_OP_PREFIX}.{op_value}"
+    metadata["op"] = op_value
+
+    @unit_of_work(timeout=_NEO4J_TX_TIMEOUT, metadata=metadata)
+    async def _tx(tx):
+        res = await tx.run(cypher, **params)
+        await res.consume()
+
+    if hasattr(session, "execute_write"):
+        await session.execute_write(_tx)
+    else:
+        await _tx(session)
+
+
+async def _neo4j_read(session, cypher: str, op: str, **params) -> list[dict]:
+    metadata = dict(_NEO4J_META_BASE)
+    op_value = op or "read"
+    if _NEO4J_OP_PREFIX:
+        op_value = f"{_NEO4J_OP_PREFIX}.{op_value}"
+    metadata["op"] = op_value
+
+    @unit_of_work(timeout=_NEO4J_TX_TIMEOUT, metadata=metadata)
+    async def _tx(tx):
+        res = await tx.run(cypher, **params)
+        return await res.data()
+
+    if hasattr(session, "execute_read"):
+        return await session.execute_read(_tx)
+    return await _tx(session)
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +141,7 @@ async def _get_redis() -> Optional[Any]:
         return _redis_client
     try:
         import redis.asyncio as aioredis  # type: ignore
+
         _redis_client = aioredis.from_url(_REDIS_URL, decode_responses=True)
         await _redis_client.ping()
         _debug("redis_connected", url=_REDIS_URL)
@@ -149,7 +214,9 @@ async def get_file_skeleton(session_id: str, file_path_hash: str) -> Optional[st
     return None
 
 
-async def set_file_skeleton(session_id: str, file_path_hash: str, skeleton: str) -> None:
+async def set_file_skeleton(
+    session_id: str, file_path_hash: str, skeleton: str
+) -> None:
     """Cache a parsed codebase skeleton to Redis."""
     try:
         r = await _get_redis()
@@ -212,6 +279,7 @@ async def _open_pg_pool() -> None:
         return
     try:
         from psycopg_pool import AsyncConnectionPool  # type: ignore
+
         _pg_pool = AsyncConnectionPool(
             _PG_DSN, min_size=_PG_POOL_MIN, max_size=_PG_POOL_MAX, open=False
         )
@@ -280,13 +348,14 @@ async def insert_turn(
     try:
         import uuid as _uuid
         import hashlib
+
         row_id = str(_uuid.uuid4())
         meta_json = json.dumps(metadata or {})
-        
+
         project_id = None
         if project_path:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
-        
+
         cypher = """
         MERGE (t:MemoryTurn {id: $id})
         SET t.session_id = $session_id,
@@ -311,23 +380,31 @@ async def insert_turn(
         driver = graph_bootstrap.get_driver()
         if not driver:
             return None
-            
+
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(
-                cypher,
-                id=row_id,
-                session_id=session_id,
-                project_id=project_id,
-                turn_index=turn_index,
-                role=role,
-                content=content,
-                compact_content=compact_content,
-                model=model,
-                tool_name=tool_name,
-                tool_call_id=tool_call_id,
-                metadata=meta_json,
-                created_at=time.time()
-            )
+
+            async def _tx(tx):
+                result = await tx.run(
+                    cypher,
+                    id=row_id,
+                    session_id=session_id,
+                    project_id=project_id,
+                    turn_index=turn_index,
+                    role=role,
+                    content=content,
+                    compact_content=compact_content,
+                    model=model,
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    metadata=meta_json,
+                    created_at=time.time(),
+                )
+                await result.consume()
+
+            if hasattr(session, "execute_write"):
+                await session.execute_write(_tx)
+            else:
+                await _tx(session)
         _debug("graph_insert_turn", session_id=session_id, project_id=project_id)
         return row_id
     except Exception as exc:
@@ -346,9 +423,10 @@ async def insert_summary(
         return None
     try:
         import uuid as _uuid
+
         row_id = str(_uuid.uuid4())
         meta_json = json.dumps(metadata or {})
-        
+
         cypher = """
         MERGE (s:MemorySummary {id: $id})
         SET s.session_id = $session_id,
@@ -361,17 +439,26 @@ async def insert_summary(
         MERGE (sess)-[:HAS_SUMMARY]->(s)
         """
         driver = graph_bootstrap.get_driver()
-        if not driver: return None
+        if not driver:
+            return None
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(
-                cypher,
-                id=row_id,
-                session_id=session_id,
-                summary_text=summary_text,
-                summary_type=summary_type,
-                metadata=meta_json,
-                created_at=time.time()
-            )
+
+            async def _tx(tx):
+                result = await tx.run(
+                    cypher,
+                    id=row_id,
+                    session_id=session_id,
+                    summary_text=summary_text,
+                    summary_type=summary_type,
+                    metadata=meta_json,
+                    created_at=time.time(),
+                )
+                await result.consume()
+
+            if hasattr(session, "execute_write"):
+                await session.execute_write(_tx)
+            else:
+                await _tx(session)
         _debug("graph_insert_summary", session_id=session_id, type=summary_type)
         return row_id
     except Exception as exc:
@@ -392,9 +479,10 @@ async def insert_tool_output(
         return None
     try:
         import uuid as _uuid
+
         row_id = str(_uuid.uuid4())
         meta_json = json.dumps(metadata or {})
-        
+
         cypher = """
         MERGE (o:ToolOutput {id: $id})
         SET o.session_id = $session_id,
@@ -409,19 +497,29 @@ async def insert_tool_output(
         MERGE (sess)-[:PRODUCED_OUTPUT]->(o)
         """
         driver = graph_bootstrap.get_driver()
-        if not driver: return None
+        if not driver:
+            return None
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(
-                cypher,
-                id=row_id,
-                session_id=session_id,
-                tool_name=tool_name,
-                tool_call_id=tool_call_id,
-                raw_output=raw_output,
-                compact_output=compact_output,
-                metadata=meta_json,
-                created_at=time.time()
-            )
+
+            async def _tx(tx):
+                result = await tx.run(
+                    cypher,
+                    id=row_id,
+                    session_id=session_id,
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    raw_output=raw_output,
+                    compact_output=compact_output,
+                    metadata=meta_json,
+                    created_at=time.time(),
+                    timeout=_NEO4J_WRITE_TIMEOUT_S,
+                )
+                await result.consume()
+
+            if hasattr(session, "execute_write"):
+                await session.execute_write(_tx)
+            else:
+                await _tx(session)
         _debug("graph_insert_tool_output", session_id=session_id, tool=tool_name)
         return row_id
     except Exception as exc:
@@ -440,10 +538,11 @@ async def insert_checkpoint(
         return None
     try:
         import uuid as _uuid
+
         row_id = str(_uuid.uuid4())
         meta_json = json.dumps(metadata or {})
         wm_json = json.dumps(working_memory)
-        
+
         cypher = """
         MERGE (c:MemoryCheckpoint {id: $id})
         SET c.session_id = $session_id,
@@ -456,17 +555,27 @@ async def insert_checkpoint(
         MERGE (sess)-[:HAS_CHECKPOINT]->(c)
         """
         driver = graph_bootstrap.get_driver()
-        if not driver: return None
+        if not driver:
+            return None
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(
-                cypher,
-                id=row_id,
-                session_id=session_id,
-                working_memory=wm_json,
-                rolling_summary=rolling_summary,
-                metadata=meta_json,
-                created_at=time.time()
-            )
+
+            async def _tx(tx):
+                result = await tx.run(
+                    cypher,
+                    id=row_id,
+                    session_id=session_id,
+                    working_memory=wm_json,
+                    rolling_summary=rolling_summary,
+                    metadata=meta_json,
+                    created_at=time.time(),
+                    timeout=_NEO4J_WRITE_TIMEOUT_S,
+                )
+                await result.consume()
+
+            if hasattr(session, "execute_write"):
+                await session.execute_write(_tx)
+            else:
+                await _tx(session)
         _debug("graph_insert_checkpoint", session_id=session_id)
         return row_id
     except Exception as exc:
@@ -506,12 +615,26 @@ async def insert_codebase_embedding(
                 VALUES (%s, %s, %s, %s, %s, %s, %s::vector, %s::jsonb, to_timestamp(%s))
                 ON CONFLICT (chunk_id) DO NOTHING
                 """,
-                (chunk_id, project_id, file_path, ref_type, chunk_index,
-                 content, vec_str, meta_json, time.time()),
+                (
+                    chunk_id,
+                    project_id,
+                    file_path,
+                    ref_type,
+                    chunk_index,
+                    content,
+                    vec_str,
+                    meta_json,
+                    time.time(),
+                ),
             )
         return True
     except Exception as exc:
-        _debug("pg_insert_ce_error", project_id=project_id, file_path=file_path, error=str(exc))
+        _debug(
+            "pg_insert_ce_error",
+            project_id=project_id,
+            file_path=file_path,
+            error=str(exc),
+        )
         return False
 
 
@@ -536,6 +659,7 @@ async def insert_embeddings_batch(
 
     try:
         import hashlib
+
         if project_path and not project_id:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
 
@@ -545,22 +669,30 @@ async def insert_embeddings_batch(
             _now = time.time()
             rows = []
             for item in batch:
-                chunk_id  = item["ref_id"]
-                meta      = item.get("metadata", {})
+                chunk_id = item["ref_id"]
+                meta = item.get("metadata", {})
                 file_path = meta.get("file", "") if isinstance(meta, dict) else ""
                 chunk_idx = int(chunk_id.split("::")[-1]) if "::" in chunk_id else 0
-                vec       = item.get("vector", [])
+                vec = item.get("vector", [])
 
                 if not isinstance(vec, list) or len(vec) != _EXPECTED_EMBEDDING_DIM:
                     continue  # skip malformed vectors
 
-                vec_str   = "[" + ",".join(str(v) for v in vec) + "]"
+                vec_str = "[" + ",".join(str(v) for v in vec) + "]"
                 meta_json = json.dumps(meta if isinstance(meta, dict) else {})
-                rows.append((
-                    chunk_id, project_id, file_path,
-                    item.get("ref_type", "code_chunk"), chunk_idx,
-                    item["text"], vec_str, meta_json, _now,
-                ))
+                rows.append(
+                    (
+                        chunk_id,
+                        project_id,
+                        file_path,
+                        item.get("ref_type", "code_chunk"),
+                        chunk_idx,
+                        item["text"],
+                        vec_str,
+                        meta_json,
+                        _now,
+                    )
+                )
 
             if rows:
                 async with _pg_pool.connection() as conn:  # type: ignore[union-attr]
@@ -611,9 +743,16 @@ MERGE (s)-[:HAS_EMBEDDING]->(m)
 MERGE (p)-[:HAS_EMBEDDING]->(m)
 """
                 async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-                    await s.run(node_cypher, session_id=session_id, project_id=project_id)
+                    await s.run(
+                        node_cypher, session_id=session_id, project_id=project_id
+                    )
                 async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-                    await s.run(edge_cypher, session_id=session_id, project_id=project_id, ref_ids=ref_ids)
+                    await s.run(
+                        edge_cypher,
+                        session_id=session_id,
+                        project_id=project_id,
+                        ref_ids=ref_ids,
+                    )
 
         _debug("insert_embeddings_batch", session_id=session_id, count=written)
         return written
@@ -621,7 +760,6 @@ MERGE (p)-[:HAS_EMBEDDING]->(m)
     except Exception as exc:
         _debug("insert_embeddings_batch_error", session_id=session_id, error=str(exc))
         return 0
-
 
 
 async def _neo4j_insert_embeddings_batch(
@@ -639,10 +777,10 @@ async def _neo4j_insert_embeddings_batch(
         created_at = time.time()
         items = [
             {
-                "ref_id":   b["ref_id"],
+                "ref_id": b["ref_id"],
                 "ref_type": b.get("ref_type", "code_chunk"),
-                "text":     b["text"],
-                "vector":   b["vector"],
+                "text": b["text"],
+                "vector": b["vector"],
                 "metadata": json.dumps(b.get("metadata", {})),
             }
             for b in batch
@@ -661,13 +799,17 @@ ON CREATE SET
     m.created_at  = $created_at
 """
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-            await s.run(chunk_cypher, items=items, session_id=session_id,
-                        project_id=project_id, created_at=created_at)
+            await s.run(
+                chunk_cypher,
+                items=items,
+                session_id=session_id,
+                project_id=project_id,
+                created_at=created_at,
+            )
         return len(batch)
     except Exception as exc:
         _debug("neo4j_fallback_error", session_id=session_id, error=str(exc))
         return 0
-
 
 
 async def insert_embedding(
@@ -684,7 +826,11 @@ async def insert_embedding(
         return None
 
     if not isinstance(vector, list) or not vector:
-        _debug("graph_insert_embedding_invalid_vector", session_id=session_id, ref_type=ref_type)
+        _debug(
+            "graph_insert_embedding_invalid_vector",
+            session_id=session_id,
+            ref_type=ref_type,
+        )
         return None
 
     actual_dim = len(vector)
@@ -701,8 +847,9 @@ async def insert_embedding(
         import uuid as _uuid
         # row_id = str(_uuid.uuid4()) # This line is removed as ref_id is already a parameter
         # meta_json = json.dumps(metadata or {}) # This is moved directly into session.run
-        
-        import hashlib # Added for project_id calculation
+
+        import hashlib  # Added for project_id calculation
+
         project_id = None
         if project_path:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
@@ -733,13 +880,16 @@ async def insert_embedding(
         )
         """
         driver = graph_bootstrap.get_driver()
-        if not driver: return None
-        
+        if not driver:
+            return None
+
         file_path = metadata.get("file") if metadata else None
 
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(
+            await _neo4j_write(
+                session,
                 cypher,
+                "insert_embedding",
                 ref_id=ref_id,
                 session_id=session_id,
                 project_id=project_id,
@@ -748,9 +898,11 @@ async def insert_embedding(
                 vector=vector,
                 metadata=json.dumps(metadata or {}),
                 created_at=time.time(),
-                file_path=file_path
+                file_path=file_path,
             )
-        _debug("graph_insert_embedding_ok", session_id=session_id, project_id=project_id)
+        _debug(
+            "graph_insert_embedding_ok", session_id=session_id, project_id=project_id
+        )
         return ref_id
     except Exception as exc:
         _debug("graph_insert_embedding_error", session_id=session_id, error=str(exc))
@@ -791,20 +943,22 @@ async def search_similar_memory(
         LIMIT $k
         """
         driver = graph_bootstrap.get_driver()
-        if not driver: return []
-        
+        if not driver:
+            return []
+
         results: List[Dict[str, Any]] = []
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            res = await session.run(
+            records = await _neo4j_read(
+                session,
                 cypher,
+                "search_similar_memory",
                 query_vector=query_vector,
                 k=k,
                 global_search=global_search,
                 same_session=not same_session_only,
-                sid=session_id
+                sid=session_id,
             )
-            async for record in res:
-                results.append(dict(record))
+            results = [dict(record) for record in records]
 
         _debug(
             "graph_search_memory",
@@ -822,6 +976,7 @@ async def search_similar_memory(
 # ---------------------------------------------------------------------------
 # Structured-summary durable facts helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_summary_json(summary_text: str) -> Dict[str, List[str]]:
     if not summary_text or not summary_text.strip():
@@ -841,7 +996,9 @@ def _parse_summary_json(summary_text: str) -> Dict[str, List[str]]:
         return {}
 
 
-def extract_summary_facts(summary_text: str, max_items_per_section: Optional[int] = None) -> List[Dict[str, str]]:
+def extract_summary_facts(
+    summary_text: str, max_items_per_section: Optional[int] = None
+) -> List[Dict[str, str]]:
     """
     Flatten structured summary JSON into durable facts.
     Returns:
@@ -859,7 +1016,9 @@ def extract_summary_facts(summary_text: str, max_items_per_section: Optional[int
     return facts
 
 
-async def _fact_embedding_exists(session_id: str, ref_type: str, compact_text: str) -> bool:
+async def _fact_embedding_exists(
+    session_id: str, ref_type: str, compact_text: str
+) -> bool:
     """Check if a durable fact exists in Neo4j."""
     if not _pool_available():
         return False
@@ -870,10 +1029,18 @@ async def _fact_embedding_exists(session_id: str, ref_type: str, compact_text: s
         RETURN 1 LIMIT 1
         """
         driver = graph_bootstrap.get_driver()
-        if not driver: return False
+        if not driver:
+            return False
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            res = await session.run(cypher, sid=session_id, rtype=ref_type, text=compact_text)
-            return await res.single() is not None
+            records = await _neo4j_read(
+                session,
+                cypher,
+                "fact_embedding_exists",
+                sid=session_id,
+                rtype=ref_type,
+                text=compact_text,
+            )
+            return bool(records)
     except Exception as exc:
         _debug("graph_fact_exists_error", session_id=session_id, error=str(exc))
         return False
@@ -942,9 +1109,11 @@ async def insert_summary_facts(
         _debug("pg_insert_summary_facts", session_id=session_id, count=len(created_ids))
     return created_ids
 
+
 # ---------------------------------------------------------------------------
 # Codebase Search helpers
 # ---------------------------------------------------------------------------
+
 
 async def insert_codebase_embedding_graph(
     project_id: str,
@@ -967,7 +1136,7 @@ async def insert_codebase_embedding_graph(
         chunk_id = f"{project_id}:{file_path}:{chunk_index}"
         # File ID: project_id:file:path (matches structural graph convention)
         file_id = f"{project_id}:file:{file_path}"
-        
+
         cypher = """
         MERGE (chk:Chunk {id: $chk_id})
         SET chk.project_id = $pid,
@@ -979,23 +1148,36 @@ async def insert_codebase_embedding_graph(
         MATCH (f:File {id: $fid})
         MERGE (f)-[:HAS_CHUNK]->(chk)
         """
-        
+
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(
+            await _neo4j_write(
+                session,
                 cypher,
+                "insert_codebase_embedding_graph",
                 chk_id=chunk_id,
                 pid=project_id,
                 path=file_path,
                 idx=chunk_index,
                 text=content,
                 vec=vector,
-                fid=file_id
+                fid=file_id,
             )
-        _debug("neo4j_insert_chunk", project_id=project_id, file_path=file_path, chunk_index=chunk_index)
+        _debug(
+            "neo4j_insert_chunk",
+            project_id=project_id,
+            file_path=file_path,
+            chunk_index=chunk_index,
+        )
         return True
     except Exception as exc:
-        _debug("neo4j_insert_chunk_error", project_id=project_id, file_path=file_path, error=str(exc))
+        _debug(
+            "neo4j_insert_chunk_error",
+            project_id=project_id,
+            file_path=file_path,
+            error=str(exc),
+        )
         return False
+
 
 async def search_codebase(
     project_id: str,
@@ -1017,9 +1199,9 @@ async def search_codebase(
     # ── Postgres primary path ─────────────────────────────────────────────────
     if _pg_pool_available():
         try:
-            vec_str      = "[" + ",".join(str(v) for v in query_vector) + "]"
-            use_keyword  = bool(query_text and query_text.strip())
-            fetch        = k * 4
+            vec_str = "[" + ",".join(str(v) for v in query_vector) + "]"
+            use_keyword = bool(query_text and query_text.strip())
+            fetch = k * 4
 
             if use_keyword:
                 sql = """
@@ -1053,8 +1235,13 @@ async def search_codebase(
                     ORDER BY rrf_score DESC
                     LIMIT %(k)s
                 """
-                params: Dict[str, Any] = {"vec": vec_str, "qt": query_text,
-                                          "pid": project_id, "fetch": fetch, "k": k}
+                params: Dict[str, Any] = {
+                    "vec": vec_str,
+                    "qt": query_text,
+                    "pid": project_id,
+                    "fetch": fetch,
+                    "k": k,
+                }
             else:
                 sql = """
                     SELECT file_path, chunk_index, content, metadata, created_at,
@@ -1073,17 +1260,24 @@ async def search_codebase(
                 async with conn.cursor() as cur:
                     await cur.execute(sql, params)
                     async for row in cur:
-                        results.append({
-                            "file_path":   row[0],
-                            "chunk_index": row[1],
-                            "content":     row[2],
-                            "metadata":    row[3],
-                            "created_at":  row[4],
-                            "rrf_score":   float(row[5]),
-                        })
+                        results.append(
+                            {
+                                "file_path": row[0],
+                                "chunk_index": row[1],
+                                "content": row[2],
+                                "metadata": row[3],
+                                "created_at": row[4],
+                                "rrf_score": float(row[5]),
+                            }
+                        )
 
-            _debug("pg_search_codebase", project_id=project_id, k=k,
-                   keyword_arm=use_keyword, found=len(results))
+            _debug(
+                "pg_search_codebase",
+                project_id=project_id,
+                k=k,
+                keyword_arm=use_keyword,
+                found=len(results),
+            )
             return await _augment_with_graph_context(project_id, results)
 
         except Exception as exc:
@@ -1108,7 +1302,9 @@ async def search_codebase(
             async for record in res:
                 results.append(dict(record))
         results = results[:k]
-        _debug("neo4j_search_codebase_fallback", project_id=project_id, found=len(results))
+        _debug(
+            "neo4j_search_codebase_fallback", project_id=project_id, found=len(results)
+        )
         return await _augment_with_graph_context(project_id, results)
     except Exception as exc:
         _debug("neo4j_search_codebase_error", project_id=project_id, error=str(exc))
@@ -1133,10 +1329,13 @@ async def _augment_with_graph_context(
             return results
 
         # Current file node ID format: "project_id:file:rel_path"
-        file_node_ids = list(set(
-            f"{project_id}:file:{r['file_path']}"
-            for r in results if r.get("file_path")
-        ))
+        file_node_ids = list(
+            set(
+                f"{project_id}:file:{r['file_path']}"
+                for r in results
+                if r.get("file_path")
+            )
+        )
         if not file_node_ids:
             return results
 
@@ -1187,53 +1386,61 @@ async def get_project_preferences(project_id: str) -> List[str]:
     """Retrieve UserPreference strings linked to the current Project."""
     try:
         import graph_bootstrap
+
         if not graph_bootstrap._NEO4J_ENABLED:
             return []
         driver = graph_bootstrap.get_driver()
         if not driver:
             return []
-            
+
         cypher = """
         MATCH (proj:Project {id: $pid})-[:PREFERS_ENV]->(pref:UserPreference)
         RETURN pref.instruction AS instruction
         """
-        
+
         prefs = []
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            res = await session.run(cypher, pid=project_id)
-            async for record in res:
-                if record["instruction"]:
+            records = await _neo4j_read(
+                session, cypher, "get_project_preferences", pid=project_id
+            )
+            for record in records:
+                if record.get("instruction"):
                     prefs.append(record["instruction"])
         return prefs
     except Exception:
         return []
 
+
 async def get_global_instructions() -> List[str]:
     """Retrieve floating Instruction nodes for general guidance."""
     try:
         import graph_bootstrap
+
         if not graph_bootstrap._NEO4J_ENABLED:
             return []
         driver = graph_bootstrap.get_driver()
         if not driver:
             return []
-            
+
         cypher = """
         MATCH (i:Instruction)
         RETURN i.text AS text
         """
-        
+
         instructions = []
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            res = await session.run(cypher)
-            async for record in res:
-                if record["text"]:
+            records = await _neo4j_read(session, cypher, "get_global_instructions")
+            for record in records:
+                if record.get("text"):
                     instructions.append(record["text"])
         return instructions
     except Exception:
         return []
 
-async def add_durable_memory(session_id: str, text: str, is_global: bool = False) -> bool:
+
+async def add_durable_memory(
+    session_id: str, text: str, is_global: bool = False
+) -> bool:
     """
     Store a durable memory or instruction.
     If is_global is True, creates a floating Instruction node.
@@ -1241,15 +1448,16 @@ async def add_durable_memory(session_id: str, text: str, is_global: bool = False
     """
     try:
         import graph_bootstrap
+
         if not graph_bootstrap._NEO4J_ENABLED:
             return False
         driver = graph_bootstrap.get_driver()
         if not driver:
             return False
-            
+
         # Extract project_id from session_id
         project_id = session_id.split(":")[0] if ":" in session_id else session_id
-        
+
         if is_global:
             cypher = "CREATE (i:Instruction {text: $text, created_at: timestamp()})"
             params = {"text": text}
@@ -1266,9 +1474,9 @@ async def add_durable_memory(session_id: str, text: str, is_global: bool = False
             RETURN pref
             """
             params = {"pid": project_id, "text": text}
-            
+
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(cypher, **params)
+            await _neo4j_write(session, cypher, "add_durable_memory", **params)
         return True
     except Exception as e:
         _debug("add_durable_memory_error", error=str(e))
@@ -1287,6 +1495,7 @@ async def list_durable_memories(
     """
     try:
         import graph_bootstrap
+
         if not graph_bootstrap._NEO4J_ENABLED:
             return []
         driver = graph_bootstrap.get_driver()
@@ -1303,13 +1512,17 @@ async def list_durable_memories(
         ORDER BY pref.created_at DESC
         """
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-            res = await s.run(pref_cypher, pid=project_id)
-            async for record in res:
-                memories.append({
-                    "text": record["text"],
-                    "is_global": False,
-                    "created_at": record["created_at"],
-                })
+            records = await _neo4j_read(
+                s, pref_cypher, "list_durable_memories_pref", pid=project_id
+            )
+            for record in records:
+                memories.append(
+                    {
+                        "text": record.get("text"),
+                        "is_global": False,
+                        "created_at": record.get("created_at"),
+                    }
+                )
 
         # Global memories (Instruction nodes)
         if include_global:
@@ -1319,13 +1532,17 @@ async def list_durable_memories(
             ORDER BY i.created_at DESC
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-                res = await s.run(inst_cypher)
-                async for record in res:
-                    memories.append({
-                        "text": record["text"],
-                        "is_global": True,
-                        "created_at": record["created_at"],
-                    })
+                records = await _neo4j_read(
+                    s, inst_cypher, "list_durable_memories_global"
+                )
+                for record in records:
+                    memories.append(
+                        {
+                            "text": record.get("text"),
+                            "is_global": True,
+                            "created_at": record.get("created_at"),
+                        }
+                    )
 
         # Sort newest-first across both sources
         memories.sort(key=lambda m: m.get("created_at") or 0, reverse=True)

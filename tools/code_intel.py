@@ -3,11 +3,39 @@
 import hashlib
 import time
 import os
+from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules
+from ts_diagnostics import normalize_ts_pack_result
 
 
 def register(mcp: FastMCP) -> None:
+
+    _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+    _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+    _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "code_intel"}
+
+    async def _execute_read(
+        session,
+        cypher: str,
+        timeout: float | None = None,
+        op: str | None = None,
+        **params,
+    ):
+        metadata = dict(_TX_METADATA_BASE)
+        op_value = op or "read"
+        if _TX_OP_PREFIX:
+            op_value = f"{_TX_OP_PREFIX}.{op_value}"
+        metadata["op"] = op_value
+
+        @unit_of_work(timeout=timeout or _TX_TIMEOUT, metadata=metadata)
+        async def _tx(tx):
+            result = await tx.run(cypher, **params)
+            return await result.data()
+
+        if hasattr(session, "execute_read"):
+            return await session.execute_read(_tx)
+        return await _tx(session)
 
     @mcp.tool()
     async def get_symbol_context(project_path: str, symbol_name: str) -> str:
@@ -32,17 +60,17 @@ def register(mcp: FastMCP) -> None:
 
             _, _, _, _, proxy = get_memory_modules()
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                r = await session.run(
+                records = await _execute_read(
+                    session,
                     """
                     MATCH (s {name: $name, project_id: $pid})
                     WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:EnumCase OR s:Method
                     OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
-                    OPTIONAL MATCH (caller)-[:CALLS]->(s)
-                    OPTIONAL MATCH (s)-[:CALLS]->(callee)
+                    OPTIONAL MATCH (caller)-[:CALLS|CALLS_INFERRED]->(s)
+                    OPTIONAL MATCH (s)-[:CALLS|CALLS_INFERRED]->(callee)
                     RETURN
                       labels(s)[0]  AS kind,
                       s.filepath    AS filepath,
@@ -57,8 +85,9 @@ def register(mcp: FastMCP) -> None:
                 """,
                     name=symbol_name,
                     pid=project_id,
+                    op="get_symbol_context",
                 )
-                rec = await r.single()
+                rec = records[0] if records else None
 
             if not rec:
                 return f"Symbol '{symbol_name}' not found. Run index_workspace() first."
@@ -84,24 +113,37 @@ def register(mcp: FastMCP) -> None:
                     out.append(f"  - `{c['name']}`  in {c.get('file', '?')}")
 
             try:
-                memory_store, _, _, _, _ = get_memory_modules()
-                await memory_store.open_pool()
-                async with memory_store._pg_pool.connection() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute(
-                            """
-                            SELECT content FROM codebase_embeddings
-                            WHERE  project_id = %s AND file_path = %s
-                            ORDER  BY chunk_index LIMIT 2
-                        """,
-                            (project_id, rec["filepath"]),
-                        )
-                        rows = await cur.fetchall()
-                        if rows:
-                            src = "\n\n".join(r[0][:600] for r in rows)
-                            out += [f"\n**Source preview:**\n```\n{src}\n```"]
+                abs_path = os.path.join(project_path, rec["filepath"])
+                if os.path.exists(abs_path):
+                    with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
+                        lines_list = fh.read().splitlines()
+                    start_line = max(1, int(rec["start_line"] or 1))
+                    end_line = max(start_line, int(rec["end_line"] or start_line))
+                    snippet = "\n".join(lines_list[start_line - 1 : end_line])
+                    if snippet.strip():
+                        out += [f"\n**Source preview:**\n```ts\n{snippet}\n```"]
+                else:
+                    raise FileNotFoundError(abs_path)
             except Exception:
-                pass
+                try:
+                    memory_store, _, _, _, _ = get_memory_modules()
+                    await memory_store.open_pool()
+                    async with memory_store._pg_pool.connection() as conn:
+                        async with conn.cursor() as cur:
+                            await cur.execute(
+                                """
+                                SELECT content FROM codebase_embeddings
+                                WHERE  project_id = %s AND file_path = %s
+                                ORDER  BY chunk_index LIMIT 2
+                            """,
+                                (project_id, rec["filepath"]),
+                            )
+                            rows = await cur.fetchall()
+                            if rows:
+                                src = "\n\n".join(r[0][:600] for r in rows)
+                                out += [f"\n**Source preview:**\n```\n{src}\n```"]
+                except Exception:
+                    pass
 
             return "\n".join(out)
         except Exception as e:
@@ -132,19 +174,43 @@ def register(mcp: FastMCP) -> None:
             signature:    Optional signature substring to disambiguate symbols.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_root = os.path.realpath(project_path)
+            project_id = hashlib.md5(project_root.encode()).hexdigest()[:12]
             depth = min(int(depth), 5)
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
+
+            normalized_file_path = None
+            if file_path:
+                raw_path = file_path.strip()
+                if os.path.isabs(raw_path):
+                    abs_path = os.path.realpath(raw_path)
+                    try:
+                        normalized_file_path = os.path.relpath(abs_path, project_root)
+                    except ValueError:
+                        normalized_file_path = raw_path
+                else:
+                    normalized_file_path = raw_path
+                normalized_file_path = normalized_file_path.replace(os.sep, "/")
+                if normalized_file_path.startswith("./"):
+                    normalized_file_path = normalized_file_path[2:]
+                if not normalized_file_path:
+                    normalized_file_path = None
+
+            normalized_signature = (
+                signature.strip() if isinstance(signature, str) else None
+            )
+            if not normalized_signature:
+                normalized_signature = None
 
             resolve_cypher = """
-                MATCH (s {project_id: $pid})
-                WHERE s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum
+                MATCH (s)
+                WHERE s.project_id = $pid
+                  AND (s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum)
                   AND ($file_path IS NULL OR s.filepath = $file_path)
                   AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
-                OPTIONAL MATCH (s)<-[:CALLS]-(caller)
+                OPTIONAL MATCH (s)<-[:CALLS|CALLS_INFERRED]-(caller)
                 WITH s,
                      CASE
                        WHEN s.name = $name THEN 0
@@ -175,9 +241,9 @@ def register(mcp: FastMCP) -> None:
                 cypher = (
                     f"MATCH (start) WHERE elementId(start) = $eid "
                     f"MATCH path = (start)"
-                    f"<-[:CALLS*1..{depth}]-(hop)"
+                    f"<-[:CALLS|CALLS_INFERRED*1..{depth}]-(hop)"
                     " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
-                    " RETURN [n IN nodes(path) | n.name] AS chain,"
+                    + " RETURN [n IN nodes(path) | n.name] AS chain,"
                     "        [n IN nodes(path) | n.filepath] AS files"
                     " LIMIT 40"
                 )
@@ -186,22 +252,23 @@ def register(mcp: FastMCP) -> None:
                 cypher = (
                     f"MATCH (start) WHERE elementId(start) = $eid "
                     f"MATCH path = (start)"
-                    f"-[:CALLS*1..{depth}]->(hop)"
+                    f"-[:CALLS|CALLS_INFERRED*1..{depth}]->(hop)"
                     " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
-                    " RETURN [n IN nodes(path) | n.name] AS chain,"
+                    + " RETURN [n IN nodes(path) | n.name] AS chain,"
                     "        [n IN nodes(path) | n.filepath] AS files"
                     " LIMIT 40"
                 )
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                res = await session.run(
+                candidates = await _execute_read(
+                    session,
                     resolve_cypher,
                     name=symbol_name,
                     pid=project_id,
-                    file_path=file_path,
-                    signature=signature,
+                    file_path=normalized_file_path,
+                    signature=normalized_signature,
+                    op="get_call_chain_resolve",
                 )
-                candidates = [rec async for rec in res]
                 if not candidates:
                     return (
                         f"`{symbol_name}` not found or no {hop_label}s within {depth} hops.\n"
@@ -210,15 +277,18 @@ def register(mcp: FastMCP) -> None:
 
                 matches_by_file = []
                 matches_by_signature = []
-                if file_path:
+                if normalized_file_path:
                     matches_by_file = [
-                        c for c in candidates if c.get("filepath") == file_path
+                        c
+                        for c in candidates
+                        if c.get("filepath") == normalized_file_path
                     ]
-                if signature:
+                if normalized_signature:
                     matches_by_signature = [
                         c
                         for c in candidates
-                        if c.get("signature") and signature in c.get("signature")
+                        if c.get("signature")
+                        and normalized_signature in c.get("signature")
                     ]
 
                 if matches_by_file:
@@ -233,8 +303,9 @@ def register(mcp: FastMCP) -> None:
                     picked.get("qualified_name") or picked.get("name") or symbol_name
                 )
 
-                result = await session.run(cypher, eid=resolved_eid)
-                rows = [rec async for rec in result]
+                rows = await _execute_read(
+                    session, cypher, eid=resolved_eid, op="get_call_chain"
+                )
 
             if not rows:
                 return (
@@ -258,7 +329,7 @@ def register(mcp: FastMCP) -> None:
                     seen.add(key)
                     pad = "  " * i
                     name = chain[i]
-                    fp = (files[i] or "").split("/")[-1] if files[i] else "?"
+                    fp = files[i] or "?"
                     out.append(f"{pad}{'└─' if i > 1 else '  '} `{name}`  ({fp})")
 
             return "\n".join(out)
@@ -284,8 +355,7 @@ def register(mcp: FastMCP) -> None:
 
             _, _, _, _, proxy = get_memory_modules()
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             q = (query or "").strip()
             if not q:
@@ -348,7 +418,8 @@ def register(mcp: FastMCP) -> None:
 
             start = time.perf_counter()
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await session.run(
+                rows = await _execute_read(
+                    session,
                     cypher,
                     pid=project_id,
                     q=q,
@@ -357,8 +428,8 @@ def register(mcp: FastMCP) -> None:
                     type_kinds=type_kinds,
                     callable_kinds=callable_kinds,
                     timeout=float(os.getenv("LM_PROXY_NEO4J_READ_TIMEOUT", "3.0")),
+                    op="list_symbol_matches",
                 )
-                rows = [rec async for rec in result]
 
             proxy.debug_log(
                 "list_symbol_matches",
@@ -410,8 +481,7 @@ def register(mcp: FastMCP) -> None:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             q = (query or "").strip()
             if not q:
@@ -430,14 +500,16 @@ def register(mcp: FastMCP) -> None:
 
             start = time.perf_counter()
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await session.run(
+                records = await _execute_read(
+                    session,
                     cypher,
                     pid=project_id,
                     q=q,
                     kind=kind,
                     timeout=float(os.getenv("LM_PROXY_NEO4J_READ_TIMEOUT", "3.0")),
+                    op="diagnose_symbol_query",
                 )
-                rec = await result.single()
+                rec = records[0] if records else None
 
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             return (
@@ -466,8 +538,7 @@ def register(mcp: FastMCP) -> None:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             # Primary query: use GDS PageRank if available
             cypher_pr = """
@@ -498,7 +569,7 @@ def register(mcp: FastMCP) -> None:
             OPTIONAL MATCH (f)-[:CONTAINS]->(s)
               WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
             WITH f, count(s) AS sym_count, collect(DISTINCT s.name)[..4] AS sym_examples
-            OPTIONAL MATCH (caller:File {project_id: $pid})-[:CALLS]->(cs)<-[:CONTAINS]-(f)
+            OPTIONAL MATCH (caller:File {project_id: $pid})-[:CALLS|CALLS_INFERRED]->(cs)<-[:CONTAINS]-(f)
               WHERE caller <> f
             WITH f, sym_count, sym_examples, count(DISTINCT caller) AS callers_in
             WITH f.filepath AS file, sym_count, sym_examples,
@@ -509,13 +580,21 @@ def register(mcp: FastMCP) -> None:
             """
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await session.run(cypher_pr, pid=project_id)
-                records = [r async for r in result]
+                records = await _execute_read(
+                    session,
+                    cypher_pr,
+                    pid=project_id,
+                    op="get_code_importance_pr",
+                )
                 using_pagerank = bool(records)
 
                 if not using_pagerank:
-                    result = await session.run(cypher_fallback, pid=project_id)
-                    records = [r async for r in result]
+                    records = await _execute_read(
+                        session,
+                        cypher_fallback,
+                        pid=project_id,
+                        op="get_code_importance_fallback",
+                    )
 
             scoring_method = (
                 "GDS PageRank (CALLS graph)"
@@ -567,8 +646,7 @@ def register(mcp: FastMCP) -> None:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             # Primary: Louvain topology-based communities
             cypher_louvain = """
@@ -605,13 +683,23 @@ def register(mcp: FastMCP) -> None:
             """
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await session.run(cypher_louvain, pid=project_id)
-                records = [r async for r in result]
+                records = await _execute_read(
+                    session,
+                    session,
+                    cypher_louvain,
+                    pid=project_id,
+                    op="get_code_communities_louvain",
+                )
                 using_louvain = bool(records)
 
                 if not using_louvain:
-                    result = await session.run(cypher_dir, pid=project_id)
-                    records = [r async for r in result]
+                    records = await _execute_read(
+                        session,
+                        session,
+                        cypher_dir,
+                        pid=project_id,
+                        op="get_code_communities_dir",
+                    )
 
             method = (
                 "GDS Louvain (topology)" if using_louvain else "top-level directory"
@@ -656,12 +744,17 @@ def register(mcp: FastMCP) -> None:
             """
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await session.run(cypher, fid=file_id, pid=project_id)
                 related = []
-                async for record in result:
+                records = await _execute_read(
+                    session,
+                    cypher,
+                    fid=file_id,
+                    pid=project_id,
+                    op="get_related_files",
+                )
+                for record in records:
                     related.append(
                         f"- {record['related_file']} (Strength: {record['shared_imports']})"
                     )
@@ -679,8 +772,13 @@ def register(mcp: FastMCP) -> None:
             """
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await session.run(symbol_query, fid=file_id)
-                symbols = [rec["name"] async for rec in result if rec.get("name")]
+                records = await _execute_read(
+                    session,
+                    symbol_query,
+                    fid=file_id,
+                    op="get_related_files_symbols",
+                )
+                symbols = [rec["name"] for rec in records if rec.get("name")]
 
             symbols = [s for s in symbols if isinstance(s, str) and s.strip()]
             if not symbols:
@@ -720,7 +818,7 @@ def register(mcp: FastMCP) -> None:
         and any code chunk that mentions the name.
 
         Combines two sources:
-        1. Neo4j [:CALLS] edges (precise call-site graph hits)
+        1. Neo4j [:CALLS|CALLS_INFERRED] edges (precise + inferred call graph hits)
         2. Postgres full-text search over codebase_embeddings (catches type references,
            field accesses, generic bounds, and string literals that the graph misses)
 
@@ -780,7 +878,9 @@ def register(mcp: FastMCP) -> None:
                 if lang:
                     cfg = ts_pack.ProcessConfig(lang)
                     cfg.diagnostics = True
-                    result = ts_pack.process(code, config=cfg)
+                    result = normalize_ts_pack_result(
+                        code, lang, ts_pack.process(code, config=cfg)
+                    )
                     error_count = (result.get("metrics") or {}).get("error_count", 0)
                     lang_label = f"  [{lang}]"
                     if error_count:
@@ -819,8 +919,7 @@ def register(mcp: FastMCP) -> None:
                 file_id = f"{project_id}:file:{rel_path}"
                 import graph_bootstrap
 
-                await graph_bootstrap.init_graph_db()
-                driver = graph_bootstrap.get_driver()
+                driver = await graph_bootstrap.require_driver()
                 sym_cypher = """
                 MATCH (f:File {id: $fid})-[:CONTAINS]->(s)
                 WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Module
@@ -833,8 +932,14 @@ def register(mcp: FastMCP) -> None:
                 async with driver.session(
                     database=graph_bootstrap._NEO4J_DB
                 ) as session:
-                    result_q = await session.run(sym_cypher, fid=file_id)
-                    async for rec in result_q:
+                    records = await _execute_read(
+                        session,
+                        session,
+                        sym_cypher,
+                        fid=file_id,
+                        op="describe_file_symbols",
+                    )
+                    for rec in records:
                         loc = f":{rec['start']}-{rec['end']}" if rec["start"] else ""
                         sig = f"  →  {rec['sig']}" if rec["sig"] else ""
                         neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
@@ -890,35 +995,36 @@ def register(mcp: FastMCP) -> None:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                focus_r = await session.run(
+                focus_nodes = await _execute_read(
+                    session,
                     """
                     MATCH (n {name: $name, project_id: $pid})
                     WHERE n:Function OR n:Class OR n:Struct OR n:Enum OR n:Trait OR n:File
                     RETURN n.id AS id, labels(n)[0] AS kind, n.name AS name,
                            n.filepath AS fp, n.start_line AS sl
                     LIMIT 3
-                """,
+                    """,
                     name=symbol_name,
                     pid=project_id,
+                    op="visualize_subgraph_focus",
                 )
-                focus_nodes = [dict(r) async for r in focus_r]
                 if not focus_nodes:
                     return f"No symbol named '{symbol_name}' found in this project."
                 focus = focus_nodes[0]
                 focus_id = focus["id"]
 
-                nbr_r = await session.run(
+                nbr_rows = await _execute_read(
+                    session,
                     """
                     MATCH (n {id: $fid})
                      OPTIONAL MATCH (parent:File)-[:CONTAINS]->(n)
-                     OPTIONAL MATCH (n)<-[:CALLS]-(caller)
+                     OPTIONAL MATCH (n)<-[:CALLS|CALLS_INFERRED]-(caller)
                          WHERE caller:File OR caller:Function OR caller:Class OR caller:Method
                      OPTIONAL MATCH (n)<-[:IMPORTS]-(importer:File)
-                    OPTIONAL MATCH (n)-[:CALLS]->(callee)
+                    OPTIONAL MATCH (n)-[:CALLS|CALLS_INFERRED]->(callee)
                         WHERE callee:Function OR callee:Class OR callee:Struct
                     RETURN
                       parent.id AS parent_id, parent.name AS parent_name, parent.filepath AS parent_fp,
@@ -927,10 +1033,11 @@ def register(mcp: FastMCP) -> None:
                       collect(DISTINCT {id: callee.id, name: callee.name, kind: labels(callee)[0],
                                         fp: callee.filepath})[..8] AS callees
                     LIMIT 1
-                """,
+                    """,
                     fid=focus_id,
+                    op="visualize_subgraph_neighbors",
                 )
-                nbr = dict(await nbr_r.single() or {})
+                nbr = dict(nbr_rows[0]) if nbr_rows else {}
 
             node_counter = [0]
             node_map: dict = {}
@@ -1031,26 +1138,46 @@ async def find_references_impl(project_path: str | list[str], symbol_name: str) 
 
         import graph_bootstrap
 
-        await graph_bootstrap.init_graph_db()
-        driver = graph_bootstrap.get_driver()
+        driver = await graph_bootstrap.require_driver()
 
         # 1. Graph References (Neo4j)
         graph_refs = []
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            r = await session.run(
+            records = await _execute_read(
+                session,
                 """
                 MATCH (target {name: $name})
                 WHERE target.project_id IN $pids
-                MATCH (caller:Node)-[:CALLS]->(target)
+                MATCH (caller:Node)-[:CALLS|CALLS_INFERRED]->(target)
                 MATCH (f:File)-[:CONTAINS]->(caller)
                 RETURN f.filepath AS fp, caller.start_line AS sl, caller.name AS cn, target.project_id AS tpid
+                UNION
+                MATCH (target {qualified_name: $name})
+                WHERE target.project_id IN $pids
+                MATCH (caller:Node)-[:CALLS|CALLS_INFERRED]->(target)
+                MATCH (f:File)-[:CONTAINS]->(caller)
+                RETURN f.filepath AS fp, caller.start_line AS sl, caller.name AS cn, target.project_id AS tpid
+                UNION
+                MATCH (target {name: $name})
+                WHERE target.project_id IN $pids
+                MATCH (f:File)-[:IMPORTS_SYMBOL]->(target)
+                RETURN f.filepath AS fp, null AS sl, f.name AS cn, target.project_id AS tpid
+                UNION
+                MATCH (f:File {project_id: $pid})-[:CONTAINS]->(imp:Import)
+                WHERE imp.source CONTAINS $name OR imp.source =~ $re
+                RETURN f.filepath AS fp, null AS sl, f.name AS cn, $pid AS tpid
             """,
                 name=symbol_name,
                 pids=pids,
+                pid=pids[0] if pids else "",
+                re=f".*\\b{symbol_name}\\b.*",
+                op="find_references",
             )
-            async for rec in r:
+            for rec in records:
+                line = rec.get("sl")
+                line_part = f":{line}" if line else ""
                 graph_refs.append(
-                    f"- {rec['fp']}:{rec['sl']} ({rec['cn']}) [Project: {rec['tpid']}]"
+                    f"- {rec['fp']}{line_part} ({rec['cn']}) [Project: {rec['tpid']}]"
                 )
 
         # 2. Semantic/Literal References (Postgres)

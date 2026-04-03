@@ -42,6 +42,23 @@ CHUNK_LINES = 250  # fallback: target lines per chunk
 OVERLAP_LINES = 25  # fallback: line overlap between chunks
 CHUNK_MAX_BYTES = 8_000  # max bytes per section chunk (ts_pack split_markdown)
 MAX_PAGE_BYTES = 2_000_000  # skip pages > 2MB of markdown
+DEFAULT_URL_FILTERS = [
+    "/python/docs/0.6/",
+    "/python/api/0.6/",
+]
+DEFAULT_TOPIC_URL_FILTERS = {
+    "neo4j-cypher": [
+        "/docs/cypher-manual/current/cypher-neo4j/",
+        "/docs/cypher-manual/current/cypher-aura/",
+        "/docs/cypher-manual/current/cypher-overview/",
+    ]
+}
+DEFAULT_FORCE_PLAYWRIGHT_HOSTS = [
+    "neo4j.com",
+]
+DEFAULT_SKIP_SITEMAP_HOSTS = [
+    "neo4j.com",
+]
 
 
 # ── llms.txt discovery ───────────────────────────────────────────────────────
@@ -83,7 +100,9 @@ async def _fetch_url_text(url: str, timeout: int = 10) -> Optional[str]:
     return None
 
 
-async def discover_pages(seed_url: str) -> List[str]:
+async def discover_pages(
+    seed_url: str, url_filters: Optional[List[str]] = None
+) -> List[str]:
     """Given a seed URL, try llms.txt then sitemap.xml to get related doc pages.
 
     Returns a deduplicated list of URLs to crawl (includes seed_url itself).
@@ -104,8 +123,6 @@ async def discover_pages(seed_url: str) -> List[str]:
         and not parsed.path.endswith("/")
         and not seed_url.endswith("/llms.txt")
     ):
-        return [seed_url]
-    if parsed.path.startswith("/docs/") and parsed.path.rstrip("/") != "/docs":
         return [seed_url]
 
     # ── GitHub repo detection: rewrite to raw markdown ────────────────────────
@@ -135,11 +152,23 @@ async def discover_pages(seed_url: str) -> List[str]:
         )
 
     pages = [seed_url]
+    skip_sitemap_hosts = DEFAULT_SKIP_SITEMAP_HOSTS
+    env_skip_sitemaps = os.getenv("LM_PROXY_DOCS_SKIP_SITEMAP_HOSTS", "")
+    if env_skip_sitemaps.strip():
+        skip_sitemap_hosts = [
+            h.strip().lower() for h in env_skip_sitemaps.split(",") if h.strip()
+        ]
 
     def _in_scope(url: str) -> bool:
         """True iff url is on the same host and starts with the seed path prefix."""
         u = urlparse(url)
-        return u.netloc == parsed.netloc and u.path.startswith(seed_path)
+        if u.netloc != parsed.netloc or not u.path.startswith(seed_path):
+            return False
+        if url_filters:
+            for filt in url_filters:
+                if filt and filt in url:
+                    return False
+        return True
 
     def _parse_llms(text: str) -> List[str]:
         llms_urls: List[str] = []
@@ -159,17 +188,7 @@ async def discover_pages(seed_url: str) -> List[str]:
     def _filter_llms_urls(urls: List[str]) -> List[str]:
         if not urls:
             return []
-        filtered: List[str] = []
-        for u in urls:
-            parsed_u = urlparse(u)
-            if parsed_u.netloc != parsed.netloc:
-                continue
-            if seed_path.startswith("/docs/") and not parsed_u.path.startswith(
-                "/docs/"
-            ):
-                continue
-            filtered.append(u)
-        return filtered
+        return [u for u in urls if _in_scope(u)]
 
     # 1. llms.txt (seed URL can be llms.txt itself)
     if seed_url.endswith("/llms.txt"):
@@ -207,12 +226,10 @@ async def discover_pages(seed_url: str) -> List[str]:
                     flush=True,
                 )
                 return list(dict.fromkeys(pages))
-            # llms.txt may point to a canonical docs domain; prefer it.
             print(
-                f"[doc-indexer] llms.txt: using {len(valid_llms)} URL(s) outside scope",
+                "[doc-indexer] llms.txt: no in-scope URLs found; falling back",
                 flush=True,
             )
-            return list(dict.fromkeys(valid_llms))
 
         if llms_urls:
             print(
@@ -222,44 +239,53 @@ async def discover_pages(seed_url: str) -> List[str]:
             return list(dict.fromkeys(llms_urls))
 
     # 2. sitemap.xml — stream via SitemapRequestLoader (handles gz + sitemap index files)
-    try:
-        from crawlee.request_loaders import SitemapRequestLoader
-        from crawlee.http_clients import HttpxHttpClient as _SitemapClient
-
-        async with SitemapRequestLoader(
-            sitemap_urls=[f"{root}/sitemap.xml"],
-            http_client=_SitemapClient(),
-        ) as loader:
-            req = await loader.fetch_next_request()
-            while req is not None:
-                if _in_scope(req.url):
-                    pages.append(req.url)
-                await loader.mark_request_as_handled(req)
-                if len(pages) > 201:  # hard cap (1 seed + 200 from sitemap)
-                    break
-                req = await loader.fetch_next_request()
-        if len(pages) > 1:
-            print(
-                f"[doc-indexer] sitemap.xml — {len(pages) - 1} in-scope pages (prefix={seed_path})",
-                flush=True,
-            )
-            return list(dict.fromkeys(pages))
-    except Exception as _e:
+    skip_sitemap = any(h in parsed.netloc.lower() for h in skip_sitemap_hosts)
+    if skip_sitemap:
         print(
-            f"[doc-indexer] SitemapRequestLoader failed ({_e}), falling back to regex",
+            f"[doc-indexer] skip sitemap loader for host={parsed.netloc}",
             flush=True,
         )
-        sitemap_txt = await _fetch_url_text(f"{root}/sitemap.xml")
-        if sitemap_txt:
-            locs = re.findall(r"<loc>(https?://[^<]+)</loc>", sitemap_txt)
-            filtered = [u for u in locs if _in_scope(u)]
-            if filtered:
-                pages.extend(filtered[:200])
+    if not skip_sitemap:
+        try:
+            from crawlee.request_loaders import SitemapRequestLoader
+            from crawlee.http_clients import HttpxHttpClient as _SitemapClient
+
+            async with SitemapRequestLoader(
+                sitemap_urls=[f"{root}/sitemap.xml", f"{root}/sitemap_index.xml"],
+                http_client=_SitemapClient(),
+            ) as loader:
+                req = await loader.fetch_next_request()
+                while req is not None:
+                    if _in_scope(req.url):
+                        pages.append(req.url)
+                    await loader.mark_request_as_handled(req)
+                    if len(pages) > 201:  # hard cap (1 seed + 200 from sitemap)
+                        break
+                    req = await loader.fetch_next_request()
+            if len(pages) > 1:
                 print(
-                    f"[doc-indexer] sitemap.xml (regex) — {len(filtered)} pages (prefix={seed_path})",
+                    f"[doc-indexer] sitemap.xml — {len(pages) - 1} in-scope pages (prefix={seed_path})",
                     flush=True,
                 )
                 return list(dict.fromkeys(pages))
+        except Exception as _e:
+            print(
+                f"[doc-indexer] SitemapRequestLoader failed ({_e}), falling back to regex",
+                flush=True,
+            )
+            for sitemap_url in (f"{root}/sitemap.xml", f"{root}/sitemap_index.xml"):
+                sitemap_txt = await _fetch_url_text(sitemap_url)
+                if not sitemap_txt:
+                    continue
+                locs = re.findall(r"<loc>(https?://[^<]+)</loc>", sitemap_txt)
+                filtered = [u for u in locs if _in_scope(u)]
+                if filtered:
+                    pages.extend(filtered[:200])
+                    print(
+                        f"[doc-indexer] sitemap.xml (regex) — {len(filtered)} pages (prefix={seed_path})",
+                        flush=True,
+                    )
+                    return list(dict.fromkeys(pages))
 
     # 3. Link extraction — try HTTP first, then Playwright if the page is JS-rendered.
     #    Handles Sphinx/MkDocs sites (HTTP) and SPA doc sites like neo4j (Playwright).
@@ -356,13 +382,19 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
 
     from datetime import timedelta
     from crawlee.configuration import Configuration
+    from crawlee import ConcurrencySettings
     from crawlee._types import RequestHandlerRunResult
     from crawlee.crawlers import (
         AdaptivePlaywrightCrawler,
         AdaptivePlaywrightCrawlingContext,
         AdaptivePlaywrightPreNavCrawlingContext,
+        PlaywrightCrawler,
+        PlaywrightCrawlingContext,
+        PlaywrightPreNavCrawlingContext,
     )
+    from crawlee.events import LocalEventManager
     from crawlee.http_clients import ImpitHttpClient
+    from crawlee.storage_clients import FileSystemStorageClient
     from crawlee.fingerprint_suite import (
         DefaultFingerprintGenerator,
         HeaderGeneratorOptions,
@@ -406,6 +438,12 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
     )
 
     results: List[Dict] = []
+    quiet = os.getenv("LM_PROXY_DOCS_QUIET", "").strip().lower() in {"1", "true", "yes"}
+
+    def _log(message: str) -> None:
+        if quiet:
+            return
+        print(message, flush=True)
 
     # ── 1. Raw GitHub markdown (no browser, no trafilatura) ───────────────────
     raw_urls = [u for u in urls if "raw.githubusercontent.com" in u]
@@ -420,9 +458,7 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
                 .replace("_", " ")
             )
             results.append({"url": raw_url, "markdown": text, "title": title})
-            print(
-                f"[doc-indexer] fetched raw: {raw_url} — {len(text)} chars", flush=True
-            )
+            _log(f"[doc-indexer] fetched raw: {raw_url} — {len(text)} chars")
         else:
             print(
                 f"[doc-indexer] raw fetch failed: {raw_url}",
@@ -430,7 +466,7 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
                 flush=True,
             )
 
-    # ── 2. AdaptivePlaywrightCrawler for all other URLs ───────────────────────
+    # ── 2. AdaptivePlaywrightCrawler / PlaywrightCrawler ──────────────────────
     rest_urls = [u for u in rest_urls if not u.lower().endswith(".pdf")]
     if not rest_urls:
         return results
@@ -441,163 +477,286 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
             max_requests = int(os.getenv("LM_PROXY_DOCS_MAX_REQUESTS", ""))
         except ValueError:
             max_requests = len(rest_urls)
-    crawler = AdaptivePlaywrightCrawler.with_beautifulsoup_static_parser(
-        max_requests_per_crawl=max_requests,
-        http_client=ImpitHttpClient(),
-        # Use job-specific storage for request queue (ephemeral, crash-resumable);
-        # predictor KV lives in the stable _PREDICTOR_DIR via CRAWLEE_STORAGE_DIR env.
-        configuration=Configuration(
-            storage_dir=_job_storage,
-            purge_on_start=False,
-        ),
-        rendering_type_predictor=_predictor,  # persistent cross-job learning
-        result_checker=_result_checker,  # validate content quality
-        result_comparator=_result_comparator,  # compare HTTP vs Playwright
-        playwright_crawler_specific_kwargs={
-            "headless": True,
-            "max_request_retries": 2,
-            "request_handler_timeout": timedelta(seconds=45),
-            "retry_on_blocked": False,
-            "use_session_pool": False,
-            "additional_http_error_status_codes": [429, 503],
-            "browser_launch_options": {"args": ["--disable-dev-shm-usage"]},
-            "fingerprint_generator": _fp_gen,
-        },
-    )
+    if len(rest_urls) > max_requests:
+        rest_urls = rest_urls[:max_requests]
+    http_client = None
+    client_choice = os.getenv("LM_PROXY_DOCS_HTTP_CLIENT", "impit").strip().lower()
+    if client_choice in {"httpx", "httpxhttpclient"}:
+        try:
+            from crawlee.http_clients import HttpxHttpClient
 
-    # Block ads, tracking, media — Playwright path only (no page object in HTTP path)
-    @crawler.pre_navigation_hook(playwright_only=True)
-    async def _block_junk(context: AdaptivePlaywrightPreNavCrawlingContext) -> None:
-        context.page.set_default_navigation_timeout(60_000)
-        await context.block_requests(
-            extra_url_patterns=[
-                "adsbygoogle.js",
-                "gtm.js",
-                "analytics.js",
-                "hotjar",
-                "segment.io",
-                "intercom",
-                "drift",
-                "hubspot",
-            ],
-        )
-
-    # AdaptivePlaywrightCrawler intentionally fires both sub-crawlers periodically
-    # (for RenderingTypePredictor learning). We deduplicate here, preferring HTTP
-    # results (cheaper) over Playwright when both run for the same URL.
-    seen_urls: Dict[str, str] = {}  # url → mode that stored the result
-
-    @crawler.router.default_handler
-    async def _handler(context: AdaptivePlaywrightCrawlingContext) -> None:
-        url = context.request.url
-
-        # Get raw HTML: check _page (private; context.page raises in static mode)
-        if context._page is not None:
-            try:
-                await context._page.wait_for_load_state("networkidle", timeout=5_000)
-            except Exception:
-                pass
-            html = await context._page.content()
-            title = await context._page.title()
-            mode = "js"
-        else:
-            raw = await context.http_response.read()
-            html = raw.decode("utf-8", errors="replace")
-            title_m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.I)
-            title = title_m.group(1).strip() if title_m else url.rsplit("/", 1)[-1]
-            mode = "http"
-
-        # Skip if already stored via HTTP (best mode); allow HTTP to replace a js entry
-        prior = seen_urls.get(url)
-        if prior == "http":
-            return  # already have best result; discard Playwright duplicate
-        if prior == "js" and mode == "js":
-            return  # same mode duplicate — skip
-
-        xml = (
-            trafilatura.extract(
-                html,
-                include_links=False,
-                output_format="xml",
-                favor_recall=True,
+            http_client = HttpxHttpClient()
+        except Exception as exc:
+            print(
+                f"[doc-indexer] httpx client unavailable ({exc}); falling back to Impit",
+                file=sys.stderr,
+                flush=True,
             )
-            or ""
-        )
-        if not xml.strip():
-            markdown = (
+    elif client_choice in {"curl", "curl-impersonate", "curlimpersonate"}:
+        try:
+            from crawlee.http_clients import CurlImpersonateHttpClient
+
+            http_client = CurlImpersonateHttpClient()
+        except Exception as exc:
+            print(
+                f"[doc-indexer] curl-impersonate client unavailable ({exc}); falling back to Impit",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    if http_client is None:
+        http_client = ImpitHttpClient()
+
+    configuration = Configuration(
+        storage_dir=_job_storage,
+        purge_on_start=False,
+    )
+    storage_client = FileSystemStorageClient()
+
+    max_concurrency = 16
+    env_max_concurrency = os.getenv("LM_PROXY_DOCS_MAX_CONCURRENCY", "").strip()
+    if env_max_concurrency:
+        try:
+            max_concurrency = max(1, int(env_max_concurrency))
+        except ValueError:
+            max_concurrency = 16
+    concurrency_settings = ConcurrencySettings(max_concurrency=max_concurrency)
+
+    async with LocalEventManager() as event_manager:
+        force_hosts = DEFAULT_FORCE_PLAYWRIGHT_HOSTS
+        env_hosts = os.getenv("LM_PROXY_DOCS_FORCE_PLAYWRIGHT_HOSTS", "")
+        if env_hosts.strip():
+            force_hosts = [h.strip().lower() for h in env_hosts.split(",") if h.strip()]
+
+        def _force_playwright(url: str) -> bool:
+            host = urlparse(url).netloc.lower()
+            return any(h in host for h in force_hosts)
+
+        force_js_urls = [u for u in rest_urls if _force_playwright(u)]
+        adaptive_urls = [u for u in rest_urls if u not in set(force_js_urls)]
+
+        adaptive_crawler = None
+        if adaptive_urls:
+            adaptive_crawler = AdaptivePlaywrightCrawler.with_beautifulsoup_static_parser(
+                max_requests_per_crawl=max_requests,
+                http_client=http_client,
+                configuration=configuration,
+                storage_client=storage_client,
+                event_manager=event_manager,
+                concurrency_settings=concurrency_settings,
+                rendering_type_predictor=_predictor,  # persistent cross-job learning
+                result_checker=_result_checker,  # validate content quality
+                result_comparator=_result_comparator,  # compare HTTP vs Playwright
+                max_request_retries=2,
+                request_handler_timeout=timedelta(seconds=45),
+                retry_on_blocked=False,
+                use_session_pool=False,
+                additional_http_error_status_codes=[429, 503],
+                playwright_crawler_specific_kwargs={
+                    "headless": True,
+                    "browser_launch_options": {"args": ["--disable-dev-shm-usage"]},
+                    "fingerprint_generator": _fp_gen,
+                },
+            )
+
+        js_crawler = None
+        if force_js_urls:
+            js_crawler = PlaywrightCrawler(
+                max_requests_per_crawl=max_requests,
+                configuration=configuration,
+                storage_client=storage_client,
+                event_manager=event_manager,
+                concurrency_settings=concurrency_settings,
+                max_request_retries=2,
+                request_handler_timeout=timedelta(seconds=45),
+                retry_on_blocked=False,
+                use_session_pool=False,
+                additional_http_error_status_codes=[429, 503],
+                browser_launch_options={"args": ["--disable-dev-shm-usage"]},
+                fingerprint_generator=_fp_gen,
+            )
+
+        # Block ads, tracking, media — Playwright path only (no page object in HTTP path)
+        async def _block_junk(context) -> None:
+            context.page.set_default_navigation_timeout(60_000)
+            await context.block_requests(
+                extra_url_patterns=[
+                    "adsbygoogle.js",
+                    "gtm.js",
+                    "analytics.js",
+                    "hotjar",
+                    "segment.io",
+                    "intercom",
+                    "drift",
+                    "hubspot",
+                ],
+            )
+
+        if adaptive_crawler:
+
+            @adaptive_crawler.pre_navigation_hook(playwright_only=True)
+            async def _block_junk_adaptive(
+                context: AdaptivePlaywrightPreNavCrawlingContext,
+            ) -> None:
+                await _block_junk(context)
+
+        if js_crawler:
+
+            @js_crawler.pre_navigation_hook
+            async def _block_junk_playwright(
+                context: PlaywrightPreNavCrawlingContext,
+            ) -> None:
+                await _block_junk(context)
+
+        # AdaptivePlaywrightCrawler intentionally fires both sub-crawlers periodically
+        # (for RenderingTypePredictor learning). We deduplicate here, preferring HTTP
+        # results (cheaper) over Playwright when both run for the same URL.
+        seen_urls: Dict[str, str] = {}  # url → mode that stored the result
+
+        async def _store_content(
+            context,
+            url: str,
+            html: str,
+            title: str,
+            mode: str,
+        ) -> None:
+            prior = seen_urls.get(url)
+            if prior == "http":
+                return
+            if prior == "js" and mode == "js":
+                return
+
+            xml = (
                 trafilatura.extract(
                     html,
                     include_links=False,
-                    output_format="markdown",
+                    output_format="xml",
                     favor_recall=True,
                 )
                 or ""
             )
-            if markdown.strip():
-                await context.push_data({"_len": len(markdown)})
-                results.append({"url": url, "markdown": markdown, "title": title})
+            if not xml.strip():
+                markdown = (
+                    trafilatura.extract(
+                        html,
+                        include_links=False,
+                        output_format="markdown",
+                        favor_recall=True,
+                    )
+                    or ""
+                )
+                if markdown.strip():
+                    await context.push_data({"_len": len(markdown)})
+                    results.append({"url": url, "markdown": markdown, "title": title})
+                    _log(
+                        f"[doc-indexer] crawled ({mode}, md fallback): {url} — {len(markdown)} chars"
+                    )
+                    seen_urls[url] = mode
+                    return
+                _log(f"[doc-indexer] skip (no content): {url}")
+                return
+            if len(xml.encode()) > MAX_PAGE_BYTES:
+                _log(f"[doc-indexer] skip (too large): {url}")
+                return
+
+            await context.push_data({"_len": len(xml)})
+
+            if prior == "js" and mode == "http":
+                for i, r in enumerate(results):
+                    if r["url"] == url:
+                        results[i] = {"url": url, "xml": xml, "title": title}
+                        break
+                _log(f"[doc-indexer] upgraded http←js: {url} — {len(xml)} chars")
+            else:
+                results.append({"url": url, "xml": xml, "title": title})
+                _log(f"[doc-indexer] crawled ({mode}): {url} — {len(xml)} chars")
+
+            seen_urls[url] = mode
+
+        if adaptive_crawler:
+
+            @adaptive_crawler.router.default_handler
+            async def _handler(context: AdaptivePlaywrightCrawlingContext) -> None:
+                url = context.request.url
+                page = None
+                try:
+                    page = context.page
+                except Exception:
+                    page = None
+
+                if page is not None:
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=5_000)
+                    except Exception:
+                        pass
+                    html = await page.content()
+                    title = await page.title()
+                    mode = "js"
+                else:
+                    raw = await context.http_response.read()
+                    html = raw.decode("utf-8", errors="replace")
+                    title_m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.I)
+                    title = (
+                        title_m.group(1).strip() if title_m else url.rsplit("/", 1)[-1]
+                    )
+                    mode = "http"
+
+                await _store_content(context, url, html, title, mode)
+
+            @adaptive_crawler.failed_request_handler
+            async def _error_adaptive(
+                context: AdaptivePlaywrightCrawlingContext, error: Exception
+            ) -> None:
                 print(
-                    f"[doc-indexer] crawled ({mode}, md fallback): {url} — {len(markdown)} chars",
+                    f"[doc-indexer] JS failed: {context.request.url} — {error}",
+                    file=sys.stderr,
                     flush=True,
                 )
-                seen_urls[url] = mode
-                return
-            print(f"[doc-indexer] skip (no content): {url}", flush=True)
-            return
-        if len(xml.encode()) > MAX_PAGE_BYTES:
-            print(f"[doc-indexer] skip (too large): {url}", flush=True)
-            return
 
-        # Signal content quality to the predictor via push_data.
-        # This is the ONLY output the result_checker/result_comparator see; we use
-        # a sentinel key "_len" so real dataset consumers can ignore it.
-        await context.push_data({"_len": len(xml)})
+        if js_crawler:
 
-        if prior == "js" and mode == "http":
-            # Upgrade: remove the old Playwright entry, replace with HTTP result
-            for i, r in enumerate(results):
-                if r["url"] == url:
-                    results[i] = {"url": url, "xml": xml, "title": title}
-                    break
-            print(
-                f"[doc-indexer] upgraded http←js: {url} — {len(xml)} chars", flush=True
-            )
-        else:
-            results.append({"url": url, "xml": xml, "title": title})
-            print(
-                f"[doc-indexer] crawled ({mode}): {url} — {len(xml)} chars", flush=True
-            )
+            @js_crawler.router.default_handler
+            async def _handler_js(context: PlaywrightCrawlingContext) -> None:
+                url = context.request.url
+                try:
+                    await context.page.wait_for_load_state("networkidle", timeout=5_000)
+                except Exception:
+                    pass
+                html = await context.page.content()
+                title = await context.page.title()
+                await _store_content(context, url, html, title, "js")
 
-        seen_urls[url] = mode
+            @js_crawler.failed_request_handler
+            async def _error_js(
+                context: PlaywrightCrawlingContext, error: Exception
+            ) -> None:
+                print(
+                    f"[doc-indexer] JS failed: {context.request.url} — {error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
-    @crawler.failed_request_handler
-    async def _error(
-        context: AdaptivePlaywrightCrawlingContext, error: Exception
-    ) -> None:
-        print(
-            f"[doc-indexer] JS failed: {context.request.url} — {error}",
-            file=sys.stderr,
-            flush=True,
-        )
+        try:
+            if js_crawler:
+                await js_crawler.run(force_js_urls)
+            if adaptive_crawler:
+                await adaptive_crawler.run(adaptive_urls)
+        except Exception as e:
+            print(f"[doc-indexer] crawler error: {e}", file=sys.stderr, flush=True)
 
-    try:
-        await crawler.run(rest_urls)
-    except Exception as e:
-        print(f"[doc-indexer] crawler error: {e}", file=sys.stderr, flush=True)
-
-    # Log adaptive crawler statistics: HTTP vs Playwright ratio and mispredictions
-    try:
-        s = crawler.statistics.state
-        http_runs = getattr(s, "http_only_request_handler_runs", "?")
-        js_runs = getattr(s, "browser_request_handler_runs", "?")
-        misses = getattr(s, "rendering_type_mispredictions", "?")
-        print(
-            f"[doc-indexer] stats: http={http_runs}  js={js_runs}  "
-            f"mispredictions={misses}  total={len(results)}",
-            flush=True,
-        )
-    except Exception:
-        pass
+        if adaptive_crawler:
+            try:
+                s = adaptive_crawler.statistics.state
+                http_runs = getattr(s, "http_only_request_handler_runs", "?")
+                js_runs = getattr(s, "browser_request_handler_runs", "?")
+                misses = getattr(s, "rendering_type_mispredictions", "?")
+                print(
+                    f"[doc-indexer] stats: http={http_runs}  js={js_runs}  "
+                    f"mispredictions={misses}  total={len(results)}",
+                    flush=True,
+                )
+            except Exception:
+                pass
 
     return results
 
@@ -672,7 +831,12 @@ def _chunk_id(url: str, idx: int) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-async def index_docs(urls: List[str], topic: str) -> int:
+async def index_docs(
+    urls: List[str],
+    topic: str,
+    discover: bool = False,
+    url_filters: Optional[List[str]] = None,
+) -> int:
     """Full pipeline: discover → crawl → extract → chunk → embed → upsert."""
     await memory_bootstrap.bootstrap_schema()
     await memory_store.open_pool()
@@ -696,13 +860,18 @@ async def index_docs(urls: List[str], topic: str) -> int:
     t0 = time.time()
     total_chunks = 0
 
-    # Expand URLs with llms.txt / sitemap discovery
-    all_pages: List[str] = []
-    for url in urls:
-        discovered = await discover_pages(url)
-        all_pages.extend(discovered)
-    # Deduplicate but preserve all distinct seed URLs
-    all_pages = list(dict.fromkeys(all_pages))
+    # Expand URLs with llms.txt / sitemap discovery (opt-in)
+    if discover:
+        all_pages: List[str] = []
+        for url in urls:
+            discovered = await discover_pages(url, url_filters=url_filters)
+            all_pages.extend(discovered)
+        # Deduplicate but preserve all distinct seed URLs
+        all_pages = list(dict.fromkeys(all_pages))
+    else:
+        all_pages = list(dict.fromkeys(urls))
+        if url_filters:
+            all_pages = [u for u in all_pages if not any(f in u for f in url_filters)]
 
     print(
         f"[doc-indexer] Crawling {len(all_pages)} pages for topic='{topic}'",
@@ -819,13 +988,43 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Documentation indexer")
     parser.add_argument(
-        "--urls-file", required=True, help="JSON file with list of URLs"
+        "--urls-file", required=False, help="JSON file with list of URLs"
     )
-    parser.add_argument("--topic", required=True, help="Topic label (e.g. 'neo4j')")
+    parser.add_argument("--topic", required=False, help="Topic label (e.g. 'neo4j')")
+    parser.add_argument("urls_file_pos", nargs="?", help="Positional JSON file path")
+    parser.add_argument("topic_pos", nargs="?", help="Positional topic label")
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="Enable llms.txt/sitemap/link discovery for each seed URL",
+    )
+    parser.add_argument(
+        "--url-filter",
+        action="append",
+        default=[],
+        help="Substring filter to exclude URLs (repeatable)",
+    )
     args = parser.parse_args()
 
-    with open(args.urls_file) as fh:
+    urls_file = args.urls_file or args.urls_file_pos
+    topic = args.topic or args.topic_pos
+    if not urls_file:
+        parser.error("urls file is required (positional or --urls-file)")
+    if not topic:
+        parser.error("topic is required (positional or --topic)")
+
+    with open(urls_file) as fh:
         urls: List[str] = json.load(fh)
 
-    print(f"[doc-indexer] {len(urls)} seed URLs  topic={args.topic}", flush=True)
-    asyncio.run(index_docs(urls, args.topic))
+    print(f"[doc-indexer] {len(urls)} seed URLs  topic={topic}", flush=True)
+    topic_filters = DEFAULT_TOPIC_URL_FILTERS.get(topic, [])
+    url_filters = DEFAULT_URL_FILTERS + topic_filters + (args.url_filter or [])
+
+    asyncio.run(
+        index_docs(
+            urls,
+            topic,
+            discover=bool(args.discover),
+            url_filters=url_filters or None,
+        )
+    )

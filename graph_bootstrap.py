@@ -4,7 +4,7 @@ import os
 import json
 import sys
 from typing import Optional, Any
-from neo4j import AsyncGraphDatabase
+from neo4j import AsyncGraphDatabase, unit_of_work
 
 _NEO4J_ENABLED = os.getenv("LM_PROXY_GRAPH_ENABLED", "1").strip().lower() in {
     "1",
@@ -16,6 +16,10 @@ _NEO4J_URI = os.getenv("LM_PROXY_NEO4J_URI", "bolt://localhost:7687")
 _NEO4J_USER = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
 _NEO4J_PASSWORD = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
 _NEO4J_DB = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+_EMBEDDING_DIM = int(os.getenv("LM_PROXY_MEMORY_EMBEDDING_DIM", "768"))
+_TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+_TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+_TX_METADATA_BASE = {"source": "lm_proxy", "tool": "graph_bootstrap"}
 _ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
     "1",
     "true",
@@ -66,17 +70,45 @@ async def init_graph_db() -> None:
         # Use single-property uniqueness (node.id) since Neo4j Community Edition
         # doesn't support composite uniqueness constraints.
         async with _driver.session(database=_NEO4J_DB) as session:
+
+            async def _run_write(cypher: str, op: str) -> None:
+                metadata = dict(_TX_METADATA_BASE)
+                op_value = op or "write"
+                if _TX_OP_PREFIX:
+                    op_value = f"{_TX_OP_PREFIX}.{op_value}"
+                metadata["op"] = op_value
+
+                async def _tx(tx):
+                    res = await tx.run(cypher)
+                    await res.consume()
+
+                if hasattr(session, "execute_write"):
+                    await session.execute_write(
+                        unit_of_work(timeout=_TX_TIMEOUT, metadata=metadata)(_tx)
+                    )
+                else:
+                    await unit_of_work(timeout=_TX_TIMEOUT, metadata=metadata)(_tx)(
+                        session
+                    )
+
             # Uniqueness constraints — ensure all MERGE operations use NodeUniqueIndexSeek.
             # Without these, Session/Project/Chunk MERGE falls back to NodeByLabelScan
             # (confirmed by PROFILE: full label scan + Eager on Session).
             constraints = [
                 # Global structural node identity (already exists, kept for safety)
                 "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE",
+                # File nodes are MERGE'd by id; ensure index-backed MERGE
+                "CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:File) REQUIRE f.id IS UNIQUE",
                 # Per-project lookup index for read-heavy queries
                 "CREATE INDEX node_project_id IF NOT EXISTS FOR (n:Node) ON (n.project_id)",
+                "CREATE INDEX file_project_id IF NOT EXISTS FOR (f:File) ON (f.project_id)",
                 # Session/Project: MERGE'd on every semantic batch — must use index
                 "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.id IS UNIQUE",
                 "CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE",
+                "CREATE CONSTRAINT memory_turn_id_unique IF NOT EXISTS FOR (t:MemoryTurn) REQUIRE t.id IS UNIQUE",
+                "CREATE CONSTRAINT memory_summary_id_unique IF NOT EXISTS FOR (s:MemorySummary) REQUIRE s.id IS UNIQUE",
+                "CREATE CONSTRAINT memory_checkpoint_id_unique IF NOT EXISTS FOR (c:MemoryCheckpoint) REQUIRE c.id IS UNIQUE",
+                "CREATE CONSTRAINT tool_output_id_unique IF NOT EXISTS FOR (o:ToolOutput) REQUIRE o.id IS UNIQUE",
                 # Chunk: dedicated label constraint for vector index alignment
                 "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE",
                 # Relationship index: eliminates O(degree) edge scan in CONTAINS MERGE
@@ -85,22 +117,22 @@ async def init_graph_db() -> None:
 
             for query in constraints:
                 try:
-                    await session.run(query)
+                    await _run_write(query, op="schema_bootstrap")
                 except Exception as e:
                     _debug("constraint_creation_warning", error=str(e), query=query)
 
             # 3. Vector Index for Codebase Search
-            vector_index_query = """
+            vector_index_query = f"""
             CREATE VECTOR INDEX `codebase_chunks_vector` IF NOT EXISTS
             FOR (n:Chunk)
             ON (n.embedding)
-            OPTIONS {indexConfig: {
-              `vector.dimensions`: 768,
+            OPTIONS {{indexConfig: {{
+              `vector.dimensions`: {_EMBEDDING_DIM},
               `vector.similarity_function`: 'cosine'
-            }}
+            }}}}
             """
             try:
-                await session.run(vector_index_query)
+                await _run_write(vector_index_query, op="vector_index")
                 _debug("neo4j_vector_index_initialized")
             except Exception as e:
                 _debug("vector_index_creation_error", error=str(e))
@@ -127,4 +159,16 @@ async def close_graph_db() -> None:
 
 def get_driver():
     """Return the active Neo4j Async Driver instance."""
+    return _driver
+
+
+async def require_driver():
+    """Initialize Neo4j if needed and return a live driver or raise a clear error."""
+    await init_graph_db()
+    if _driver is None:
+        raise RuntimeError(
+            "Neo4j driver unavailable. Check that Neo4j is running and that "
+            "LM_PROXY_NEO4J_URI / LM_PROXY_NEO4J_USER / LM_PROXY_NEO4J_PASSWORD / "
+            "LM_PROXY_NEO4J_DB are valid."
+        )
     return _driver

@@ -1,12 +1,34 @@
 """tools/dev.py — developer workflow tools (git, grep, test discovery, linting)."""
+
 import os
 import sys
 from typing import List
+from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules
 
 
 def register(mcp: FastMCP) -> None:
+
+    _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+    _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+    _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "dev"}
+
+    async def _execute_read(session, cypher: str, op: str | None = None, **params):
+        metadata = dict(_TX_METADATA_BASE)
+        op_value = op or "read"
+        if _TX_OP_PREFIX:
+            op_value = f"{_TX_OP_PREFIX}.{op_value}"
+        metadata["op"] = op_value
+
+        @unit_of_work(timeout=_TX_TIMEOUT, metadata=metadata)
+        async def _tx(tx):
+            result = await tx.run(cypher, **params)
+            return await result.data()
+
+        if hasattr(session, "execute_read"):
+            return await session.execute_read(_tx)
+        return await _tx(session)
 
     @mcp.tool()
     async def git_summary(project_path: str) -> str:
@@ -33,9 +55,9 @@ def register(mcp: FastMCP) -> None:
                 )
                 return r.stdout.strip()
 
-            branch    = git(["rev-parse", "--abbrev-ref", "HEAD"])
-            status    = git(["status", "--short"])
-            log       = git(["log", "--oneline", "-12"])
+            branch = git(["rev-parse", "--abbrev-ref", "HEAD"])
+            status = git(["status", "--short"])
+            log = git(["log", "--oneline", "-12"])
             diff_stat = git(["diff", "--stat", "HEAD"])
 
             parts = [f"### Git Summary: `{project_path}`", f"**Branch:** `{branch}`\n"]
@@ -52,7 +74,9 @@ def register(mcp: FastMCP) -> None:
             return f"Error running git: {str(e)}"
 
     @mcp.tool()
-    async def grep_codebase(project_path: str, pattern: str, file_glob: str = "") -> str:
+    async def grep_codebase(
+        project_path: str, pattern: str, file_glob: str = ""
+    ) -> str:
         """
         Search for a literal string or regex pattern across the entire codebase
         using ripgrep (rg). Faster and more precise than semantic search for
@@ -72,13 +96,23 @@ def register(mcp: FastMCP) -> None:
             from collections import defaultdict
 
             rg = shutil.which("rg") or "rg"
-            cmd = [rg, "--line-number", "--no-heading", "--color=never",
-                   "--max-count=3", "--max-filesize=500K", "-e", pattern]
+            cmd = [
+                rg,
+                "--line-number",
+                "--no-heading",
+                "--color=never",
+                "--max-count=3",
+                "--max-filesize=500K",
+                "-e",
+                pattern,
+            ]
             if file_glob:
                 cmd += ["--glob", file_glob]
             cmd.append(".")
 
-            r = subprocess.run(cmd, cwd=project_path, capture_output=True, text=True, timeout=15)
+            r = subprocess.run(
+                cmd, cwd=project_path, capture_output=True, text=True, timeout=15
+            )
             lines = r.stdout.strip().splitlines()
             if not lines:
                 extra = f" in `{file_glob}`" if file_glob else ""
@@ -116,15 +150,20 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import hashlib, subprocess
+
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
-            basename   = os.path.splitext(os.path.basename(file_path))[0]
+            basename = os.path.splitext(os.path.basename(file_path))[0]
             results: dict[str, str] = {}
 
             candidates = [
-                f"test_{basename}.py", f"{basename}_test.py",
-                f"test_{basename}.ts", f"{basename}.test.ts",
-                f"test_{basename}.rs", f"{basename}_test.rs",
-                f"test_{basename}.go", f"{basename}_test.go",
+                f"test_{basename}.py",
+                f"{basename}_test.py",
+                f"test_{basename}.ts",
+                f"{basename}.test.ts",
+                f"test_{basename}.rs",
+                f"{basename}_test.rs",
+                f"test_{basename}.go",
+                f"{basename}_test.go",
             ]
             find_args = ["-type", "f", "("]
             for i, c in enumerate(candidates):
@@ -132,35 +171,69 @@ def register(mcp: FastMCP) -> None:
                     find_args.append("-o")
                 find_args += ["-name", c]
             find_args.append(")")
-            r = subprocess.run(["find", project_path] + find_args,
-                               capture_output=True, text=True, timeout=10)
+            r = subprocess.run(
+                ["find", project_path] + find_args,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
             for p in r.stdout.strip().splitlines():
                 rel = os.path.relpath(p, project_path)
                 results[rel] = "name convention"
 
             try:
                 import graph_bootstrap
-                await graph_bootstrap.init_graph_db()
-                driver = graph_bootstrap.get_driver()
-                async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                    res = await session.run("""
+
+                driver = await graph_bootstrap.require_driver()
+                async with driver.session(
+                    database=graph_bootstrap._NEO4J_DB
+                ) as session:
+                    res = await _execute_read(
+                        """
                         MATCH (src:File {project_id: $pid})
                         WHERE src.filepath ENDS WITH $fp
-                        MATCH (tester:File)-[:IMPORTS]->(src)
-                        RETURN tester.filepath AS tf LIMIT 20
-                    """, pid=project_id, fp=file_path)
-                    async for rec in res:
-                        tf = rec["tf"]
-                        if tf:
-                            rel = os.path.relpath(tf, project_path) if os.path.isabs(tf) else tf
-                            results.setdefault(rel, "imports this file")
+                        OPTIONAL MATCH (tester:File)-[:IMPORTS]->(src)
+                        OPTIONAL MATCH (src)-[:CONTAINS]->(sym:Node)
+                        OPTIONAL MATCH (tester2:File)-[:IMPORTS_SYMBOL]->(sym)
+                        RETURN tester.filepath AS tf, tester2.filepath AS tf2
+                        LIMIT 50
+                        """,
+                        pid=project_id,
+                        fp=file_path,
+                        op="get_test_coverage_for",
+                    )
+                    for rec in res:
+                        tf = rec.get("tf")
+                        tf2 = rec.get("tf2")
+                        for path, reason in (
+                            (tf, "imports this file"),
+                            (tf2, "imports symbol"),
+                        ):
+                            if path:
+                                rel = (
+                                    os.path.relpath(path, project_path)
+                                    if os.path.isabs(path)
+                                    else path
+                                )
+                                results.setdefault(rel, reason)
             except Exception:
                 pass
 
             try:
                 rg_r = subprocess.run(
-                    ["rg", "--files-with-matches", "--glob", "*test*", "-e", basename, "."],
-                    cwd=project_path, capture_output=True, text=True, timeout=10
+                    [
+                        "rg",
+                        "--files-with-matches",
+                        "--glob",
+                        "*test*",
+                        "-e",
+                        basename,
+                        ".",
+                    ],
+                    cwd=project_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 for p in rg_r.stdout.strip().splitlines():
                     rel = os.path.relpath(os.path.join(project_path, p), project_path)
@@ -169,8 +242,10 @@ def register(mcp: FastMCP) -> None:
                 pass
 
             if not results:
-                return (f"No test files found for `{file_path}`.\n"
-                        "Either no tests exist yet or the project is not indexed.")
+                return (
+                    f"No test files found for `{file_path}`.\n"
+                    "Either no tests exist yet or the project is not indexed."
+                )
             out = [f"## Tests covering `{file_path}`\n"]
             for rel, reason in sorted(results.items()):
                 out.append(f"- `{rel}`  ← {reason}")
@@ -194,16 +269,20 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import subprocess, re
+
             r = subprocess.run(
                 ["git", "diff", "--unified=4", since],
-                cwd=project_path, capture_output=True, text=True, timeout=15
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             diff = r.stdout
             if not diff.strip():
                 return f"No changes vs `{since}`. Working tree is clean."
 
             file_re = re.compile(r"^diff --git a/.+ b/(.+)$")
-            def_re  = re.compile(
+            def_re = re.compile(
                 r"^\+[ \t]*(?:pub (?:async )?)?(?:"
                 r"def |async def |fn |class |struct |impl |trait |enum |"
                 r"func |function |"
@@ -253,6 +332,7 @@ def register(mcp: FastMCP) -> None:
         import subprocess
         import shutil
         import sys
+
         results = []
 
         # Extend PATH with common conda/venv bin dirs so linters installed
@@ -268,25 +348,41 @@ def register(mcp: FastMCP) -> None:
                 return candidate
             return None
 
-        ruff      = _which("ruff")
-        pylint    = _which("pylint")
+        ruff = _which("ruff")
+        pylint = _which("pylint")
         swiftlint = _which("swiftlint")
         for f in files:
             if f.endswith(".swift"):
                 if swiftlint:
-                    res = subprocess.run([swiftlint, "lint", f], capture_output=True, text=True)
-                    results.append(f"--- SwiftLint: {os.path.basename(f)} ---\n{res.stdout or 'No issues found.'}")
+                    res = subprocess.run(
+                        [swiftlint, "lint", f], capture_output=True, text=True
+                    )
+                    results.append(
+                        f"--- SwiftLint: {os.path.basename(f)} ---\n{res.stdout or 'No issues found.'}"
+                    )
                 else:
                     results.append(f"SwiftLint not found. Skipping {f}.")
             elif f.endswith(".py"):
                 linter = ruff or pylint
                 if linter:
-                    cmd = [linter, "check", f] if "ruff" in linter else [linter, "--errors-only", f]
+                    cmd = (
+                        [linter, "check", f]
+                        if "ruff" in linter
+                        else [linter, "--errors-only", f]
+                    )
                     res = subprocess.run(cmd, capture_output=True, text=True)
-                    results.append(f"--- Python Linter ({os.path.basename(linter)}): {os.path.basename(f)} ---\n{res.stdout or 'No issues found.'}")
+                    results.append(
+                        f"--- Python Linter ({os.path.basename(linter)}): {os.path.basename(f)} ---\n{res.stdout or 'No issues found.'}"
+                    )
                 else:
-                    results.append(f"Python linter (ruff/pylint) not found. Skipping {f}.")
-        return "\n\n".join(results) if results else "No supported files provided or no linters found."
+                    results.append(
+                        f"Python linter (ruff/pylint) not found. Skipping {f}."
+                    )
+        return (
+            "\n\n".join(results)
+            if results
+            else "No supported files provided or no linters found."
+        )
 
     @mcp.tool()
     async def swift_doc_lookup(file_path: str, symbol_name: str) -> str:
@@ -313,7 +409,9 @@ def register(mcp: FastMCP) -> None:
             try:
                 res = subprocess.run(
                     [sk, "structure", "--file", file_path],
-                    capture_output=True, text=True, timeout=30
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 if res.returncode == 0:
                     data = json.loads(res.stdout)
@@ -336,17 +434,19 @@ def register(mcp: FastMCP) -> None:
                         try:
                             with open(file_path, "rb") as fh:
                                 raw = fh.read()
-                            offset     = node.get("key.offset", 0) or 0
+                            offset = node.get("key.offset", 0) or 0
                             end_offset = offset + (node.get("key.length", 0) or 0)
                             start_line = raw[:offset].count(b"\n") + 1
-                            end_line   = raw[:end_offset].count(b"\n") + 1
+                            end_line = raw[:end_offset].count(b"\n") + 1
                         except Exception:
                             start_line, end_line = "?", "?"
                         lines = [
                             f"**{symbol_name}** ({node.get('key.kind', '?').split('.')[-1]})",
                             f"File: `{file_path}`  L{start_line}–{end_line}",
                         ]
-                        doc = node.get("key.doc.comment") or node.get("key.annotated_decl", "")
+                        doc = node.get("key.doc.comment") or node.get(
+                            "key.annotated_decl", ""
+                        )
                         if doc:
                             lines += ["", doc.strip()]
                         return "\n".join(lines)
@@ -357,13 +457,13 @@ def register(mcp: FastMCP) -> None:
         # Fallback: ts_pack structural extraction
         try:
             import skeleton_extractor
+
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
             doc = skeleton_extractor.get_swift_docs(code, symbol_name)
             return doc if doc else f"No documentation found for '{symbol_name}'."
         except Exception as e:
             return f"Error looking up docs: {str(e)}"
-
 
     @mcp.tool()
     async def extract_function_body(file_path: str, symbol_name: str) -> str:
@@ -379,6 +479,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import tree_sitter_language_pack as ts_pack
+
             if not os.path.exists(file_path):
                 return "File not found."
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
@@ -387,7 +488,7 @@ def register(mcp: FastMCP) -> None:
             lang = ts_pack.detect_language(file_path)
             if not lang:
                 return f"Language not supported for `{os.path.basename(file_path)}`."
-            cfg    = ts_pack.ProcessConfig(lang)
+            cfg = ts_pack.ProcessConfig.all(lang)
             result = ts_pack.process(code, config=cfg)
 
             def _find(items: list, name: str) -> dict | None:
@@ -402,6 +503,50 @@ def register(mcp: FastMCP) -> None:
 
             node = _find(result.get("structure") or [], symbol_name)
             if not node:
+                try:
+                    import hashlib
+                    import graph_bootstrap
+
+                    project_path = None
+                    cur = os.path.abspath(os.path.dirname(file_path))
+                    while cur and cur != os.path.dirname(cur):
+                        if os.path.isdir(os.path.join(cur, ".git")):
+                            project_path = cur
+                            break
+                        cur = os.path.dirname(cur)
+                    if project_path:
+                        rel_path = os.path.relpath(file_path, project_path)
+                        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+                        driver = await graph_bootstrap.require_driver()
+                        async with driver.session(
+                            database=graph_bootstrap._NEO4J_DB
+                        ) as session:
+                            records = await _execute_read(
+                                """
+                                MATCH (f:File {project_id:$pid, filepath:$fp})-[:CONTAINS]->(s)
+                                WHERE s.name = $name
+                                RETURN s.start_line AS sl, s.end_line AS el, labels(s) AS labels
+                                LIMIT 1
+                                """,
+                                pid=project_id,
+                                fp=rel_path.replace(os.sep, "/"),
+                                name=symbol_name,
+                                op="extract_function_body_fallback",
+                            )
+                            rec = records[0] if records else None
+                            if rec:
+                                sl = rec.get("sl")
+                                el = rec.get("el")
+                                if sl is not None and el is not None:
+                                    sl1, el1 = sl, el
+                                    body = "\n".join(lines_list[sl1 - 1 : el1])
+                                    label = (rec.get("labels") or [""])[0]
+                                    return (
+                                        f"## `{symbol_name}` ({label})  —  L{sl1}–{el1}\n"
+                                        f"```{lang}\n{body}\n```"
+                                    )
+                except Exception:
+                    pass
                 return f"`{symbol_name}` not found in `{os.path.basename(file_path)}`."
 
             # ts-pack stores line info in span dict, 0-indexed
@@ -413,11 +558,10 @@ def register(mcp: FastMCP) -> None:
 
             # Convert to 1-indexed for display and slicing
             sl1, el1 = sl + 1, el + 1
-            body = "\n".join(lines_list[sl : el1])
+            body = "\n".join(lines_list[sl:el1])
             kind = node.get("kind", "")
             return (
-                f"## `{symbol_name}` ({kind})  —  L{sl1}–{el1}\n"
-                f"```{lang}\n{body}\n```"
+                f"## `{symbol_name}` ({kind})  —  L{sl1}–{el1}\n```{lang}\n{body}\n```"
             )
         except Exception as e:
             return f"Error extracting body: {str(e)}"
@@ -435,6 +579,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import tree_sitter_language_pack as ts_pack
+
             if not os.path.exists(file_path):
                 return "File not found."
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
@@ -442,7 +587,7 @@ def register(mcp: FastMCP) -> None:
             lang = ts_pack.detect_language(file_path)
             if not lang:
                 return f"Language not supported for `{os.path.basename(file_path)}`."
-            cfg    = ts_pack.ProcessConfig(lang)
+            cfg = ts_pack.ProcessConfig(lang)
             result = ts_pack.process(code, config=cfg)
 
             def _find_class(items: list, name: str) -> dict | None:
@@ -461,17 +606,25 @@ def register(mcp: FastMCP) -> None:
 
             kind = cls_node.get("kind", "")
             cls_span = cls_node.get("span") or {}
-            sl   = (cls_span.get("start_line") or 0) + 1
-            el   = (cls_span.get("end_line")   or 0) + 1
-            out  = [f"## `{class_name}` ({kind})  L{sl}–{el}\n"]
+            sl = (cls_span.get("start_line") or 0) + 1
+            el = (cls_span.get("end_line") or 0) + 1
+            out = [f"## `{class_name}` ({kind})  L{sl}–{el}\n"]
 
             for child in cls_node.get("children") or []:
                 child_kind = child.get("kind") or ""
-                if child_kind in ("Method", "Function", "Property", "Variable",
-                                  "Const", "Enum", "Struct", "Class"):
+                if child_kind in (
+                    "Method",
+                    "Function",
+                    "Property",
+                    "Variable",
+                    "Const",
+                    "Enum",
+                    "Struct",
+                    "Class",
+                ):
                     name = child.get("name") or "?"
                     cspan = child.get("span") or {}
-                    csl   = (cspan.get("start_line") or 0) + 1
+                    csl = (cspan.get("start_line") or 0) + 1
                     out.append(f"  {name}  (L{csl})")
 
             if len(out) == 1:
@@ -494,6 +647,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import re
+
             if not os.path.exists(file_path):
                 return "File not found."
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:

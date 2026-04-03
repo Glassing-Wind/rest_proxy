@@ -45,6 +45,9 @@ def _drain_proc_output(proc, job_id: str, prefix: str, rc_key: str) -> None:
                 if len(logs) > _MAX_LOG_LINES:
                     del logs[0]
     proc.wait()
+    cancel_requested = False
+    project_path = ""
+    project_id = ""
     with _JOBS_LOCK:
         if job_id in _JOBS:
             _JOBS[job_id][rc_key] = proc.returncode
@@ -71,27 +74,68 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
 
     with _JOBS_LOCK:
         if job_id in _JOBS:
+            cancel_requested = bool(_JOBS[job_id].get("cancel_requested"))
             ok = struct_rc == 0 and sem_rc == 0
-            _JOBS[job_id]["status"] = "done" if ok else "failed"
+            if cancel_requested:
+                _JOBS[job_id]["status"] = "cancelled"
+            else:
+                _JOBS[job_id]["status"] = "done" if ok else "failed"
             _JOBS[job_id]["finished_at"] = _t.time()
             project_path = _JOBS[job_id].get("project_path", "")
+            project_id = _JOBS[job_id].get("project_id", "")
 
-    # Auto-build import/symbol graphs after a successful index so edges
-    # are always fresh without blocking latency-sensitive tool calls.
-    if ok and project_path and not project_path.startswith("docs://"):
+    # Refresh structural metadata whenever the structural phase succeeded,
+    # even if semantic indexing failed. Graph-backed tools remain useful.
+    if (
+        struct_rc == 0
+        and project_path
+        and project_id
+        and not project_path.startswith("docs://")
+        and not cancel_requested
+    ):
         try:
             import asyncio
+            import graph_bootstrap
             from tools.project import enqueue_graph_build
+
+            async def _post_index_maintenance() -> None:
+                from neo4j import unit_of_work
+
+                driver = await graph_bootstrap.require_driver()
+                async with driver.session(
+                    database=graph_bootstrap._NEO4J_DB
+                ) as session:
+                    tx_timeout = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
+                    metadata = {
+                        "source": "lm_proxy",
+                        "tool": "jobs",
+                        "op": "post_index_refresh",
+                    }
+
+                    @unit_of_work(timeout=tx_timeout, metadata=metadata)
+                    async def _tx(tx):
+                        res = await tx.run(
+                            "MATCH (f:File {project_id: $pid}) "
+                            "SET f.indexed_at = timestamp()",
+                            pid=project_id,
+                        )
+                        await res.consume()
+
+                    if hasattr(session, "execute_write"):
+                        await session.execute_write(_tx)
+                    else:
+                        await _tx(session)
+                await enqueue_graph_build(
+                    project_path, run_imports=True, run_symbols=True
+                )
 
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
                 future = asyncio.run_coroutine_threadsafe(
-                    enqueue_graph_build(
-                        project_path, run_imports=True, run_symbols=True
-                    ),
+                    _post_index_maintenance(),
                     _MAIN_LOOP,
                 )
                 future.result(timeout=2)
-                queued = "enqueued"
+                queued = "enqueued + timestamps refreshed"
             else:
                 queued = "skipped: main loop not available"
             with _JOBS_LOCK:

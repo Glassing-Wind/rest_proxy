@@ -66,8 +66,8 @@ _CODEBASE_DDL_STEPS = [
     "CREATE INDEX IF NOT EXISTS idx_ce_fts        ON codebase_embeddings USING gin  (search_vec)",
     # Btree for project-scoped deletes / incremental re-index
     "CREATE INDEX IF NOT EXISTS idx_ce_project    ON codebase_embeddings (project_id, file_path)",
-    # Unique constraint on chunk_id — required for ON CONFLICT (chunk_id) DO NOTHING
-    "ALTER TABLE codebase_embeddings ADD CONSTRAINT ce_chunk_id_unique UNIQUE (chunk_id)",
+    # Unique index on chunk_id — required for ON CONFLICT (chunk_id) DO NOTHING
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ce_chunk_id ON codebase_embeddings (chunk_id) WHERE chunk_id IS NOT NULL",
 ]
 
 # doc_embeddings — identical schema for external documentation (future)

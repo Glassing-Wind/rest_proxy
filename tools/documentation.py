@@ -94,7 +94,8 @@ def register(mcp: FastMCP) -> None:
         Crawl, extract, chunk, embed, and index documentation URLs into Postgres.
         Returns immediately with a job_id. Use get_index_status(job_id) to monitor.
 
-        Pages are discovered via llms.txt/sitemap before crawling.
+        By default, only the provided seed URLs are crawled. Set
+        LM_PROXY_DOCS_DISCOVER=1 to enable llms.txt/sitemap/link discovery.
         Content is extracted as native markdown via crawl4ai, then chunked at
         heading-section boundaries using an AST-aware splitter (tree-sitter markdown).
         Each chunk includes a context_path breadcrumb (e.g. ['GRPCServer', 'Error Handling']).
@@ -140,6 +141,12 @@ def register(mcp: FastMCP) -> None:
                 "--topic",
                 topic,
             ]
+            if os.getenv("LM_PROXY_DOCS_DISCOVER", "").lower() in {
+                "1",
+                "true",
+                "yes",
+            }:
+                doc_cmd.append("--discover")
             proc = subprocess.Popen(
                 doc_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )

@@ -5,6 +5,9 @@ import hashlib
 import threading
 import asyncio
 import time
+import re
+import uuid
+from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules
 
@@ -16,12 +19,30 @@ _GRAPH_WRITE_CONCURRENCY = max(
 )
 _NEO4J_READ_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_READ_TIMEOUT", "3.0"))
 _NEO4J_WRITE_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_WRITE_TIMEOUT", "15.0"))
+_TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
+_TX_METADATA_BASE = {"source": "lm_proxy", "tool": "project"}
 _NEO4J_GRAPH_BUILD_BATCH = max(50, int(os.getenv("LM_PROXY_GRAPH_BUILD_BATCH", "500")))
+
+_GRAPH_LOCK_ENABLED = os.getenv(
+    "LM_PROXY_GRAPH_BUILD_LOCK_REDIS", "1"
+).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+_GRAPH_LOCK_KEY = os.getenv("LM_PROXY_GRAPH_BUILD_LOCK_KEY", "lmproxy:graph_build_lock")
+_GRAPH_LOCK_TTL_S = float(os.getenv("LM_PROXY_GRAPH_BUILD_LOCK_TTL", "300"))
+_GRAPH_LOCK_WAIT_S = float(os.getenv("LM_PROXY_GRAPH_BUILD_LOCK_WAIT", "30"))
+_GRAPH_LOCK_POLL_S = float(os.getenv("LM_PROXY_GRAPH_BUILD_LOCK_POLL", "0.2"))
+_GRAPH_LOCK_RENEW_S = float(os.getenv("LM_PROXY_GRAPH_BUILD_LOCK_RENEW", "20"))
+_REDIS_URL = os.getenv("LM_PROXY_REDIS_URL", "redis://localhost:6379/0")
 
 _WRITE_SEM = asyncio.Semaphore(_GRAPH_WRITE_CONCURRENCY)
 _GRAPH_BUILD_QUEUE: asyncio.Queue | None = None
 _GRAPH_BUILD_WORKER: asyncio.Task | None = None
 _GRAPH_BUILD_LOCK = asyncio.Lock()
+_REDIS_CLIENT: object | None = None
 
 _METRICS_LOCK = threading.Lock()
 _METRICS_MAX = 200
@@ -43,6 +64,81 @@ def _record_metric(event: str, **fields: object) -> None:
             del _METRICS[: len(_METRICS) - _METRICS_MAX]
 
 
+def _is_deadlock_error(exc: Exception) -> bool:
+    code = getattr(exc, "code", "") or getattr(exc, "gql_status", "")
+    if isinstance(code, str) and "DeadlockDetected" in code:
+        return True
+    msg = str(exc)
+    return "DeadlockDetected" in msg or "deadlock" in msg.lower()
+
+
+async def _execute_write(session, cypher: str, op: str | None = None, **params) -> None:
+    metadata = dict(_TX_METADATA_BASE)
+    op_value = op or "write"
+    if _TX_OP_PREFIX:
+        op_value = f"{_TX_OP_PREFIX}.{op_value}"
+    metadata["op"] = op_value
+
+    @unit_of_work(timeout=_NEO4J_WRITE_TIMEOUT_S, metadata=metadata)
+    async def _tx(tx):
+        result = await tx.run(cypher, **params)
+        await result.consume()
+
+    if hasattr(session, "execute_write"):
+        await session.execute_write(_tx)
+    else:
+        await _tx(session)
+
+
+async def _execute_read(session, cypher: str, op: str | None = None, **params):
+    metadata = dict(_TX_METADATA_BASE)
+    op_value = op or "read"
+    if _TX_OP_PREFIX:
+        op_value = f"{_TX_OP_PREFIX}.{op_value}"
+    metadata["op"] = op_value
+
+    @unit_of_work(timeout=_NEO4J_READ_TIMEOUT_S, metadata=metadata)
+    async def _tx(tx):
+        result = await tx.run(cypher, **params)
+        return await result.data()
+
+    if hasattr(session, "execute_read"):
+        return await session.execute_read(_tx)
+    return await _tx(session)
+
+
+async def _run_graph_build_with_retry(fn, label: str, project_path: str) -> str:
+    attempts = 3
+    for attempt in range(1, attempts + 1):
+        try:
+            result = await fn(project_path)
+        except Exception as exc:
+            if _is_deadlock_error(exc) and attempt < attempts:
+                _debug_log(
+                    "graph_build_retry",
+                    project_path=project_path,
+                    phase=label,
+                    attempt=attempt,
+                )
+                await asyncio.sleep(0.2 * attempt)
+                continue
+            raise
+        if isinstance(result, str) and "deadlock" in result.lower():
+            if attempt < attempts:
+                _debug_log(
+                    "graph_build_retry",
+                    project_path=project_path,
+                    phase=label,
+                    attempt=attempt,
+                )
+                await asyncio.sleep(0.2 * attempt)
+                continue
+        if isinstance(result, str):
+            return result
+        return f"{label} graph build completed"
+    return f"{label} graph build completed"
+
+
 def _summarize_batches(event: str, limit: int = 50) -> tuple[int, int, int]:
     with _METRICS_LOCK:
         recent = [m for m in _METRICS if m.get("event") == event][-limit:]
@@ -58,6 +154,86 @@ def get_last_graph_build_metric() -> dict[str, object] | None:
             if entry.get("event") == "graph_build_done":
                 return dict(entry)
     return None
+
+
+async def _get_redis() -> object | None:
+    global _REDIS_CLIENT
+    if not _GRAPH_LOCK_ENABLED:
+        return None
+    if _REDIS_CLIENT is not None:
+        return _REDIS_CLIENT
+    try:
+        import redis.asyncio as aioredis  # type: ignore
+
+        client = aioredis.from_url(_REDIS_URL, decode_responses=True)
+        await client.ping()
+        _REDIS_CLIENT = client
+        return _REDIS_CLIENT
+    except Exception as exc:
+        _debug_log("graph_lock_redis_unavailable", error=str(exc))
+        return None
+
+
+async def _acquire_graph_lock() -> str | None:
+    if not _GRAPH_LOCK_ENABLED:
+        return None
+    client = await _get_redis()
+    if client is None:
+        return None
+    token = uuid.uuid4().hex
+    deadline = time.monotonic() + _GRAPH_LOCK_WAIT_S
+    while time.monotonic() < deadline:
+        try:
+            ok = await client.set(
+                _GRAPH_LOCK_KEY,
+                token,
+                nx=True,
+                ex=int(_GRAPH_LOCK_TTL_S),
+            )
+        except Exception as exc:
+            _debug_log("graph_lock_acquire_error", error=str(exc))
+            return None
+        if ok:
+            return token
+        await asyncio.sleep(_GRAPH_LOCK_POLL_S)
+    return None
+
+
+async def _release_graph_lock(token: str | None) -> None:
+    if not token or not _GRAPH_LOCK_ENABLED:
+        return
+    client = await _get_redis()
+    if client is None:
+        return
+    try:
+        await client.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            1,
+            _GRAPH_LOCK_KEY,
+            token,
+        )
+    except Exception as exc:
+        _debug_log("graph_lock_release_error", error=str(exc))
+
+
+async def _renew_graph_lock(token: str) -> bool:
+    if not _GRAPH_LOCK_ENABLED:
+        return False
+    client = await _get_redis()
+    if client is None:
+        return False
+    try:
+        ok = await client.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('expire', KEYS[1], ARGV[2]) else return 0 end",
+            1,
+            _GRAPH_LOCK_KEY,
+            token,
+            str(int(_GRAPH_LOCK_TTL_S)),
+        )
+        return bool(ok)
+    except Exception as exc:
+        _debug_log("graph_lock_renew_error", error=str(exc))
+        return False
 
 
 async def _ensure_graph_build_worker() -> None:
@@ -85,6 +261,37 @@ async def _graph_build_worker() -> None:
             _GRAPH_BUILD_QUEUE.task_done()
             return
         project_path, run_imports, run_symbols = item
+        lock_token = await _acquire_graph_lock()
+        if _GRAPH_LOCK_ENABLED and lock_token is None:
+            _debug_log(
+                "graph_build_lock_busy",
+                project_path=project_path,
+                wait_s=_GRAPH_LOCK_WAIT_S,
+            )
+            _record_metric(
+                "graph_build_lock_busy",
+                project_path=project_path,
+                wait_s=_GRAPH_LOCK_WAIT_S,
+            )
+            await asyncio.sleep(0.5)
+            await _GRAPH_BUILD_QUEUE.put(item)
+            _GRAPH_BUILD_QUEUE.task_done()
+            continue
+        renew_task: asyncio.Task | None = None
+        if _GRAPH_LOCK_ENABLED and lock_token:
+
+            async def _renew_loop() -> None:
+                while True:
+                    await asyncio.sleep(_GRAPH_LOCK_RENEW_S)
+                    ok = await _renew_graph_lock(lock_token)
+                    if not ok:
+                        _record_metric(
+                            "graph_build_lock_renew_failed",
+                            project_path=project_path,
+                        )
+                        return
+
+            renew_task = asyncio.create_task(_renew_loop())
         _debug_log(
             "graph_build_start",
             project_path=project_path,
@@ -100,10 +307,17 @@ async def _graph_build_worker() -> None:
         start = time.perf_counter()
         try:
             if run_imports:
-                await _build_import_graph_impl(project_path)
+                await _run_graph_build_with_retry(
+                    _build_import_graph_impl, "imports", project_path
+                )
                 await asyncio.sleep(0)
             if run_symbols:
-                await _build_symbol_import_export_graph_impl(project_path)
+                await _run_graph_build_with_retry(
+                    _build_symbol_import_export_graph_impl, "symbols", project_path
+                )
+            await _run_graph_build_with_retry(
+                _build_asset_graph_impl, "assets", project_path
+            )
         except Exception as exc:
             _debug_log("graph_build_error", project_path=project_path, error=str(exc))
             _record_metric(
@@ -122,6 +336,13 @@ async def _graph_build_worker() -> None:
                 elapsed_ms=elapsed_ms,
             )
         finally:
+            if renew_task:
+                renew_task.cancel()
+                try:
+                    await renew_task
+                except Exception:
+                    pass
+            await _release_graph_lock(lock_token)
             _GRAPH_BUILD_QUEUE.task_done()
 
 
@@ -178,6 +399,9 @@ Doc indexing tips:
 - `get_changed_symbols(project_path, since='HEAD~1')` → which functions changed
 - `grep_codebase(project_path, pattern)` → exact text search (ripgrep)
 - `find_references(project_path, symbol_name)` → graph + text references
+- `find_code_duplication(project_path, min_similarity=0.92, max_pairs=50, min_tokens=80, per_chunk=5, sample_size=500, include_paths?, exclude_paths?)` → duplicate detection with exact/normalized hashes, winnowing + small-input fallback, and semantic similarity
+  - Winnowing guarantee: matches shorter than `t = w + k − 1` are not guaranteed; small blocks use k-gram/token fallback
+  - Tune with `winnow_*` parameters to balance recall vs noise
 - `get_related_files(project_path, file_path)` → structural neighbors
 - `visualize_subgraph(project_path, symbol_name)` → Mermaid subgraph
 - `query_graph(cypher)` → raw Neo4j Cypher
@@ -185,7 +409,13 @@ Doc indexing tips:
 - `get_test_coverage_for(project_path, file_path)` → tests that cover a file
 - `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
-- `get_language_pack_status()` → available vs manifest languages (auto-download status)
+- `rebuild_symbol_graph(project_path)` → rebuild symbol-level IMPORTS/EXPORTS graph
+- `cancel_index_job(job_id)` → cancel a running indexing job
+- `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
+  Example:
+  `get_app_flow_summary("/Users/michaelmarler/Projects/rental", ui_contains="lease-detail", model_contains="Lease", service_contains="Lease", limit=50, as_table=true)`
+ - `get_language_pack_status()` → available vs manifest languages (auto-download status)
+ - `get_indexed_projects(query?)` → list indexed repo paths (filters by id prefix or path substring)
 
 ### Memory Tools:
 - `search_memory(session_id, query, global_search=True)` → cross-project recall
@@ -207,26 +437,30 @@ Doc indexing tips:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                r = await session.run(
+                r = await _execute_read(
+                    session,
                     "MATCH (f:File {project_id:$p}) RETURN count(f) AS files",
                     p=project_id,
+                    op="get_project_overview_file_count",
                 )
-                rec = await r.single()
+                rec = r[0] if r else None
                 n_files = rec["files"] if rec else 0
 
-                r2 = await session.run(
+                r2 = await _execute_read(
+                    session,
                     "MATCH (s {project_id:$p}) WHERE s:Function OR s:Class OR s:Struct "
                     "RETURN count(s) AS syms",
                     p=project_id,
+                    op="get_project_overview_symbol_count",
                 )
-                rec2 = await r2.single()
+                rec2 = r2[0] if r2 else None
                 n_syms = rec2["syms"] if rec2 else 0
 
-                r3 = await session.run(
+                r3 = await _execute_read(
+                    session,
                     """
                     MATCH (f:File {project_id: $p})
                     WITH f, CASE WHEN f.filepath CONTAINS '/'
@@ -238,14 +472,16 @@ Doc indexing tips:
                     RETURN top_dir, files, syms
                 """,
                     p=project_id,
+                    op="get_project_overview_dirs",
                 )
                 dirs = []
-                async for rec in r3:
+                for rec in r3:
                     dirs.append(
                         f"  📂 {rec['top_dir']}/  ({rec['files']} files, {rec['syms']} symbols)"
                     )
 
-                r4 = await session.run(
+                r4 = await _execute_read(
+                    session,
                     """
                     MATCH (f:File {project_id: $p})-[:CONTAINS]->(s)
                     WHERE (s:Function OR s:Class OR s:Struct)
@@ -256,9 +492,10 @@ Doc indexing tips:
                     RETURN fp, n, ex
                 """,
                     p=project_id,
+                    op="get_project_overview_key_files",
                 )
                 key_files = []
-                async for rec in r4:
+                for rec in r4:
                     ex = ", ".join(e for e in rec["ex"] if e)
                     key_files.append(f"  - {rec['fp']}  ({rec['n']} symbols: {ex})")
 
@@ -426,13 +663,13 @@ Doc indexing tips:
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
             import graph_bootstrap
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             limit = max(1, min(int(limit), 100))
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                r1 = await session.run(
+                r1 = await _execute_read(
+                    session,
                     """
                     MATCH (f:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
                     RETURN s.name AS symbol, count(*) AS n
@@ -441,12 +678,14 @@ Doc indexing tips:
                     """,
                     p=project_id,
                     limit=limit,
+                    op="get_symbol_imports_summary_symbols",
                 )
                 top_symbols = []
-                async for rec in r1:
+                for rec in r1:
                     top_symbols.append((rec["symbol"], rec["n"]))
 
-                r2 = await session.run(
+                r2 = await _execute_read(
+                    session,
                     """
                     MATCH (f:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
                     WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
@@ -456,9 +695,10 @@ Doc indexing tips:
                     """,
                     p=project_id,
                     limit=limit,
+                    op="get_symbol_imports_summary_files",
                 )
                 top_files = []
-                async for rec in r2:
+                for rec in r2:
                     top_files.append((rec["file"], rec["n"], rec["symbols"]))
 
             if not top_symbols and not top_files:
@@ -502,13 +742,13 @@ Doc indexing tips:
             import graph_bootstrap
             import fnmatch
 
-            await graph_bootstrap.init_graph_db()
-            driver = graph_bootstrap.get_driver()
+            driver = await graph_bootstrap.require_driver()
 
             limit = max(1, min(int(limit), 100))
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                r1 = await session.run(
+                r1 = await _execute_read(
+                    session,
                     """
                     MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
                     RETURN s.name AS symbol, count(*) AS n
@@ -517,9 +757,10 @@ Doc indexing tips:
                     """,
                     p=project_id,
                     limit=limit,
+                    op="get_symbol_exports_summary_symbols",
                 )
                 top_symbols = []
-                async for rec in r1:
+                for rec in r1:
                     name = rec["symbol"]
                     if (
                         symbol_prefix
@@ -533,7 +774,8 @@ Doc indexing tips:
                 if include_paths or exclude_paths or symbol_prefix:
                     fetch_limit = min(limit * 10, 200)
 
-                r2 = await session.run(
+                r2 = await _execute_read(
+                    session,
                     """
                     MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
                     WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
@@ -543,9 +785,10 @@ Doc indexing tips:
                     """,
                     p=project_id,
                     limit=fetch_limit,
+                    op="get_symbol_exports_summary_files",
                 )
                 top_files = []
-                async for rec in r2:
+                for rec in r2:
                     file = rec["file"]
                     if include_paths:
                         if not any(fnmatch.fnmatch(file, pat) for pat in include_paths):
@@ -582,6 +825,143 @@ Doc indexing tips:
         except Exception as e:
             return f"Error summarizing symbol exports: {str(e)}"
 
+    @mcp.tool()
+    async def rebuild_symbol_graph(project_path: str) -> str:
+        """
+        Rebuild symbol-level IMPORTS/EXPORTS graph for a project.
+        """
+        result = await _run_graph_build_with_retry(
+            _build_symbol_import_export_graph_impl, "symbols", project_path
+        )
+        return result
+
+    @mcp.tool()
+    async def get_app_flow_summary(
+        project_path: str,
+        ui_contains: str | None = None,
+        model_contains: str | None = None,
+        service_contains: str | None = None,
+        include_tests: bool = False,
+        limit: int = 20,
+        as_table: bool = False,
+    ) -> str:
+        """
+        Summarize UI → API → Service → DB paths for a project.
+        """
+        try:
+            import graph_bootstrap
+
+            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            query_limit = limit
+            if model_contains:
+                query_limit = max(limit * 10, 200)
+            driver = await graph_bootstrap.require_driver()
+            rows = []
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                result = await _execute_read(
+                    session,
+                    """
+                    CALL {
+                        MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
+                        MATCH (js)-[:CALLS_API]->(api:File {project_id:$p})
+                        OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
+                        OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
+                        OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
+                        OPTIONAL MATCH (js)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+                        WHERE ($ui_filter IS NULL OR ui.filepath CONTAINS $ui_filter)
+                          AND ($include_tests OR (
+                            NOT ui.filepath STARTS WITH 'tests/'
+                            AND NOT ui.filepath CONTAINS '/tests/'
+                            AND NOT ui.filepath CONTAINS '__tests__'
+                            AND NOT ui.filepath CONTAINS '.test.'
+                            AND NOT js.filepath STARTS WITH 'tests/'
+                            AND NOT js.filepath CONTAINS '/tests/'
+                            AND NOT js.filepath CONTAINS '__tests__'
+                            AND NOT js.filepath CONTAINS '.test.'
+                          ))
+                        RETURN ui.filepath AS ui,
+                           js.filepath AS js,
+                           api.filepath AS api,
+                           svc.filepath AS svc,
+                           model.name AS model,
+                           schema.filepath AS schema,
+                           ext.url AS external
+                        UNION
+                        MATCH (ui:File {project_id:$p})-[:CALLS_API]->(api:File {project_id:$p})
+                        OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
+                        OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
+                        OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
+                        OPTIONAL MATCH (ui)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+                        WHERE ($ui_filter IS NULL OR ui.filepath CONTAINS $ui_filter)
+                          AND ($include_tests OR (
+                            NOT ui.filepath STARTS WITH 'tests/'
+                            AND NOT ui.filepath CONTAINS '/tests/'
+                            AND NOT ui.filepath CONTAINS '__tests__'
+                            AND NOT ui.filepath CONTAINS '.test.'
+                          ))
+                        RETURN ui.filepath AS ui,
+                           ui.filepath AS js,
+                           api.filepath AS api,
+                           svc.filepath AS svc,
+                           model.name AS model,
+                           schema.filepath AS schema,
+                           ext.url AS external
+                    }
+                    RETURN ui, js, api, svc, model, schema, external
+                    LIMIT $limit
+                    """,
+                    p=project_id,
+                    ui_filter=ui_contains,
+                    include_tests=include_tests,
+                    limit=query_limit,
+                    op="get_app_flow_summary",
+                )
+                raw_rows = []
+                for row in result:
+                    raw_rows.append(
+                        (
+                            row.get("ui"),
+                            row.get("js"),
+                            row.get("api"),
+                            row.get("svc"),
+                            row.get("model"),
+                            row.get("schema"),
+                            row.get("external"),
+                        )
+                    )
+
+            if ui_contains:
+                raw_rows = [r for r in raw_rows if r[0] and ui_contains in r[0]]
+            if model_contains:
+                raw_rows = [r for r in raw_rows if r[4] and model_contains in r[4]]
+            if service_contains:
+                raw_rows = [r for r in raw_rows if r[3] and service_contains in r[3]]
+
+            if as_table:
+                rows = [
+                    "| UI | JS | API | Service | Model | Schema | External |",
+                    "| --- | --- | --- | --- | --- | --- | --- |",
+                ]
+                for ui, js, api, svc, model, schema, external in raw_rows:
+                    rows.append(
+                        f"| {ui or ''} | {js or ''} | {api or ''} | {svc or ''} | {model or ''} | {schema or ''} | {external or ''} |"
+                    )
+            else:
+                rows = [
+                    " -> ".join(
+                        [v for v in [ui, js, api, svc, model, schema, external] if v]
+                    )
+                    for ui, js, api, svc, model, schema, external in raw_rows
+                ]
+            if limit and len(rows) > limit:
+                rows = rows[:limit]
+            if not rows:
+                return "No UI → API → Service → DB paths found."
+            rows = list(dict.fromkeys(rows))
+            return "\n".join(rows)
+        except Exception as exc:
+            return f"Error building flow summary: {str(exc)}"
+
 
 async def _build_import_graph_impl(project_path: str) -> str:
     """Module-level implementation callable from _jobs.py post-index hook."""
@@ -595,17 +975,18 @@ async def _build_import_graph_impl(project_path: str) -> str:
         project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
         import graph_bootstrap
 
-        await graph_bootstrap.init_graph_db()
-        driver = graph_bootstrap.get_driver()
+        driver = await graph_bootstrap.require_driver()
 
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            r = await session.run(
+            r = await _execute_read(
+                session,
+                session,
                 "MATCH (f:File {project_id:$p}) RETURN f.filepath AS fp, f.id AS fid",
                 p=project_id,
-                timeout=_NEO4J_READ_TIMEOUT_S,
+                op="build_import_graph_files",
             )
             files: dict[str, str] = {}
-            async for rec in r:
+            for rec in r:
                 files[rec["fp"]] = rec["fid"]
 
             stems: dict[str, list[str]] = {}
@@ -613,14 +994,16 @@ async def _build_import_graph_impl(project_path: str) -> str:
                 stem = PurePosixPath(fp).stem
                 stems.setdefault(stem, []).append(fp)
 
-            r2 = await session.run(
+            r2 = await _execute_read(
+                session,
+                session,
                 "MATCH (f:File {project_id:$p})-[:CONTAINS]->(imp:Import) "
                 "RETURN f.id AS src_fid, f.filepath AS src_fp, imp.source AS src_text",
                 p=project_id,
-                timeout=_NEO4J_READ_TIMEOUT_S,
+                op="build_import_graph_imports",
             )
             imports = []
-            async for rec in r2:
+            for rec in r2:
                 imports.append((rec["src_fid"], rec["src_fp"], rec["src_text"] or ""))
 
         # Build Swift SPM module → file mapping
@@ -785,7 +1168,8 @@ async def _build_import_graph_impl(project_path: str) -> str:
         edges = list(set(edges))
         BATCH = _NEO4J_GRAPH_BUILD_BATCH
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            await session.run(
+            await _execute_write(
+                session,
                 "MATCH (a:File {project_id:$p})-[r:IMPORTS]->() DELETE r",
                 p=project_id,
                 timeout=_NEO4J_WRITE_TIMEOUT_S,
@@ -794,7 +1178,8 @@ async def _build_import_graph_impl(project_path: str) -> str:
                 batch = [{"src": s, "tgt": t} for s, t in edges[i : i + BATCH]]
                 t0 = time.perf_counter()
                 async with _WRITE_SEM:
-                    await session.run(
+                    await _execute_write(
+                        session,
                         """
                         UNWIND $batch AS edge
                         MATCH (a:File {id: edge.src})
@@ -846,6 +1231,370 @@ async def _build_import_graph_impl(project_path: str) -> str:
         return f"Error building import graph: {str(e)}"
 
 
+async def _build_asset_graph_impl(project_path: str) -> str:
+    """Build asset linkage edges (HTML → assets, JS/TS → API spec/routes)."""
+    try:
+        _debug_log("asset_graph_start", project_path=project_path)
+        start = time.perf_counter()
+        import posixpath
+        from pathlib import PurePosixPath
+
+        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+        import graph_bootstrap
+
+        driver = await graph_bootstrap.require_driver()
+
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+            r = await _execute_read(
+                session,
+                session,
+                "MATCH (f:File {project_id:$p}) RETURN f.filepath AS fp, f.id AS fid",
+                p=project_id,
+                op="build_asset_graph_files",
+            )
+            files: dict[str, str] = {}
+            for rec in r:
+                files[rec["fp"]] = rec["fid"]
+
+        if not files:
+            return "No files found for asset graph."
+
+        html_files = [
+            (fp, fid) for fp, fid in files.items() if fp.endswith((".html", ".astro"))
+        ]
+        script_files = [
+            (fp, fid)
+            for fp, fid in files.items()
+            if fp.endswith((".js", ".ts", ".tsx", ".astro"))
+        ]
+
+        api_targets: list[str] = []
+        api_target_paths: list[str] = []
+        if "src/api/openapi.yaml" in files:
+            api_target_paths.append("src/api/openapi.yaml")
+        if "src/api/routes.ts" in files:
+            api_target_paths.append("src/api/routes.ts")
+
+        for fp in files:
+            if fp.startswith("src/pages/api/") or fp.startswith("pages/api/"):
+                if fp.endswith((".ts", ".js", ".tsx", ".jsx")):
+                    api_target_paths.append(fp)
+            if fp.startswith("src/app/api/") or fp.startswith("app/api/"):
+                if fp.endswith(("route.ts", "route.js", "route.tsx", "route.jsx")):
+                    api_target_paths.append(fp)
+            if fp.startswith("src/app/") or fp.startswith("app/"):
+                if fp.endswith(("route.ts", "route.js", "route.tsx", "route.jsx")):
+                    api_target_paths.append(fp)
+
+        for fp in files:
+            if fp.startswith("src/api/") and fp.endswith((".ts", ".js", ".tsx")):
+                api_target_paths.append(fp)
+
+        api_targets = [files[p] for p in api_target_paths if p in files]
+        api_targets = list(dict.fromkeys(api_targets))
+
+        def _route_path_from_file(fp: str) -> str | None:
+            path = PurePosixPath(fp)
+            parts = path.parts
+            if len(parts) < 2:
+                return None
+            if parts[0] == "src":
+                parts = parts[1:]
+            if not parts:
+                return None
+            if parts[0] == "app" and path.name.startswith("route."):
+                route_parts = parts[1:-1]
+                if not route_parts:
+                    return "/"
+                return "/" + "/".join(route_parts)
+            if parts[0] == "pages" and len(parts) > 1 and parts[1] == "api":
+                rel = parts[2:]
+                if not rel:
+                    return "/api"
+                file_stem = PurePosixPath(*rel).stem
+                if file_stem == "index":
+                    rel = rel[:-1]
+                else:
+                    rel = rel[:-1] + (file_stem,)
+                if not rel:
+                    return "/api"
+                return "/api/" + "/".join(rel)
+            if parts[0] == "api":
+                rel = parts[1:]
+                if not rel:
+                    return "/api"
+                file_stem = PurePosixPath(*rel).stem
+                if file_stem == "index":
+                    rel = rel[:-1]
+                else:
+                    rel = rel[:-1] + (file_stem,)
+                if not rel:
+                    return "/api"
+                return "/api/" + "/".join(rel)
+            return None
+
+        route_targets: dict[str, str] = {}
+        for fp, fid in files.items():
+            route_path = _route_path_from_file(fp)
+            if route_path:
+                route_targets.setdefault(route_path, fid)
+
+        def _read_text(abs_path: str) -> str:
+            try:
+                if os.path.getsize(abs_path) > 1_000_000:
+                    return ""
+                with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    return fh.read()
+            except OSError:
+                return ""
+
+        def _resolve_href(src_fp: str, raw: str) -> str | None:
+            raw = raw.split("#", 1)[0].split("?", 1)[0].strip()
+            if not raw:
+                return None
+            if raw.startswith(("http://", "https://", "//", "data:", "mailto:")):
+                return None
+            if raw.startswith("/"):
+                candidate = raw.lstrip("/")
+                if candidate.startswith("assets/"):
+                    candidate = posixpath.join("src/public", candidate)
+                else:
+                    public_candidate = posixpath.join("src/public", candidate)
+                    if public_candidate in files:
+                        candidate = public_candidate
+            else:
+                src_dir = str(PurePosixPath(src_fp).parent)
+                candidate = posixpath.normpath(posixpath.join(src_dir, raw)).lstrip("/")
+                if candidate.startswith("../"):
+                    return None
+            return candidate if candidate in files else None
+
+        html_edges: list[tuple[str, str]] = []
+        for fp, fid in html_files:
+            abs_path = os.path.join(project_path, fp)
+            content = _read_text(abs_path)
+            if not content:
+                continue
+            for m in re.finditer(r"<script[^>]+src=[\"']([^\"']+)[\"']", content, re.I):
+                target = _resolve_href(fp, m.group(1))
+                if target and files[target] != fid:
+                    html_edges.append((fid, files[target]))
+            for m in re.finditer(r"<link[^>]+href=[\"']([^\"']+)[\"']", content, re.I):
+                href = m.group(1)
+                if not href.lower().endswith(".css"):
+                    continue
+                target = _resolve_href(fp, href)
+                if target and files[target] != fid:
+                    html_edges.append((fid, files[target]))
+
+        api_edges: list[tuple[str, str]] = []
+        if api_targets or route_targets:
+            api_re = re.compile(r"[\"'](/api/[^\"']+)[\"']")
+            route_re = re.compile(r"[\"'](/[^\"']+)[\"']")
+            client_re = re.compile(r"\b(fetch|axios|ky|ofetch)\b")
+            for fp, fid in script_files:
+                abs_path = os.path.join(project_path, fp)
+                content = _read_text(abs_path)
+                if not content:
+                    continue
+                if not api_re.search(content) and not client_re.search(content):
+                    continue
+                matched_targets: set[str] = set()
+                for literal in route_re.findall(content):
+                    cleaned = literal.split("?", 1)[0].split("#", 1)[0]
+                    if cleaned in route_targets:
+                        matched_targets.add(route_targets[cleaned])
+                    elif cleaned.startswith("/api/") and api_targets:
+                        matched_targets.update(api_targets)
+                if not matched_targets and api_re.search(content):
+                    matched_targets.update(api_targets)
+                for tgt in matched_targets:
+                    if tgt != fid:
+                        api_edges.append((fid, tgt))
+
+        service_edges: list[tuple[str, str]] = []
+        service_files = {
+            os.path.splitext(os.path.basename(fp))[0]: fid
+            for fp, fid in files.items()
+            if fp.startswith("src/services/") and fp.endswith((".ts", ".js"))
+        }
+        if service_files:
+            backend_files = [
+                (fp, fid)
+                for fp, fid in files.items()
+                if (
+                    fp.startswith("src/api/")
+                    or fp.startswith("src/webhooks/")
+                    or fp.startswith("src/jobs/")
+                    or fp.startswith("src/pages/api/")
+                    or fp.startswith("pages/api/")
+                    or fp.startswith("src/app/api/")
+                    or fp.startswith("app/api/")
+                )
+                and fp.endswith((".ts", ".js"))
+            ]
+            for fp, fid in backend_files:
+                abs_path = os.path.join(project_path, fp)
+                content = _read_text(abs_path)
+                if not content:
+                    continue
+                for name, svc_fid in service_files.items():
+                    if name in {"index", "types"}:
+                        continue
+                    if re.search(rf"\b{name}\b", content):
+                        service_edges.append((fid, svc_fid))
+
+        db_edges: list[tuple[str, str]] = []
+        schema_fp = "prisma/schema.prisma"
+        schema_fid = files.get(schema_fp)
+        if schema_fid:
+            schema_path = os.path.join(project_path, schema_fp)
+            schema_text = _read_text(schema_path)
+            models = set(re.findall(r"\bmodel\s+(\w+)\s+\{", schema_text))
+            if models:
+                delegates = set(models)
+                for name in list(models):
+                    if name:
+                        delegates.add(name[0].lower() + name[1:])
+                prisma_re = re.compile(
+                    r"\b(?:this\.)?prisma\.([A-Za-z_][A-Za-z0-9_]*)\b"
+                )
+                scan_files = [
+                    (fp, fid)
+                    for fp, fid in files.items()
+                    if fp.startswith("src/") and fp.endswith((".ts", ".js"))
+                ]
+                for fp, fid in scan_files:
+                    abs_path = os.path.join(project_path, fp)
+                    content = _read_text(abs_path)
+                    if not content:
+                        continue
+                    for match in prisma_re.findall(content):
+                        if match in delegates:
+                            db_edges.append((fid, schema_fid))
+                            break
+
+        html_edges = list(set(html_edges))
+        api_edges = list(set(api_edges))
+        service_edges = list(set(service_edges))
+        db_edges = list(set(db_edges))
+        if not html_edges and not api_edges and not service_edges and not db_edges:
+            return "No asset edges resolved."
+
+        BATCH = _NEO4J_GRAPH_BUILD_BATCH
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+            await _execute_write(
+                session,
+                "MATCH (a:File {project_id:$p})-[r:ASSET_LINKS]->() DELETE r",
+                p=project_id,
+                timeout=_NEO4J_WRITE_TIMEOUT_S,
+            )
+            await _execute_write(
+                session,
+                "MATCH (a:File {project_id:$p})-[r:CALLS_API]->() DELETE r",
+                p=project_id,
+                timeout=_NEO4J_WRITE_TIMEOUT_S,
+            )
+            await _execute_write(
+                session,
+                "MATCH (a:File {project_id:$p})-[r:CALLS_SERVICE]->() DELETE r",
+                p=project_id,
+                timeout=_NEO4J_WRITE_TIMEOUT_S,
+            )
+            await _execute_write(
+                session,
+                "MATCH (a:File {project_id:$p})-[r:CALLS_DB]->() DELETE r",
+                p=project_id,
+                timeout=_NEO4J_WRITE_TIMEOUT_S,
+            )
+            if html_edges:
+                for i in range(0, len(html_edges), BATCH):
+                    batch = [{"src": s, "tgt": t} for s, t in html_edges[i : i + BATCH]]
+                    async with _WRITE_SEM:
+                        await _execute_write(
+                            session,
+                            """
+                            UNWIND $batch AS edge
+                            MATCH (a:File {id: edge.src})
+                            MATCH (b:File {id: edge.tgt})
+                            MERGE (a)-[:ASSET_LINKS]->(b)
+                            """,
+                            batch=batch,
+                            timeout=_NEO4J_WRITE_TIMEOUT_S,
+                        )
+            if api_edges:
+                for i in range(0, len(api_edges), BATCH):
+                    batch = [{"src": s, "tgt": t} for s, t in api_edges[i : i + BATCH]]
+                    async with _WRITE_SEM:
+                        await _execute_write(
+                            session,
+                            """
+                            UNWIND $batch AS edge
+                            MATCH (a:File {id: edge.src})
+                            MATCH (b:File {id: edge.tgt})
+                            MERGE (a)-[:CALLS_API]->(b)
+                            """,
+                            batch=batch,
+                            timeout=_NEO4J_WRITE_TIMEOUT_S,
+                        )
+
+            if service_edges:
+                for i in range(0, len(service_edges), BATCH):
+                    batch = [
+                        {"src": s, "tgt": t} for s, t in service_edges[i : i + BATCH]
+                    ]
+                    async with _WRITE_SEM:
+                        await _execute_write(
+                            session,
+                            """
+                            UNWIND $batch AS edge
+                            MATCH (a:File {id: edge.src})
+                            MATCH (b:File {id: edge.tgt})
+                            MERGE (a)-[:CALLS_SERVICE]->(b)
+                            """,
+                            batch=batch,
+                            timeout=_NEO4J_WRITE_TIMEOUT_S,
+                        )
+
+            if db_edges:
+                for i in range(0, len(db_edges), BATCH):
+                    batch = [{"src": s, "tgt": t} for s, t in db_edges[i : i + BATCH]]
+                    async with _WRITE_SEM:
+                        await _execute_write(
+                            session,
+                            """
+                            UNWIND $batch AS edge
+                            MATCH (a:File {id: edge.src})
+                            MATCH (b:File {id: edge.tgt})
+                            MERGE (a)-[:CALLS_DB]->(b)
+                            """,
+                            batch=batch,
+                            timeout=_NEO4J_WRITE_TIMEOUT_S,
+                        )
+
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        _debug_log(
+            "asset_graph_done",
+            project_path=project_path,
+            elapsed_ms=elapsed_ms,
+            asset_links=len(html_edges),
+            api_links=len(api_edges),
+            service_links=len(service_edges),
+            db_links=len(db_edges),
+        )
+        return (
+            f"ASSET graph built for {project_path.split('/')[-1]}:\n"
+            f"  {len(html_edges)} ASSET_LINKS edges\n"
+            f"  {len(api_edges)} CALLS_API edges\n"
+            f"  {len(service_edges)} CALLS_SERVICE edges\n"
+            f"  {len(db_edges)} CALLS_DB edges\n"
+            f"  elapsed={elapsed_ms}ms"
+        )
+    except Exception as exc:
+        _debug_log("asset_graph_error", project_path=project_path, error=str(exc))
+        return f"Error building asset graph: {str(exc)}"
+
+
 async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
     """Build symbol-level IMPORTS/EXPORTS edges using Import nodes and chunk metadata."""
     try:
@@ -859,25 +1608,24 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
 
         memory_store, _, _, _, _ = get_memory_modules()
 
-        await graph_bootstrap.init_graph_db()
-        driver = graph_bootstrap.get_driver()
+        driver = await graph_bootstrap.require_driver()
         await memory_store.open_pool()
-        if not memory_store._pg_pool_available():
-            return "Symbol import/export graph skipped: Postgres not available"
+        pg_available = memory_store._pg_pool_available()
 
         # Collect symbols by file
         symbols_by_file: dict[str, dict[str, str]] = {}
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            r = await session.run(
+            r = await _execute_read(
+                session,
                 """
                 MATCH (f:File {project_id:$p})-[:CONTAINS]->(s)
                 WHERE s:Function OR s:Class OR s:Struct OR s:Enum OR s:Trait OR s:Method OR s:Protocol
                 RETURN f.filepath AS fp, s.name AS name, s.id AS sid
                 """,
                 p=project_id,
-                timeout=_NEO4J_READ_TIMEOUT_S,
+                op="build_symbol_graph_symbols",
             )
-            async for rec in r:
+            for rec in r:
                 fp = rec["fp"]
                 name = rec["name"]
                 sid = rec["sid"]
@@ -887,27 +1635,34 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
 
         # Load file exports from Postgres metadata
         exports_by_file: dict[str, list[str]] = {}
-        async with memory_store._pg_pool.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    """
-                    SELECT file_path, metadata->'file_exports' AS exports
-                    FROM codebase_embeddings
-                    WHERE project_id = %s AND metadata ? 'file_exports'
-                    """,
-                    (project_id,),
-                )
-                async for row in cur:
-                    fp = row[0]
-                    exports = row[1] or []
-                    names: list[str] = []
-                    for item in exports or []:
-                        if isinstance(item, dict) and item.get("name"):
-                            names.append(item.get("name"))
-                        elif isinstance(item, str):
-                            names.append(item)
-                    if names:
-                        exports_by_file[fp] = list(dict.fromkeys(names))
+        if pg_available:
+            async with memory_store._pg_pool.connection() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        SELECT file_path, metadata->'file_exports' AS exports
+                        FROM codebase_embeddings
+                        WHERE project_id = %s AND metadata ? 'file_exports'
+                        """,
+                        (project_id,),
+                    )
+                    async for row in cur:
+                        fp = row[0]
+                        exports = row[1] or []
+                        names: list[str] = []
+                        for item in exports or []:
+                            if isinstance(item, dict) and item.get("name"):
+                                names.append(item.get("name"))
+                            elif isinstance(item, str):
+                                names.append(item)
+                        if names:
+                            exports_by_file[fp] = list(dict.fromkeys(names))
+
+        # Fallback: if no exports metadata, treat defined symbols as exports.
+        if not exports_by_file:
+            for fp, symbols in symbols_by_file.items():
+                if symbols:
+                    exports_by_file[fp] = list(symbols.keys())
 
         # Ensure tool registration functions are treated as exports.
         for fp, symbols in symbols_by_file.items():
@@ -922,16 +1677,34 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
             if names:
                 exports_by_file[fp] = names
 
+        swift_module_map: dict[str, list[str]] = {}
+        for fp in symbols_by_file:
+            parts = fp.replace("\\", "/").split("/")
+            if "Sources" in parts:
+                src_idx = parts.index("Sources")
+                if src_idx > 0:
+                    mod_name = parts[src_idx - 1]
+                    swift_module_map.setdefault(mod_name, []).append(fp)
+
         def _parse_imported_names(ext: str, src_text: str) -> list[str]:
             src_text = src_text.strip()
             names: list[str] = []
+
+            def _clean(name: str) -> str:
+                name = name.strip()
+                if name.startswith("type "):
+                    name = name[5:].strip()
+                if name.startswith("typeof "):
+                    name = name[7:].strip()
+                return name
+
             if ext == "py":
                 m = re.match(r"from\s+[\w.]+\s+import\s+(.+)", src_text)
                 if m:
                     block = m.group(1).strip()
                     block = block.strip("()")
                     for part in block.split(","):
-                        name = part.strip()
+                        name = _clean(part)
                         if not name or name == "*":
                             continue
                         if " as " in name:
@@ -942,13 +1715,19 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
                 m_default = re.match(r"import\s+([\w$]+)\s+from\s+['\"]", src_text)
                 if m_default:
                     names.append(m_default.group(1))
+                # import * as Name from 'x'
+                m_star = re.match(
+                    r"import\s+\*\s+as\s+([\w$]+)\s+from\s+['\"]", src_text
+                )
+                if m_star:
+                    names.append(m_star.group(1))
                 # import Default, {a as b, c} from 'x'
                 m_both = re.match(r"import\s+([\w$]+)\s*,\s*\{([^}]+)\}", src_text)
                 if m_both:
                     names.append(m_both.group(1))
                     block = m_both.group(2)
                     for part in block.split(","):
-                        name = part.strip()
+                        name = _clean(part)
                         if not name:
                             continue
                         if " as " in name:
@@ -959,37 +1738,82 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
                 if m:
                     block = m.group(1)
                     for part in block.split(","):
-                        name = part.strip()
+                        name = _clean(part)
                         if not name:
                             continue
                         if " as " in name:
                             name = name.split(" as ", 1)[0].strip()
                         names.append(name)
+            elif ext == "swift":
+                m = re.match(r"^(?:@testable\s+)?import\s+(\w+)", src_text)
+                if m:
+                    names.append(m.group(1))
+            elif ext == "rs":
+                m = re.match(r"^(?:pub\s+)?use\s+(.+)$", src_text)
+                if m:
+                    body = m.group(1).strip().rstrip(";")
+
+                    def _add_name(path: str) -> None:
+                        path = path.strip()
+                        if not path:
+                            return
+                        for prefix in ("crate::", "self::", "super::"):
+                            if path.startswith(prefix):
+                                path = path[len(prefix) :]
+                        if path.endswith("::*"):
+                            return
+                        name = path.split("::")[-1].strip()
+                        if " as " in name:
+                            name = name.split(" as ", 1)[0].strip()
+                        if not name or name in {"self", "super", "crate"}:
+                            return
+                        names.append(name)
+
+                    if "{" in body and "}" in body:
+                        prefix, rest = body.split("{", 1)
+                        prefix = prefix.strip()
+                        rest = rest.split("}", 1)[0]
+                        for part in rest.split(","):
+                            part = part.strip()
+                            if not part or part in {"self", "super", "crate"}:
+                                continue
+                            full = part
+                            if prefix:
+                                if prefix.endswith("::"):
+                                    full = f"{prefix}{part}"
+                                else:
+                                    full = f"{prefix}::{part}"
+                            _add_name(full)
+                    else:
+                        _add_name(body)
             return list(dict.fromkeys(names))
 
         # Reuse Import nodes to resolve file edges and symbol edges
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            r2 = await session.run(
+            r2 = await _execute_read(
+                session,
                 """
                 MATCH (f:File {project_id:$p})-[:CONTAINS]->(imp:Import)
                 RETURN f.id AS src_fid, f.filepath AS src_fp, imp.source AS src_text
                 """,
                 p=project_id,
-                timeout=_NEO4J_READ_TIMEOUT_S,
+                op="build_symbol_graph_imports",
             )
             imports = []
-            async for rec in r2:
+            for rec in r2:
                 imports.append((rec["src_fid"], rec["src_fp"], rec["src_text"] or ""))
 
         # Resolve file imports using same logic as build_import_graph
         files: dict[str, str] = {}
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            rfiles = await session.run(
+            rfiles = await _execute_read(
+                session,
+                session,
                 "MATCH (f:File {project_id:$p}) RETURN f.filepath AS fp, f.id AS fid",
                 p=project_id,
-                timeout=_NEO4J_READ_TIMEOUT_S,
+                op="build_symbol_graph_files",
             )
-            async for rec in rfiles:
+            for rec in rfiles:
                 files[rec["fp"]] = rec["fid"]
 
         stems: dict[str, list[str]] = {}
@@ -1021,12 +1845,19 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
                 m = re.search(r"from\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text)
                 if m:
                     imp = m.group(1)
-                    if imp.startswith("."):
+                    if imp.startswith("./") or imp.startswith("../"):
                         import posixpath
 
                         base = posixpath.normpath(posixpath.join(src_dir, imp)).lstrip(
                             "/"
                         )
+                    elif imp.startswith("@/") or imp.startswith("~/"):
+                        base = imp[2:]
+                    elif imp.startswith("src/"):
+                        base = imp
+                    else:
+                        base = None
+                    if base:
                         for suf in (
                             "",
                             ".js",
@@ -1035,22 +1866,106 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
                             ".tsx",
                             "/index.js",
                             "/index.ts",
+                            "/index.jsx",
+                            "/index.tsx",
                         ):
                             candidate = (base + suf).lstrip("/")
                             if candidate in files:
                                 return candidate
+            elif ext == "rs":
+                m = re.match(r"(?:pub\s+)?(?:use|mod)\s+(?:crate::)?([\w:]+)", src_text)
+                if m:
+                    mod = m.group(1).split("::")[0]
+                    for fp in [
+                        f"{src_dir}/{mod}.rs",
+                        f"{src_dir}/{mod}/mod.rs",
+                        f"src/{mod}.rs",
+                        f"src/{mod}/mod.rs",
+                    ]:
+                        fp = fp.lstrip("./")
+                        if fp in files:
+                            return fp
             return None
+
+        SWIFT_IMPORT_RE = re.compile(r"^(?:@testable\s+)?import\s+(\w+)", re.MULTILINE)
+        SYSTEM_MODS = frozenset(
+            {
+                "Foundation",
+                "Swift",
+                "Dispatch",
+                "Darwin",
+                "Combine",
+                "UIKit",
+                "AppKit",
+                "SwiftUI",
+                "XCTest",
+                "os",
+                "simd",
+                "CoreFoundation",
+                "ObjectiveC",
+                "CoreGraphics",
+                "QuartzCore",
+                "Metal",
+                "MetalKit",
+                "MetalPerformanceShaders",
+                "Accelerate",
+                "CoreML",
+                "CreateML",
+                "Vision",
+                "NaturalLanguage",
+                "AVFoundation",
+                "CoreVideo",
+                "CoreImage",
+                "CoreData",
+                "SystemConfiguration",
+                "Network",
+                "Logging",
+                "NIO",
+                "NIOHTTP1",
+                "NIOHTTP2",
+                "NIOSSL",
+                "GRPC",
+                "SwiftProtobuf",
+                "Atomics",
+                "ConcurrencyExtras",
+                "ArgumentParser",
+            }
+        )
 
         def _build_symbol_edges() -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
             import_edges_local: set[tuple[str, str]] = set()
             for src_fid, src_fp, src_text in imports:
                 tgt_fp = resolve(src_fp, src_text)
-                if not tgt_fp or tgt_fp == src_fp:
-                    continue
                 ext = os.path.splitext(src_fp)[1].lstrip(".")
                 names = _parse_imported_names(ext, src_text)
                 if not names:
                     continue
+                if ext == "swift":
+                    for mod in names:
+                        for fp in swift_module_map.get(mod, []):
+                            if fp == src_fp:
+                                continue
+                            target_symbols = symbols_by_file.get(fp, {})
+                            for sid in target_symbols.values():
+                                import_edges_local.add((src_fid, sid))
+                    continue
+                if not tgt_fp or tgt_fp == src_fp:
+                    if not tgt_fp and names:
+                        mod_stem = os.path.basename(src_text)
+                        m_path = re.search(
+                            r"from\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]",
+                            src_text,
+                        )
+                        if m_path:
+                            mod_stem = os.path.basename(m_path.group(1))
+                        if mod_stem in stems and len(stems[mod_stem]) == 1:
+                            tgt_fp = stems[mod_stem][0]
+                        elif mod_stem:
+                            matches = stems.get(mod_stem, [])
+                            if matches:
+                                tgt_fp = matches[0]
+                    if not tgt_fp or tgt_fp == src_fp:
+                        continue
                 target_symbols = symbols_by_file.get(tgt_fp, {})
                 for name in names:
                     sid = target_symbols.get(name)
@@ -1079,7 +1994,8 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
             BATCH = _NEO4J_GRAPH_BUILD_BATCH
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 if import_edges:
-                    await session.run(
+                    await _execute_write(
+                        session,
                         "MATCH (a:File {project_id:$p})-[r:IMPORTS_SYMBOL]->() DELETE r",
                         p=project_id,
                         timeout=_NEO4J_WRITE_TIMEOUT_S,
@@ -1089,7 +2005,8 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
                         batch = [{"src": s, "tgt": t} for s, t in edges[i : i + BATCH]]
                         t0 = time.perf_counter()
                         async with _WRITE_SEM:
-                            await session.run(
+                            await _execute_write(
+                                session,
                                 """
                                 UNWIND $batch AS edge
                                 MATCH (a:File {id: edge.src})
@@ -1115,7 +2032,8 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
                         )
                         await asyncio.sleep(0)
                 if export_edges:
-                    await session.run(
+                    await _execute_write(
+                        session,
                         "MATCH (a:File {project_id:$p})-[r:EXPORTS_SYMBOL]->() DELETE r",
                         p=project_id,
                         timeout=_NEO4J_WRITE_TIMEOUT_S,
@@ -1125,7 +2043,8 @@ async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
                         batch = [{"src": s, "tgt": t} for s, t in edges[i : i + BATCH]]
                         t0 = time.perf_counter()
                         async with _WRITE_SEM:
-                            await session.run(
+                            await _execute_write(
+                                session,
                                 """
                                 UNWIND $batch AS edge
                                 MATCH (a:File {id: edge.src})

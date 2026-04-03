@@ -22,7 +22,8 @@ import asyncio
 import json
 import time
 import threading
-from typing import List, Dict
+from collections import Counter
+from typing import List, Dict, Tuple
 from dotenv import load_dotenv
 
 _base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +34,7 @@ sys.path.insert(0, _base_dir)
 import memory_store
 import memory_bootstrap
 from embedding_service import get_embedding_service
+from ts_diagnostics import normalize_ts_pack_result
 
 # AST-chunk size: target upper bound for native ts_pack chunks.
 CHUNK_MAX_BYTES = 4_000  # bytes — passed as chunk_max_size to ProcessConfig
@@ -69,6 +71,14 @@ _FALLBACK_EXTS = {
     "hcl",
     "r",
     "jl",
+}
+
+# Dotfiles that should still be chunked with the line-window fallback.
+_FALLBACK_FILENAMES = {
+    ".env",
+    ".env.example",
+    ".gitignore",
+    ".indexignore",
 }
 
 # Minimal extraction patterns for languages where queries are stable.
@@ -115,6 +125,93 @@ _EXTRACTIONS_BY_LANG = {
         },
     },
 }
+
+
+def _ensure_ts_pack_initialized() -> None:
+    global _TS_PACK_INIT_DONE
+    if _TS_PACK_INIT_DONE:
+        return
+    with _TS_PACK_INIT_LOCK:
+        if _TS_PACK_INIT_DONE:
+            return
+        if TS_PACK_CACHE_DIR:
+            try:
+                import tree_sitter_language_pack as ts_pack
+
+                ts_pack.init({"cache_dir": TS_PACK_CACHE_DIR})
+            except Exception as exc:
+                print(
+                    f"[lm-proxy:indexer] ts_pack init failed ({exc})",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        _TS_PACK_INIT_DONE = True
+
+
+def _preflight_ts_pack(manifest: List[Dict]) -> None:
+    if not TS_PACK_AUTO_DOWNLOAD:
+        return
+    try:
+        import tree_sitter_language_pack as ts_pack
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] ts_pack import failed ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    _ensure_ts_pack_initialized()
+
+    detected: set[str] = set()
+    for entry in manifest:
+        ext = (entry.get("ext") or "").lower().lstrip(".")
+        if not ext or ext in _FALLBACK_EXTS:
+            continue
+        lang = None
+        try:
+            lang = ts_pack.detect_language_from_extension(ext)
+        except Exception:
+            lang = None
+        if not lang:
+            abs_path = entry.get("abs_path")
+            if abs_path:
+                try:
+                    lang = ts_pack.detect_language(abs_path)
+                except Exception:
+                    lang = None
+        if lang:
+            detected.add(lang)
+
+    if not detected:
+        return
+
+    missing = [lang for lang in sorted(detected) if not ts_pack.has_language(lang)]
+    if not missing:
+        return
+
+    print(
+        f"[lm-proxy:indexer] ts_pack preflight — downloading {len(missing)} languages",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        ts_pack.download(missing)
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] ts_pack download failed ({exc})",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+
+    still_missing = [lang for lang in missing if not ts_pack.has_language(lang)]
+    if still_missing:
+        print(
+            f"[lm-proxy:indexer] ts_pack missing after download: {', '.join(still_missing)}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 # ── Chunk-ID helper ───────────────────────────────────────────────────────────
@@ -381,7 +478,9 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
     return chunks
 
 
-def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]:
+def _read_and_chunk(
+    abs_path: str, rel_path: str, project_id: str
+) -> Tuple[List[Dict], str | None]:
     """Read *abs_path* and return chunk dicts with stable ref_ids.
 
     Uses ts_pack's native chunker (process() with chunk_max_size) for all
@@ -396,24 +495,6 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
                    context_path}
     """
     import tree_sitter_language_pack as ts_pack
-
-    def _ensure_ts_pack_initialized() -> None:
-        global _TS_PACK_INIT_DONE
-        if _TS_PACK_INIT_DONE:
-            return
-        with _TS_PACK_INIT_LOCK:
-            if _TS_PACK_INIT_DONE:
-                return
-            if TS_PACK_CACHE_DIR:
-                try:
-                    ts_pack.init({"cache_dir": TS_PACK_CACHE_DIR})
-                except Exception as exc:
-                    print(
-                        f"[lm-proxy:indexer] ts_pack init failed ({exc})",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-            _TS_PACK_INIT_DONE = True
 
     _ensure_ts_pack_initialized()
 
@@ -438,7 +519,10 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
     # Use ts_pack.detect_language for language detection — covers 156 languages.
     # Prefer extension-based detection when available to avoid mis-detection.
     lang: str | None = None
-    if ext not in _FALLBACK_EXTS:
+    if (
+        ext not in _FALLBACK_EXTS
+        and os.path.basename(abs_path) not in _FALLBACK_FILENAMES
+    ):
         try:
             lang = ts_pack.detect_language_from_extension(ext)
         except Exception:
@@ -446,21 +530,30 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
         if not lang:
             lang = ts_pack.detect_language(abs_path)
 
+    parser_missing = False
     if lang and not _ensure_language_available(lang):
+        parser_missing = True
         lang = None
 
     # Nothing to do: unknown file type and not a line-window fallback extension.
-    if lang is None and ext not in _FALLBACK_EXTS:
-        return []
+    if (
+        lang is None
+        and ext not in _FALLBACK_EXTS
+        and os.path.basename(abs_path) not in _FALLBACK_FILENAMES
+    ):
+        reason = "missing_parser" if parser_missing else "unknown_language"
+        return [], reason
 
     try:
         with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
             source = fh.read()
     except OSError:
-        return []
+        return [], "read_error"
 
-    if len(source) > MAX_FILE_BYTES or not source.strip():
-        return []
+    if len(source) > MAX_FILE_BYTES:
+        return [], "too_large"
+    if not source.strip():
+        return [], "empty"
 
     file_header = f"// File: {rel_path}\n"
     chunks: List[Dict] = []
@@ -483,7 +576,9 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
                 )
             except TypeError:
                 cfg = ts_pack.ProcessConfig("swift")
-            result = ts_pack.process(source, cfg)
+            result = normalize_ts_pack_result(
+                source, "swift", ts_pack.process(source, cfg)
+            )
             file_meta = {
                 "file_imports": _compact_imports(result.get("imports", [])),
                 "file_exports": _compact_exports(result.get("exports", [])),
@@ -498,7 +593,7 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
                 "yes",
             ):
                 if file_meta.get("file_diagnostics", {}).get("count", 0) > 0:
-                    return []
+                    return [], "diagnostics"
         except Exception:
             file_meta = {}
 
@@ -507,7 +602,7 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
             for ch in swift_chunks:
                 if isinstance(ch.get("metadata"), dict):
                     ch["metadata"].update(file_meta)
-            return swift_chunks
+            return swift_chunks, None
         # fall through to ts_pack / line-window if structure[] was empty
 
     # ── Native ts_pack chunking ───────────────────────────────────────────────
@@ -539,7 +634,9 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
                     diagnostics=True,
                     chunk_max_size=CHUNK_MAX_BYTES,
                 )
-            result = ts_pack.process(source, config)
+            result = normalize_ts_pack_result(
+                source, lang, ts_pack.process(source, config)
+            )
             file_meta = {
                 "file_imports": _compact_imports(result.get("imports", [])),
                 "file_exports": _compact_exports(result.get("exports", [])),
@@ -554,7 +651,7 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
                 "yes",
             ):
                 if file_meta.get("file_diagnostics", {}).get("count", 0) > 0:
-                    return []
+                    return [], "diagnostics"
             for chunk in result.get("chunks", []):
                 cmeta = chunk.get("metadata", {})
                 # Skip chunks that contain parse errors — embeddings for broken
@@ -615,10 +712,12 @@ def _read_and_chunk(abs_path: str, rel_path: str, project_id: str) -> List[Dict]
             )
             i += CHUNK_LINES - OVERLAP_LINES
 
-    return chunks
+    return chunks, None
 
 
-async def chunk_file(abs_path: str, rel_path: str, project_id: str) -> List[Dict]:
+async def chunk_file(
+    abs_path: str, rel_path: str, project_id: str
+) -> Tuple[List[Dict], str | None]:
     """Async wrapper — runs blocking read+chunk in a worker thread."""
     return await asyncio.to_thread(_read_and_chunk, abs_path, rel_path, project_id)
 
@@ -686,17 +785,60 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
         flush=True,
     )
 
+    _preflight_ts_pack(manifest)
+
     # ── Parallel chunking (I/O-bound reads) ─────────────────────────────────
     t_chunk = time.time()
-    all_chunks: List[List[Dict]] = await asyncio.gather(
+    all_results: List[Tuple[List[Dict], str | None]] = await asyncio.gather(
         *[chunk_file(e["abs_path"], e["rel_path"], project_id) for e in manifest]
     )
+    all_chunks: List[List[Dict]] = [result[0] for result in all_results]
+    skipped_reasons: Counter[str] = Counter(
+        (reason or "unknown") for chunks, reason in all_results if not chunks
+    )
+    skipped_samples: dict[str, list[str]] = {}
+    for entry, (chunks, reason) in zip(manifest, all_results):
+        if chunks:
+            continue
+        reason_key = reason or "unknown"
+        bucket = skipped_samples.setdefault(reason_key, [])
+        if len(bucket) < 5:
+            bucket.append(entry.get("rel_path") or "")
+    parsed_files = sum(1 for chunks in all_chunks if chunks)
+    skipped_files = total_files - parsed_files
     print(
         f"[lm-proxy:indexer] Chunked {total_files} files in "
         f"{time.time() - t_chunk:.2f}s",
         file=sys.stderr,
         flush=True,
     )
+    reason_bits = ""
+    if skipped_files:
+        reason_bits = (
+            " ("
+            + ", ".join(
+                f"{reason}={count}" for reason, count in skipped_reasons.most_common()
+            )
+            + ")"
+        )
+    print(
+        f"[lm-proxy:indexer] File parse summary — parsed={parsed_files} "
+        f"skipped={skipped_files}{reason_bits}",
+        file=sys.stderr,
+        flush=True,
+    )
+    if skipped_samples:
+        for reason, samples in skipped_samples.items():
+            if not samples:
+                continue
+            sample_text = ", ".join(s for s in samples if s)
+            if not sample_text:
+                continue
+            print(
+                f"[lm-proxy:indexer] Skipped samples ({reason}): {sample_text}",
+                file=sys.stderr,
+                flush=True,
+            )
 
     # ── Fetch already-indexed chunk_ids (one Postgres round-trip) ────────────
     existing_ids: set = set()
@@ -774,7 +916,8 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
     elapsed = time.time() - t0
     print(
         f"[lm-proxy:indexer] Done — {total_indexed} new / {skipped} skipped / "
-        f"{total_files} files in {elapsed:.2f}s",
+        f"{total_files} files in {elapsed:.2f}s "
+        f"(parsed={parsed_files} skipped_files={skipped_files})",
         file=sys.stderr,
         flush=True,
     )
