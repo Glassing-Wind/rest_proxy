@@ -15,6 +15,7 @@ venv.bak/
 # Logs and databases
 *.log
 lm_proxy_state.json
+session-ses_*.md
 
 # Crawlee runtime storage (request queues, statistics — never commit)
 storage/

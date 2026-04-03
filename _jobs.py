@@ -168,6 +168,14 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                 queued = "skipped: main loop not available"
             with _JOBS_LOCK:
                 if job_id in _JOBS:
+                    _JOBS[job_id].pop("clone_enrich_status", None)
+                    _JOBS[job_id].pop("clone_enrich_msg", None)
+                    if _JOBS[job_id].get("logs"):
+                        _JOBS[job_id]["logs"] = [
+                            line
+                            for line in _JOBS[job_id]["logs"]
+                            if "[clone-enrich]" not in line
+                        ]
                     _JOBS[job_id]["logs"].append(f"[graph-build] {queued}")
         except Exception as e:
             with _JOBS_LOCK:

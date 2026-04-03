@@ -359,19 +359,19 @@ def register(mcp: FastMCP) -> None:
 
                         file_group_map: dict[str, str] = {}
                         file_group_source = (
-                            os.getenv("LM_PROXY_FILE_CLONE_SOURCE", "chunk")
+                            os.getenv("LM_PROXY_FILE_CLONE_SOURCE", "function")
                             .strip()
                             .lower()
                         )
                         if file_group_source not in {"chunk", "function", "hybrid"}:
-                            file_group_source = "chunk"
+                            file_group_source = "function"
 
                         for pid, items in by_project.items():
                             async with driver.session(
                                 database=graph_bootstrap._NEO4J_DB
                             ) as session:
                                 file_records = []
-                                if file_group_source in {"chunk", "hybrid"}:
+                                if file_group_source == "chunk":
                                     file_records = await _execute_read(
                                         session,
                                         """
@@ -415,19 +415,15 @@ def register(mcp: FastMCP) -> None:
                                     ).hexdigest()[:12]
                                     func_group_map[fp] = gid
 
+                                if func_group_map:
+                                    for fp, gid in func_group_map.items():
+                                        file_group_map[fp] = gid
+
                                 for row in file_records:
                                     fp = row.get("fp")
                                     gid = row.get("gid")
-                                    if fp and gid:
+                                    if fp and gid and fp not in file_group_map:
                                         file_group_map[fp] = gid
-
-                                if func_group_map:
-                                    for fp, gid in func_group_map.items():
-                                        if (
-                                            file_group_source == "function"
-                                            or fp not in file_group_map
-                                        ):
-                                            file_group_map[fp] = gid
 
                         debug_clone = os.getenv(
                             "LM_PROXY_CLONE_DEBUG", "0"
