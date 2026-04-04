@@ -46,6 +46,7 @@ def register(mcp: FastMCP) -> None:
         fallback_ratio: float = 0.4,
         fallback_max: int = 12,
         fallback_glob: str = "",
+        exclude_tests: bool = True,
         languages: list | None = None,
         min_imports: int = 0,
         min_symbols: int = 0,
@@ -77,6 +78,7 @@ def register(mcp: FastMCP) -> None:
             fallback_ratio: Trigger fallback when unique files / results <= ratio (default 0.4).
             fallback_max: Maximum fallback file paths to show (default 12).
             fallback_glob: Optional glob filter for fallback grep (e.g., "*.ts").
+            exclude_tests: Exclude test files from results (default True).
             languages: Optional allowlist of languages to include.
             min_imports: Require at least N file imports in metadata.
             min_symbols: Require at least N file symbols in metadata.
@@ -282,6 +284,9 @@ def register(mcp: FastMCP) -> None:
             if mode not in {"precise", "broad"}:
                 mode = "precise"
 
+            if exclude_tests and mode != "broad":
+                exclude_paths = (exclude_paths or []) + ["*test*", "*tests*"]
+
             if mode == "broad":
                 if max_per_dir == 2:
                     max_per_dir = 4
@@ -291,6 +296,8 @@ def register(mcp: FastMCP) -> None:
                     fallback = "grep"
                 if max_per_file == 0:
                     max_per_file = 2
+                if exclude_tests:
+                    exclude_paths = (exclude_paths or []) + ["*test*", "*tests*"]
 
             filters_active = any(
                 [
