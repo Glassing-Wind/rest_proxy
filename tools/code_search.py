@@ -281,7 +281,6 @@ def register(mcp: FastMCP) -> None:
                 mode = "precise"
 
             if mode == "broad":
-                dedupe_files = False
                 if max_per_dir == 2:
                     max_per_dir = 4
                 if meta_boost == 0.005:
@@ -610,6 +609,8 @@ def register(mcp: FastMCP) -> None:
                     }
                 output = stdout.decode("utf-8", errors="ignore")
                 paths = [p.strip() for p in output.splitlines() if p.strip()]
+                if fallback_glob:
+                    paths = [p for p in paths if fnmatch.fnmatch(p, fallback_glob)]
                 return paths[: max(0, fallback_max)], {
                     "code": proc.returncode,
                     "count": len(paths),

@@ -1305,6 +1305,7 @@ async def _get_cli_flow_summary(
                 "Scripts/%",
                 "src/%",
                 "Sources/%",
+                "",
             ]
 
         entry_points: list[tuple[str, str]] = []
@@ -1337,6 +1338,36 @@ async def _get_cli_flow_summary(
                 )
                 for rec in rows:
                     entry_points.append((rec["fp"], "file"))
+
+            # SwiftUI @main/App entrypoints (repo-wide)
+            swift_rows = await _execute_read(
+                session,
+                """
+                MATCH (f:File {project_id:$pid})-[:CONTAINS]->(s)
+                WHERE f.filepath ENDS WITH '.swift'
+                  AND (s:Struct OR s:Class)
+                  AND s.name CONTAINS 'App'
+                RETURN DISTINCT f.filepath AS fp
+                """,
+                pid=project_id,
+                op="flow_cli_swiftui_main",
+            )
+            for rec in swift_rows:
+                entry_points.append((rec["fp"], "swiftui"))
+
+            # Filename heuristic for SwiftUI apps
+            swift_file_rows = await _execute_read(
+                session,
+                """
+                MATCH (f:File {project_id:$pid})
+                WHERE f.filepath ENDS WITH 'App.swift'
+                RETURN f.filepath AS fp
+                """,
+                pid=project_id,
+                op="flow_cli_swiftui_files",
+            )
+            for rec in swift_file_rows:
+                entry_points.append((rec["fp"], "swiftui_file"))
 
             # Rust bin targets via Cargo.toml
             cargo_rows = await _execute_read(
