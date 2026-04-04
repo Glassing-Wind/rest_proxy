@@ -287,6 +287,14 @@ def register(mcp: FastMCP) -> None:
             if exclude_tests and mode != "broad":
                 exclude_paths = (exclude_paths or []) + ["*test*", "*tests*"]
 
+            if exclude_tests:
+                exclude_paths = (exclude_paths or []) + [
+                    "*test*",
+                    "*tests*",
+                    "*Test*",
+                    "*Tests*",
+                ]
+
             if mode == "broad":
                 if max_per_dir == 2:
                     max_per_dir = 4
@@ -296,8 +304,6 @@ def register(mcp: FastMCP) -> None:
                     fallback = "grep"
                 if max_per_file == 0:
                     max_per_file = 2
-                if exclude_tests:
-                    exclude_paths = (exclude_paths or []) + ["*test*", "*tests*"]
 
             filters_active = any(
                 [
