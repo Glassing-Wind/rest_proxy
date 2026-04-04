@@ -268,7 +268,12 @@ def register(mcp: FastMCP) -> None:
                     ):
                         return False
                 if exclude_paths:
-                    if any(fnmatch.fnmatch(file_path, pat) for pat in exclude_paths):
+                    file_lower = file_path.lower()
+                    if any(
+                        fnmatch.fnmatch(file_path, pat)
+                        or fnmatch.fnmatch(file_lower, pat.lower())
+                        for pat in exclude_paths
+                    ):
                         return False
                 return True
 
@@ -284,8 +289,14 @@ def register(mcp: FastMCP) -> None:
             if mode not in {"precise", "broad"}:
                 mode = "precise"
 
-            if exclude_tests and mode != "broad":
-                exclude_paths = (exclude_paths or []) + ["*test*", "*tests*"]
+            if exclude_tests:
+                exclude_paths = (exclude_paths or []) + [
+                    "*test*",
+                    "*tests*",
+                    "*Test*",
+                    "*Tests*",
+                ]
+                exclude_paths = list(dict.fromkeys(exclude_paths))
 
             if exclude_tests:
                 exclude_paths = (exclude_paths or []) + [
