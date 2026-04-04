@@ -4,6 +4,6 @@ from mcp.server.fastmcp import FastMCP
 
 
 def register(mcp: FastMCP) -> None:
-    from tools import code_intel_core
+    from tools.code_intel import core as code_intel_core
 
     code_intel_core.register(mcp)

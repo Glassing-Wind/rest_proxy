@@ -7,20 +7,19 @@ import asyncio
 import hashlib
 import threading
 import subprocess
-from neo4j import unit_of_work
+import time
 from typing import Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job
 from _helpers import get_memory_modules
 
-# --- Background Watcher State ---
-CONFIG_DIR = os.path.expanduser("~/.gemini/antigravity/rest_proxy_config")
-WATCHED_CONFIG_PATH = os.path.join(CONFIG_DIR, "watched_projects.json")
-INDEXED_CONFIG_PATH = os.path.join(CONFIG_DIR, "indexed_projects.json")
-WATCHED_PATHS: Dict[str, Dict[str, float]] = {}  # project_path → {file_path: mtime}
-WATCH_INTERVAL = 30  # seconds between polls
+from graphrag_core.config import load_env
+from graphrag_core.indexing import watcher as index_watcher
+from graphrag_core.indexing.manifest import build_manifest
+from graphrag_core.indexing.registry import record_indexed_project
+from graphrag_core import neo4j as neo4j_utils
 
-_WATCHER_TASK: asyncio.Task | None = None
+load_env()
 
 _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
 _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
@@ -28,115 +27,32 @@ _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "indexing"}
 
 
 async def _execute_read(session, cypher: str, op: str | None = None, **params):
-    metadata = dict(_TX_METADATA_BASE)
-    op_value = op or "read"
-    if _TX_OP_PREFIX:
-        op_value = f"{_TX_OP_PREFIX}.{op_value}"
-    metadata["op"] = op_value
-
-    @unit_of_work(timeout=_TX_TIMEOUT, metadata=metadata)
-    async def _tx(tx):
-        result = await tx.run(cypher, **params)
-        return await result.data()
-
-    if hasattr(session, "execute_read"):
-        return await session.execute_read(_tx)
-    return await _tx(session)
+    return await neo4j_utils.execute_read(
+        session,
+        cypher,
+        op=op or "read",
+        op_prefix=_TX_OP_PREFIX,
+        timeout_s=_TX_TIMEOUT,
+        base_metadata=_TX_METADATA_BASE,
+        **params,
+    )
 
 
-def _save_watched_config() -> None:
-    """Save the list of watched project paths to a local JSON config."""
+def _debug_log(message: str, **fields: object) -> None:
+    payload: Dict[str, object] = {"message": message}
+    payload.update(fields)
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(WATCHED_CONFIG_PATH, "w") as f:
-            json.dump(list(WATCHED_PATHS.keys()), f)
-    except Exception as e:
-        print(f"[lm-proxy:watcher] Failed to save config: {e}", file=sys.stderr)
-
-
-def _load_indexed_projects() -> dict[str, dict[str, object]]:
-    try:
-        if os.path.exists(INDEXED_CONFIG_PATH):
-            with open(INDEXED_CONFIG_PATH) as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return data
+        print(
+            f"[lm-proxy:indexing] {json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False)}",
+            file=sys.stderr,
+            flush=True,
+        )
     except Exception:
-        return {}
-    return {}
-
-
-def _save_indexed_projects(data: dict[str, dict[str, object]]) -> None:
-    try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(INDEXED_CONFIG_PATH, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        print(f"[lm-proxy:indexing] Failed to save index map: {e}", file=sys.stderr)
-
-
-async def _record_indexed_project(
-    project_path: str,
-    project_id: str,
-    file_count: int | None = None,
-    source_url: str | None = None,
-    source_type: str | None = None,
-) -> None:
-    try:
-        import time
-
-        abs_path = os.path.abspath(project_path)
-        data = _load_indexed_projects()
-        data[project_id] = {
-            "project_path": abs_path,
-            "last_indexed": time.time(),
-        }
-        _save_indexed_projects(data)
-    except Exception:
-        pass
-
-    try:
-        import graph_bootstrap
-
-        if not graph_bootstrap._NEO4J_ENABLED:
-            return
-        driver = await graph_bootstrap.require_driver()
-        now = time.time()
-        effective_type = source_type or ("git" if source_url else "local")
-        name = os.path.basename(abs_path)
-
-        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            tx_metadata = dict(_TX_METADATA_BASE)
-            tx_metadata["op"] = "update_project_indexed"
-
-            @unit_of_work(timeout=_TX_TIMEOUT, metadata=tx_metadata)
-            async def _tx(tx):
-                result = await tx.run(
-                    """
-                    MERGE (p:Project {id: $id})
-                    SET p.project_path = $path,
-                        p.name = $name,
-                        p.last_indexed = $ts,
-                        p.source_type = $source_type,
-                        p.source_url = $source_url,
-                        p.file_count = $file_count
-                    """,
-                    id=project_id,
-                    path=abs_path,
-                    name=name,
-                    ts=now,
-                    source_type=effective_type,
-                    source_url=source_url,
-                    file_count=file_count,
-                )
-                await result.consume()
-
-            if hasattr(session, "execute_write"):
-                await session.execute_write(_tx)
-            else:
-                await _tx(session)
-    except Exception:
-        return
+        print(
+            f"[lm-proxy:indexing] {message} {fields}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _is_deadlock_error(exc: Exception) -> bool:
@@ -166,228 +82,17 @@ async def _retry_deadlock(label: str, fn, attempts: int = 3) -> None:
 
 async def load_watched_config() -> None:
     """Load the list of watched project paths from the config on startup."""
-    try:
-        if os.path.exists(WATCHED_CONFIG_PATH):
-            with open(WATCHED_CONFIG_PATH) as f:
-                paths = json.load(f)
-            for p in paths:
-                if os.path.exists(p):
-                    WATCHED_PATHS[os.path.abspath(p)] = {}
-            print(
-                f"[lm-proxy:watcher] Restored {len(WATCHED_PATHS)} watched projects.",
-                file=sys.stderr,
-            )
-    except Exception as e:
-        print(f"[lm-proxy:watcher] Failed to load config: {e}", file=sys.stderr)
+    await index_watcher.load_watched_config()
 
 
-async def start_watcher(index_fn) -> asyncio.Task:
+async def start_watcher(index_fn) -> asyncio.Task | None:
     """Start the polling watcher loop and return the task."""
-    global _WATCHER_TASK
-    _WATCHER_TASK = asyncio.create_task(_poll_watcher(index_fn))
-    return _WATCHER_TASK
+    return await index_watcher.start_watcher(index_fn)
 
 
 async def stop_watcher() -> None:
     """Cancel the watcher task if running."""
-    global _WATCHER_TASK
-    if _WATCHER_TASK:
-        _WATCHER_TASK.cancel()
-        try:
-            await _WATCHER_TASK
-        except asyncio.CancelledError:
-            pass
-
-
-async def _poll_watcher(index_fn) -> None:
-    """Background loop to check for file changes in watched projects."""
-    while True:
-        try:
-            for project_path, last_mtimes in list(WATCHED_PATHS.items()):
-                changed = False
-                current_mtimes = {}
-                for root, _, files in os.walk(project_path):
-                    if any(
-                        x in root
-                        for x in [
-                            ".git",
-                            "node_modules",
-                            "__pycache__",
-                            "build",
-                            "dist",
-                        ]
-                    ):
-                        continue
-                    for f in files:
-                        if not f.endswith(
-                            (
-                                ".py",
-                                ".swift",
-                                ".js",
-                                ".ts",
-                                ".jsx",
-                                ".tsx",
-                                ".md",
-                                ".rs",
-                                ".go",
-                                ".cpp",
-                                ".c",
-                                ".h",
-                                ".java",
-                                ".rb",
-                                ".php",
-                                ".cs",
-                                ".json",
-                                ".toml",
-                                ".yaml",
-                                ".yml",
-                            )
-                        ):
-                            continue
-                        fpath = os.path.join(root, f)
-                        try:
-                            mtime = os.path.getmtime(fpath)
-                            current_mtimes[fpath] = mtime
-                            if fpath not in last_mtimes or mtime > last_mtimes[fpath]:
-                                changed = True
-                        except (OSError, FileNotFoundError):
-                            continue
-                if not changed and len(current_mtimes) != len(last_mtimes):
-                    changed = True
-                WATCHED_PATHS[project_path] = current_mtimes
-                if changed:
-                    print(
-                        f"[lm-proxy:watcher] Change detected in {project_path}. Triggering index...",
-                        file=sys.stderr,
-                    )
-                    try:
-                        await index_fn(project_path)
-                    except Exception as e:
-                        print(
-                            f"[lm-proxy:watcher] Indexing failed: {e}", file=sys.stderr
-                        )
-        except Exception as e:
-            print(f"[lm-proxy:watcher] Loop error: {e}", file=sys.stderr)
-        await asyncio.sleep(WATCH_INTERVAL)
-
-
-def _build_manifest(project_path: str) -> list[dict[str, object]]:
-    from pathlib import Path
-
-    manifest: list[dict[str, object]] = []
-    root = Path(project_path)
-    skip_dirs = {
-        ".git",
-        "__pycache__",
-        "node_modules",
-        ".cache",
-        ".ruff_cache",
-        ".next",
-        ".turbo",
-        ".gemini",
-        ".agents",
-        ".agent",
-        ".build",
-        "target",
-        "build",
-        "dist",
-        "Pods",
-        "DerivedData",
-        "venv",
-        ".venv",
-        "env",
-        "vendor",
-        "third_party",
-        "vendored",
-        "external",
-        "testdata",
-        "fixtures",
-        "__fixtures__",
-        "__mocks__",
-        "mocks",
-        "snapshots",
-        "__snapshots__",
-        "parsers",
-    }
-    skip_exts = {
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".pdf",
-        ".zip",
-        ".tar",
-        ".gz",
-        ".mp4",
-        ".mp3",
-        ".bin",
-        ".exe",
-        ".dll",
-        ".so",
-        ".pyc",
-        ".lock",
-        ".dylib",
-        ".a",
-        ".o",
-        ".dSYM",
-        ".wasm",
-        ".swiftmodule",
-        ".swiftdeps",
-        ".d",
-    }
-    skip_filenames = {"parser.c", "grammar.json", "node-types.json", "parser.h"}
-    max_file_size = 1 * 1024 * 1024
-
-    indexignore_patterns: list[str] = []
-    indexignore_path = root / ".indexignore"
-    if indexignore_path.exists():
-        import fnmatch
-
-        for line in indexignore_path.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#"):
-                indexignore_patterns.append(line)
-
-    def _is_ignored(rel: str) -> bool:
-        if not indexignore_patterns:
-            return False
-        import fnmatch
-
-        parts = rel.replace("\\", "/")
-        for pat in indexignore_patterns:
-            if fnmatch.fnmatch(parts, pat):
-                return True
-            if fnmatch.fnmatch(parts.split("/")[-1], pat):
-                return True
-        return False
-
-    for path in root.rglob("*"):
-        if any(part in skip_dirs for part in path.parts):
-            continue
-        if not path.is_file():
-            continue
-        if path.suffix.lower() in skip_exts:
-            continue
-        if path.name in skip_filenames:
-            continue
-        try:
-            rel = str(path.relative_to(root))
-            if _is_ignored(rel):
-                continue
-            stats = path.stat()
-            if stats.st_size > max_file_size:
-                continue
-            manifest.append(
-                {
-                    "abs_path": str(path.absolute()),
-                    "rel_path": rel,
-                    "ext": path.suffix.lower().lstrip("."),
-                    "size": stats.st_size,
-                }
-            )
-        except Exception:
-            continue
-    return manifest
+    await index_watcher.stop_watcher()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -409,13 +114,15 @@ async def index_workspace(project_path: str) -> str:
         project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
         # __file__ is tools/indexing.py — step up one level to rest_proxy/
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        runtime_dir = os.path.join(base_dir, ".runtime")
+        os.makedirs(runtime_dir, exist_ok=True)
 
-        manifest = _build_manifest(project_path)
-        await _record_indexed_project(
+        manifest = build_manifest(project_path)
+        await record_indexed_project(
             project_path, project_id, file_count=len(manifest)
         )
 
-        manifest_path = os.path.join(base_dir, f"{project_id}_manifest.json")
+        manifest_path = os.path.join(runtime_dir, f"{project_id}_manifest.json")
         with open(manifest_path, "w") as f:
             json.dump(manifest, f)
 
@@ -722,10 +429,9 @@ async def watch_project(project_path: str) -> str:
     if not os.path.exists(project_path):
         return f"Error: Path does not exist: {project_path}"
     abs_path = os.path.abspath(project_path)
-    if abs_path in WATCHED_PATHS:
+    if index_watcher.is_watched(abs_path):
         return f"Project is already being watched: {abs_path}"
-    WATCHED_PATHS[abs_path] = {}
-    _save_watched_config()
+    index_watcher.add_watch(abs_path)
     return f"Started watching project: {abs_path}. Indexing will occur automatically on changes."
 
 
@@ -789,13 +495,13 @@ async def get_indexing_health(project_path: str) -> str:
 
     stale: List[str] = []
     missing: List[str] = []
-    manifest = _build_manifest(project_path)
+    manifest = build_manifest(project_path)
     total_checked_all = len(manifest)
 
     for entry in manifest:
         rel = entry.get("rel_path")
         abs_path = entry.get("abs_path")
-        if not rel or not abs_path:
+        if not isinstance(rel, str) or not isinstance(abs_path, str):
             continue
         try:
             mtime = os.path.getmtime(abs_path)
@@ -882,12 +588,18 @@ async def get_indexed_projects(query: Optional[str] = None) -> str:
         items = []
 
     if not items:
-        data = _load_indexed_projects()
+        data = index_watcher.load_indexed_projects()
         for pid, entry in data.items():
             path = entry.get("project_path")
-            if not path:
+            if not isinstance(path, str) or not path:
                 continue
-            items.append((pid, path, entry.get("last_indexed"), None))
+            last_indexed = entry.get("last_indexed")
+            if not isinstance(last_indexed, (int, float)):
+                last_indexed = None
+            source_url = entry.get("source_url")
+            if not isinstance(source_url, str):
+                source_url = None
+            items.append((pid, path, last_indexed, source_url))
 
     if not items:
         return "No indexed projects found."
@@ -916,9 +628,7 @@ async def unwatch_project(project_path: str) -> str:
     Stop watching a project.
     """
     abs_path = os.path.abspath(project_path)
-    if abs_path in WATCHED_PATHS:
-        del WATCHED_PATHS[abs_path]
-        _save_watched_config()
+    if index_watcher.remove_watch(abs_path):
         return f"Stopped watching project: {abs_path}"
     return f"Project is not currently being watched: {abs_path}"
 
@@ -930,5 +640,27 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(cancel_index_job)
     mcp.tool()(watch_project)
     mcp.tool()(unwatch_project)
+
+    @mcp.tool()
+    async def set_watcher_enabled(enabled: bool) -> str:
+        """
+        Enable or disable the background watcher loop (per-process).
+
+        Args:
+            enabled: True to start the watcher (if configured), False to stop it.
+        """
+        if enabled:
+            if index_watcher.is_enabled() and index_watcher.get_task():
+                return "Watcher is already enabled."
+            index_watcher.set_enabled(True)
+            if index_watcher.get_index_fn() is None:
+                return "Watcher enabled, but no index function is available yet."
+            await start_watcher(index_watcher.get_index_fn())
+            return "Watcher enabled."
+
+        index_watcher.set_enabled(False)
+        await stop_watcher()
+        return "Watcher disabled."
+
     mcp.tool()(get_indexing_health)
     mcp.tool()(get_indexed_projects)

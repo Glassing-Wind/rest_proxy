@@ -31,8 +31,8 @@ load_dotenv(os.path.join(REPO_ROOT, ".env"))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-import memory_store
-import memory_bootstrap
+import memory.store as memory_store
+import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
 from ts_diagnostics import normalize_ts_pack_result
 

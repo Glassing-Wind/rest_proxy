@@ -456,7 +456,7 @@ def register(mcp: FastMCP) -> None:
 
         # Fallback: ts_pack structural extraction
         try:
-            import skeleton_extractor
+            import memory.skeleton_extractor as skeleton_extractor
 
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()

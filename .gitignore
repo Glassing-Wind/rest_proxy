@@ -17,6 +17,7 @@ venv.bak/
 lm_proxy_state.json
 session-ses_*.md
 *_manifest.json
+.runtime/
 
 # Crawlee runtime storage (request queues, statistics — never commit)
 storage/

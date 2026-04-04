@@ -8,17 +8,10 @@ from mcp.server.fastmcp import FastMCP
 
 
 def register_all(mcp: FastMCP) -> None:
-    from tools import (
-        memory,
-        code_search,
-        code_intel,
-        dev,
-        documentation,
-        indexing,
-        docs_tools,
-        graph_tools,
-        search_tools,
-    )
+    from tools import memory, code_search, code_intel, dev, documentation, indexing
+    from tools.docs import core as docs_tools
+    from tools.graph import core as graph_tools
+    from tools.search import tools as search_tools
 
     memory.register(mcp)
     code_search.register(mcp)

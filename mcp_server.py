@@ -6,10 +6,9 @@ Shared helpers:  _helpers.py   (lazy module loader)
                  _jobs.py      (background job registry)
 """
 
-import os
-from dotenv import load_dotenv
-# Load environment configuration from the rest_proxy directory
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+from graphrag_core.config import load_env
+
+load_env()
 
 import asyncio
 import sys
@@ -26,22 +25,26 @@ mcp = FastMCP("rest_proxy")
 
 # Register all tool groups
 from tools import register_all
+
 register_all(mcp)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lifecycle
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 async def main() -> None:
     """Main entrypoint: restore watched projects, start watcher, run MCP server."""
     import tools.indexing as _idx
     import _jobs
+
     _jobs.register_main_loop(asyncio.get_running_loop())
 
     await _idx.load_watched_config()
 
     # Grab the index_workspace function so the watcher can call it without a circular import
     from tools.indexing import index_workspace
+
     await _idx.start_watcher(index_workspace)
 
     print("[lm-proxy] Startup complete.", file=sys.stderr)
@@ -52,7 +55,8 @@ async def main() -> None:
     finally:
         await _idx.stop_watcher()
         try:
-            import memory_store
+            import memory.store as memory_store
+
             await memory_store.close_pool()
         except ImportError:
             pass
@@ -61,16 +65,20 @@ async def main() -> None:
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="GraphRAG MCP Server")
     parser.add_argument("command", nargs="?", choices=["index_workspace"])
     parser.add_argument("path", nargs="?", help="Project path for indexing")
     args = parser.parse_args()
 
     if args.command == "index_workspace" and args.path:
+
         async def _run_index() -> None:
             from tools.indexing import index_workspace
+
             result = await index_workspace(args.path)
             print(result)
+
         asyncio.run(_run_index())
     else:
         try:
