@@ -418,7 +418,7 @@ Doc indexing tips:
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
 - `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)
-- `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI or backend flow (auto tries UI then backend)
+ - `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI, backend, or CLI flow (auto tries UI → backend → CLI)
   - Tip: set `include_tests=true` when you want coverage paths from test files too
   Example:
   `get_app_flow_summary("/Users/michaelmarler/Projects/rental", ui_contains="lease-detail", model_contains="Lease", service_contains="Lease", limit=50, as_table=true)`
@@ -1228,7 +1228,7 @@ Doc indexing tips:
         Summarize UI → API → Service → DB paths or API → Service → DB paths.
 
         Args:
-            mode: 'auto', 'ui', or 'backend'.
+            mode: 'auto', 'ui', 'backend', or 'cli'.
             ui_contains: Filter UI files (ui mode only).
             api_contains: Filter API files (backend mode only).
             model_contains: Filter model names.
@@ -1238,8 +1238,8 @@ Doc indexing tips:
             as_table: Render as table when supported.
         """
         mode_norm = (mode or "auto").strip().lower()
-        if mode_norm not in {"auto", "ui", "backend"}:
-            return "Invalid mode. Use 'auto', 'ui', or 'backend'."
+        if mode_norm not in {"auto", "ui", "backend", "cli"}:
+            return "Invalid mode. Use 'auto', 'ui', 'backend', or 'cli'."
 
         if mode_norm in {"auto", "ui"}:
             ui_result = await get_app_flow_summary(
@@ -1265,7 +1265,159 @@ Doc indexing tips:
             limit=limit,
             as_table=as_table,
         )
+        if mode_norm == "backend" or not backend_result.startswith(
+            "No API → Service → DB paths found"
+        ):
+            return backend_result
+
+        if mode_norm in {"auto", "cli"}:
+            cli_result = await _get_cli_flow_summary(
+                project_path,
+                include_tests=include_tests,
+                limit=limit,
+                as_table=as_table,
+            )
+            return cli_result
+
         return backend_result
+
+
+async def _get_cli_flow_summary(
+    project_path: str,
+    include_tests: bool = False,
+    limit: int = 20,
+    as_table: bool = False,
+) -> str:
+    """Build a CLI/entrypoint-oriented flow summary for non-web repos."""
+    try:
+        import re
+        from pathlib import PurePosixPath
+
+        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+        import graph_bootstrap
+
+        driver = await graph_bootstrap.require_driver()
+
+        def _path_filters() -> list[str]:
+            return [
+                "Apps/%",
+                "Tools/%",
+                "Scripts/%",
+                "src/%",
+                "Sources/%",
+            ]
+
+        entry_points: list[tuple[str, str]] = []
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+            for pattern in _path_filters():
+                rows = await _execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id:$pid})
+                    WHERE f.filepath STARTS WITH $prefix
+                      AND (f.filepath ENDS WITH 'main.swift'
+                        OR f.filepath ENDS WITH 'main.rs'
+                        OR f.filepath ENDS WITH 'main.py'
+                        OR f.filepath ENDS WITH 'main.go'
+                        OR f.filepath ENDS WITH 'main.js'
+                        OR f.filepath ENDS WITH 'main.ts'
+                        OR f.filepath ENDS WITH 'server.ts'
+                        OR f.filepath ENDS WITH 'server.js'
+                        OR f.filepath ENDS WITH 'app.ts'
+                        OR f.filepath ENDS WITH 'app.js'
+                        OR f.filepath ENDS WITH 'App.swift'
+                        OR f.filepath ENDS WITH 'AppDelegate.swift'
+                        OR f.filepath ENDS WITH 'SceneDelegate.swift'
+                        OR f.filepath CONTAINS 'CLI')
+                    RETURN f.filepath AS fp
+                    """,
+                    pid=project_id,
+                    prefix=pattern.rstrip("%"),
+                    op="flow_cli_entry_files",
+                )
+                for rec in rows:
+                    entry_points.append((rec["fp"], "file"))
+
+            # Rust bin targets via Cargo.toml
+            cargo_rows = await _execute_read(
+                session,
+                """
+                MATCH (f:File {project_id:$pid})
+                WHERE f.filepath ENDS WITH 'Cargo.toml'
+                RETURN f.filepath AS fp
+                """,
+                pid=project_id,
+                op="flow_cli_cargo",
+            )
+            cargo_files = [rec["fp"] for rec in cargo_rows]
+
+        # Expand Cargo.toml bins with a light parse
+        for cargo_fp in cargo_files:
+            abs_path = os.path.join(project_path, cargo_fp)
+            try:
+                with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    text = fh.read()
+                bins = re.findall(
+                    r"\[\[bin\]\][^\[]*?name\s*=\s*\"([^\"]+)\"", text, re.S
+                )
+                for name in bins:
+                    entry_points.append((f"src/bin/{name}.rs", "cargo"))
+            except Exception:
+                continue
+
+        code_exts = {".swift", ".rs", ".py", ".go", ".js", ".ts", ".sh"}
+        entry_points = [
+            (fp, kind)
+            for fp, kind in entry_points
+            if PurePosixPath(fp).suffix in code_exts or not PurePosixPath(fp).suffix
+        ]
+
+        if not include_tests:
+            entry_points = [
+                (fp, kind) for fp, kind in entry_points if "test" not in fp.lower()
+            ]
+
+        # Deduplicate
+        entry_points = list(dict.fromkeys(entry_points))
+        if not entry_points:
+            return "No CLI/entrypoint paths found."
+
+        rows: list[tuple[str, str | None]] = []
+        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+            for fp, _kind in entry_points:
+                # Find neighboring files via imports (cap per entry to keep variety)
+                import_rows = await _execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id:$pid, filepath:$fp})-[:IMPORTS]->(t:File)
+                    RETURN t.filepath AS target
+                    """,
+                    pid=project_id,
+                    fp=fp,
+                    op="flow_cli_imports",
+                )
+                targets = [r["target"] for r in import_rows][:5]
+                if not targets:
+                    rows.append((fp, None))
+                else:
+                    for target in targets:
+                        rows.append((fp, target))
+
+        if as_table:
+            output = ["| Entry | Imports |", "| --- | --- |"]
+            for entry, target in rows[:limit]:
+                output.append(f"| {entry} | {target or ''} |")
+        else:
+            output = [
+                " -> ".join([v for v in [entry, target] if v]) for entry, target in rows
+            ]
+
+        output = list(dict.fromkeys(output))
+        if limit and len(output) > limit:
+            output = output[:limit]
+        return "\n".join(output)
+    except Exception as exc:
+        return f"Error building CLI flow summary: {str(exc)}"
 
 
 async def _build_import_graph_impl(project_path: str) -> str:
