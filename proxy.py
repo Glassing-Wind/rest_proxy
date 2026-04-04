@@ -4,80 +4,40 @@ import hashlib
 import json
 import os
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-
-load_dotenv()
-
-
-# ---------------------------------------------------------------------------
-# Memory layer feature flags (loaded once; all optional)
-# ---------------------------------------------------------------------------
-_MEMORY_ENABLED = os.getenv("LM_PROXY_MEMORY_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
-_ENABLE_PERSISTENCE = os.getenv("LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1").strip().lower() in {"1", "true", "yes", "on"}
-_ENABLE_REDIS = os.getenv("LM_PROXY_MEMORY_ENABLE_REDIS", "1").strip().lower() in {"1", "true", "yes", "on"}
-_ENABLE_EMBEDDINGS = os.getenv("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes", "on"}
-_MEMORY_SESSION_NAMESPACE = os.getenv("LM_PROXY_MEMORY_SESSION_NAMESPACE", "lmproxy")
-# Memory injection into prompts: prepend rolling summary + trim old turns before forwarding.
-_MEMORY_ENABLE_INJECT = os.getenv("LM_PROXY_MEMORY_ENABLE_INJECT", "1").strip().lower() in {"1", "true", "yes", "on"}
-_MEMORY_MAX_INJECT_TURNS = int(os.getenv("LM_PROXY_MEMORY_MAX_INJECT_TURNS", "10"))
-
-# Add memory mode flag
-# Deprecated: _MEMORY_MODE was previously used to gate injection (stateless/hybrid/stateful).
-# Injection is now always active when _MEMORY_ENABLED and _MEMORY_ENABLE_INJECT are set.
-# This var is kept for backward-compat but no longer changes behaviour.
-_MEMORY_MODE = os.getenv("LM_PROXY_MEMORY_MODE", "stateless").strip().lower()
-
-# Conditionally import memory modules; keep failures non-fatal so the proxy
-# still works even if optional dependencies are missing.
-_memory_store = None
-_memory_summary = None
-_memory_retrieval = None
-_memory_bootstrap = None
-_skeleton_extractor = None
-
-if _MEMORY_ENABLED:
-    try:
-        import memory_store as _memory_store          # type: ignore
-        import memory_summary as _memory_summary      # type: ignore
-        import memory_retrieval as _memory_retrieval  # type: ignore
-        import memory_bootstrap as _memory_bootstrap  # type: ignore
-        import skeleton_extractor as _skeleton_extractor  # type: ignore
-    except ImportError as _mem_import_err:
-        # Memory modules not available; proxy runs normally without them.
-        print(f"[lm-proxy] memory_import_failed error={_mem_import_err}", file=sys.stderr, flush=True)
-        _memory_store = None
-        _memory_summary = None
-        _memory_retrieval = None
-        _memory_bootstrap = None
-        _skeleton_extractor = None
-
-def get_env(name: str, default=None):
-    return os.getenv(name, default)
-
-LM_BASE = os.getenv("LM_BASE", "http://127.0.0.1:1234").rstrip("/")
-OPENAI_BASE = f"{LM_BASE}/v1"
-STATE_FILE = Path(os.getenv("LM_PROXY_STATE", "./lm_proxy_state.json"))
-ENABLE_PROXY_FILTERING = os.getenv("LM_PROXY_ENABLE_FILTERING", "true").strip().lower() not in {"0", "false", "no", "off"}
-ENABLE_DEBUG_LOGGING = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {"1", "true", "yes", "on"}
-MODEL_ALIASES_ENV = os.getenv("LM_PROXY_MODEL_ALIASES", "").strip()
-FALLBACK_MODEL = os.getenv("LM_PROXY_FALLBACK_MODEL", "").strip()
-ENABLE_MODEL_VALIDATION = os.getenv("LM_PROXY_VALIDATE_MODELS", "true").strip().lower() not in {"0", "false", "no", "off"}
-USE_LOCAL_MODELS_FOR_V1 = os.getenv("LM_PROXY_V1_MODELS_LOCAL", "false").strip().lower() in {"1", "true", "yes", "on"}
-# Default context window size injected into stateful route payloads when not provided by client.
-# Set to 0 to let LM Studio use its own default.
-DEFAULT_CONTEXT_LENGTH = int(os.getenv("LM_PROXY_CONTEXT_LENGTH", "0"))
-# When enabled, tool-using requests are translated to LM Studio's stateful /v1/responses
-# endpoint instead of /v1/chat/completions, gaining server-side KV-cache continuity.
-USE_RESPONSES_API = os.getenv("LM_PROXY_USE_RESPONSES_API", "0").strip().lower() in {"1", "true", "yes", "on"}
-# Number of consecutive identical tool calls required to trigger loop-break injection.
-LOOP_DETECT_THRESHOLD = int(os.getenv("LM_PROXY_LOOP_DETECT_THRESHOLD", "3"))
+from proxy_config import (
+    _MEMORY_ENABLED,
+    _ENABLE_PERSISTENCE,
+    _ENABLE_REDIS,
+    _ENABLE_EMBEDDINGS,
+    _MEMORY_SESSION_NAMESPACE,
+    _MEMORY_ENABLE_INJECT,
+    _MEMORY_MAX_INJECT_TURNS,
+    _MEMORY_MODE,
+    _memory_store,
+    _memory_summary,
+    _memory_retrieval,
+    _memory_bootstrap,
+    _skeleton_extractor,
+    get_env,
+    LM_BASE,
+    OPENAI_BASE,
+    STATE_FILE,
+    ENABLE_PROXY_FILTERING,
+    ENABLE_DEBUG_LOGGING,
+    MODEL_ALIASES_ENV,
+    FALLBACK_MODEL,
+    ENABLE_MODEL_VALIDATION,
+    USE_LOCAL_MODELS_FOR_V1,
+    DEFAULT_CONTEXT_LENGTH,
+    USE_RESPONSES_API,
+    LOOP_DETECT_THRESHOLD,
+)
 
 app = FastAPI(title="LM Studio Stateful Chat Proxy")
 
@@ -90,122 +50,24 @@ async def _startup_event() -> None:
         try:
             await _memory_store.open_pool()
         except Exception as _pool_exc:
-            print(f"[lm-proxy] memory_init_error error={_pool_exc}", file=sys.stderr, flush=True)
-
-# history-hash -> LM Studio response id
-STATE: Dict[str, str] = {}
-
-
-def load_state() -> None:
-    global STATE
-    if STATE_FILE.exists():
-        try:
-            STATE = json.loads(STATE_FILE.read_text())
-            debug_log("state_loaded", entries=len(STATE), state_file=str(STATE_FILE))
-        except Exception:
-            STATE = {}
-            debug_log("state_load_failed", state_file=str(STATE_FILE))
+            print(
+                f"[lm-proxy] memory_init_error error={_pool_exc}",
+                file=sys.stderr,
+                flush=True,
+            )
 
 
-def save_state() -> None:
-    tmp = STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(STATE, indent=2, sort_keys=True))
-    tmp.replace(STATE_FILE)
-    debug_log("state_saved", entries=len(STATE), state_file=str(STATE_FILE))
-
-
-def debug_log(message: str, **fields: Any) -> None:
-    if not ENABLE_DEBUG_LOGGING:
-        return
-
-    payload = {"message": message}
-    payload.update(fields)
-    try:
-        log_str = f"[lm-proxy] {stable_json(payload)}"
-        print(log_str, file=sys.stderr, flush=True)
-        with open("proxy_debug.log", "a") as f:
-            f.write(log_str + "\n")
-    except Exception as e:
-        log_str = f"[lm-proxy] {message} {fields} - Exception: {e}"
-        print(log_str, file=sys.stderr, flush=True)
-        with open("proxy_debug.log", "a") as f:
-            f.write(log_str + "\n")
-
-
-def stable_json(obj: Any) -> str:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
+from proxy_logging import debug_log, stable_json
+from proxy_models import (
+    parse_model_aliases,
+    extract_model_keys,
+    fetch_lmstudio_models,
+    resolve_model_name,
+    build_local_llm_models,
+)
+from proxy_state import STATE, load_state, save_state
 
 load_state()
-
-
-# --- Model aliasing and fallback helpers
-def parse_model_aliases() -> Dict[str, str]:
-    if not MODEL_ALIASES_ENV:
-        return {}
-    try:
-        parsed = json.loads(MODEL_ALIASES_ENV)
-    except Exception:
-        debug_log("model_alias_parse_failed", raw_value=MODEL_ALIASES_ENV)
-        return {}
-
-    if not isinstance(parsed, dict):
-        debug_log("model_alias_parse_failed", raw_value=MODEL_ALIASES_ENV)
-        return {}
-
-    aliases: Dict[str, str] = {}
-    for key, value in parsed.items():
-        if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
-            aliases[key.strip()] = value.strip()
-    return aliases
-
-
-def extract_model_keys(models_payload: Any) -> List[str]:
-    if not isinstance(models_payload, dict):
-        return []
-    models = models_payload.get("models")
-    if not isinstance(models, list):
-        return []
-
-    keys: List[str] = []
-    for item in models:
-        if not isinstance(item, dict):
-            continue
-        key = item.get("key")
-        if isinstance(key, str) and key:
-            keys.append(key)
-    return keys
-
-
-async def fetch_lmstudio_models() -> Dict[str, Any]:
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.get(f"{LM_BASE}/api/v1/models")
-        r.raise_for_status()
-        return r.json()
-
-
-def resolve_model_name(requested_model: str, available_keys: List[str]) -> str:
-    aliases = parse_model_aliases()
-    if requested_model in aliases:
-        mapped = aliases[requested_model]
-        debug_log("model_alias_applied", requested_model=requested_model, mapped_model=mapped)
-        requested_model = mapped
-
-    if not ENABLE_MODEL_VALIDATION:
-        return requested_model
-
-    if requested_model in available_keys:
-        return requested_model
-
-    if FALLBACK_MODEL and FALLBACK_MODEL in available_keys:
-        debug_log(
-            "model_missing_using_fallback",
-            requested_model=requested_model,
-            fallback_model=FALLBACK_MODEL,
-        )
-        return FALLBACK_MODEL
-
-    return requested_model
 
 
 def is_insufficient_resource_error_text(detail_text: str) -> bool:
@@ -224,6 +86,7 @@ def history_key(messages: List[Dict[str, Any]]) -> str:
 # ---------------------------------------------------------------------------
 # Memory session ID helpers
 # ---------------------------------------------------------------------------
+
 
 def _derive_session_id(body: Dict[str, Any], messages: List[Dict[str, Any]]) -> str:
     """
@@ -290,7 +153,11 @@ def _derive_session_id(body: Dict[str, Any], messages: List[Dict[str, Any]]) -> 
     if project_path:
         safe = _re.sub(r"[^a-zA-Z0-9_\-]", "_", project_path)[:80]
         session_id = f"{_MEMORY_SESSION_NAMESPACE}:project:{safe}"
-        debug_log("session_id_project_scoped", project_path=project_path, session_id=session_id)
+        debug_log(
+            "session_id_project_scoped",
+            project_path=project_path,
+            session_id=session_id,
+        )
         return session_id
 
     # 3. Fallback: hash of system prompt + first user message
@@ -329,7 +196,10 @@ async def _persist_memory_best_effort(
 
         # --- Build turn dicts for Redis ---
         user_turn = {"role": "user", "content": user_content[:500]}
-        assistant_turn: Dict[str, Any] = {"role": "assistant", "content": assistant_text[:500]}
+        assistant_turn: Dict[str, Any] = {
+            "role": "assistant",
+            "content": assistant_text[:500],
+        }
         if tool_calls:
             assistant_turn["tool_calls"] = tool_calls
 
@@ -342,7 +212,9 @@ async def _persist_memory_best_effort(
             # Update rolling summary
             try:
                 prev_summary = await _memory_store.get_rolling_summary(session_id)
-                new_summary = await _memory_summary.update_rolling_summary(prev_summary, new_turns)
+                new_summary = await _memory_summary.update_rolling_summary(
+                    prev_summary, new_turns
+                )
                 await _memory_store.set_rolling_summary(session_id, new_summary)
             except Exception as _sum_exc:
                 debug_log("memory_summary_update_error", error=str(_sum_exc))
@@ -350,7 +222,13 @@ async def _persist_memory_best_effort(
         # --- Postgres: persist turns durably ---
         if _MEMORY_ENABLE_PERSISTENCE:
             # Determine turn index (approximate; use timestamp-based ordering)
-            turn_count = len([m for m in messages if isinstance(m, dict) and m.get("role") != "system"])
+            turn_count = len(
+                [
+                    m
+                    for m in messages
+                    if isinstance(m, dict) and m.get("role") != "system"
+                ]
+            )
 
             user_compact = _memory_summary.compact_turn_content("user", user_content)
             user_turn_id = await _memory_store.insert_turn(
@@ -365,7 +243,9 @@ async def _persist_memory_best_effort(
             asst_content = assistant_text
             if tool_calls:
                 asst_content += "\n" + stable_json(tool_calls)
-            asst_compact = _memory_summary.compact_turn_content("assistant", asst_content)
+            asst_compact = _memory_summary.compact_turn_content(
+                "assistant", asst_content
+            )
             asst_turn_id = await _memory_store.insert_turn(
                 session_id=session_id,
                 turn_index=turn_count + 1,
@@ -378,7 +258,9 @@ async def _persist_memory_best_effort(
             # Persist summary snapshot periodically (every call; lightweight since text is small)
             if _MEMORY_ENABLE_REDIS:
                 try:
-                    current_summary = await _memory_store.get_rolling_summary(session_id)
+                    current_summary = await _memory_store.get_rolling_summary(
+                        session_id
+                    )
                     if current_summary:
                         await _memory_store.insert_summary(
                             session_id=session_id,
@@ -391,7 +273,7 @@ async def _persist_memory_best_effort(
             # --- Embed compact turn text and store vectors for hybrid retrieval ---
             if _MEMORY_ENABLE_EMBEDDINGS and _memory_retrieval is not None:
                 for ref_id, ref_role, compact_text in [
-                    (user_turn_id, "user",      user_compact),
+                    (user_turn_id, "user", user_compact),
                     (asst_turn_id, "assistant", asst_compact),
                 ]:
                     if not ref_id or not compact_text:
@@ -408,10 +290,13 @@ async def _persist_memory_best_effort(
                                 metadata={"role": ref_role},
                             )
                     except Exception as _emb_exc:
-                        debug_log("memory_embed_turn_error", role=ref_role, error=str(_emb_exc))
+                        debug_log(
+                            "memory_embed_turn_error",
+                            role=ref_role,
+                            error=str(_emb_exc),
+                        )
 
         debug_log("memory_persisted", session_id=session_id, model=model)
-
 
     except Exception as exc:
         debug_log("memory_persist_error", session_id=session_id, error=str(exc))
@@ -436,8 +321,11 @@ async def _inject_memory_into_messages(
         return messages
     try:
         last_user = next(
-            (m.get("content", "") for m in reversed(messages)
-             if isinstance(m, dict) and m.get("role") == "user"),
+            (
+                m.get("content", "")
+                for m in reversed(messages)
+                if isinstance(m, dict) and m.get("role") == "user"
+            ),
             "",
         )
         assembled = await _memory_retrieval.assemble_memory(
@@ -446,7 +334,9 @@ async def _inject_memory_into_messages(
         )
         rolling_summary = assembled.assembled_text.strip() if assembled else ""
         # --- NEW: adaptive memory budget ---
-        total_len = len(rolling_summary) + sum(len(str(m.get("content", ""))) for m in messages)
+        total_len = len(rolling_summary) + sum(
+            len(str(m.get("content", ""))) for m in messages
+        )
 
         if total_len > 12000:
             rolling_summary = _truncate_text(rolling_summary, 1200)
@@ -478,17 +368,27 @@ async def _inject_memory_into_messages(
             debug_log("memory_recent_turns_error", error=str(_rt_exc))
 
         # Split messages into system and non-system
-        system_msgs = [dict(m) for m in messages if isinstance(m, dict) and m.get("role") == "system"]
-        non_system = [m for m in messages if isinstance(m, dict) and m.get("role") != "system"]
+        system_msgs = [
+            dict(m)
+            for m in messages
+            if isinstance(m, dict) and m.get("role") == "system"
+        ]
+        non_system = [
+            m for m in messages if isinstance(m, dict) and m.get("role") != "system"
+        ]
 
         # Inject memory block into system prompt (or create one)
         tag_block_parts = []
 
         # Always inject: summary + recent-turns context (no mode gate).
         if formatted_summary:
-            tag_block_parts.append(f"<planner_context>\n{formatted_summary}\n</planner_context>")
+            tag_block_parts.append(
+                f"<planner_context>\n{formatted_summary}\n</planner_context>"
+            )
         if recent_turns_text:
-            tag_block_parts.append(f"<coder_context>\n{recent_turns_text}\n</coder_context>")
+            tag_block_parts.append(
+                f"<coder_context>\n{recent_turns_text}\n</coder_context>"
+            )
 
         tag_block = "\n\n".join(tag_block_parts)
 
@@ -503,7 +403,9 @@ async def _inject_memory_into_messages(
                         if "." in part and "/" in part:
                             files.add(part.strip(".,:;()[]"))
                 if files:
-                    recent_files_hint = "Recently inspected files:\n" + "\n".join(f"- {f}" for f in list(files)[:5])
+                    recent_files_hint = "Recently inspected files:\n" + "\n".join(
+                        f"- {f}" for f in list(files)[:5]
+                    )
         except Exception as _rf_exc:
             debug_log("memory_recent_files_error", error=str(_rf_exc))
 
@@ -516,14 +418,16 @@ async def _inject_memory_into_messages(
         try:
             if _memory_store is not None and files:
                 skeleton_parts = []
-                for f in list(files)[:5]: # cap at 5 recent files
-                    file_hash = hashlib.sha256(f.encode('utf-8')).hexdigest()
+                for f in list(files)[:5]:  # cap at 5 recent files
+                    file_hash = hashlib.sha256(f.encode("utf-8")).hexdigest()
                     skel = await _memory_store.get_file_skeleton(session_id, file_hash)
                     if skel:
                         skeleton_parts.append(f"--- {f} ---\n{skel}")
-                
+
                 if skeleton_parts:
-                    skeletons_text = "API Skeletons of recent files:\n\n" + "\n\n".join(skeleton_parts)
+                    skeletons_text = "API Skeletons of recent files:\n\n" + "\n\n".join(
+                        skeleton_parts
+                    )
         except Exception as _sk_exc:
             debug_log("memory_recent_skeletons_error", error=str(_sk_exc))
 
@@ -543,43 +447,26 @@ async def _inject_memory_into_messages(
             if system_msgs:
                 existing = system_msgs[0].get("content", "")
                 system_msgs[0]["content"] = (
-                    f"{tag_block}\n\n"
-                    "Instructions:\n"
-                    "First, silently plan using <planner_context>:\n"
-                    "- Understand goals, decisions, and next steps\n"
-                    "- Do NOT output the plan explicitly\n\n"
-                    "Then execute using <coder_context>:\n"
-                    "- Focus on exact file edits, tool calls, and current task\n"
-                    "- Be precise and avoid unnecessary exploration\n\n"
-                    "Rules:\n"
-                    "- Exploration of the codebase is allowed when needed to understand context\n"
-                    "- Do not repeatedly read the same file or the same file sections without new purpose\n"
-                    "- If you already inspected a file, only revisit it if you need different sections or new information\n"
-                    "- Do not search repeatedly for the same missing symbols if already checked\n"
-                    "- If a required file or symbol is missing, assume it should be created\n"
-                    "- Prefer making progress over repeated exploration loops\n\n"
-                    f"{existing}"
-                ) if existing else (
-                    f"{tag_block}\n\n"
-                    "Instructions:\n"
-                    "First, silently plan using <planner_context>:\n"
-                    "- Understand goals, decisions, and next steps\n"
-                    "- Do NOT output the plan explicitly\n\n"
-                    "Then execute using <coder_context>:\n"
-                    "- Focus on exact file edits, tool calls, and current task\n"
-                    "- Be precise and avoid unnecessary exploration\n\n"
-                    "Rules:\n"
-                    "- Exploration of the codebase is allowed when needed to understand context\n"
-                    "- Do not repeatedly read the same file or the same file sections without new purpose\n"
-                    "- If you already inspected a file, only revisit it if you need different sections or new information\n"
-                    "- Do not search repeatedly for the same missing symbols if already checked\n"
-                    "- If a required file or symbol is missing, assume it should be created\n"
-                    "- Prefer making progress over repeated exploration loops\n\n"
-                )
-            else:
-                system_msgs = [{
-                    "role": "system",
-                    "content": (
+                    (
+                        f"{tag_block}\n\n"
+                        "Instructions:\n"
+                        "First, silently plan using <planner_context>:\n"
+                        "- Understand goals, decisions, and next steps\n"
+                        "- Do NOT output the plan explicitly\n\n"
+                        "Then execute using <coder_context>:\n"
+                        "- Focus on exact file edits, tool calls, and current task\n"
+                        "- Be precise and avoid unnecessary exploration\n\n"
+                        "Rules:\n"
+                        "- Exploration of the codebase is allowed when needed to understand context\n"
+                        "- Do not repeatedly read the same file or the same file sections without new purpose\n"
+                        "- If you already inspected a file, only revisit it if you need different sections or new information\n"
+                        "- Do not search repeatedly for the same missing symbols if already checked\n"
+                        "- If a required file or symbol is missing, assume it should be created\n"
+                        "- Prefer making progress over repeated exploration loops\n\n"
+                        f"{existing}"
+                    )
+                    if existing
+                    else (
                         f"{tag_block}\n\n"
                         "Instructions:\n"
                         "First, silently plan using <planner_context>:\n"
@@ -596,13 +483,40 @@ async def _inject_memory_into_messages(
                         "- If a required file or symbol is missing, assume it should be created\n"
                         "- Prefer making progress over repeated exploration loops\n\n"
                     )
-                }]
+                )
+            else:
+                system_msgs = [
+                    {
+                        "role": "system",
+                        "content": (
+                            f"{tag_block}\n\n"
+                            "Instructions:\n"
+                            "First, silently plan using <planner_context>:\n"
+                            "- Understand goals, decisions, and next steps\n"
+                            "- Do NOT output the plan explicitly\n\n"
+                            "Then execute using <coder_context>:\n"
+                            "- Focus on exact file edits, tool calls, and current task\n"
+                            "- Be precise and avoid unnecessary exploration\n\n"
+                            "Rules:\n"
+                            "- Exploration of the codebase is allowed when needed to understand context\n"
+                            "- Do not repeatedly read the same file or the same file sections without new purpose\n"
+                            "- If you already inspected a file, only revisit it if you need different sections or new information\n"
+                            "- Do not search repeatedly for the same missing symbols if already checked\n"
+                            "- If a required file or symbol is missing, assume it should be created\n"
+                            "- Prefer making progress over repeated exploration loops\n\n"
+                        ),
+                    }
+                ]
 
         # Trim history: keep only the last N non-system messages
         if len(non_system) > _MEMORY_MAX_INJECT_TURNS:
             trimmed = len(non_system) - _MEMORY_MAX_INJECT_TURNS
             non_system = non_system[-_MEMORY_MAX_INJECT_TURNS:]
-            debug_log("memory_inject_trimmed", dropped_turns=trimmed, kept_turns=len(non_system))
+            debug_log(
+                "memory_inject_trimmed",
+                dropped_turns=trimmed,
+                kept_turns=len(non_system),
+            )
 
         result = system_msgs + non_system
         debug_log(
@@ -619,7 +533,9 @@ async def _inject_memory_into_messages(
 
 
 # --- Hybrid routing: OpenAI tool call detection
-def request_uses_openai_tools(body: Dict[str, Any], messages: List[Dict[str, Any]]) -> bool:
+def request_uses_openai_tools(
+    body: Dict[str, Any], messages: List[Dict[str, Any]]
+) -> bool:
     tools = body.get("tools")
     if isinstance(tools, list) and tools:
         return True
@@ -719,9 +635,7 @@ def _detect_and_break_tool_loop(
     tool_name, tool_args = last_key
     try:
         args_dict = json.loads(tool_args) if tool_args else {}
-        args_summary = ", ".join(
-            f"{k}={v!r}" for k, v in list(args_dict.items())[:5]
-        )
+        args_summary = ", ".join(f"{k}={v!r}" for k, v in list(args_dict.items())[:5])
     except Exception:
         args_summary = tool_args[:120] if tool_args else ""
 
@@ -752,7 +666,9 @@ def _detect_and_break_tool_loop(
 # ---------------------------------------------------------------------------
 
 # Set to "0" to disable tool description compaction.
-_COMPACT_TOOL_DEFINITIONS = os.getenv("LM_PROXY_COMPACT_TOOL_DEFINITIONS", "1").strip().lower() not in {"0", "false", "no", "off"}
+_COMPACT_TOOL_DEFINITIONS = os.getenv(
+    "LM_PROXY_COMPACT_TOOL_DEFINITIONS", "1"
+).strip().lower() not in {"0", "false", "no", "off"}
 
 # Max chars to keep from each tool description (first N chars ≈ first sentence).
 _TOOL_DESC_MAX_CHARS = int(os.getenv("LM_PROXY_TOOL_DESC_MAX_CHARS", "120"))
@@ -805,7 +721,9 @@ def _compact_tool_definitions(tools: Any) -> Any:
         # Compact parameters schema.
         params = fn_copy.get("parameters")
         if isinstance(params, dict):
-            params_copy = {k: v for k, v in params.items() if k not in _SCHEMA_NOISE_KEYS}
+            params_copy = {
+                k: v for k, v in params.items() if k not in _SCHEMA_NOISE_KEYS
+            }
             props = params_copy.get("properties")
             if isinstance(props, dict):
                 new_props: Dict[str, Any] = {}
@@ -857,7 +775,9 @@ def compact_message_content(content: Any, max_chars: int) -> Any:
                     item_copy["text"] = _truncate_text(item_copy["text"], max_chars)
 
                 if isinstance(item_copy.get("content"), str):
-                    item_copy["content"] = _truncate_text(item_copy["content"], max_chars)
+                    item_copy["content"] = _truncate_text(
+                        item_copy["content"], max_chars
+                    )
 
                 image_url = item_copy.get("image_url")
                 if (
@@ -888,13 +808,13 @@ async def _extract_and_cache_skeleton_bg(session_id: str, raw_content: str) -> N
     """
     if _memory_store is None or _skeleton_extractor is None:
         return
-        
+
     try:
         # Basic heuristic: if it looks like a file path is mentioned near the start, extract it.
         # Often tools output something like: "Read file: /path/to/script.swift\n\nimport Foundation..."
         lines = raw_content.split("\\n", 10)
         file_path = "unknown.txt"
-        
+
         # Try to infer the file type from the content or the first lines.
         # OpenCode `read_file` usually prints the path.
         for line in lines:
@@ -904,17 +824,19 @@ async def _extract_and_cache_skeleton_bg(session_id: str, raw_content: str) -> N
                     if "/" in p and "." in p:
                         file_path = p.strip("',`\":[]()")
                         break
-        
+
         # SourceKitten only works if the filename ends in .swift
         # or we explicitly guess it's swift. If it has import Foundation, it's swift.
         if "import Foundation" in raw_content or "import SwiftUI" in raw_content:
             file_path = "inferred.swift"
-            
+
         skel = _skeleton_extractor.extract_skeleton(raw_content, file_path)
         if skel and len(skel) > 10:
-            file_hash = hashlib.sha256(file_path.encode('utf-8')).hexdigest()
+            file_hash = hashlib.sha256(file_path.encode("utf-8")).hexdigest()
             await _memory_store.set_file_skeleton(session_id, file_hash, skel)
-            debug_log("skeleton_extracted_in_bg", file_path=file_path, skeleton_len=len(skel))
+            debug_log(
+                "skeleton_extracted_in_bg", file_path=file_path, skeleton_len=len(skel)
+            )
     except Exception as e:
         debug_log("skeleton_extraction_failed", error=str(e))
 
@@ -924,7 +846,10 @@ def _is_filter_bypassed(messages: List[Dict[str, Any]]) -> bool:
         return True
     return False
 
-def filter_messages_for_proxy(session_id: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+
+def filter_messages_for_proxy(
+    session_id: str, messages: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     if _is_filter_bypassed(messages):
         debug_log("filter_bypassed_empty_messages")
         return messages
@@ -935,14 +860,19 @@ def filter_messages_for_proxy(session_id: str, messages: List[Dict[str, Any]]) -
 
     max_recent_messages = int(os.getenv("LM_PROXY_MAX_RECENT_MESSAGES", "40"))
     max_old_message_chars = int(os.getenv("LM_PROXY_MAX_OLD_MESSAGE_CHARS", "4000"))
-    max_recent_message_chars = int(os.getenv("LM_PROXY_MAX_RECENT_MESSAGE_CHARS", "12000"))
-    max_system_prompt_chars = int(os.getenv("LM_PROXY_MAX_SYSTEM_PROMPT_CHARS", "10000"))
+    max_recent_message_chars = int(
+        os.getenv("LM_PROXY_MAX_RECENT_MESSAGE_CHARS", "12000")
+    )
+    max_system_prompt_chars = int(
+        os.getenv("LM_PROXY_MAX_SYSTEM_PROMPT_CHARS", "10000")
+    )
     max_tool_message_chars = int(os.getenv("LM_PROXY_MAX_TOOL_MESSAGE_CHARS", "200000"))
     _OVERRIDE_MAX_TOKENS = int(os.getenv("LM_PROXY_OVERRIDE_MAX_TOKENS", "1280000"))
 
     filtered: List[Dict[str, Any]] = []
     non_system_indices = [
-        i for i, msg in enumerate(messages)
+        i
+        for i, msg in enumerate(messages)
         if isinstance(msg, dict) and msg.get("role") != "system"
     ]
     recent_non_system = set(non_system_indices[-max_recent_messages:])
@@ -957,8 +887,7 @@ def filter_messages_for_proxy(session_id: str, messages: List[Dict[str, Any]]) -
         if role == "system":
             # Always keep system messages, but truncate if they are too long.
             msg_copy["content"] = _truncate_text(
-                content_to_text(message.get("content", "")),
-                max_system_prompt_chars
+                content_to_text(message.get("content", "")), max_system_prompt_chars
             )
             filtered.append(msg_copy)
             continue
@@ -984,8 +913,14 @@ def filter_messages_for_proxy(session_id: str, messages: List[Dict[str, Any]]) -
             filtered.append(msg_copy)
             continue
 
-        max_chars = max_recent_message_chars if i in recent_non_system else max_old_message_chars
-        msg_copy["content"] = compact_message_content(message.get("content", ""), max_chars)
+        max_chars = (
+            max_recent_message_chars
+            if i in recent_non_system
+            else max_old_message_chars
+        )
+        msg_copy["content"] = compact_message_content(
+            message.get("content", ""), max_chars
+        )
         filtered.append(msg_copy)
 
     debug_log(
@@ -1143,7 +1078,9 @@ def get_last_non_system_message(messages: List[Dict[str, Any]]) -> Dict[str, Any
     for message in reversed(messages):
         if isinstance(message, dict) and message.get("role") != "system":
             return message
-    raise HTTPException(status_code=400, detail="No non-system message found in request")
+    raise HTTPException(
+        status_code=400, detail="No non-system message found in request"
+    )
 
 
 def extract_text_from_api_chat_output(output: Any) -> str:
@@ -1171,7 +1108,6 @@ def extract_text_from_api_chat_output(output: Any) -> str:
                 elif isinstance(sub, str):
                     parts.append(sub)
     return "".join(parts)
-
 
 
 def build_chat_completion_response(
@@ -1203,7 +1139,6 @@ def build_chat_completion_response(
     }
 
 
-
 def _extract_new_messages_for_responses_api(
     messages: List[Dict[str, Any]],
 ) -> tuple[Optional[str], List[Dict[str, Any]]]:
@@ -1226,9 +1161,15 @@ def _extract_new_messages_for_responses_api(
             last_asst_idx = i
 
     # New messages: everything after the last assistant turn (tool results + new user msg)
-    raw_new = messages[last_asst_idx + 1:] if last_asst_idx >= 0 else [
-        m for m in messages if isinstance(m, dict) and m.get("role") not in ("system", "assistant")
-    ]
+    raw_new = (
+        messages[last_asst_idx + 1 :]
+        if last_asst_idx >= 0
+        else [
+            m
+            for m in messages
+            if isinstance(m, dict) and m.get("role") not in ("system", "assistant")
+        ]
+    )
 
     input_items: List[Dict[str, Any]] = []
     for m in raw_new:
@@ -1237,11 +1178,13 @@ def _extract_new_messages_for_responses_api(
         role = m.get("role")
         if role == "tool":
             # Convert tool result to function_call_output
-            input_items.append({
-                "type": "function_call_output",
-                "call_id": m.get("tool_call_id", "unknown"),
-                "output": str(m.get("content", "")),
-            })
+            input_items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": m.get("tool_call_id", "unknown"),
+                    "output": str(m.get("content", "")),
+                }
+            )
         elif role == "user":
             content = m.get("content", "")
             if isinstance(content, str):
@@ -1272,14 +1215,18 @@ def _responses_output_to_chat_completion(
                 elif isinstance(part, str):
                     text_parts.append(part)
         elif item_type == "function_call":
-            tool_calls.append({
-                "id": item.get("call_id") or item.get("id") or f"call_{len(tool_calls)}",
-                "type": "function",
-                "function": {
-                    "name": item.get("name", ""),
-                    "arguments": item.get("arguments", ""),
-                },
-            })
+            tool_calls.append(
+                {
+                    "id": item.get("call_id")
+                    or item.get("id")
+                    or f"call_{len(tool_calls)}",
+                    "type": "function",
+                    "function": {
+                        "name": item.get("name", ""),
+                        "arguments": item.get("arguments", ""),
+                    },
+                }
+            )
         elif item_type == "reasoning":
             pass  # reasoning is internal; don't expose to client
 
@@ -1301,7 +1248,13 @@ def _responses_output_to_chat_completion(
         "object": "chat.completion",
         "created": 0,
         "model": model,
-        "choices": [{"index": 0, "message": message, "finish_reason": "tool_calls" if tool_calls else "stop"}],
+        "choices": [
+            {
+                "index": 0,
+                "message": message,
+                "finish_reason": "tool_calls" if tool_calls else "stop",
+            }
+        ],
         "usage": usage,
         # Pass the response_id through so callers can inspect it.
         "x_lmstudio_response_id": resp.get("id"),
@@ -1309,8 +1262,11 @@ def _responses_output_to_chat_completion(
 
 
 async def stream_openai_compatible_response(
-    url: str, payload: Dict[str, Any], messages: List[Dict[str, Any]] | None = None,
-    original_body: Dict[str, Any] = None, fallback_func=None
+    url: str,
+    payload: Dict[str, Any],
+    messages: List[Dict[str, Any]] | None = None,
+    original_body: Dict[str, Any] = None,
+    fallback_func=None,
 ) -> Any:
     """
     Generic streaming helper that pipes an OpenAI-compatible stream from an upstream URL.
@@ -1319,7 +1275,7 @@ async def stream_openai_compatible_response(
     timeout = httpx.Timeout(900.0, connect=30.0)
     client = httpx.AsyncClient(timeout=timeout)
     req = client.build_request("POST", url, json=payload)
-    
+
     try:
         r = await client.send(req, stream=True)
     except Exception as exc:
@@ -1328,14 +1284,16 @@ async def stream_openai_compatible_response(
             debug_log("streaming_failed_fallback", error=str(exc))
             return await fallback_func(original_body)
         raise HTTPException(status_code=500, detail=str(exc))
-        
+
     if r.status_code >= 400:
         detail = await r.aread()
         err_text = detail.decode("utf-8", errors="replace")
         await r.aclose()
         await client.aclose()
         if fallback_func and original_body is not None:
-            debug_log("streaming_rejected_fallback", status=r.status_code, error=err_text)
+            debug_log(
+                "streaming_rejected_fallback", status=r.status_code, error=err_text
+            )
             return await fallback_func(original_body)
         raise HTTPException(r.status_code, err_text)
 
@@ -1348,7 +1306,7 @@ async def stream_openai_compatible_response(
             async for line in r.aiter_lines():
                 if not line:
                     continue
-                    
+
                 if not is_responses_api:
                     # Standard OpenAI stream pass-through
                     if messages and line.startswith("data: "):
@@ -1358,14 +1316,17 @@ async def stream_openai_compatible_response(
                                 data = json.loads(data_str)
                                 if not last_id:
                                     last_id = data.get("id") or data.get("response_id")
-                                
+
                                 choices = data.get("choices", [])
                                 if choices:
                                     delta = choices[0].get("delta", {})
                                     if "content" in delta:
                                         accumulated_content += delta["content"]
                                     if choices[0].get("finish_reason"):
-                                        debug_log("stream_finished", reason=choices[0].get("finish_reason"))
+                                        debug_log(
+                                            "stream_finished",
+                                            reason=choices[0].get("finish_reason"),
+                                        )
                             except (json.JSONDecodeError, KeyError):
                                 pass
 
@@ -1378,20 +1339,31 @@ async def stream_openai_compatible_response(
                             try:
                                 data = json.loads(data_str)
                                 evt_type = data.get("type")
-                                
+
                                 if evt_type == "response.created":
                                     if not last_id:
-                                        last_id = data.get("response", {}).get("id", "resp_unk")
+                                        last_id = data.get("response", {}).get(
+                                            "id", "resp_unk"
+                                        )
                                     # yield initial role block
                                     chunk = {
                                         "id": last_id,
                                         "object": "chat.completion.chunk",
                                         "created": int(time.time()),
                                         "model": payload.get("model", "unknown"),
-                                        "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}]
+                                        "choices": [
+                                            {
+                                                "index": 0,
+                                                "delta": {
+                                                    "role": "assistant",
+                                                    "content": "",
+                                                },
+                                                "finish_reason": None,
+                                            }
+                                        ],
                                     }
                                     yield f"data: {json.dumps(chunk)}\n\n"
-                                    
+
                                 elif evt_type == "response.output_text.delta":
                                     text_delta = data.get("delta", "")
                                     accumulated_content += text_delta
@@ -1400,10 +1372,16 @@ async def stream_openai_compatible_response(
                                         "object": "chat.completion.chunk",
                                         "created": int(time.time()),
                                         "model": payload.get("model", "unknown"),
-                                        "choices": [{"index": 0, "delta": {"content": text_delta}, "finish_reason": None}]
+                                        "choices": [
+                                            {
+                                                "index": 0,
+                                                "delta": {"content": text_delta},
+                                                "finish_reason": None,
+                                            }
+                                        ],
                                     }
                                     yield f"data: {json.dumps(chunk)}\n\n"
-                                    
+
                                 elif evt_type == "tool_call.start":
                                     current_tool_call_index += 1
                                     call_id = f"call_{uuid.uuid4().hex[:12]}"
@@ -1413,41 +1391,75 @@ async def stream_openai_compatible_response(
                                         "object": "chat.completion.chunk",
                                         "created": int(time.time()),
                                         "model": payload.get("model", "unknown"),
-                                        "choices": [{"index": 0, "delta": {
-                                            "tool_calls": [{
-                                                "index": current_tool_call_index,
-                                                "id": call_id,
-                                                "type": "function",
-                                                "function": {"name": tool_name, "arguments": ""}
-                                            }]
-                                        }, "finish_reason": None}]
+                                        "choices": [
+                                            {
+                                                "index": 0,
+                                                "delta": {
+                                                    "tool_calls": [
+                                                        {
+                                                            "index": current_tool_call_index,
+                                                            "id": call_id,
+                                                            "type": "function",
+                                                            "function": {
+                                                                "name": tool_name,
+                                                                "arguments": "",
+                                                            },
+                                                        }
+                                                    ]
+                                                },
+                                                "finish_reason": None,
+                                            }
+                                        ],
                                     }
                                     yield f"data: {json.dumps(chunk)}\n\n"
-                                    
+
                                 elif evt_type == "tool_call.arguments":
                                     args_obj = data.get("arguments", {})
-                                    args_str = json.dumps(args_obj) if isinstance(args_obj, dict) else str(args_obj)
+                                    args_str = (
+                                        json.dumps(args_obj)
+                                        if isinstance(args_obj, dict)
+                                        else str(args_obj)
+                                    )
                                     chunk = {
                                         "id": last_id or "resp_unk",
                                         "object": "chat.completion.chunk",
                                         "created": int(time.time()),
                                         "model": payload.get("model", "unknown"),
-                                        "choices": [{"index": 0, "delta": {
-                                            "tool_calls": [{
-                                                "index": max(0, current_tool_call_index),
-                                                "function": {"arguments": args_str}
-                                            }]
-                                        }, "finish_reason": None}]
+                                        "choices": [
+                                            {
+                                                "index": 0,
+                                                "delta": {
+                                                    "tool_calls": [
+                                                        {
+                                                            "index": max(
+                                                                0,
+                                                                current_tool_call_index,
+                                                            ),
+                                                            "function": {
+                                                                "arguments": args_str
+                                                            },
+                                                        }
+                                                    ]
+                                                },
+                                                "finish_reason": None,
+                                            }
+                                        ],
                                     }
                                     yield f"data: {json.dumps(chunk)}\n\n"
-                                    
+
                                 elif evt_type == "response.completed":
                                     chunk = {
                                         "id": last_id or "resp_unk",
                                         "object": "chat.completion.chunk",
                                         "created": int(time.time()),
                                         "model": payload.get("model", "unknown"),
-                                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                                        "choices": [
+                                            {
+                                                "index": 0,
+                                                "delta": {},
+                                                "finish_reason": "stop",
+                                            }
+                                        ],
                                     }
                                     yield f"data: {json.dumps(chunk)}\n\n"
                                     yield "data: [DONE]\n\n"
@@ -1480,19 +1492,25 @@ async def stream_openai_compatible_response(
     )
 
 
-async def forward_responses_api_completion(body: Dict[str, Any], history_messages: Optional[List[Dict[str, Any]]] = None) -> Any:
+async def forward_responses_api_completion(
+    body: Dict[str, Any], history_messages: Optional[List[Dict[str, Any]]] = None
+) -> Any:
     """
     Forward a chat/completions request to LM Studio's /v1/responses endpoint.
     This endpoint is stateful (via previous_response_id) and OpenAI-compatible (messages/tools).
     """
     messages: List[Dict[str, Any]] = body.get("messages", [])
-    
-    debug_log("dumping_raw_messages", first_message=messages[0] if messages else None, last_message=messages[-1] if messages else None)
-    
+
+    debug_log(
+        "dumping_raw_messages",
+        first_message=messages[0] if messages else None,
+        last_message=messages[-1] if messages else None,
+    )
+
     # Use history_messages if provided, otherwise default to the current messages array.
     # This prevents mutations (like tool-calling blocks) from breaking the history_key.
     tracking_messages = history_messages if history_messages is not None else messages
-    
+
     model: str = body.get("model", "")
     stream = bool(body.get("stream", False))
     timeout = httpx.Timeout(900.0, connect=30.0)
@@ -1503,7 +1521,7 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
     prev_messages = tracking_messages[:-1] if len(tracking_messages) > 1 else []
     hk = history_key(prev_messages)
     prev_response_id = STATE.get(hk)
-    
+
     # If the previous turn fell back to stateless, it has a chatcmpl_ ID. We must ignore it.
     if prev_response_id and not prev_response_id.startswith("resp_"):
         prev_response_id = None
@@ -1516,14 +1534,18 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
     else:
         payload_input = messages
 
-    instructions = messages[0].get("content", "") if messages and messages[0].get("role") == "system" else ""
+    instructions = (
+        messages[0].get("content", "")
+        if messages and messages[0].get("role") == "system"
+        else ""
+    )
 
     payload = {
         "model": model,
         "input": payload_input,
         "stream": stream,
     }
-    
+
     if "tools" in body:
         payload["tools"] = body["tools"]
     if "tool_choice" in body:
@@ -1533,11 +1555,11 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
             payload["tool_choice"] = "required" if tc else "auto"
         else:
             payload["tool_choice"] = tc
-    
+
     # Only send instructions if non-empty and only on the FIRST turn (no previous ID)
     if instructions and not prev_response_id:
         payload["instructions"] = instructions
-    
+
     if prev_response_id:
         payload["previous_response_id"] = prev_response_id
 
@@ -1553,11 +1575,11 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
     if stream:
         # Use existing streaming helper but target the /v1/responses endpoint
         return await stream_openai_compatible_response(
-            url=f"{OPENAI_BASE}/responses", 
-            payload=payload, 
+            url=f"{OPENAI_BASE}/responses",
+            payload=payload,
             messages=messages,
             original_body=body,
-            fallback_func=forward_openai_chat_completion
+            fallback_func=forward_openai_chat_completion,
         )
 
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -1569,10 +1591,14 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
             try:
                 err_json = exc.response.json()
                 if "error" not in err_json or not isinstance(err_json["error"], dict):
-                    err_json = {"error": {"message": exc.response.text, "type": "proxy_error"}}
+                    err_json = {
+                        "error": {"message": exc.response.text, "type": "proxy_error"}
+                    }
             except Exception:
-                err_json = {"error": {"message": exc.response.text, "type": "proxy_error"}}
-                
+                err_json = {
+                    "error": {"message": exc.response.text, "type": "proxy_error"}
+                }
+
             debug_log("responses_api_failed", error=err_json)
             # Fall back to stateless chat/completions if responses API rejects the payload
             return await forward_openai_chat_completion(body)
@@ -1583,14 +1609,14 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
 
     # Extract the assistant message and new response_id for state tracking
     new_response_id = resp.get("id")
-    
+
     # Handle both OpenAI 'choices' and LM Studio 'output' formats
     choices = resp.get("choices", [])
     output = resp.get("output", [])
-    
+
     asst_msg = {}
     finish_reason = None
-    
+
     if choices:
         asst_msg = choices[0].get("message", {})
         finish_reason = choices[0].get("finish_reason")
@@ -1600,9 +1626,11 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
         finish_reason = last_out.get("status")
         # Extract text from the content array if present
         content_items = last_out.get("content", [])
-        text_content = "".join([i.get("text", "") for i in content_items if i.get("type") == "output_text"])
+        text_content = "".join(
+            [i.get("text", "") for i in content_items if i.get("type") == "output_text"]
+        )
         asst_msg = {"role": "assistant", "content": text_content}
-    
+
     if new_response_id and asst_msg:
         hk_save = history_key(tracking_messages + [asst_msg])
         STATE[hk_save] = new_response_id
@@ -1631,15 +1659,15 @@ async def forward_responses_api_completion(body: Dict[str, Any], history_message
 async def forward_openai_chat_completion(body: Dict[str, Any]) -> Any:
 
     timeout = httpx.Timeout(900.0, connect=30.0)
-    
+
     # Flatten structured tool_choice because LM Studio universally rejects objects natively.
-    # We use "auto" instead of "required" to give the model breathing room to output plain text 
+    # We use "auto" instead of "required" to give the model breathing room to output plain text
     # if it needs to, preventing "toxic stops" mid-sentence caused by grammar enforcers.
     if "tool_choice" in body:
         tc = body["tool_choice"]
         if isinstance(tc, dict):
             body["tool_choice"] = "auto"
-            
+
     # Stop stripping moved to chat_completions for global coverage
 
     stream = bool(body.get("stream", False))
@@ -1650,7 +1678,9 @@ async def forward_openai_chat_completion(body: Dict[str, Any]) -> Any:
         "route_openai_chat_completions",
         stream=stream,
         has_tools=isinstance(body.get("tools"), list) and bool(body.get("tools")),
-        message_count=len(body.get("messages", [])) if isinstance(body.get("messages"), list) else None,
+        message_count=len(body.get("messages", []))
+        if isinstance(body.get("messages"), list)
+        else None,
         model=body.get("model"),
     )
 
@@ -1713,66 +1743,86 @@ async def forward_openai_chat_completion(body: Dict[str, Any]) -> Any:
                     try:
                         args = json.loads(fn.get("arguments", "{}"))
                         query = args.get("query", "")
-                        
+
                         debug_log("intercepting_codebase_search", query=query)
-                        
+
                         # 1. Get embedding
                         query_vec = None
                         if _memory_retrieval and query:
                             query_vec = await _memory_retrieval.get_embedding(query)
-                            
+
                         # 2. Run search
                         results_text = "No results found."
                         if query_vec and _memory_store:
                             # We need a project ID. In OpenCode, the first system prompt usually has the workspace path.
                             # We'll try to infer it from the first few messages, or just use a hash of the session ID.
-                            session_id = _derive_session_id(body, body.get("messages", []))
-                            project_id_guess = session_id.split("-")[0] if "-" in session_id else session_id
-                            
+                            session_id = _derive_session_id(
+                                body, body.get("messages", [])
+                            )
+                            project_id_guess = (
+                                session_id.split("-")[0]
+                                if "-" in session_id
+                                else session_id
+                            )
+
                             hits = await _memory_store.search_codebase(
                                 project_id=project_id_guess,
                                 query_vector=query_vec,
                                 query_text=query,
-                                k=5
+                                k=5,
                             )
-                            
+
                             if hits:
-                                parts = ["Here are the results from the codebase search. Please review them carefully to answer the user's request. DO NOT truncate your response. List all relevant findings:\n"]
+                                parts = [
+                                    "Here are the results from the codebase search. Please review them carefully to answer the user's request. DO NOT truncate your response. List all relevant findings:\n"
+                                ]
                                 for hit in hits:
-                                    parts.append(f"```python\n// File: {hit['file_path']}\n{hit['content']}\n```")
-                                results_text = "\n\n".join(parts) + "\n\nSearch complete. Please output your analysis now."
-                                
+                                    parts.append(
+                                        f"```python\n// File: {hit['file_path']}\n{hit['content']}\n```"
+                                    )
+                                results_text = (
+                                    "\n\n".join(parts)
+                                    + "\n\nSearch complete. Please output your analysis now."
+                                )
+
                         # 3. Append the tool call and response to the messages array
                         new_body = dict(body)
                         new_messages = list(new_body.get("messages", []))
-                        
+
                         # Add the assistant's tool call message
-                        new_messages.append({
-                            "role": "assistant",
-                            "content": "I need to search the codebase to answer this.",
-                            "tool_calls": [tc]
-                        })
-                        
+                        new_messages.append(
+                            {
+                                "role": "assistant",
+                                "content": "I need to search the codebase to answer this.",
+                                "tool_calls": [tc],
+                            }
+                        )
+
                         # Add the tool's response message
-                        new_messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc.get("id"),
-                            "name": "codebase_search",
-                            "content": results_text
-                        })
-                        
+                        new_messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.get("id"),
+                                "name": "codebase_search",
+                                "content": results_text,
+                            }
+                        )
+
                         new_body["messages"] = new_messages
-                        
+
                         # Preserve token limits so the model doesn't truncate the post-search explanation
                         if "max_tokens" in body:
                             new_body["max_tokens"] = body["max_tokens"]
                         if "max_output_tokens" in body:
                             new_body["max_output_tokens"] = body["max_output_tokens"]
-                        
+
                         # 4. Recursively call the LLM to get the *actual* answer
-                        debug_log("codebase_search_returning_to_llm", hits=len(hits) if "hits" in locals() and hits else 0)
+                        debug_log(
+                            "codebase_search_returning_to_llm",
+                            hits=len(hits) if "hits" in locals() and hits else 0,
+                        )
                         return await forward_openai_chat_completion(new_body)
-                        
+
                     except Exception as _search_exc:
                         debug_log("codebase_search_failed", error=str(_search_exc))
 
@@ -1797,20 +1847,24 @@ async def forward_openai_chat_completion(body: Dict[str, Any]) -> Any:
                     if history.count(sig) >= 3:
                         debug_log("loop_guard_triggered", tool=fn.get("name"))
 
-                        return JSONResponse({
-                            "id": "chatcmpl_loop_guard",
-                            "object": "chat.completion",
-                            "created": 0,
-                            "model": body.get("model", ""),
-                            "choices": [{
-                                "index": 0,
-                                "message": {
-                                    "role": "assistant",
-                                    "content": "Repeated identical tool calls detected. Try a different approach."
-                                },
-                                "finish_reason": "stop",
-                            }],
-                        })
+                        return JSONResponse(
+                            {
+                                "id": "chatcmpl_loop_guard",
+                                "object": "chat.completion",
+                                "created": 0,
+                                "model": body.get("model", ""),
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "message": {
+                                            "role": "assistant",
+                                            "content": "Repeated identical tool calls detected. Try a different approach.",
+                                        },
+                                        "finish_reason": "stop",
+                                    }
+                                ],
+                            }
+                        )
             if isinstance(tool_calls, list) and tool_calls:
                 bad_calls = []
                 for tc in tool_calls:
@@ -1843,63 +1897,21 @@ async def forward_openai_chat_completion(body: Dict[str, Any]) -> Any:
                         "object": "chat.completion",
                         "created": response_json.get("created", 0),
                         "model": response_json.get("model", body.get("model", "")),
-                        "choices": [{
-                            "index": 0,
-                            "message": {"role": "assistant", "content": recovery_msg},
-                            "finish_reason": "stop",
-                        }],
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {
+                                    "role": "assistant",
+                                    "content": recovery_msg,
+                                },
+                                "finish_reason": "stop",
+                            }
+                        ],
                         "usage": usage,
                     }
                     return JSONResponse(recovery_response)
 
     return JSONResponse(response_json)
-
-
-
-
-def build_local_llm_models(payload: Any) -> List[Dict[str, Any]]:
-    raw_models = payload.get("models", []) if isinstance(payload, dict) else []
-
-    models: List[Dict[str, Any]] = []
-    for item in raw_models:
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") != "llm":
-            continue
-
-        quantization = item.get("quantization")
-        quantization_name = None
-        if isinstance(quantization, dict):
-            name = quantization.get("name")
-            if isinstance(name, str) and name:
-                quantization_name = name
-
-        capabilities = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
-        display_name = item.get("display_name")
-        key = item.get("key")
-
-        if not isinstance(key, str) or not key:
-            continue
-
-        if not isinstance(display_name, str) or not display_name:
-            display_name = key
-
-        models.append(
-            {
-                "id": key,
-                "name": display_name,
-                "publisher": item.get("publisher") if isinstance(item.get("publisher"), str) else None,
-                "params": item.get("params_string") if isinstance(item.get("params_string"), str) else None,
-                "format": item.get("format") if isinstance(item.get("format"), str) else None,
-                "quantization": quantization_name,
-                "context_length": item.get("max_context_length"),
-                "vision": bool(capabilities.get("vision", False)),
-                "tool_use": bool(capabilities.get("trained_for_tool_use", False)),
-                "loaded": bool(item.get("loaded_instances")),
-            }
-        )
-
-    return models
 
 
 @app.get("/v1/models")
@@ -1999,7 +2011,11 @@ async def chat_completions(request: Request) -> Any:
     raw_messages = body["messages"]
     requested_stream = bool(body.get("stream", False))
 
-    debug_log("dumping_raw_messages", first_message=raw_messages[0] if raw_messages else None, last_message=raw_messages[-1] if raw_messages else None)
+    debug_log(
+        "dumping_raw_messages",
+        first_message=raw_messages[0] if raw_messages else None,
+        last_message=raw_messages[-1] if raw_messages else None,
+    )
 
     available_model_keys: List[str] = []
     if ENABLE_MODEL_VALIDATION or MODEL_ALIASES_ENV or FALLBACK_MODEL:
@@ -2102,7 +2118,9 @@ async def chat_completions(request: Request) -> Any:
         if not body.get("stream") and "stream_options" in body:
             body.pop("stream_options", None)
 
-        return await forward_responses_api_completion(body, history_messages=raw_messages)
+        return await forward_responses_api_completion(
+            body, history_messages=raw_messages
+        )
 
     # Use the refactored stateful Response API route for all conversation turns
     return await forward_responses_api_completion(body, history_messages=raw_messages)
