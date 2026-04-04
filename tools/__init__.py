@@ -15,7 +15,9 @@ def register_all(mcp: FastMCP) -> None:
         dev,
         documentation,
         indexing,
-        project,
+        docs_tools,
+        graph_tools,
+        search_tools,
     )
 
     memory.register(mcp)
@@ -24,4 +26,6 @@ def register_all(mcp: FastMCP) -> None:
     dev.register(mcp)
     documentation.register(mcp)
     indexing.register(mcp)
-    project.register(mcp)
+    docs_tools.register(mcp)
+    graph_tools.register(mcp)
+    search_tools.register(mcp)
