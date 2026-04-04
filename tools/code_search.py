@@ -38,6 +38,7 @@ def register(mcp: FastMCP) -> None:
         include_metadata: bool = False,
         dedupe_files: bool = True,
         include_debug: bool = False,
+        max_per_file: int = 0,
         max_per_dir: int = 2,
         meta_boost: float = 0.005,
         mode: str = "precise",
@@ -68,6 +69,7 @@ def register(mcp: FastMCP) -> None:
             include_metadata: Show metadata lines in results (default False).
             dedupe_files: Collapse results to one chunk per file (default True).
             include_debug: Include clone-dedup debug entry in output (default False).
+            max_per_file: Max results per file when dedupe is off (default 0 = disable).
             max_per_dir: Max results per top-level directory (default 2, 0=disable).
             meta_boost: Additive boost per metadata field present (default 0.005).
             mode: "precise" (default) or "broad" to expand coverage when query is exploratory.
@@ -287,6 +289,8 @@ def register(mcp: FastMCP) -> None:
                     meta_boost = 0.0
                 if fallback == "none":
                     fallback = "grep"
+                if max_per_file == 0:
+                    max_per_file = 2
 
             filters_active = any(
                 [
@@ -538,6 +542,20 @@ def register(mcp: FastMCP) -> None:
                     seen_files.add(fp)
                     deduped_files.append(r)
                 all_results = deduped_files
+
+            if max_per_file and max_per_file > 0:
+                per_file_counts: dict[str, int] = {}
+                capped: list[dict] = []
+                for r in all_results:
+                    fp = r.get("file_path") or ""
+                    if not fp:
+                        continue
+                    count = per_file_counts.get(fp, 0)
+                    if count >= max_per_file:
+                        continue
+                    per_file_counts[fp] = count + 1
+                    capped.append(r)
+                all_results = capped
 
             if max_per_dir and max_per_dir > 0:
                 dir_counts: dict[str, int] = {}

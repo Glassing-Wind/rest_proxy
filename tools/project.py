@@ -364,7 +364,7 @@ def register(mcp: FastMCP) -> None:
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_project_overview(project_path)` → health, architecture clusters, key files
 4. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
-5. `search_codebase([project_path], query, include_metadata=False, dedupe_files=True, include_debug=False, max_per_dir=2, meta_boost=0.005, mode="precise", fallback="none", fallback_ratio=0.4, fallback_max=12, fallback_glob="", languages?, min_imports=0, min_symbols=0, require_diagnostics=False, require_context=False, include_paths?, exclude_paths?)` → semantic search + metadata filters
+5. `search_codebase([project_path], query, include_metadata=False, dedupe_files=True, include_debug=False, max_per_file=0, max_per_dir=2, meta_boost=0.005, mode="precise", fallback="none", fallback_ratio=0.4, fallback_max=12, fallback_glob="", languages?, min_imports=0, min_symbols=0, require_diagnostics=False, require_context=False, include_paths?, exclude_paths?)` → semantic search + metadata filters
 6. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
 ### Call Graph Traversal:
