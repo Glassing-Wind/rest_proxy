@@ -1,10 +1,9 @@
 """tools/search/duplication.py — code duplication detection."""
 
-import hashlib
 import os
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id
 from tools.search import core as search_core
 
 
@@ -93,6 +92,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import fnmatch
+            import hashlib
             import itertools
             import re
 
@@ -104,7 +104,7 @@ def register(mcp: FastMCP) -> None:
             if not memory_store._pg_pool_available():
                 return "Error: Postgres pool not available for semantic search."
 
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             min_chars = max(0, int(min_tokens) * 4)
             winnow_min_chars = max(0, int(winnow_min_tokens) * 4)
             per_chunk = max(1, int(per_chunk))

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 import re
 import time
 from typing import Awaitable, Callable
 
 import graph_bootstrap
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id
+from .core import _SYMBOL_FILTER_CYPHER
 
 
 ExecuteRead = Callable[..., Awaitable[list[dict[str, object]]]]
@@ -35,7 +35,7 @@ async def build_symbol_graph(
         debug_log("symbol_graph_start", project_path=project_path)
         start = time.perf_counter()
 
-        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+        project_id = get_project_id(project_path)
         driver = await graph_bootstrap.require_driver()
 
         memory_store, _, _, _, _ = get_memory_modules()
@@ -49,10 +49,10 @@ async def build_symbol_graph(
             r = await execute_read(
                 session,
                 """
-                MATCH (f:File {project_id:$p})-[:CONTAINS]->(s)
-                WHERE s:Function OR s:Class OR s:Struct OR s:Enum OR s:Trait OR s:Method OR s:Protocol
+                MATCH (f:File {{project_id:$p}})-[:CONTAINS]->(s)
+                WHERE {filters}
                 RETURN f.filepath AS fp, s.name AS name, s.id AS sid
-                """,
+                """.format(filters=_SYMBOL_FILTER_CYPHER),
                 p=project_id,
                 op="build_symbol_graph_symbols",
             )

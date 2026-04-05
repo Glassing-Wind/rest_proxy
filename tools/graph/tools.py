@@ -2,16 +2,124 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id
 from tools.graph import core as graph_core
 from tools.graph import runtime as graph_runtime
+from .core import _SYMBOL_FILTER_CYPHER
 
 
 def register(mcp: FastMCP) -> None:
+
+    @mcp.tool()
+    async def get_directory_snapshot(
+        project_path: str, directory_path: str, limit: int = 5
+    ) -> str:
+        """
+        Provides an architectural onboarding guide for a specific directory.
+        Summarizes importance, exports, and inbound/outbound coupling.
+
+        Args:
+            project_path: Absolute path to project root.
+            directory_path: Relative path to director (e.g. 'src/api').
+            limit: Max results per section (default 5).
+        """
+        try:
+            import graph_bootstrap
+
+            project_id = get_project_id(project_path)
+            # Ensure directory path ends with / for prefix matching (unless empty for root)
+            dir_prefix = directory_path.strip("/")
+            if dir_prefix:
+                dir_prefix += "/"
+
+            driver = await graph_bootstrap.require_driver()
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                # 1. Folder Metrics & Top Files
+                r_files = await graph_core._execute_read(
+                    session,
+                    """
+                    MATCH (f:File {{project_id: $p}})
+                    WHERE f.filepath STARTS WITH $dir
+                    OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+                    WHERE {filters}
+                    WITH f.filepath AS fp, count(s) AS sym_count, collect(s.name)[..3] AS samples
+                    ORDER BY sym_count DESC
+                    RETURN fp, sym_count, samples
+                    LIMIT $limit
+                """.format(filters=_SYMBOL_FILTER_CYPHER),
+                    p=project_id,
+                    dir=dir_prefix,
+                    limit=limit,
+                    op="get_directory_snapshot_files",
+                )
+
+                # 2. Inbound Context (Consumers)
+                r_inbound = await graph_core._execute_read(
+                    session,
+                    """
+                    MATCH (ext:File {project_id: $p})-[:IMPORTS]->(inner:File {project_id: $p})
+                    WHERE inner.filepath STARTS WITH $dir
+                      AND NOT ext.filepath STARTS WITH $dir
+                    RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
+                    ORDER BY n_imports DESC
+                    LIMIT $limit
+                """,
+                    p=project_id,
+                    dir=dir_prefix,
+                    limit=limit,
+                    op="get_directory_snapshot_inbound",
+                )
+
+                # 3. Outbound Context (Dependencies)
+                r_outbound = await graph_core._execute_read(
+                    session,
+                    """
+                    MATCH (inner:File {project_id: $p})-[:IMPORTS]->(ext:File {project_id: $p})
+                    WHERE inner.filepath STARTS WITH $dir
+                      AND NOT ext.filepath STARTS WITH $dir
+                    RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
+                    ORDER BY n_usages DESC
+                    LIMIT $limit
+                """,
+                    p=project_id,
+                    dir=dir_prefix,
+                    limit=limit,
+                    op="get_directory_snapshot_outbound",
+                )
+
+            # Format Report
+            lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
+            if not r_files:
+                return f"No indexed files found in `{directory_path}`."
+
+            lines.append(f"\n### 🏆 Top Files (by symbol density)")
+            for rec in r_files:
+                samples = ", ".join(rec["samples"])
+                lines.append(
+                    f"- **{rec['fp']}** ({rec['sym_count']} symbols: {samples})"
+                )
+
+            if r_inbound:
+                lines.append(f"\n### 📥 Consumers (External files importing from here)")
+                for rec in r_inbound:
+                    lines.append(f"- `{rec['caller']}` (imports {rec['n_imports']} files)")
+            else:
+                lines.append("\n### 📥 Consumers: None found.")
+
+            if r_outbound:
+                lines.append(f"\n### 📤 Dependencies (External files imported by here)")
+                for rec in r_outbound:
+                    lines.append(f"- `{rec['dependency']}` (used by {rec['n_usages']} files)")
+            else:
+                lines.append("\n### 📤 Dependencies: None found.")
+
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error building directory snapshot: {str(e)}"
+
 
     @mcp.tool()
     async def get_project_overview(project_path: str) -> str:
@@ -24,7 +132,7 @@ def register(mcp: FastMCP) -> None:
             project_path: Absolute path to the project root.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -41,8 +149,7 @@ def register(mcp: FastMCP) -> None:
 
                 r2 = await graph_core._execute_read(
                     session,
-                    "MATCH (s {project_id:$p}) WHERE s:Function OR s:Class OR s:Struct "
-                    "OR s:Trait OR s:Enum RETURN count(s) AS syms",
+                    f"MATCH (s {{project_id:$p}}) WHERE {_SYMBOL_FILTER_CYPHER} RETURN count(s) AS syms",
                     p=project_id,
                     op="get_project_overview_symbol_count",
                 )
@@ -52,15 +159,15 @@ def register(mcp: FastMCP) -> None:
                 r3 = await graph_core._execute_read(
                     session,
                     """
-                    MATCH (f:File {project_id: $p})
+                    MATCH (f:File {{project_id: $p}})
                     WITH f, CASE WHEN f.filepath CONTAINS '/'
                          THEN split(f.filepath, '/')[0] ELSE '(root)' END AS top_dir
                     OPTIONAL MATCH (f)-[:CONTAINS]->(s)
-                    WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
+                    WHERE {filters}
                     WITH top_dir, count(DISTINCT s) AS syms, count(DISTINCT f) AS files
                     ORDER BY syms DESC LIMIT 6
                     RETURN top_dir, files, syms
-                """,
+                """.format(filters=_SYMBOL_FILTER_CYPHER),
                     p=project_id,
                     op="get_project_overview_dirs",
                 )
@@ -73,14 +180,14 @@ def register(mcp: FastMCP) -> None:
                 r4 = await graph_core._execute_read(
                     session,
                     """
-                    MATCH (f:File {project_id: $p})-[:CONTAINS]->(s)
-                    WHERE (s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum)
+                    MATCH (f:File {{project_id: $p}})-[:CONTAINS]->(s)
+                    WHERE ({filters})
                       AND NOT f.filepath CONTAINS 'test'
                       AND NOT f.filepath CONTAINS 'spec'
                     WITH f.filepath AS fp, count(s) AS n, collect(DISTINCT s.name)[..3] AS ex
                     ORDER BY n DESC LIMIT 5
                     RETURN fp, n, ex
-                """,
+                """.format(filters=_SYMBOL_FILTER_CYPHER),
                     p=project_id,
                     op="get_project_overview_key_files",
                 )
@@ -254,6 +361,16 @@ def register(mcp: FastMCP) -> None:
         )
 
     @mcp.tool()
+    async def rebuild_asset_graph(project_path: str) -> str:
+        """
+        Rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB).
+        Used for App Flow visualization.
+        """
+        return await graph_core._run_graph_build_with_retry(
+            graph_core._build_asset_graph_impl, "assets", project_path
+        )
+
+    @mcp.tool()
     async def get_app_flow_summary(
         project_path: str,
         ui_contains: str | None = None,
@@ -269,7 +386,7 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             query_limit = limit
             if model_contains:
                 query_limit = max(limit * 10, 200)
@@ -396,7 +513,7 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             query_limit = limit
             if model_contains:
                 query_limit = max(limit * 10, 200)
@@ -544,6 +661,103 @@ def register(mcp: FastMCP) -> None:
                 limit=limit,
                 as_table=as_table,
             )
-            return cli_result
+            if mode_norm == "cli" or not cli_result.startswith("No CLI"):
+                return cli_result
 
-        return backend_result
+        # Step 2: Heuristic Fallback
+        heuristic_result = await get_heuristic_flow_summary(
+            project_path, limit=limit, as_table=as_table
+        )
+        if not heuristic_result.startswith("No heuristic"):
+            return f"### Heuristic Flow Summary\n{heuristic_result}"
+
+        # Step 3: Topology Summary (Last Resort)
+        return await get_topology_summary(project_path, limit=limit)
+
+    async def get_heuristic_flow_summary(
+        project_path: str, limit: int = 20, as_table: bool = False
+    ) -> str:
+        """Heuristic flow based on directory patterns and IMPORTS edges."""
+        try:
+            import graph_bootstrap
+
+            project_id = get_project_id(project_path)
+            driver = await graph_bootstrap.require_driver()
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                # Optimized heuristic query: look for UI -> API -> Service -> Model chains
+                result = await graph_core._execute_read(
+                    session,
+                    """
+                    MATCH (f1:File {project_id: $p})
+                    WHERE (f1.filepath CONTAINS 'ui' OR f1.filepath CONTAINS 'view' OR f1.filepath CONTAINS 'component' OR f1.filepath CONTAINS 'pages')
+                      AND NOT (f1.filepath CONTAINS 'test' OR f1.filepath CONTAINS 'spec')
+                    MATCH (f1)-[:IMPORTS]->(f2:File {project_id: $p})
+                    WHERE (f2.filepath CONTAINS 'api' OR f2.filepath CONTAINS 'client' OR f2.filepath CONTAINS 'controller' OR f2.filepath CONTAINS 'routes')
+                    OPTIONAL MATCH (f2)-[:IMPORTS]->(f3:File {project_id: $p})
+                    WHERE (f3.filepath CONTAINS 'service' OR f3.filepath CONTAINS 'domain' OR f3.filepath CONTAINS 'provider' OR f3.filepath CONTAINS 'usecase')
+                    OPTIONAL MATCH (f3)-[:IMPORTS]->(f4:File {project_id: $p})
+                    WHERE (f4.filepath CONTAINS 'model' OR f4.filepath CONTAINS 'db' OR f4.filepath CONTAINS 'entity' OR f4.filepath CONTAINS 'schema')
+                    RETURN f1.filepath AS ui, f2.filepath AS api, f3.filepath AS svc, f4.filepath AS model
+                    ORDER BY ui, api
+                    LIMIT $limit
+                    """,
+                    p=project_id,
+                    limit=limit * 2,
+                    op="get_heuristic_flow_summary",
+                )
+                if not result:
+                    return "No heuristic paths found."
+
+                rows = []
+                for row in result:
+                    path = [v for v in [row.get("ui"), row.get("api"), row.get("svc"), row.get("model")] if v]
+                    if len(path) >= 2:
+                        rows.append(path)
+
+                if not rows:
+                    return "No heuristic paths found."
+
+                if as_table:
+                    out = ["| Origin | Endpoint | Secondary | Data |", "| --- | --- | --- | --- |"]
+                    for row in rows[:limit]:
+                        padded = row + [""] * (4 - len(row))
+                        out.append(f"| {' | '.join(padded)} |")
+                    return "\n".join(out)
+                else:
+                    return "\n".join([" -> ".join(r) for r in rows[:limit]])
+        except Exception as e:
+            return f"Error in heuristic flow: {str(e)}"
+
+    async def get_topology_summary(project_path: str, limit: int = 10) -> str:
+        """High-level summary of the most connected files/directories."""
+        try:
+            import graph_bootstrap
+
+            project_id = get_project_id(project_path)
+            driver = await graph_bootstrap.require_driver()
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                result = await graph_core._execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id: $p})
+                    OPTIONAL MATCH (f)-[:IMPORTS]->(out:File {project_id: $p})
+                    OPTIONAL MATCH (in:File {project_id: $p})-[:IMPORTS]->(f)
+                    WITH f, count(DISTINCT out) AS outbound, count(DISTINCT in) AS inbound
+                    WHERE inbound + outbound > 0
+                    RETURN f.filepath AS fp, inbound, outbound
+                    ORDER BY inbound + outbound DESC
+                    LIMIT $limit
+                    """,
+                    p=project_id,
+                    limit=limit,
+                    op="get_topology_summary",
+                )
+                if not result:
+                    return "No architectural topology found (index might be empty)."
+
+                out = ["### Architectural Topology (Most Connected Files)\n"]
+                for rec in result:
+                    out.append(f"- `{rec['fp']}`: {rec['inbound']} incoming, {rec['outbound']} outgoing imports")
+                return "\n".join(out)
+        except Exception as e:
+            return f"Error in topology summary: {str(e)}"

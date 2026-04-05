@@ -22,7 +22,10 @@ def load_state() -> None:
 
 
 def save_state() -> None:
-    tmp = STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(STATE, indent=2, sort_keys=True))
-    tmp.replace(STATE_FILE)
-    debug_log("state_saved", entries=len(STATE), state_file=str(STATE_FILE))
+    try:
+        tmp = STATE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(STATE, indent=2, sort_keys=True))
+        tmp.replace(STATE_FILE)
+        debug_log("state_saved", entries=len(STATE), state_file=str(STATE_FILE))
+    except (OSError, PermissionError):
+        debug_log("state_save_failed", state_file=str(STATE_FILE))

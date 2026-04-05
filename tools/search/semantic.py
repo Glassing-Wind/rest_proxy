@@ -1,11 +1,10 @@
 """tools/search/semantic.py — semantic + keyword search tool."""
 
-import hashlib
 import os
 import json
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id
 from tools.search import core as search_core
 
 
@@ -95,8 +94,10 @@ def register(mcp: FastMCP) -> None:
 
             pid_to_name: dict[str, str] = {}
             pid_to_path: dict[str, str] = {}
+            pids = []
             for p in project_paths:
-                pid = hashlib.md5(p.encode()).hexdigest()[:12]
+                pid = get_project_id(p)
+                pids.append(pid)
                 pid_to_name[pid] = p.rstrip("/").split("/")[-1]
                 pid_to_path[pid] = p
 
@@ -468,6 +469,7 @@ def register(mcp: FastMCP) -> None:
                                     if not fp or not gids:
                                         continue
                                     gids.sort()
+                                    import hashlib
                                     gid = hashlib.md5(
                                         "|".join(gids).encode()
                                     ).hexdigest()[:12]

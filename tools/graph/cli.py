@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 from pathlib import PurePosixPath
 from typing import Awaitable, Callable
 import re
 
 import graph_bootstrap
+from _helpers import get_project_id
 
 
 ExecuteRead = Callable[..., Awaitable[list[dict[str, object]]]]
@@ -23,7 +23,7 @@ async def get_cli_flow_summary(
 ) -> str:
     """Build a CLI/entrypoint-oriented flow summary for non-web repos."""
     try:
-        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+        project_id = get_project_id(project_path)
         driver = await graph_bootstrap.require_driver()
 
         def _path_filters() -> list[str]:
@@ -57,6 +57,8 @@ async def get_cli_flow_summary(
                         OR f.filepath ENDS WITH 'App.swift'
                         OR f.filepath ENDS WITH 'AppDelegate.swift'
                         OR f.filepath ENDS WITH 'SceneDelegate.swift'
+                        OR f.filepath ENDS WITH 'mcp_server.py'
+                        OR f.filepath ENDS WITH 'proxy.py'
                         OR f.filepath CONTAINS 'CLI')
                     RETURN f.filepath AS fp
                     """,

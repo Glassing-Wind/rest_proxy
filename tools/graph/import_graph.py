@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 import re
 import time
@@ -11,6 +10,7 @@ from pathlib import PurePosixPath
 from typing import Awaitable, Callable
 
 import graph_bootstrap
+from _helpers import get_project_id
 
 
 ExecuteRead = Callable[..., Awaitable[list[dict[str, object]]]]
@@ -34,16 +34,15 @@ async def build_import_graph(
         debug_log("import_graph_start", project_path=project_path)
         start = time.perf_counter()
 
-        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+        project_id = get_project_id(project_path)
         driver = await graph_bootstrap.require_driver()
 
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
             r = await execute_read(
                 session,
-                session,
                 "MATCH (f:File {project_id:$p}) RETURN f.filepath AS fp, f.id AS fid",
+                operation="build_import_graph_files",
                 p=project_id,
-                op="build_import_graph_files",
             )
             files: dict[str, str] = {}
             for rec in r:
@@ -56,11 +55,10 @@ async def build_import_graph(
 
             r2 = await execute_read(
                 session,
-                session,
                 "MATCH (f:File {project_id:$p})-[:CONTAINS]->(imp:Import) "
                 "RETURN f.id AS src_fid, f.filepath AS src_fp, imp.source AS src_text",
+                operation="build_import_graph_imports",
                 p=project_id,
-                op="build_import_graph_imports",
             )
             imports = []
             for rec in r2:
@@ -80,44 +78,93 @@ async def build_import_graph(
             ext = PurePosixPath(src_fp).suffix.lstrip(".")
             src_dir = str(PurePosixPath(src_fp).parent)
             if ext in ("py", ""):
-                m = re.match(r"from\s+([\w.]+)\s+import", src_text) or re.match(
-                    r"import\s+([\w.]+)", src_text
-                )
-                if m:
-                    mod = m.group(1).split(".")[0]
-                    for fp in [
-                        f"{src_dir}/{mod}.py",
-                        f"{mod}.py",
-                        f"{src_dir}/{mod}/__init__.py",
-                        f"{mod}/__init__.py",
-                    ]:
-                        fp = fp.lstrip("./")
-                        if fp in files:
-                            return fp
-                    if mod in stems and len(stems[mod]) == 1:
-                        return stems[mod][0]
+                # Handle 'from . import x', 'from .. import y', 'from a.b import z', 'import a.b'
+                # Use imp.source directly since it holds the module path.
+                mod_path = src_text
+                dots = 0
+                while mod_path.startswith("."):
+                    dots += 1
+                    mod_path = mod_path[1:]
+
+                # Path segments to check
+                path_str = mod_path.replace(".", "/")
+                search_paths = []
+
+                if dots > 0:
+                    # Relative resolution: dots=1 means same dir, dots=2 means parent dir
+                    parts = src_dir.strip("/").split("/") if src_dir.strip("/") else []
+                    
+                    remove = dots - 1
+                    if remove <= len(parts):
+                        base_parts = parts[:len(parts) - remove]
+                        rel_base = "/".join(base_parts)
+                        
+                        if path_str:
+                             full_mod_rel = f"{rel_base}/{path_str}".strip("/")
+                             search_paths.extend([
+                                f"{full_mod_rel}.py",
+                                f"{full_mod_rel}/__init__.py"
+                            ])
+                        elif rel_base:
+                             search_paths.extend([
+                                f"{rel_base}/__init__.py"
+                            ])
+                else:
+                    # Absolute or local relative (no leading dots)
+                    # 1. Try relative to src_dir (local package import)
+                    if src_dir:
+                        rel_path = f"{src_dir}/{path_str}".strip("/")
+                        search_paths.extend([
+                            f"{rel_path}.py",
+                            f"{rel_path}/__init__.py"
+                        ])
+                    
+                    # 2. Try as absolute/top-level
+                    search_paths.extend([
+                        f"{path_str}.py",
+                        f"{path_str}/__init__.py"
+                    ])
+
+                for fp in search_paths:
+                    fp = fp.lstrip("/")
+                    if fp in files:
+                        return fp
+                
+                # Fallback to stems for unique matches
+                mod_segments = mod_path.split(".") if mod_path else []
+                mod_tail = mod_segments[-1] if mod_segments else ""
+                
+                if mod_tail in stems and len(stems[mod_tail]) == 1:
+                    return stems[mod_tail][0]
+                
+                # Try the whole mod_path as a stem if dots in it
+                if mod_path in stems and len(stems[mod_path]) == 1:
+                    return stems[mod_path][0]
+
             elif ext in ("js", "ts", "jsx", "tsx", "mjs", "cjs"):
-                m = re.search(r"from\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text)
+                m = re.search(r"from\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text) or \
+                    re.search(r"import\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text)
                 if m:
                     imp = m.group(1)
+                    import posixpath
                     if imp.startswith("."):
-                        import posixpath
-
-                        base = posixpath.normpath(posixpath.join(src_dir, imp)).lstrip(
-                            "/"
-                        )
-                        for suf in (
-                            "",
-                            ".js",
-                            ".ts",
-                            ".jsx",
-                            ".tsx",
-                            "/index.js",
-                            "/index.ts",
-                        ):
-                            candidate = (base + suf).lstrip("/")
-                            if candidate in files:
-                                return candidate
+                        base = posixpath.normpath(posixpath.join(src_dir, imp)).lstrip("/")
+                    else:
+                        base = imp # Absolute or baseUrl
+                    
+                    for suf in (
+                        "",
+                        ".js",
+                        ".ts",
+                        ".jsx",
+                        ".tsx",
+                        "/index.js",
+                        "/index.ts",
+                        "/index.tsx"
+                    ):
+                        candidate = (base + suf).lstrip("/")
+                        if candidate in files:
+                            return candidate
             elif ext == "rs":
                 m = re.match(r"(?:use|mod)\s+(?:crate::)?([\w:]+)", src_text)
                 if m:
@@ -230,6 +277,7 @@ async def build_import_graph(
             await execute_write(
                 session,
                 "MATCH (a:File {project_id:$p})-[r:IMPORTS]->() DELETE r",
+                operation="build_import_graph_cleanup",
                 p=project_id,
                 timeout=write_timeout_s,
             )
@@ -245,6 +293,7 @@ async def build_import_graph(
                         MATCH (b:File {id: edge.tgt})
                         MERGE (a)-[:IMPORTS]->(b)
                     """,
+                        operation="build_import_graph_batch",
                         batch=batch,
                         timeout=write_timeout_s,
                     )

@@ -20,9 +20,10 @@ def register(mcp: FastMCP) -> None:
 1. `index_workspace(project_path)` → returns immediately with a `job_id`
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_project_overview(project_path)` → health, architecture clusters, key files
-4. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
-5. `search_codebase([project_path], query, include_metadata=False, dedupe_files=True, include_debug=False, max_per_file=0, max_per_dir=2, meta_boost=0.005, mode="precise", fallback="none", fallback_ratio=0.4, fallback_max=12, fallback_glob="", exclude_tests=true, languages?, min_imports=0, min_symbols=0, require_diagnostics=False, require_context=False, include_paths?, exclude_paths?)` → semantic search + metadata filters
-6. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
+4. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, and coupling for a folder
+5. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
+6. `search_codebase([project_path], query, ...)` → semantic search + metadata filters
+7. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
 ### Call Graph Traversal:
 - `get_call_chain(project_path, symbol_name, depth=3, direction='down', file_path=None, signature=None)` → trace CALLS N hops
@@ -31,6 +32,7 @@ def register(mcp: FastMCP) -> None:
 ### File & Symbol Inspection (no indexing required):
 - `describe_file("", "/abs/path/file.swift")` → fast outline
 - `describe_file(project_path, "rel/path")` → symbols + semantic preview
+- `get_directory_snapshot(project_path, directory_path, limit=5)` → architectural onboarding for a specific folder
 - `list_symbol_matches(project_path, query, limit=30)` → name/signature substring matches (supports EnumCase)
 - `extract_function_body(file_path, symbol_name)` → exact source by AST
 - `extract_class_interface(file_path, class_name)` → public method signatures
@@ -72,6 +74,7 @@ Doc indexing tips:
 - `get_symbol_imports_overview(project_path, limit=20, include_implicit=true)` → summarize explicit + implicit symbol import edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
 - `rebuild_symbol_graph(project_path)` → rebuild symbol-level IMPORTS/EXPORTS graph
+- `rebuild_asset_graph(project_path)` → rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB)
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
 - `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)

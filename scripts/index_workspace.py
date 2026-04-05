@@ -523,12 +523,15 @@ def _read_and_chunk(
         ext not in _FALLBACK_EXTS
         and os.path.basename(abs_path) not in _FALLBACK_FILENAMES
     ):
-        try:
-            lang = ts_pack.detect_language_from_extension(ext)
-        except Exception:
-            lang = None
-        if not lang:
-            lang = ts_pack.detect_language(abs_path)
+        if ext == "svg":
+            lang = "xml"
+        else:
+            try:
+                lang = ts_pack.detect_language_from_extension(ext)
+            except Exception:
+                lang = None
+            if not lang:
+                lang = ts_pack.detect_language(abs_path)
 
     parser_missing = False
     if lang and not _ensure_language_available(lang):

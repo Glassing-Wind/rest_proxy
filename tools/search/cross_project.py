@@ -1,9 +1,8 @@
 """tools/search/cross_project.py — cross-project symbol tracing."""
 
-import hashlib
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id
 from tools.search import core as search_core
 
 
@@ -36,8 +35,8 @@ def register(mcp: FastMCP) -> None:
 
             memory_store, _, _, _, _ = get_memory_modules()
 
-            src_id = hashlib.md5(source_project.encode()).hexdigest()[:12]
-            tgt_id = hashlib.md5(target_project.encode()).hexdigest()[:12]
+            src_id = get_project_id(source_project)
+            tgt_id = get_project_id(target_project)
             src_name = source_project.rstrip("/").split("/")[-1]
             tgt_name = target_project.rstrip("/").split("/")[-1]
 

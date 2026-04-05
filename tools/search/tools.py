@@ -1,9 +1,9 @@
 """tools/search/tools.py — graph-backed search summaries."""
 
-import hashlib
 from mcp.server.fastmcp import FastMCP
 
 from tools.graph import core as graph_tools
+from _helpers import get_project_id
 
 
 def register(mcp: FastMCP) -> None:
@@ -18,7 +18,7 @@ def register(mcp: FastMCP) -> None:
             limit: Max rows to return per section (default 20).
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -91,7 +91,7 @@ def register(mcp: FastMCP) -> None:
             include_implicit: Include IMPLICIT_IMPORTS_SYMBOL edges when true.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -238,7 +238,7 @@ def register(mcp: FastMCP) -> None:
             symbol_prefix: Optional prefix to filter exported symbols.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
             import fnmatch
 

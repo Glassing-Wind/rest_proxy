@@ -89,7 +89,31 @@ def get_env(name: str, default=None):
 
 LM_BASE = os.getenv("LM_BASE", "http://127.0.0.1:1234").rstrip("/")
 OPENAI_BASE = f"{LM_BASE}/v1"
-STATE_FILE = Path(os.getenv("LM_PROXY_STATE", "./.runtime/lm_proxy_state.json"))
+def _get_writable_path(env_var: str, default_rel: str) -> Path:
+    env_val = os.getenv(env_var)
+    if env_val:
+        return Path(env_val)
+    
+    # Try current directory .runtime
+    local_runtime = Path("./.runtime")
+    try:
+        local_runtime.mkdir(parents=True, exist_ok=True)
+        # Test writability
+        test_file = local_runtime / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        return local_runtime / default_rel
+    except (OSError, PermissionError):
+        # Fallback to /tmp
+        tmp_runtime = Path("/tmp/lm-proxy/.runtime")
+        try:
+            tmp_runtime.mkdir(parents=True, exist_ok=True)
+            return tmp_runtime / default_rel
+        except Exception:
+            # Absolute fallback: just the filename in /tmp
+            return Path("/tmp") / default_rel
+
+STATE_FILE = _get_writable_path("LM_PROXY_STATE", "lm_proxy_state.json")
 ENABLE_PROXY_FILTERING = os.getenv(
     "LM_PROXY_ENABLE_FILTERING", "true"
 ).strip().lower() not in {
@@ -104,9 +128,7 @@ ENABLE_DEBUG_LOGGING = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
     "yes",
     "on",
 }
-DEBUG_LOG_PATH = Path(
-    os.getenv("LM_PROXY_DEBUG_LOG", "./.runtime/proxy_debug.log")
-)
+DEBUG_LOG_PATH = _get_writable_path("LM_PROXY_DEBUG_LOG", "proxy_debug.log")
 MODEL_ALIASES_ENV = os.getenv("LM_PROXY_MODEL_ALIASES", "").strip()
 FALLBACK_MODEL = os.getenv("LM_PROXY_FALLBACK_MODEL", "").strip()
 ENABLE_MODEL_VALIDATION = os.getenv(

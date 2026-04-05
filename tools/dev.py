@@ -5,7 +5,7 @@ import sys
 from typing import List
 from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id, normalize_neo4j_path
 
 
 def register(mcp: FastMCP) -> None:
@@ -151,7 +151,7 @@ def register(mcp: FastMCP) -> None:
         try:
             import hashlib, subprocess
 
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             basename = os.path.splitext(os.path.basename(file_path))[0]
             results: dict[str, str] = {}
 
@@ -199,7 +199,7 @@ def register(mcp: FastMCP) -> None:
                         LIMIT 50
                         """,
                         pid=project_id,
-                        fp=file_path,
+                        fp=normalize_neo4j_path(file_path),
                         op="get_test_coverage_for",
                     )
                     for rec in res:
@@ -504,19 +504,19 @@ def register(mcp: FastMCP) -> None:
             node = _find(result.get("structure") or [], symbol_name)
             if not node:
                 try:
-                    import hashlib
                     import graph_bootstrap
 
-                    project_path = None
+                    project_root = None
                     cur = os.path.abspath(os.path.dirname(file_path))
                     while cur and cur != os.path.dirname(cur):
                         if os.path.isdir(os.path.join(cur, ".git")):
-                            project_path = cur
+                            project_root = cur
                             break
                         cur = os.path.dirname(cur)
-                    if project_path:
-                        rel_path = os.path.relpath(file_path, project_path)
-                        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+
+                    if project_root:
+                        rel_path = os.path.relpath(file_path, project_root)
+                        project_id = get_project_id(project_root)
                         driver = await graph_bootstrap.require_driver()
                         async with driver.session(
                             database=graph_bootstrap._NEO4J_DB
@@ -529,7 +529,7 @@ def register(mcp: FastMCP) -> None:
                                 LIMIT 1
                                 """,
                                 pid=project_id,
-                                fp=rel_path.replace(os.sep, "/"),
+                                fp=normalize_neo4j_path(rel_path),
                                 name=symbol_name,
                                 op="extract_function_body_fallback",
                             )
@@ -610,7 +610,10 @@ def register(mcp: FastMCP) -> None:
             el = (cls_span.get("end_line") or 0) + 1
             out = [f"## `{class_name}` ({kind})  L{sl}–{el}\n"]
 
-            for child in cls_node.get("children") or []:
+            MAX_MEMBERS = 100
+            children = cls_node.get("children") or []
+            
+            for child in children[:MAX_MEMBERS]:
                 child_kind = child.get("kind") or ""
                 if child_kind in (
                     "Method",
@@ -621,14 +624,18 @@ def register(mcp: FastMCP) -> None:
                     "Enum",
                     "Struct",
                     "Class",
+                    "EnumCase",
                 ):
                     name = child.get("name") or "?"
                     cspan = child.get("span") or {}
                     csl = (cspan.get("start_line") or 0) + 1
                     out.append(f"  {name}  (L{csl})")
 
-            if len(out) == 1:
+            if len(children) > MAX_MEMBERS:
+                out.append(f"  ... (and {len(children) - MAX_MEMBERS} more members truncated)")
+            elif not children:
                 out.append("  (no public members found)")
+
             return "\n".join(out)
         except Exception as e:
             return f"Error extracting interface: {str(e)}"

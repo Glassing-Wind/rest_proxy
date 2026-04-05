@@ -4,7 +4,7 @@ import os
 import threading
 import asyncio
 from mcp.server.fastmcp import FastMCP
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id
 from graphrag_core import neo4j as neo4j_utils
 
 
@@ -21,6 +21,11 @@ _NEO4J_GRAPH_BUILD_BATCH = max(50, int(os.getenv("LM_PROXY_GRAPH_BUILD_BATCH", "
 
 _WRITE_SEM = asyncio.Semaphore(_GRAPH_WRITE_CONCURRENCY)
 _GRAPH_RUNTIME_CONFIGURED = False
+
+# Standard symbol labels for architectural queries
+_SYMBOL_LABELS = ["Function", "Class", "Struct", "Trait", "Enum", "Method", "Protocol"]
+_SYMBOL_FILTER_CYPHER = " OR ".join([f"s:{l}" for l in _SYMBOL_LABELS])
+
 
 
 def _debug_log(message: str, **fields: object) -> None:
@@ -45,11 +50,13 @@ def _is_deadlock_error(exc: Exception) -> bool:
     return "DeadlockDetected" in msg or "deadlock" in msg.lower()
 
 
-async def _execute_write(session, cypher: str, op: str | None = None, **params) -> None:
+async def _execute_write(session, cypher: str, operation: str | None = None, **params) -> None:
+    # Avoid conflict if 'op' is also in params
+    params.pop("op", None)
     await neo4j_utils.execute_write(
         session,
         cypher,
-        op=op or "write",
+        op=operation or "write",
         op_prefix=_TX_OP_PREFIX,
         timeout_s=_NEO4J_WRITE_TIMEOUT_S,
         base_metadata=_TX_METADATA_BASE,
@@ -57,11 +64,13 @@ async def _execute_write(session, cypher: str, op: str | None = None, **params) 
     )
 
 
-async def _execute_read(session, cypher: str, op: str | None = None, **params):
+async def _execute_read(session, cypher: str, operation: str | None = None, **params):
+    # Avoid conflict if 'op' is also in params
+    params.pop("op", None)
     return await neo4j_utils.execute_read(
         session,
         cypher,
-        op=op or "read",
+        op=operation or "read",
         op_prefix=_TX_OP_PREFIX,
         timeout_s=_NEO4J_READ_TIMEOUT_S,
         base_metadata=_TX_METADATA_BASE,

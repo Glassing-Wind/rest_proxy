@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 import re
 import time
@@ -11,6 +10,7 @@ from pathlib import PurePosixPath
 from typing import Awaitable, Callable
 
 import graph_bootstrap
+from _helpers import get_project_id
 
 
 ExecuteRead = Callable[..., Awaitable[list[dict[str, object]]]]
@@ -33,12 +33,11 @@ async def build_asset_graph(
         start = time.perf_counter()
         import posixpath
 
-        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+        project_id = get_project_id(project_path)
         driver = await graph_bootstrap.require_driver()
 
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
             r = await execute_read(
-                session,
                 session,
                 "MATCH (f:File {project_id:$p}) RETURN f.filepath AS fp, f.id AS fid",
                 p=project_id,
@@ -61,25 +60,27 @@ async def build_asset_graph(
         ]
 
         api_target_paths: list[str] = []
-        if "src/api/openapi.yaml" in files:
-            api_target_paths.append("src/api/openapi.yaml")
-        if "src/api/routes.ts" in files:
-            api_target_paths.append("src/api/routes.ts")
-
         for fp in files:
-            if fp.startswith("src/pages/api/") or fp.startswith("pages/api/"):
+            # 1. Recognized API Root files
+            if fp.endswith(("openapi.yaml", "openapi.json", "routes.ts", "routes.js")):
+                if "/api/" in fp or "src/api/" in fp or fp.startswith("api/"):
+                    api_target_paths.append(fp)
+            
+            # 2. Next.js / Standard API directories (Pages or App Router)
+            # Supports: src/pages/api, pages/api, packages/app/src/pages/api, etc.
+            if "/pages/api/" in fp or fp.startswith("pages/api/"):
                 if fp.endswith((".ts", ".js", ".tsx", ".jsx")):
                     api_target_paths.append(fp)
-            if fp.startswith("src/app/api/") or fp.startswith("app/api/"):
-                if fp.endswith(("route.ts", "route.js", "route.tsx", "route.jsx")):
-                    api_target_paths.append(fp)
-            if fp.startswith("src/app/") or fp.startswith("app/"):
+            
+            # App Router: matches route.ts in any 'app' directory (e.g., packages/web/src/app/api/...)
+            if "/app/" in fp or fp.startswith("app/"):
                 if fp.endswith(("route.ts", "route.js", "route.tsx", "route.jsx")):
                     api_target_paths.append(fp)
 
-        for fp in files:
-            if fp.startswith("src/api/") and fp.endswith((".ts", ".js", ".tsx")):
-                api_target_paths.append(fp)
+            # 3. Generic API directory (e.g. src/api/...)
+            if "/api/" in fp or fp.startswith("api/"):
+                if fp.endswith((".ts", ".js", ".tsx")):
+                    api_target_paths.append(fp)
 
         api_targets = [files[p] for p in api_target_paths if p in files]
         api_targets = list(dict.fromkeys(api_targets))
@@ -89,17 +90,30 @@ async def build_asset_graph(
             parts = path.parts
             if len(parts) < 2:
                 return None
-            if parts[0] == "src":
-                parts = parts[1:]
-            if not parts:
+            
+            # Monorepo support: skip package/app prefixes
+            # e.g. packages/web/src/app/api/hello/route.ts -> app/api/hello/route.ts
+            idx = 0
+            while idx < len(parts) and parts[idx] in {"packages", "apps", "src"}:
+                # If we're at 'src', we skip it but stay alert for the next part
+                # If we are in a subfolder of packages/ or apps/, we skip that subfolder too
+                if parts[idx] in {"packages", "apps"} and idx + 1 < len(parts):
+                    idx += 2 # Skip 'packages' AND the package name
+                else:
+                    idx += 1
+            
+            relevant_parts = parts[idx:]
+            if not relevant_parts:
                 return None
-            if parts[0] == "app" and path.name.startswith("route."):
-                route_parts = parts[1:-1]
+                
+            if relevant_parts[0] == "app" and path.name.startswith("route."):
+                route_parts = relevant_parts[1:-1]
                 if not route_parts:
                     return "/"
                 return "/" + "/".join(route_parts)
-            if parts[0] == "pages" and len(parts) > 1 and parts[1] == "api":
-                rel = parts[2:]
+                
+            if relevant_parts[0] == "pages" and len(relevant_parts) > 1 and relevant_parts[1] == "api":
+                rel = relevant_parts[2:]
                 if not rel:
                     return "/api"
                 file_stem = PurePosixPath(*rel).stem
@@ -110,8 +124,9 @@ async def build_asset_graph(
                 if not rel:
                     return "/api"
                 return "/api/" + "/".join(rel)
-            if parts[0] == "api":
-                rel = parts[1:]
+                
+            if relevant_parts[0] == "api":
+                rel = relevant_parts[1:]
                 if not rel:
                     return "/api"
                 file_stem = PurePosixPath(*rel).stem
@@ -207,20 +222,19 @@ async def build_asset_graph(
         service_files = {
             os.path.splitext(os.path.basename(fp))[0]: fid
             for fp, fid in files.items()
-            if fp.startswith("src/services/") and fp.endswith((".ts", ".js"))
+            if ("/services/" in fp or fp.startswith("services/")) and fp.endswith((".ts", ".js", ".tsx", ".jsx"))
         }
         if service_files:
             backend_files = [
                 (fp, fid)
                 for fp, fid in files.items()
                 if (
-                    fp.startswith("src/api/")
-                    or fp.startswith("src/webhooks/")
-                    or fp.startswith("src/jobs/")
-                    or fp.startswith("src/pages/api/")
-                    or fp.startswith("pages/api/")
-                    or fp.startswith("src/app/api/")
-                    or fp.startswith("app/api/")
+                    "/api/" in fp
+                    or "/webhooks/" in fp
+                    or "/jobs/" in fp
+                    or fp.startswith("api/")
+                    or fp.startswith("webhooks/")
+                    or fp.startswith("jobs/")
                 )
                 and fp.endswith((".ts", ".js"))
             ]
@@ -236,8 +250,8 @@ async def build_asset_graph(
                         service_edges.append((fid, svc_fid))
 
         db_edges: list[tuple[str, str]] = []
-        schema_fp = "prisma/schema.prisma"
-        schema_fid = files.get(schema_fp)
+        schema_fp = next((fp for fp in files if fp.endswith("prisma/schema.prisma")), None)
+        schema_fid = files.get(schema_fp) if schema_fp else None
         if schema_fid:
             schema_path = os.path.join(project_path, schema_fp)
             schema_text = _read_text(schema_path)
@@ -253,7 +267,7 @@ async def build_asset_graph(
                 scan_files = [
                     (fp, fid)
                     for fp, fid in files.items()
-                    if fp.startswith("src/") and fp.endswith((".ts", ".js"))
+                    if fp.endswith((".ts", ".js")) # Scan all TS/JS for Prisma usage
                 ]
                 for fp, fid in scan_files:
                     abs_path = os.path.join(project_path, fp)

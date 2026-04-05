@@ -1,11 +1,11 @@
 """tools/code_intel/core.py — code intelligence tools (symbol analysis, visualization, file description)."""
 
-import hashlib
 import time
 import os
 from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
-from _helpers import get_memory_modules
+from _helpers import get_memory_modules, get_project_id
+from proxy.logging import debug_log
 from ts_diagnostics import normalize_ts_pack_result
 
 
@@ -53,12 +53,8 @@ def register(mcp: FastMCP) -> None:
             symbol_name:  Name of the function, class, or struct to inspect.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
-
-            _, _, _, _, proxy = get_memory_modules()
-
-            _, _, _, _, proxy = get_memory_modules()
 
             _, _, _, _, proxy = get_memory_modules()
 
@@ -180,7 +176,7 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             project_root = os.path.realpath(project_path)
-            project_id = hashlib.md5(project_root.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_root)
             depth = min(int(depth), 5)
             import graph_bootstrap
 
@@ -355,7 +351,7 @@ def register(mcp: FastMCP) -> None:
         kinds:        Optional list of kinds to include (Function, Class, Enum, EnumCase, Protocol, Extension, etc.).
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             _, _, _, _, proxy = get_memory_modules()
@@ -436,7 +432,7 @@ def register(mcp: FastMCP) -> None:
                     op="list_symbol_matches",
                 )
 
-            proxy.debug_log(
+            debug_log(
                 "list_symbol_matches",
                 query=q,
                 project_id=project_id,
@@ -463,11 +459,7 @@ def register(mcp: FastMCP) -> None:
                 )
             return "\n".join(lines)
         except Exception as e:
-            try:
-                _, _, _, _, proxy = get_memory_modules()
-                proxy.debug_log("list_symbol_matches_error", error=str(e))
-            except Exception:
-                pass
+            debug_log("list_symbol_matches_error", error=str(e))
             return f"Error listing symbols: {str(e)}"
 
     @mcp.tool()
@@ -483,7 +475,7 @@ def register(mcp: FastMCP) -> None:
             kind:         Label to filter (default: Enum).
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -540,7 +532,7 @@ def register(mcp: FastMCP) -> None:
             project_path: Absolute path to the project root.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -648,7 +640,7 @@ def register(mcp: FastMCP) -> None:
             project_path: Absolute path to the project root.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -734,7 +726,7 @@ def register(mcp: FastMCP) -> None:
             file_path: Relative path to the file in the project.
         """
         try:
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             file_id = f"{project_id}:file:{file_path}"
             cypher = """
             MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)
@@ -913,12 +905,14 @@ def register(mcp: FastMCP) -> None:
         use_syms = ts_symbols
         if project_path:
             try:
-                project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+                from _helpers import get_project_id, normalize_neo4j_path
+                project_id = get_project_id(project_path)
                 rel_path = (
                     _os.path.relpath(abs_path, project_path)
                     if project_path
                     else file_path
                 )
+                rel_path = normalize_neo4j_path(rel_path)
                 file_id = f"{project_id}:file:{rel_path}"
                 import graph_bootstrap
 
@@ -964,7 +958,7 @@ def register(mcp: FastMCP) -> None:
         # ── 3. Postgres semantic preview (only in full mode) ──────────────────
         if project_path:
             try:
-                project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+                project_id = get_project_id(project_path)
                 rel_path = _os.path.relpath(abs_path, project_path)
                 memory_store, _, _, _, _ = get_memory_modules()
                 await memory_store.open_pool()
@@ -1000,7 +994,7 @@ def register(mcp: FastMCP) -> None:
         try:
             import re
 
-            project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+            project_id = get_project_id(project_path)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -1134,16 +1128,16 @@ def register(mcp: FastMCP) -> None:
 
 async def find_references_impl(project_path: str | list[str], symbol_name: str) -> str:
     """Implementation of find_references shared by tool and test runner."""
-    import hashlib
     import os
-
+    from _helpers import get_project_id
+    
     try:
         if isinstance(project_path, str):
             project_paths = [project_path]
         else:
             project_paths = project_path
 
-        pids = [hashlib.md5(p.encode()).hexdigest()[:12] for p in project_paths]
+        pids = [get_project_id(p) for p in project_paths]
 
         import graph_bootstrap
 
@@ -1219,8 +1213,6 @@ async def find_references_impl(project_path: str | list[str], symbol_name: str) 
 
         # 2. Semantic/Literal References (Postgres)
         semantic_refs = []
-        from _helpers import get_memory_modules
-
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
         async with memory_store._pg_pool.connection() as conn:
