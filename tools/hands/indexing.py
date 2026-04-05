@@ -541,13 +541,21 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
                 op="audit_symbol_density",
             )
             symbol_bearing_exts = {".py", ".swift", ".ts", ".js", ".go", ".rs", ".c", ".cpp", ".h", ".hpp", ".rb", ".php"}
-            excluded_basenames = {"config.py", "setup.py", "__init__.py", "conftest.py"}
+            excluded_basenames = {
+                "config.py", "setup.py", "__init__.py", "conftest.py",
+                "package.json", "tsconfig.json", "pnpm-lock.yaml", "yarn.lock", "package-lock.json",
+                "vitest.config.ts", "playwright.config.ts", "jest.config.ts", "svelte.config.js",
+                "sst.config.ts", "bunfig.toml", "flake.nix"
+            }
             
             for d_rec in density_records:
                 fp = d_rec["fp"]
                 ext = os.path.splitext(fp)[1].lower()
                 base = os.path.basename(fp)
-                if ext in symbol_bearing_exts and base not in excluded_basenames:
+                # Skip ambient types and explicitly excluded basenames
+                if fp.lower().endswith(".d.ts") or base in excluded_basenames:
+                    continue
+                if ext in symbol_bearing_exts:
                     suspicious_files.append({"path": fp})
 
             # 4. Isolated File Detection (Heuristic)
@@ -555,7 +563,20 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
                 session,
                 """
                 MATCH (f:File {project_id: $pid})
-                WHERE NOT EXISTS {
+                WHERE NOT (
+                    f.filepath ENDS WITH '.md' OR 
+                    f.filepath ENDS WITH '.txt' OR 
+                    f.filepath ENDS WITH '.json' OR 
+                    f.filepath ENDS WITH '.yml' OR 
+                    f.filepath ENDS WITH '.yaml' OR
+                    f.filepath ENDS WITH '.toml' OR
+                    f.filepath ENDS WITH '.nix' OR
+                    f.filepath ENDS WITH '.sh' OR
+                    f.filepath ENDS WITH '.d.ts' OR
+                    f.filepath CONTAINS '/.github/' OR
+                    f.filepath CONTAINS '/.husky/'
+                )
+                AND NOT EXISTS {
                     MATCH (f)-[:IMPORTS|CALLS|ASSET_LINKS|CALLS_API|CALLS_SERVICE|CALLS_DB]-(other:File {project_id: $pid})
                     WHERE f <> other
                 }

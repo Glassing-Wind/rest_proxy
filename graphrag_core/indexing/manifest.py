@@ -182,6 +182,10 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
         "site.webmanifest",
         "git",
         "opencode",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lockb",
     }
     max_file_size = 1 * 1024 * 1024
 
