@@ -39,7 +39,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_symbol_context(
-        project_path: str, symbol_name: str, include_source_preview: bool = True
+        workspace_id: str, symbol_name: str, include_source_preview: bool = True
     ) -> str:
         """
         Single-call deep dive into a symbol: definition location, signature,
@@ -49,11 +49,11 @@ def register(mcp: FastMCP) -> None:
           get_code_summary → find_callers → find_definitions → search_codebase
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace name or absolute project path.
             symbol_name:  Name of the function, class, or struct to inspect.
         """
         try:
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             import graph_bootstrap
 
             _, _, _, _, proxy = get_memory_modules()
@@ -111,40 +111,41 @@ def register(mcp: FastMCP) -> None:
                     out.append(f"  - `{c['name']}`  in {c.get('file', '?')}")
 
             if include_source_preview:
+                # 1. Try Postgres (Brain/Central fallback) - This works remotely!
                 try:
-                    abs_path = os.path.join(project_path, rec["filepath"])
-                    if os.path.exists(abs_path):
-                        with open(
-                            abs_path, "r", encoding="utf-8", errors="ignore"
-                        ) as fh:
-                            lines_list = fh.read().splitlines()
-                        start_line = max(1, int(rec["start_line"] or 1))
-                        end_line = max(start_line, int(rec["end_line"] or start_line))
-                        snippet = "\n".join(lines_list[start_line - 1 : end_line])
-                        if snippet.strip():
-                            out += [f"\n**Source preview:**\n```ts\n{snippet}\n```"]
-                    else:
-                        raise FileNotFoundError(abs_path)
+                    memory_store, _, _, _, _ = get_memory_modules()
+                    await memory_store.open_pool()
+                    async with memory_store._pg_pool.connection() as conn:
+                        async with conn.cursor() as cur:
+                            await cur.execute(
+                                """
+                                SELECT content FROM codebase_embeddings
+                                WHERE  project_id = %s AND file_path = %s
+                                ORDER  BY chunk_index LIMIT 2
+                            """,
+                                (project_id, rec["filepath"]),
+                            )
+                            rows = await cur.fetchall()
+                            if rows:
+                                src = "\n\n".join(r[0][:600] for r in rows)
+                                out += [f"\n**Source preview:**\n```\n{src}\n```"]
                 except Exception:
-                    try:
-                        memory_store, _, _, _, _ = get_memory_modules()
-                        await memory_store.open_pool()
-                        async with memory_store._pg_pool.connection() as conn:
-                            async with conn.cursor() as cur:
-                                await cur.execute(
-                                    """
-                                    SELECT content FROM codebase_embeddings
-                                    WHERE  project_id = %s AND file_path = %s
-                                    ORDER  BY chunk_index LIMIT 2
-                                """,
-                                    (project_id, rec["filepath"]),
-                                )
-                                rows = await cur.fetchall()
-                                if rows:
-                                    src = "\n\n".join(r[0][:600] for r in rows)
-                                    out += [f"\n**Source preview:**\n```\n{src}\n```"]
-                    except Exception:
-                        pass
+                    # 2. Try Local Filesystem (Hands fallback) - only if workspace_id is actually a local path
+                    if os.path.exists(workspace_id):
+                        try:
+                            abs_path = os.path.join(workspace_id, rec["filepath"])
+                            if os.path.exists(abs_path):
+                                with open(
+                                    abs_path, "r", encoding="utf-8", errors="ignore"
+                                ) as fh:
+                                    lines_list = fh.read().splitlines()
+                                start_line = max(1, int(rec["start_line"] or 1))
+                                end_line = max(start_line, int(rec["end_line"] or start_line))
+                                snippet = "\n".join(lines_list[start_line - 1 : end_line])
+                                if snippet.strip():
+                                    out += [f"\n**Source preview:**\n```ts\n{snippet}\n```"]
+                        except Exception:
+                            pass
 
             return "\n".join(out)
         except Exception as e:
@@ -152,7 +153,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_call_chain(
-        project_path: str,
+        workspace_id: str,
         symbol_name: str,
         depth: int = 3,
         direction: str = "down",
@@ -167,7 +168,7 @@ def register(mcp: FastMCP) -> None:
         execution paths and gRPC handler flows.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace name or absolute project path.
             symbol_name:  Starting symbol name.
             depth:        How many hops to follow (default 3, max 5).
             direction:    'down' (what this calls) or 'up' (what calls this).
@@ -175,8 +176,7 @@ def register(mcp: FastMCP) -> None:
             signature:    Optional signature substring to disambiguate symbols.
         """
         try:
-            project_root = os.path.realpath(project_path)
-            project_id = get_project_id(project_root)
+            project_id = get_project_id(workspace_id)
             depth = min(int(depth), 5)
             import graph_bootstrap
 
@@ -186,13 +186,22 @@ def register(mcp: FastMCP) -> None:
             if file_path:
                 raw_path = file_path.strip()
                 if os.path.isabs(raw_path):
-                    abs_path = os.path.realpath(raw_path)
-                    try:
-                        normalized_file_path = os.path.relpath(abs_path, project_root)
-                    except ValueError:
+                    # If it's an absolute path, we try to make it relative to the project root
+                    # ONLY if the workspace_id itself is a valid local path.
+                    if os.path.exists(workspace_id):
+                        project_root = os.path.realpath(workspace_id)
+                        abs_path = os.path.realpath(raw_path)
+                        try:
+                            normalized_file_path = os.path.relpath(abs_path, project_root)
+                        except ValueError:
+                            normalized_file_path = raw_path
+                    else:
+                        # Otherwise, we just take the basename or keep it as is
+                        # (The Brain expects relative paths from the index)
                         normalized_file_path = raw_path
                 else:
                     normalized_file_path = raw_path
+
                 normalized_file_path = normalized_file_path.replace(os.sep, "/")
                 if normalized_file_path.startswith("./"):
                     normalized_file_path = normalized_file_path[2:]
@@ -517,7 +526,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error diagnosing symbol query: {str(e)}"
 
     @mcp.tool()
-    async def get_code_importance(project_path: str) -> str:
+    async def get_code_importance(workspace_id: str) -> str:
         """
         Identify the most important files in a project using GDS PageRank on the
         CALLS graph. Files whose symbols are called by many important callers rank
@@ -529,10 +538,10 @@ def register(mcp: FastMCP) -> None:
         Excludes test files automatically.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace name or absolute project path.
         """
         try:
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -626,7 +635,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error calculating code importance: {str(e)}"
 
     @mcp.tool()
-    async def get_code_communities(project_path: str) -> str:
+    async def get_code_communities(workspace_id: str) -> str:
         """
         Identify architectural clusters in the codebase by grouping files by their
         top-level directory. Shows the structure of the project at a glance.
@@ -637,10 +646,10 @@ def register(mcp: FastMCP) -> None:
         get_code_communities.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace name or absolute project path.
         """
         try:
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -807,7 +816,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error finding related files: {str(e)}"
 
     @mcp.tool()
-    async def find_references(project_path: str | list[str], symbol_name: str) -> str:
+    async def find_references(workspace_id: str | list[str], symbol_name: str) -> str:
         """
         Find all locations that reference a symbol — function calls, type usages,
         and any code chunk that mentions the name.
@@ -821,10 +830,10 @@ def register(mcp: FastMCP) -> None:
         must be updated.
 
         Args:
-            project_path: Absolute path to the project root (or list of paths).
+            workspace_id:  Logical workspace name or absolute project path (or list).
             symbol_name:  Exact name of the symbol to find references for.
         """
-        return await find_references_impl(project_path, symbol_name)
+        return await find_references_impl(workspace_id, symbol_name)
 
     @mcp.tool()
     async def describe_file(project_path: str, file_path: str) -> str:
@@ -981,20 +990,20 @@ def register(mcp: FastMCP) -> None:
         return "\n".join(lines)
 
     @mcp.tool()
-    async def visualize_subgraph(project_path: str, symbol_name: str) -> str:
+    async def visualize_subgraph(workspace_id: str, symbol_name: str) -> str:
         """
         Generate a Mermaid diagram of a symbol's neighborhood in the structural graph.
         Shows the symbol's containing file, what it CALLS, what IMPORTS it, and
         sibling symbols in the same file — up to 2 hops.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace name or absolute project path.
             symbol_name: Name of the symbol to visualize.
         """
         try:
             import re
 
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -1126,18 +1135,18 @@ def register(mcp: FastMCP) -> None:
             return f"Error visualizing subgraph: {str(e)}"
 
 
-async def find_references_impl(project_path: str | list[str], symbol_name: str) -> str:
+async def find_references_impl(workspace_id: str | list[str], symbol_name: str) -> str:
     """Implementation of find_references shared by tool and test runner."""
     import os
     from _helpers import get_project_id
-    
-    try:
-        if isinstance(project_path, str):
-            project_paths = [project_path]
-        else:
-            project_paths = project_path
 
-        pids = [get_project_id(p) for p in project_paths]
+    try:
+        if isinstance(workspace_id, str):
+            works = [workspace_id]
+        else:
+            works = workspace_id
+
+        pids = [get_project_id(w) for w in works]
 
         import graph_bootstrap
 

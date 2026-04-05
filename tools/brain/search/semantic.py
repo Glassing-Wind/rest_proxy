@@ -5,14 +5,14 @@ import json
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules, get_project_id
-from tools.search import core as search_core
+from tools.brain.search import core as search_core
 
 
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def search_codebase(
-        project_paths: list,
+        workspace_ids: list,
         query: str,
         k: int = 5,
         include_metadata: bool = False,
@@ -27,24 +27,24 @@ def register(mcp: FastMCP) -> None:
         fallback_max: int = 12,
         fallback_glob: str = "",
         exclude_tests: bool = True,
-        languages: list | None = None,
+        languages: list|None = None,
         min_imports: int = 0,
         min_symbols: int = 0,
         require_diagnostics: bool = False,
         require_context: bool = False,
-        include_paths: list | None = None,
-        exclude_paths: list | None = None,
+        include_paths: list|None = None,
+        exclude_paths: list|None = None,
     ) -> str:
         """
         Perform a hybrid semantic search over one or more codebases simultaneously.
         Results are ranked by relevance using RRF (vector + full-text).
 
-        Pass a single-element list for single-project search, or multiple paths
+        Pass a single-element list for single-project search, or multiple IDs
         for cross-project search — results are merged and annotated with their
         source project in the multi-project case.
 
         Args:
-            project_paths: List of absolute paths to project roots to search across.
+            workspace_ids: List of logical workspace IDs or absolute paths to search across.
             query: Natural language or code snippet to search for.
             k: Total number of results to return (default 5).
             include_metadata: Show metadata lines in results (default False).
@@ -72,14 +72,15 @@ def register(mcp: FastMCP) -> None:
             import sys
             import fnmatch
             from embedding_service import get_embedding_service
-            from tools.search import fallbacks as search_fallbacks
+            from tools.brain.search import fallbacks as search_fallbacks
+            from _helpers import WorkspaceRegistry, get_workspace_path
 
             memory_store, _, _, _, _ = get_memory_modules()
 
-            if not project_paths:
-                return "Error: provide at least one project path."
+            if not workspace_ids:
+                return "Error: provide at least one workspace ID or path."
 
-            multi = len(project_paths) > 1
+            multi = len(workspace_ids) > 1
 
             svc = get_embedding_service()
             vecs = await svc.embed_batch_async([query])
@@ -95,11 +96,12 @@ def register(mcp: FastMCP) -> None:
             pid_to_name: dict[str, str] = {}
             pid_to_path: dict[str, str] = {}
             pids = []
-            for p in project_paths:
-                pid = get_project_id(p)
+            for w_id in workspace_ids:
+                pid = WorkspaceRegistry.resolve_id(w_id) or get_project_id(w_id)
+                path = get_workspace_path(w_id)
                 pids.append(pid)
-                pid_to_name[pid] = p.rstrip("/").split("/")[-1]
-                pid_to_path[pid] = p
+                pid_to_name[pid] = (path or w_id).rstrip("/").split("/")[-1]
+                pid_to_path[pid] = path
 
             def _format_meta(meta: dict) -> list[str]:
                 if not isinstance(meta, dict):

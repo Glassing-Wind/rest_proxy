@@ -81,7 +81,7 @@ Doc indexing tips:
 - `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI, backend, or CLI flow (auto tries UI → backend → CLI)
   - Tip: set `include_tests=true` when you want coverage paths from test files too
   Example:
-  `get_app_flow_summary("/Users/michaelmarler/Projects/rental", ui_contains="lease-detail", model_contains="Lease", service_contains="Lease", limit=50, as_table=true)`
+  `get_app_flow_summary("my-project-id", ui_contains="lease-detail", model_contains="Lease", service_contains="Lease", limit=50, as_table=true)`
 - Launch edges: enable `TS_PACK_LAUNCH_EDGES=1` to emit `LAUNCHES` file edges; set `TS_PACK_DEBUG_LAUNCH=1` to log launch resolution counts per file during indexing
 - `get_language_pack_status()` → available vs manifest languages (auto-download status)
 - `get_indexed_projects(query?)` → list indexed repo paths (filters by id prefix or path substring)

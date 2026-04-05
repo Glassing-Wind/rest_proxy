@@ -37,7 +37,7 @@ def _debug_log(message: str, **fields: object) -> None:
 
 
 def _record_metric(event: str, **fields: object) -> None:
-    from tools.graph import runtime as graph_runtime
+    from tools.brain.graph import runtime as graph_runtime
 
     graph_runtime.record_metric(event, **fields)
 
@@ -111,13 +111,13 @@ async def _run_graph_build_with_retry(fn, label: str, project_path: str) -> str:
 
 
 def _summarize_batches(event: str, limit: int = 50) -> tuple[int, int, int]:
-    from tools.graph import runtime as graph_runtime
+    from tools.brain.graph import runtime as graph_runtime
 
     return graph_runtime.summarize_batches(event, limit)
 
 
 def get_last_graph_build_metric() -> dict[str, object] | None:
-    from tools.graph import runtime as graph_runtime
+    from tools.brain.graph import runtime as graph_runtime
 
     return graph_runtime.get_last_graph_build_metric()
 
@@ -126,7 +126,7 @@ def _ensure_graph_runtime_configured() -> None:
     global _GRAPH_RUNTIME_CONFIGURED
     if _GRAPH_RUNTIME_CONFIGURED:
         return
-    from tools.graph import runtime as graph_runtime
+    from tools.brain.graph import runtime as graph_runtime
 
     graph_runtime.configure(
         debug_log=_debug_log,
@@ -142,7 +142,7 @@ async def enqueue_graph_build(
     project_path: str, run_imports: bool = True, run_symbols: bool = True
 ) -> None:
     _ensure_graph_runtime_configured()
-    from tools.graph import runtime as graph_runtime
+    from tools.brain.graph import runtime as graph_runtime
 
     await graph_runtime.enqueue_graph_build(
         project_path, run_imports=run_imports, run_symbols=run_symbols
@@ -150,7 +150,7 @@ async def enqueue_graph_build(
 
 
 def register(mcp: FastMCP) -> None:
-    from tools.graph import tools as graph_tools
+    from tools.brain.graph import tools as graph_tools
 
     graph_tools.register(mcp)
 
@@ -161,7 +161,7 @@ async def _get_cli_flow_summary(
     limit: int = 20,
     as_table: bool = False,
 ) -> str:
-    from tools.graph import cli as graph_cli
+    from tools.brain.graph import cli as graph_cli
 
     return await graph_cli.get_cli_flow_summary(
         project_path,
@@ -174,7 +174,7 @@ async def _get_cli_flow_summary(
 
 async def _build_import_graph_impl(project_path: str) -> str:
     """Module-level implementation callable from _jobs.py post-index hook."""
-    from tools.graph import import_graph
+    from tools.brain.graph import import_graph
 
     return await import_graph.build_import_graph(
         project_path,
@@ -190,7 +190,7 @@ async def _build_import_graph_impl(project_path: str) -> str:
 
 async def _build_asset_graph_impl(project_path: str) -> str:
     """Build asset linkage edges (HTML → assets, JS/TS → API spec/routes)."""
-    from tools.graph import asset_graph
+    from tools.brain.graph import asset_graph
 
     return await asset_graph.build_asset_graph(
         project_path,
@@ -205,7 +205,7 @@ async def _build_asset_graph_impl(project_path: str) -> str:
 
 async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
     """Build symbol-level IMPORTS/EXPORTS edges using Import nodes and chunk metadata."""
-    from tools.graph import symbol_graph
+    from tools.brain.graph import symbol_graph
 
     return await symbol_graph.build_symbol_graph(
         project_path,

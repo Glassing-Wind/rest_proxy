@@ -3,7 +3,7 @@
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules, get_project_id
-from tools.search import core as search_core
+from tools.brain.search import core as search_core
 
 
 def register(mcp: FastMCP) -> None:
@@ -11,8 +11,8 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def trace_symbol_cross_project(
         symbol_name: str,
-        source_project: str,
-        target_project: str,
+        source_workspace: str,
+        target_workspace: str,
     ) -> str:
         """
         Trace a symbol from its definition in one project to its usages in another.
@@ -25,20 +25,25 @@ def register(mcp: FastMCP) -> None:
         - Postgres semantic search (text occurrences in chunks)
 
         Args:
-            symbol_name:     Exact name of the symbol to trace (e.g. 'GenerateImageRequest').
-            source_project:  Absolute path to the project where the symbol is defined.
-            target_project:  Absolute path to the project that consumes/calls the symbol.
+            symbol_name:      Exact name of the symbol to trace (e.g. 'GenerateImageRequest').
+            source_workspace: Logical workspace ID or absolute path where the symbol is defined.
+            target_workspace: Logical workspace ID or absolute path that consumes/calls the symbol.
         """
         try:
             import asyncio
             from embedding_service import get_embedding_service
+            from _helpers import WorkspaceRegistry, get_workspace_path
 
             memory_store, _, _, _, _ = get_memory_modules()
 
-            src_id = get_project_id(source_project)
-            tgt_id = get_project_id(target_project)
-            src_name = source_project.rstrip("/").split("/")[-1]
-            tgt_name = target_project.rstrip("/").split("/")[-1]
+            src_id = WorkspaceRegistry.resolve_id(source_workspace) or get_project_id(source_workspace)
+            tgt_id = WorkspaceRegistry.resolve_id(target_workspace) or get_project_id(target_workspace)
+            
+            src_path = get_workspace_path(source_workspace)
+            tgt_path = get_workspace_path(target_workspace)
+            
+            src_name = (src_path or source_workspace).rstrip("/").split("/")[-1]
+            tgt_name = (tgt_path or target_workspace).rstrip("/").split("/")[-1]
 
             import graph_bootstrap
 

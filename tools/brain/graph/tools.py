@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_memory_modules, get_project_id
-from tools.graph import core as graph_core
-from tools.graph import runtime as graph_runtime
+from _helpers import get_memory_modules, get_project_id, get_workspace_path
+from tools.brain.graph import core as graph_core
+from tools.brain.graph import runtime as graph_runtime
 from .core import _SYMBOL_FILTER_CYPHER
 
 
@@ -15,23 +15,23 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_directory_snapshot(
-        project_path: str, directory_path: str, limit: int = 5
+        workspace_id: str, directory_path: str, limit: int = 5
     ) -> str:
         """
         Provides an architectural onboarding guide for a specific directory.
         Summarizes importance, exports, and inbound/outbound coupling.
 
         Args:
-            project_path: Absolute path to project root.
+            workspace_id: Logical workspace name or absolute project path.
             directory_path: Relative path to director (e.g. 'src/api').
             limit: Max results per section (default 5).
         """
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(project_path)
-            # Ensure directory path ends with / for prefix matching (unless empty for root)
-            dir_prefix = directory_path.strip("/")
+            project_id = get_project_id(workspace_id)
+            # Normalize directory path for prefix matching (empty string for root)
+            dir_prefix = directory_path.strip("./")
             if dir_prefix:
                 dir_prefix += "/"
 
@@ -122,17 +122,18 @@ def register(mcp: FastMCP) -> None:
 
 
     @mcp.tool()
-    async def get_project_overview(project_path: str) -> str:
+    async def get_project_overview(workspace_id: str) -> str:
         """
         Single-call project onboarding summary. Combines health, architecture
         clusters, and most important files into one synthesized view.
         Use this as the FIRST tool when starting work on an unfamiliar codebase.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace name or absolute project path.
         """
         try:
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
+            project_path = get_workspace_path(workspace_id)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
@@ -330,7 +331,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error reading language pack status: {str(e)}"
 
     @mcp.tool()
-    async def build_import_graph(project_path: str) -> str:
+    async def build_import_graph(workspace_id: str) -> str:
         """
         Build file-level IMPORTS edges in Neo4j by resolving Import nodes.
 
@@ -347,32 +348,32 @@ def register(mcp: FastMCP) -> None:
         get_code_communities.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace name or absolute project path.
         """
-        return await graph_core._build_import_graph_impl(project_path)
+        return await graph_core._build_import_graph_impl(workspace_id)
 
     @mcp.tool()
-    async def rebuild_symbol_graph(project_path: str) -> str:
+    async def rebuild_symbol_graph(workspace_id: str) -> str:
         """
         Rebuild symbol-level IMPORTS/EXPORTS graph for a project.
         """
-        return await graph_core._run_graph_build_with_retry(
-            graph_core._build_symbol_import_export_graph_impl, "symbols", project_path
+        return await _rebuild_subgraph(
+            graph_core._build_symbol_import_export_graph_impl, "symbols", workspace_id
         )
 
     @mcp.tool()
-    async def rebuild_asset_graph(project_path: str) -> str:
+    async def rebuild_asset_graph(workspace_id: str) -> str:
         """
         Rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB).
         Used for App Flow visualization.
         """
-        return await graph_core._run_graph_build_with_retry(
-            graph_core._build_asset_graph_impl, "assets", project_path
+        return await _rebuild_subgraph(
+            graph_core._build_asset_graph_impl, "assets", workspace_id
         )
 
     @mcp.tool()
     async def get_app_flow_summary(
-        project_path: str,
+        workspace_id: str,
         ui_contains: str | None = None,
         model_contains: str | None = None,
         service_contains: str | None = None,
@@ -386,7 +387,7 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             query_limit = limit
             if model_contains:
                 query_limit = max(limit * 10, 200)
@@ -499,7 +500,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_backend_flow_summary(
-        project_path: str,
+        workspace_id: str,
         api_contains: str | None = None,
         model_contains: str | None = None,
         service_contains: str | None = None,
@@ -513,7 +514,7 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             query_limit = limit
             if model_contains:
                 query_limit = max(limit * 10, 200)
@@ -598,7 +599,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_flow_summary(
-        project_path: str,
+        workspace_id: str,
         mode: str = "auto",
         ui_contains: str | None = None,
         api_contains: str | None = None,
@@ -612,6 +613,7 @@ def register(mcp: FastMCP) -> None:
         Summarize UI → API → Service → DB paths or API → Service → DB paths.
 
         Args:
+            workspace_id: Logical workspace name or absolute project path.
             mode: 'auto', 'ui', 'backend', or 'cli'.
             ui_contains: Filter UI files (ui mode only).
             api_contains: Filter API files (backend mode only).
@@ -627,7 +629,7 @@ def register(mcp: FastMCP) -> None:
 
         if mode_norm in {"auto", "ui"}:
             ui_result = await get_app_flow_summary(
-                project_path,
+                workspace_id,
                 ui_contains=ui_contains,
                 model_contains=model_contains,
                 service_contains=service_contains,
@@ -641,7 +643,7 @@ def register(mcp: FastMCP) -> None:
                 return ui_result
 
         backend_result = await get_backend_flow_summary(
-            project_path,
+            workspace_id,
             api_contains=api_contains,
             model_contains=model_contains,
             service_contains=service_contains,
@@ -656,7 +658,7 @@ def register(mcp: FastMCP) -> None:
 
         if mode_norm in {"auto", "cli"}:
             cli_result = await graph_core._get_cli_flow_summary(
-                project_path,
+                workspace_id,
                 include_tests=include_tests,
                 limit=limit,
                 as_table=as_table,
@@ -666,22 +668,22 @@ def register(mcp: FastMCP) -> None:
 
         # Step 2: Heuristic Fallback
         heuristic_result = await get_heuristic_flow_summary(
-            project_path, limit=limit, as_table=as_table
+            workspace_id, limit=limit, as_table=as_table
         )
         if not heuristic_result.startswith("No heuristic"):
             return f"### Heuristic Flow Summary\n{heuristic_result}"
 
         # Step 3: Topology Summary (Last Resort)
-        return await get_topology_summary(project_path, limit=limit)
+        return await get_topology_summary(workspace_id, limit=limit)
 
     async def get_heuristic_flow_summary(
-        project_path: str, limit: int = 20, as_table: bool = False
+        workspace_id: str, limit: int = 20, as_table: bool = False
     ) -> str:
         """Heuristic flow based on directory patterns and IMPORTS edges."""
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             driver = await graph_bootstrap.require_driver()
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 # Optimized heuristic query: look for UI -> API -> Service -> Model chains
@@ -728,12 +730,12 @@ def register(mcp: FastMCP) -> None:
         except Exception as e:
             return f"Error in heuristic flow: {str(e)}"
 
-    async def get_topology_summary(project_path: str, limit: int = 10) -> str:
+    async def get_topology_summary(workspace_id: str, limit: int = 10) -> str:
         """High-level summary of the most connected files/directories."""
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             driver = await graph_bootstrap.require_driver()
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 result = await graph_core._execute_read(

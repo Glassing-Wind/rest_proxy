@@ -30,11 +30,11 @@ _repo_root = os.path.dirname(os.path.dirname(_base_dir))
 load_dotenv(os.path.join(_repo_root, ".env"))
 sys.path.insert(0, _repo_root)
 
-from tools.docs.config import DEFAULT_TOPIC_URL_FILTERS, DEFAULT_URL_FILTERS
-from tools.docs.discovery import discover_pages
-from tools.docs.crawl import crawl_pages
-from tools.docs.chunking import chunk_content
-from tools.docs.pipeline import index_docs
+from tools.brain.docs.config import DEFAULT_TOPIC_URL_FILTERS, DEFAULT_URL_FILTERS
+from tools.brain.docs.discovery import discover_pages
+from tools.brain.docs.crawl import crawl_pages
+from tools.brain.docs.chunking import chunk_content
+from tools.brain.docs.pipeline import index_docs
 
 __all__ = [
     "discover_pages",

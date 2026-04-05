@@ -4,14 +4,13 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules, get_project_id
-from tools.search import core as search_core
+from tools.brain.search import core as search_core
 
 
 def register(mcp: FastMCP) -> None:
-
     @mcp.tool()
     async def find_code_duplication(
-        project_path: str,
+        workspace_id: str,
         min_similarity: float = 0.92,
         max_pairs: int = 50,
         min_tokens: int = 80,
@@ -54,7 +53,7 @@ def register(mcp: FastMCP) -> None:
         Find near-duplicate code chunks within a single project using semantic embeddings.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: Logical workspace ID or absolute path to the project root.
             min_similarity: Cosine similarity threshold (default 0.92).
             max_pairs: Max duplicate pairs to return (default 50).
             min_tokens: Minimum token estimate per chunk (approx by chars/4).
@@ -95,16 +94,17 @@ def register(mcp: FastMCP) -> None:
             import hashlib
             import itertools
             import re
+            from _helpers import WorkspaceRegistry
 
             memory_store, _, _, _, _ = get_memory_modules()
-            if not project_path:
-                return "Error: provide a project path."
+            if not workspace_id:
+                return "Error: provide a workspace ID or path."
 
             await memory_store.open_pool()
             if not memory_store._pg_pool_available():
                 return "Error: Postgres pool not available for semantic search."
 
-            project_id = get_project_id(project_path)
+            project_id = WorkspaceRegistry.resolve_id(workspace_id) or get_project_id(workspace_id)
             min_chars = max(0, int(min_tokens) * 4)
             winnow_min_chars = max(0, int(winnow_min_tokens) * 4)
             per_chunk = max(1, int(per_chunk))

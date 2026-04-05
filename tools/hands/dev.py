@@ -5,7 +5,7 @@ import sys
 from typing import List
 from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
-from _helpers import get_memory_modules, get_project_id, normalize_neo4j_path
+from _helpers import get_memory_modules, get_project_id, normalize_neo4j_path, get_workspace_path
 
 
 def register(mcp: FastMCP) -> None:
@@ -31,7 +31,7 @@ def register(mcp: FastMCP) -> None:
         return await _tx(session)
 
     @mcp.tool()
-    async def git_summary(project_path: str) -> str:
+    async def git_summary(workspace_id: str) -> str:
         """
         Show the current git state of a project: recent commits, working-tree
         status, and a diff stat of any uncommitted changes.
@@ -40,8 +40,9 @@ def register(mcp: FastMCP) -> None:
         or before making edits to confirm the branch and working-tree state.
 
         Args:
-            project_path: Absolute path to the project root (must be a git repo).
+            workspace_id: The logical workspace ID or absolute path to the project root.
         """
+        project_path = get_workspace_path(workspace_id)
         try:
             import subprocess
 
@@ -75,7 +76,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def grep_codebase(
-        project_path: str, pattern: str, file_glob: str = ""
+        workspace_id: str, pattern: str, file_glob: str = ""
     ) -> str:
         """
         Search for a literal string or regex pattern across the entire codebase
@@ -86,11 +87,12 @@ def register(mcp: FastMCP) -> None:
         Complements search_codebase (semantic) and find_references (graph+pg).
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: The logical workspace ID or absolute path to the project root.
             pattern:      Literal string or regex to search for.
             file_glob:    Optional glob to restrict files, e.g. '*.py' or '*.rs'.
                           Leave empty to search all non-ignored files.
         """
+        project_path = get_workspace_path(workspace_id)
         try:
             import subprocess, shutil
             from collections import defaultdict
@@ -133,7 +135,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error running grep: {str(e)}"
 
     @mcp.tool()
-    async def get_test_coverage_for(project_path: str, file_path: str) -> str:
+    async def get_test_coverage_for(workspace_id: str, file_path: str) -> str:
         """
         Find test files that cover a given source file.
 
@@ -145,13 +147,14 @@ def register(mcp: FastMCP) -> None:
         Run this before modifying a file to know exactly what to test afterwards.
 
         Args:
-            project_path: Absolute path to the project root.
+            workspace_id: The logical workspace ID or absolute path to the project root.
             file_path:    Relative path to the source file within the project.
         """
+        project_path = get_workspace_path(workspace_id)
         try:
             import hashlib, subprocess
 
-            project_id = get_project_id(project_path)
+            project_id = get_project_id(workspace_id)
             basename = os.path.splitext(os.path.basename(file_path))[0]
             results: dict[str, str] = {}
 
@@ -254,7 +257,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error finding tests: {str(e)}"
 
     @mcp.tool()
-    async def get_changed_symbols(project_path: str, since: str = "HEAD~1") -> str:
+    async def get_changed_symbols(workspace_id: str, since: str = "HEAD~1") -> str:
         """
         List which functions and classes changed between the current working tree
         and a commit reference — not just which files, but which *symbols*.
@@ -263,10 +266,11 @@ def register(mcp: FastMCP) -> None:
         from modified hunks. Supports Python, Rust, TypeScript, Go, Swift, Ruby.
 
         Args:
-            project_path: Absolute path to the project root (must be a git repo).
+            workspace_id: The logical workspace ID or absolute path to the project root.
             since:        Git ref to diff against (default 'HEAD~1' = last commit).
                           Examples: 'HEAD', 'main', 'abc1234', 'HEAD~3'.
         """
+        project_path = get_workspace_path(workspace_id)
         try:
             import subprocess, re
 
@@ -321,18 +325,20 @@ def register(mcp: FastMCP) -> None:
             return f"Error diffing symbols: {str(e)}"
 
     @mcp.tool()
-    async def lint_project_subset(files: List[str]) -> str:
+    async def lint_project_subset(workspace_id: str, relative_paths: List[str]) -> str:
         """
-        Run best-available linter on a set of files.
+        Run best-available linter on a set of files within a workspace.
         Supports Swift (swiftlint) and Python (pylint/ruff).
 
         Args:
-            files: List of absolute paths to files to lint.
+            workspace_id:   The logical workspace ID or absolute path to the project root.
+            relative_paths: List of relative paths to files to lint.
         """
         import subprocess
         import shutil
         import sys
 
+        project_path = get_workspace_path(workspace_id)
         results = []
 
         # Extend PATH with common conda/venv bin dirs so linters installed
@@ -351,17 +357,22 @@ def register(mcp: FastMCP) -> None:
         ruff = _which("ruff")
         pylint = _which("pylint")
         swiftlint = _which("swiftlint")
-        for f in files:
+        for rel_f in relative_paths:
+            f = os.path.join(project_path, rel_f)
+            if not os.path.exists(f):
+                results.append(f"File not found: {rel_f}")
+                continue
+
             if f.endswith(".swift"):
                 if swiftlint:
                     res = subprocess.run(
                         [swiftlint, "lint", f], capture_output=True, text=True
                     )
                     results.append(
-                        f"--- SwiftLint: {os.path.basename(f)} ---\n{res.stdout or 'No issues found.'}"
+                        f"--- SwiftLint: {rel_f} ---\n{res.stdout or 'No issues found.'}"
                     )
                 else:
-                    results.append(f"SwiftLint not found. Skipping {f}.")
+                    results.append(f"SwiftLint not found. Skipping {rel_f}.")
             elif f.endswith(".py"):
                 linter = ruff or pylint
                 if linter:
@@ -372,11 +383,11 @@ def register(mcp: FastMCP) -> None:
                     )
                     res = subprocess.run(cmd, capture_output=True, text=True)
                     results.append(
-                        f"--- Python Linter ({os.path.basename(linter)}): {os.path.basename(f)} ---\n{res.stdout or 'No issues found.'}"
+                        f"--- Python Linter ({os.path.basename(linter)}): {rel_f} ---\n{res.stdout or 'No issues found.'}"
                     )
                 else:
                     results.append(
-                        f"Python linter (ruff/pylint) not found. Skipping {f}."
+                        f"Python linter (ruff/pylint) not found. Skipping {rel_f}."
                     )
         return (
             "\n\n".join(results)
@@ -385,21 +396,26 @@ def register(mcp: FastMCP) -> None:
         )
 
     @mcp.tool()
-    async def swift_doc_lookup(file_path: str, symbol_name: str) -> str:
+    async def swift_doc_lookup(workspace_id: str, file_path: str, symbol_name: str) -> str:
         """
         Extract documentation comments for a Swift symbol using SourceKitten.
 
         Args:
-            file_path: Absolute path to the Swift file.
-            symbol_name: Name of the symbol to lookup.
+            workspace_id: The logical workspace ID or absolute path to the project root.
+            file_path:    Relative path to the Swift file within the project.
+            symbol_name:  Name of the symbol to lookup.
         """
         import subprocess
         import json
         import shutil
         import sys
 
+        project_path = get_workspace_path(workspace_id)
+        if not os.path.isabs(file_path):
+            file_path = os.path.join(project_path, file_path)
+
         if not os.path.exists(file_path):
-            return "File not found."
+            return f"File not found: {file_path}"
 
         # Prefer SourceKitten — gives full AST including doc_comment fields
         sk = shutil.which("sourcekitten") or os.path.join(
@@ -466,7 +482,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error looking up docs: {str(e)}"
 
     @mcp.tool()
-    async def extract_function_body(file_path: str, symbol_name: str) -> str:
+    async def extract_function_body(workspace_id: str, file_path: str, symbol_name: str) -> str:
         """
         Extract the exact source code of a function, method, or class using
         tree-sitter AST. No Neo4j required — works on any file.
@@ -474,14 +490,20 @@ def register(mcp: FastMCP) -> None:
         More precise than reading line ranges manually.
 
         Args:
-            file_path:   Absolute path to the source file.
-            symbol_name: Name of the function, method, or class to extract.
+            workspace_id: The logical workspace ID or absolute path to the project root.
+            file_path:    Relative path to the source file within the project.
+            symbol_name:  Name of the function, method, or class to extract.
         """
         try:
             import tree_sitter_language_pack as ts_pack
 
+            project_path = get_workspace_path(workspace_id)
+            orig_file_path = file_path
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(project_path, file_path)
+
             if not os.path.exists(file_path):
-                return "File not found."
+                return f"File not found: {file_path}"
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
                 code = fh.read()
             lines_list = code.splitlines()
@@ -514,9 +536,9 @@ def register(mcp: FastMCP) -> None:
                             break
                         cur = os.path.dirname(cur)
 
-                    if project_root:
-                        rel_path = os.path.relpath(file_path, project_root)
-                        project_id = get_project_id(project_root)
+                    if project_path:
+                        rel_path = os.path.relpath(file_path, project_path)
+                        project_id = get_project_id(workspace_id)
                         driver = await graph_bootstrap.require_driver()
                         async with driver.session(
                             database=graph_bootstrap._NEO4J_DB
@@ -567,21 +589,26 @@ def register(mcp: FastMCP) -> None:
             return f"Error extracting body: {str(e)}"
 
     @mcp.tool()
-    async def extract_class_interface(file_path: str, class_name: str) -> str:
+    async def extract_class_interface(workspace_id: str, file_path: str, class_name: str) -> str:
         """
         Extract the public API surface of a class or struct — method signatures
         only, no bodies. Useful for understanding what a class exposes without
         reading thousands of lines.
 
         Args:
-            file_path:  Absolute path to the source file.
-            class_name: Name of the class or struct.
+            workspace_id:  The logical workspace ID or absolute path to the project root.
+            file_path:     Relative path to the source file within the project.
+            class_name:    Name of the class or struct.
         """
         try:
             import tree_sitter_language_pack as ts_pack
 
+            project_path = get_workspace_path(workspace_id)
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(project_path, file_path)
+
             if not os.path.exists(file_path):
-                return "File not found."
+                return f"File not found: {file_path}"
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
                 code = fh.read()
             lang = ts_pack.detect_language(file_path)
@@ -641,7 +668,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error extracting interface: {str(e)}"
 
     @mcp.tool()
-    async def find_symbol_usages(file_path: str, symbol_name: str) -> str:
+    async def find_symbol_usages(workspace_id: str, file_path: str, symbol_name: str) -> str:
         """
         Find all usages of a symbol within a single file using tree-sitter AST.
 
@@ -649,14 +676,19 @@ def register(mcp: FastMCP) -> None:
         intra-file call sites, assignments, and type annotations.
 
         Args:
-            file_path:   Absolute path to the source file.
-            symbol_name: Identifier to search for.
+            workspace_id: The logical workspace ID or absolute path to the project root.
+            file_path:    Relative path to the source file within the project.
+            symbol_name:  Identifier to search for.
         """
         try:
             import re
 
+            project_path = get_workspace_path(workspace_id)
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(project_path, file_path)
+
             if not os.path.exists(file_path):
-                return "File not found."
+                return f"File not found: {file_path}"
             with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
                 lines_list = fh.readlines()
 

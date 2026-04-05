@@ -2,7 +2,7 @@
 
 from mcp.server.fastmcp import FastMCP
 
-from tools.graph import core as graph_tools
+from tools.brain.graph import core as graph_tools
 from _helpers import get_project_id
 
 

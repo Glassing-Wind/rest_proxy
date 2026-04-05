@@ -10,8 +10,8 @@ import subprocess
 import time
 from typing import Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
-from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job
-from _helpers import get_memory_modules
+from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job, client_session_id
+from _helpers import get_memory_modules, get_project_id, get_workspace_path
 
 from graphrag_core.config import load_env
 from graphrag_core.indexing import watcher as index_watcher
@@ -100,20 +100,25 @@ async def stop_watcher() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def index_workspace(project_path: str) -> str:
+async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
     """
-    Trigger a full re-index (semantic and structural) of a directory into the graph.
+    Trigger a re-index (semantic and structural) of a directory into the graph.
     Returns immediately with a job_id. Use get_index_status(job_id) to monitor progress.
 
     Args:
-        project_path: Absolute path to the project root.
+        workspace_id: The logical workspace ID or absolute path to the project root.
+        mode: Status of the index:
+              - "incremental" (default): Updates modified files only.
+              - "rebuild": Wipes all existing project data and starts fresh.
+              - "cleanup": Only removes orphaned/deleted files from the index.
     """
     try:
         import time, uuid
 
-        project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
-        # __file__ is tools/indexing.py — step up one level to rest_proxy/
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        project_path = get_workspace_path(workspace_id)
+        project_id = get_project_id(workspace_id)
+        # __file__ is tools/hands/indexing.py — step up two levels to rest_proxy/
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         runtime_dir = os.path.join(base_dir, ".runtime")
         os.makedirs(runtime_dir, exist_ok=True)
 
@@ -130,65 +135,61 @@ async def index_workspace(project_path: str) -> str:
         await memory_store.open_pool()
 
         import graph_bootstrap
-
         driver = await graph_bootstrap.require_driver()
         valid_relpaths = [e["rel_path"] for e in manifest]
 
-        async def _cleanup() -> None:
+        # ── Handle REBUILD mode (Nuclear Wipe) ────────────────────────────────
+        if mode == "rebuild":
+            _debug_log("rebuild_wipe_start", project_id=project_id)
+            # 1. Neo4j Wipe
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as _s:
-                # 1. Delete files no longer in manifest
-                del_r = await _s.run(
-                    "MATCH (f:File {project_id: $pid}) "
-                    "WHERE NOT f.filepath IN $paths "
-                    "DETACH DELETE f RETURN count(*) AS deleted",
-                    pid=project_id,
-                    paths=valid_relpaths,
-                )
-                del_rec = await del_r.single()
-                stale_files = del_rec["deleted"] if del_rec else 0
-
-                # 2. Update timestamp for files STILL in manifest (or new ones)
-                # This allows get_indexing_health to detect stale files vs disk.
                 await _s.run(
-                    "MATCH (f:File {project_id: $pid}) "
-                    "WHERE f.filepath IN $paths "
-                    "SET f.indexed_at = timestamp()",
-                    pid=project_id,
-                    paths=valid_relpaths,
+                    "MATCH (n) WHERE n.project_id = $pid DETACH DELETE n",
+                    pid=project_id
                 )
-
-                # 3. Clean up stale symbols for files that were modified/re-indexed
-                del_sym = await _s.run(
-                    "MATCH (f:File {project_id: $pid}) WHERE f.filepath IN $paths "
-                    "MATCH (f)-[:CONTAINS]->(s) "
-                    "WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Import "
-                    "DETACH DELETE s RETURN count(*) AS deleted",
-                    pid=project_id,
-                    paths=valid_relpaths,
-                )
-                del_sym_rec = await del_sym.single()
-                stale_syms = del_sym_rec["deleted"] if del_sym_rec else 0
-
-                # ... (rest of cleanup)
-                del_s = await _s.run(
-                    "MATCH (s {project_id: $pid}) "
-                    "WHERE (s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Import) "
-                    "  AND NOT ()-[:CONTAINS]->(s) "
-                    "DETACH DELETE s RETURN count(*) AS deleted",
-                    pid=project_id,
-                )
-                del_srec = await del_s.single()
-                stale_syms += del_srec["deleted"] if del_srec else 0
-                _ = stale_files
-                _ = stale_syms
-
-        await _retry_deadlock("index_cleanup", _cleanup)
-
-        if memory_store._pg_pool_available() and valid_relpaths:
-            try:
+            # 2. Postgres Wipe
+            if memory_store._pg_pool_available():
                 async with memory_store._pg_pool.connection() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute(
+                    await conn.execute(
+                        "DELETE FROM codebase_embeddings WHERE project_id = %s",
+                        (project_id,),
+                    )
+
+        # ── Handle CLEANUP mode (Prune Orphans) ──────────────────────────────
+        elif mode == "cleanup" or mode == "incremental":
+            async def _cleanup() -> None:
+                async with driver.session(database=graph_bootstrap._NEO4J_DB) as _s:
+                    # 1. Delete files no longer in manifest
+                    await _s.run(
+                        "MATCH (f:File {project_id: $pid}) "
+                        "WHERE NOT f.filepath IN $paths "
+                        "DETACH DELETE f",
+                        pid=project_id,
+                        paths=valid_relpaths,
+                    )
+                    # 2. Update timestamp for files STILL in manifest (detected as healthy)
+                    await _s.run(
+                        "MATCH (f:File {project_id: $pid}) "
+                        "WHERE f.filepath IN $paths "
+                        "SET f.indexed_at = timestamp()",
+                        pid=project_id,
+                        paths=valid_relpaths,
+                    )
+                    # 3. Clean up symbols that are no longer referenced
+                    await _s.run(
+                        "MATCH (s {project_id: $pid}) "
+                        "WHERE (s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Import) "
+                        "  AND NOT ()-[:CONTAINS]->(s) "
+                        "DETACH DELETE s",
+                        pid=project_id,
+                    )
+
+            await _retry_deadlock("index_cleanup", _cleanup)
+
+            if memory_store._pg_pool_available() and valid_relpaths:
+                try:
+                    async with memory_store._pg_pool.connection() as conn:
+                        await conn.execute(
                             """
                             DELETE FROM codebase_embeddings
                             WHERE project_id = %s
@@ -196,12 +197,16 @@ async def index_workspace(project_path: str) -> str:
                             """,
                             (project_id, valid_relpaths),
                         )
-            except Exception as exc:
-                _debug_log(
-                    "semantic_prune_failed", project_id=project_id, error=str(exc)
-                )
+                except Exception as exc:
+                    _debug_log("semantic_prune_failed", project_id=project_id, error=str(exc))
 
+        if mode == "cleanup":
+            return f"Cleanup complete for project '{project_path}' (ID: {project_id}). Orphaned nodes and chunks removed."
+
+        # ── Launch Indexing Subprocesses ──────────────────────────────────────
+        current_session = client_session_id.get()
         with _JOBS_LOCK:
+            # Atomic check: Is this project already being indexed?
             for existing_id, existing_job in _JOBS.items():
                 if (
                     existing_job.get("project_id") == project_id
@@ -214,10 +219,10 @@ async def index_workspace(project_path: str) -> str:
                         f"\nUse get_index_status('{existing_id}') to monitor progress."
                     )
 
-        job_id = str(uuid.uuid4())[:8]
-        with _JOBS_LOCK:
+            job_id = str(uuid.uuid4())[:8]
             _JOBS[job_id] = {
                 "status": "running",
+                "session_id": current_session,
                 "project_id": project_id,
                 "project_path": project_path,
                 "file_count": len(manifest),
@@ -257,6 +262,8 @@ async def index_workspace(project_path: str) -> str:
             "--manifest-file",
             manifest_path,
         ]
+        if mode == "rebuild":
+            sem_cmd.append("--rebuild")
 
         struct_env = dict(os.environ)
         struct_env.setdefault("TS_PACK_SERIAL_PARSE", "1")
@@ -301,8 +308,9 @@ async def index_workspace(project_path: str) -> str:
             target=_finalize_job, args=(job_id, manifest_path), daemon=True
         ).start()
 
+        rebuild_info = " (Full Rebuild)" if mode == "rebuild" else ""
         return (
-            f"Indexing started in background.\n"
+            f"Indexing{rebuild_info} started in background.\n"
             f"  job_id:      {job_id}\n"
             f"  project_id:  {project_id}\n"
             f"  files found: {len(manifest)}\n"
@@ -320,8 +328,7 @@ async def get_index_status(job_id: str) -> str:
     Args:
         job_id: The job ID returned by index_workspace.
     """
-    import time
-
+    current_session = client_session_id.get()
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
         if job is None:
@@ -330,6 +337,10 @@ async def get_index_status(job_id: str) -> str:
                     job = j
                     job_id = jid
                     break
+        
+        # Security: Only allow sessions to see their own jobs (if session is active)
+        if job and current_session and job.get("session_id") != current_session:
+            return f"Access Denied: Job {job_id} belongs to another session."
 
     if job is None:
         return (
@@ -344,7 +355,7 @@ async def get_index_status(job_id: str) -> str:
     logs = job.get("logs", [])
 
     try:
-        from tools.project import get_last_graph_build_metric
+        from tools.hands.project import get_last_graph_build_metric
     except Exception:
         get_last_graph_build_metric = None
 
@@ -388,6 +399,7 @@ async def cancel_index_job(job_id: str) -> str:
     """
     Cancel a running indexing job by job_id (or prefix).
     """
+    current_session = client_session_id.get()
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
         if job is None:
@@ -402,6 +414,10 @@ async def cancel_index_job(job_id: str) -> str:
                 f"No job found for id '{job_id}'.\n"
                 f"Active jobs: {list(_JOBS.keys()) or 'none'}"
             )
+
+        # Security check: Match session ID
+        if current_session and job.get("session_id") != current_session:
+             return f"Access Denied: Cannot cancel a job belonging to another session."
 
         if job.get("status") != "running":
             return f"Job {job_id} is not running (status={job.get('status')})."
@@ -421,11 +437,12 @@ async def cancel_index_job(job_id: str) -> str:
     return f"Cancel requested for job {job_id}. Processes will terminate shortly."
 
 
-async def watch_project(project_path: str) -> str:
+async def watch_project(workspace_id: str) -> str:
     """
     Start a background watcher for a project.
     It will automatically trigger `index_workspace` when files change.
     """
+    project_path = get_workspace_path(workspace_id)
     if not os.path.exists(project_path):
         return f"Error: Path does not exist: {project_path}"
     abs_path = os.path.abspath(project_path)
@@ -435,20 +452,24 @@ async def watch_project(project_path: str) -> str:
     return f"Started watching project: {abs_path}. Indexing will occur automatically on changes."
 
 
-async def get_indexing_health(project_path: str) -> str:
+async def get_indexing_health(workspace_id: str) -> str:
     """
     Check if the index for a project is stale compared to the files on disk.
     Compares the 'indexed_at' timestamp in Neo4j with file modification times.
     """
+    project_path = get_workspace_path(workspace_id)
     if not os.path.exists(project_path):
         return f"Error: Path does not exist: {project_path}"
 
-    project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
+    project_id = get_project_id(workspace_id)
+    memory_store, _, _, _, _ = get_memory_modules()
+    await memory_store.open_pool()
     import graph_bootstrap
 
     driver = await graph_bootstrap.require_driver()
 
     indexed_files: Dict[str, float] = {}
+    semantic_files: Dict[str, float] = {}
     file_nodes = 0
     parsed_true = 0
     parsed_false = 0
@@ -456,15 +477,20 @@ async def get_indexing_health(project_path: str) -> str:
     async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
         records = await _execute_read(
             session,
-            "MATCH (f:File {project_id: $pid}) RETURN f.filepath AS fp, f.indexed_at AS ts",
+            """
+            MATCH (f:File {project_id: $pid}) 
+            RETURN f.filepath AS fp, f.indexed_at AS ts, f.vector_indexed_at AS vts
+            """,
             pid=project_id,
             op="get_indexing_health_files",
         )
         for rec in records:
             file_nodes += 1
-            # Neo4j timestamp() is in milliseconds; convert to seconds
             if rec["ts"]:
                 indexed_files[rec["fp"]] = rec["ts"] / 1000.0
+            if rec["vts"]:
+                semantic_files[rec["fp"]] = rec["vts"] / 1000.0
+
         records2 = await _execute_read(
             session,
             """
@@ -483,20 +509,21 @@ async def get_indexing_health(project_path: str) -> str:
             parsed_false = rec2["parsed_false"] or 0
             parsed_unknown = rec2["parsed_unknown"] or 0
 
-    if not indexed_files:
+    if not indexed_files and not semantic_files:
         if file_nodes > 0:
             return (
                 f"Project '{project_path}' ({project_id}) has a structural index "
-                f"with {file_nodes} file nodes, but no indexed_at timestamps yet.\n"
-                "Run index_workspace once more or let post-index maintenance complete "
-                "to refresh index health metadata."
+                f"with {file_nodes} file nodes, but no health metadata yet.\n"
+                "Run index_workspace to initialize health timestamps."
             )
         return f"Project '{project_path}' ({project_id}) is not indexed. Run index_workspace first."
 
-    stale: List[str] = []
+    stale_graph: List[str] = []
+    stale_vector: List[str] = []
     missing: List[str] = []
     manifest = build_manifest(project_path)
     total_checked_all = len(manifest)
+    manifest_paths = {entry.get("rel_path") for entry in manifest if entry.get("rel_path")}
 
     for entry in manifest:
         rel = entry.get("rel_path")
@@ -505,40 +532,97 @@ async def get_indexing_health(project_path: str) -> str:
             continue
         try:
             mtime = os.path.getmtime(abs_path)
+            # 1. Missing from graph entirely
             if rel not in indexed_files:
                 missing.append(rel)
-            elif mtime > indexed_files[rel]:
-                stale.append(rel)
+                continue
+            
+            # 2. Stale in graph (structural)
+            if mtime > indexed_files[rel]:
+                stale_graph.append(rel)
+            
+            # 3. Missing or stale in vector (semantic)
+            v_ts = semantic_files.get(rel, 0)
+            if v_ts == 0 or mtime > v_ts:
+                stale_vector.append(rel)
         except (OSError, FileNotFoundError):
             continue
 
+    # 4. Detect Orphaned Files (In index but GONE from disk)
+    orphans_graph = [fp for fp in indexed_files if fp not in manifest_paths]
+    
+    # 5. Detect Ghost Chunks (In Vector Store but GONE from disk)
+    ghost_chunks_count = 0
+    ghost_files: List[str] = []
+    if memory_store._pg_pool_available() and manifest_paths:
+        try:
+            async with memory_store._pg_pool.connection() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        SELECT file_path, count(*) 
+                        FROM codebase_embeddings 
+                        WHERE project_id = %s AND NOT (file_path = ANY(%s))
+                        GROUP BY file_path
+                        """,
+                        (project_id, list(manifest_paths)),
+                    )
+                    rows = await cur.fetchall()
+                    ghost_files = [r[0] for r in rows]
+                    ghost_chunks_count = sum(r[1] for r in rows)
+        except Exception:
+            pass
+
     lines = [f"## Indexing Health for `{project_path}`"]
-    lines.append(f"  Project ID: {project_id}")
-    lines.append(f"  Files in index:        {len(indexed_files)}")
-    lines.append(f"  Files on disk:         {total_checked_all}")
-    lines.append("  Filter: matches indexer manifest filters")
+    lines.append(f"  Project ID:           {project_id}")
+    lines.append(f"  Files in structural index: {len(indexed_files)}")
+    lines.append(f"  Files in semantic index:   {len(semantic_files)}")
+    lines.append(f"  Files on disk:             {total_checked_all}")
+    
     if file_nodes:
         lines.append(
-            f"  Parsed files:          {parsed_true}"
-            f" (unparsed={parsed_false}, unknown={parsed_unknown})"
+            f"  Parsed successfully:       {parsed_true}"
+            f" (failed={parsed_false}, unknown={parsed_unknown})"
         )
 
-    if not stale and not missing:
-        lines.append("\n✅ Index is up to date.")
-    else:
-        if stale:
-            lines.append(f"\n❌ {len(stale)} stale files (modified since last index):")
-            for s in stale[:10]:
-                lines.append(f"  - {s}")
-            if len(stale) > 10:
-                lines.append(f"  - ... and {len(stale) - 10} more")
-        if missing:
-            lines.append(f"\n⚠️ {len(missing)} files missing from index:")
-            for m in missing[:10]:
-                lines.append(f"  - {m}")
-            if len(missing) > 10:
-                lines.append(f"  - ... and {len(missing) - 10} more")
-        lines.append("\nRun `index_workspace()` to refresh the index.")
+    # Status Summary
+    if not stale_graph and not stale_vector and not missing and not orphans_graph and not ghost_files:
+        lines.append("\n✅ **Index is perfectly healthy (Graph & Vector).**")
+        return "\n".join(lines)
+
+    if stale_graph:
+        lines.append(f"\n❌ **{len(stale_graph)} Stale Structural Files** (Graph out of sync):")
+        for s in stale_graph[:3]: lines.append(f"  - {s}")
+        if len(stale_graph) > 3: lines.append(f"  - ... and {len(stale_graph) - 3} more")
+
+    if stale_vector:
+        lines.append(f"\n⚠️ **{len(stale_vector)} Stale Semantic Files** (Vector out of sync):")
+        for s in stale_vector[:3]: lines.append(f"  - {s}")
+        if len(stale_vector) > 3: lines.append(f"  - ... and {len(stale_vector) - 3} more")
+
+    if missing:
+        lines.append(f"\n⚠️ **{len(missing)} Files Missing** from index entirely:")
+        for m in missing[:3]: lines.append(f"  - {m}")
+        if len(missing) > 3: lines.append(f"  - ... and {len(missing) - 3} more")
+
+    if orphans_graph:
+        lines.append(f"\n🧹 **{len(orphans_graph)} Orphaned File Nodes** (Deleted from disk but remain in Graph):")
+        for o in orphans_graph[:3]: lines.append(f"  - {o}")
+
+    if ghost_files:
+        lines.append(f"\n👻 **{ghost_chunks_count} Ghost Chunks** from {len(ghost_files)} files (Deleted from disk but remain in Vector Store):")
+        for g in ghost_files[:3]: lines.append(f"  - {g}")
+
+    # Recommendations
+    lines.append("\n### Recommendations:")
+    if orphans_graph or ghost_files:
+        lines.append(f"- Run `index_workspace(workspace_id='{workspace_id}', mode='cleanup')` to prune orphaned nodes and ghost chunks.")
+    
+    if stale_graph or stale_vector or missing:
+        lines.append(f"- Run `index_workspace(workspace_id='{workspace_id}')` to update out-of-sync files.")
+    
+    if (len(stale_graph) + len(stale_vector)) > (total_checked_all / 2) and total_checked_all > 10:
+        lines.append(f"- **Heuristic Alert**: More than 50% of the index is stale. Consider `index_workspace(workspace_id='{workspace_id}', mode='rebuild')` for a clean state.")
 
     return "\n".join(lines)
 
@@ -623,10 +707,11 @@ async def get_indexed_projects(query: Optional[str] = None) -> str:
     return "\n".join(lines)
 
 
-async def unwatch_project(project_path: str) -> str:
+async def unwatch_project(workspace_id: str) -> str:
     """
     Stop watching a project.
     """
+    project_path = get_workspace_path(workspace_id)
     abs_path = os.path.abspath(project_path)
     if index_watcher.remove_watch(abs_path):
         return f"Stopped watching project: {abs_path}"
@@ -640,6 +725,21 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(cancel_index_job)
     mcp.tool()(watch_project)
     mcp.tool()(unwatch_project)
+
+    @mcp.tool()
+    async def register_workspace(workspace_id: str, project_path: str) -> str:
+        """
+        Explicitly register a logical workspace ID to a local filesystem path.
+        This allows tools to use the workspace_id instead of absolute paths.
+
+        Args:
+            workspace_id: A logical name for the project (e.g. 'rest_proxy').
+            project_path: The absolute path to the local project root.
+        """
+        from _helpers import WorkspaceRegistry
+        project_id = get_project_id(project_path)
+        WorkspaceRegistry.register(workspace_id, project_id, project_path)
+        return f"Registered workspace '{workspace_id}' -> `{project_path}` (ID: {project_id})"
 
     @mcp.tool()
     async def set_watcher_enabled(enabled: bool) -> str:

@@ -3,7 +3,7 @@
 import json
 from mcp.server.fastmcp import FastMCP
 
-from tools.search import core as search_core
+from tools.brain.search import core as search_core
 
 
 def register(mcp: FastMCP) -> None:

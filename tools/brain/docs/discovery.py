@@ -6,7 +6,7 @@ import sys
 from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 
-from tools.docs.config import DEFAULT_SKIP_SITEMAP_HOSTS
+from tools.brain.docs.config import DEFAULT_SKIP_SITEMAP_HOSTS
 
 
 async def _fetch_url_text(url: str, timeout: int = 10) -> Optional[str]:

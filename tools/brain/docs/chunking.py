@@ -4,7 +4,7 @@ import re
 import sys
 from typing import Dict, List
 
-from tools.docs.config import CHUNK_LINES, CHUNK_MAX_BYTES, OVERLAP_LINES
+from tools.brain.docs.config import CHUNK_LINES, CHUNK_MAX_BYTES, OVERLAP_LINES
 
 
 def chunk_content(

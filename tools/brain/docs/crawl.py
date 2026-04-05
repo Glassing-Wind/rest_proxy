@@ -6,8 +6,8 @@ import sys
 from typing import Dict, List
 from urllib.parse import urlparse
 
-from tools.docs.config import DEFAULT_FORCE_PLAYWRIGHT_HOSTS, MAX_PAGE_BYTES
-from tools.docs.discovery import _fetch_url_text
+from tools.brain.docs.config import DEFAULT_FORCE_PLAYWRIGHT_HOSTS, MAX_PAGE_BYTES
+from tools.brain.docs.discovery import _fetch_url_text
 
 
 async def crawl_pages(urls: List[str]) -> List[Dict]:

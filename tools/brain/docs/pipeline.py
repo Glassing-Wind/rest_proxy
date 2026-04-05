@@ -9,9 +9,9 @@ import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
 
-from tools.docs.chunking import chunk_content
-from tools.docs.crawl import crawl_pages
-from tools.docs.discovery import discover_pages
+from tools.brain.docs.chunking import chunk_content
+from tools.brain.docs.crawl import crawl_pages
+from tools.brain.docs.discovery import discover_pages
 
 
 def _chunk_id(url: str, idx: int) -> str:

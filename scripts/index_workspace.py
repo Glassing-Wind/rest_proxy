@@ -755,9 +755,17 @@ async def _write_buffer(
     )
 
 
-async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) -> int:
+async def index_project(
+    target_dir: str,
+    project_id: str,
+    manifest: List[Dict],
+    rebuild: bool = False,
+    cleanup_only: bool = False,
+) -> int:
     """
     Chunk, embed, and write Chunk nodes for every file in *manifest*.
+    If rebuild=True, wipes all project embeddings first.
+    If cleanup_only=True, only deletes chunks for files not in manifest.
 
     Rolling-buffer design:
     - Files are chunked in parallel (asyncio.gather over I/O-bound reads).
@@ -773,6 +781,76 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
     t0 = time.time()
     await memory_bootstrap.bootstrap_schema()
     await memory_store.open_pool()
+
+    # ── Database Preparation & Garbage Collection ──────────────────────────
+    if not store_core._pg_pool_available():
+        print(
+            "[lm-proxy:indexer] ERROR: PG pool unavailable — semantic indexing skipped",
+            file=sys.stderr,
+        )
+        return 0
+
+    # 1. Total Rebuild (Wipe project clean)
+    if rebuild:
+        try:
+            print(
+                f"[lm-proxy:indexer] Total rebuild requested — wiping project '{project_id}'...",
+                file=sys.stderr,
+                flush=True,
+            )
+            async with store_core._pg_pool.connection() as conn:
+                await conn.execute(
+                    "DELETE FROM codebase_embeddings WHERE project_id = %s",
+                    (project_id,),
+                )
+            print("[lm-proxy:indexer]   Project wiped.", file=sys.stderr, flush=True)
+        except Exception as exc:
+            print(
+                f"[lm-proxy:indexer] ERROR: rebuild wipe failed: {exc}", file=sys.stderr
+            )
+            return 0
+
+    # 2. Prune Orphans (Files that existed in past index but are gone from manifest)
+    try:
+        t_prune = time.time()
+        async with store_core._pg_pool.connection() as conn:
+            # Get all filepaths currently in DB
+            rows_cursor = await conn.execute(
+                "SELECT DISTINCT file_path FROM codebase_embeddings WHERE project_id = %s",
+                (project_id,),
+            )
+            db_paths = {r[0] async for r in rows_cursor}
+
+            if db_paths:
+                manifest_paths = {entry.get("rel_path") for entry in manifest}
+                orphans = db_paths - manifest_paths
+                if orphans:
+                    print(
+                        f"[lm-proxy:indexer] Pruning {len(orphans)} orphaned files (ghosts)...",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    for path in orphans:
+                        await conn.execute(
+                            "DELETE FROM codebase_embeddings WHERE project_id = %s AND file_path = %s",
+                            (project_id, path),
+                        )
+                    print(
+                        f"[lm-proxy:indexer]   Pruned in {(time.time() - t_prune) * 1000:.0f}ms",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+
+        if cleanup_only:
+            print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
+            return 0
+
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] WARN: orphan pruning failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
     embedding_svc = get_embedding_service()
 
     bs = embedding_svc.effective_batch_size
@@ -865,7 +943,51 @@ async def index_project(target_dir: str, project_id: str, manifest: List[Dict]) 
         flush=True,
     )
 
-    # ── Filter to only new chunks (already have stable content-hash ref_ids) ─
+    # ── Surgical Pruning: Remove ghost chunks for modified files ────────────────
+    # For every file in the manifest, we must ensure Postgres only contains the
+    # chunks we just generated. This removes "orphaned" chunks from old versions.
+    if memory_store._pg_pool_available() and all_chunks:
+        try:
+            t_prune = time.time()
+            pruned_total = 0
+            async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+                async with conn.cursor() as cur:
+                    for file_chunks in all_chunks:
+                        if not file_chunks:
+                            continue
+                        rel_path = file_chunks[0]["metadata"].get("file")
+                        if not rel_path:
+                            continue
+                        
+                        # Current valid chunk IDs for this file
+                        valid_ids = [c["ref_id"] for c in file_chunks]
+                        
+                        # Delete any chunks for this file NOT in current manifest
+                        await cur.execute(
+                            """
+                            DELETE FROM codebase_embeddings
+                            WHERE project_id = %s 
+                              AND file_path = %s
+                              AND NOT (chunk_id = ANY(%s))
+                            """,
+                            (project_id, rel_path, valid_ids),
+                        )
+                        pruned_total += cur.rowcount
+            if pruned_total > 0:
+                print(
+                    f"[lm-proxy:indexer] Surgically pruned {pruned_total} ghost chunks in "
+                    f"{(time.time() - t_prune) * 1000:.0f}ms",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        except Exception as exc:
+            print(
+                f"[lm-proxy:indexer] WARN: surgical pruning failed: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    # ── Filter to only new chunks (already have stable content-hash ref_ids) ──
     all_new_chunks: List[Dict] = [
         chunk
         for file_chunks in all_chunks
@@ -936,6 +1058,12 @@ if __name__ == "__main__":
     parser.add_argument("target", help="Absolute project root path")
     parser.add_argument("project_id", help="12-char project hash ID")
     parser.add_argument("--manifest-file", required=True, help="Path to JSON manifest")
+    parser.add_argument(
+        "--rebuild", action="store_true", help="Wipe all project embeddings first"
+    )
+    parser.add_argument(
+        "--cleanup-only", action="store_true", help="Only prune dead files from index"
+    )
     args = parser.parse_args()
 
     print(
@@ -961,4 +1089,12 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    asyncio.run(index_project(args.target, args.project_id, manifest_data))
+    asyncio.run(
+        index_project(
+            args.target,
+            args.project_id,
+            manifest_data,
+            rebuild=args.rebuild,
+            cleanup_only=args.cleanup_only,
+        )
+    )

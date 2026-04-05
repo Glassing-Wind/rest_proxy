@@ -28,10 +28,10 @@ async def _execute_read(session, cypher: str, op: str | None = None, **params):
 
 
 def register(mcp: FastMCP) -> None:
-    from tools.search import semantic as search_semantic
-    from tools.search import cross_project as search_cross_project
-    from tools.search import duplication as search_duplication
-    from tools.search import graph_query as search_graph_query
+    from tools.brain.search import semantic as search_semantic
+    from tools.brain.search import cross_project as search_cross_project
+    from tools.brain.search import duplication as search_duplication
+    from tools.brain.search import graph_query as search_graph_query
 
     search_semantic.register(mcp)
     search_cross_project.register(mcp)
