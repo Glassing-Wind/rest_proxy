@@ -352,6 +352,24 @@ def register(mcp: FastMCP) -> None:
         """
         return await graph_core._build_import_graph_impl(workspace_id)
 
+
+    async def _rebuild_subgraph(fn, label: str, workspace_id: str) -> str:
+        """Helper to resolve path, time execution, and record metrics for graph builds."""
+        import time
+        from tools.brain.graph import runtime as graph_runtime
+
+        project_path = get_workspace_path(workspace_id)
+        start_time = time.time()
+        
+        graph_runtime.record_metric(f"rebuild_{label}_start", project_path=project_path)
+        try:
+            result = await fn(project_path)
+            elapsed = (time.time() - start_time) * 1000
+            graph_runtime.record_metric(f"rebuild_{label}_done", project_path=project_path, elapsed_ms=elapsed)
+            return result
+        except Exception as e:
+            return f"Error rebuilding {label} graph: {str(e)}"
+
     @mcp.tool()
     async def rebuild_symbol_graph(workspace_id: str) -> str:
         """

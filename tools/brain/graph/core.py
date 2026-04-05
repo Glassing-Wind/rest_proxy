@@ -13,8 +13,8 @@ _SYMBOL_GRAPH_LOCK = threading.Lock()
 _GRAPH_WRITE_CONCURRENCY = max(
     1, int(os.getenv("LM_PROXY_GRAPH_WRITE_CONCURRENCY", "2"))
 )
-_NEO4J_READ_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_READ_TIMEOUT", "3.0"))
-_NEO4J_WRITE_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_WRITE_TIMEOUT", "15.0"))
+_NEO4J_READ_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_READ_TIMEOUT", "30.0"))
+_NEO4J_WRITE_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_WRITE_TIMEOUT", "120.0"))
 _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
 _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "project"}
 _NEO4J_GRAPH_BUILD_BATCH = max(50, int(os.getenv("LM_PROXY_GRAPH_BUILD_BATCH", "500")))
@@ -22,9 +22,9 @@ _NEO4J_GRAPH_BUILD_BATCH = max(50, int(os.getenv("LM_PROXY_GRAPH_BUILD_BATCH", "
 _WRITE_SEM = asyncio.Semaphore(_GRAPH_WRITE_CONCURRENCY)
 _GRAPH_RUNTIME_CONFIGURED = False
 
-# Standard symbol labels for architectural queries
-_SYMBOL_LABELS = ["Function", "Class", "Struct", "Trait", "Enum", "Method", "Protocol"]
-_SYMBOL_FILTER_CYPHER = " OR ".join([f"s:{l}" for l in _SYMBOL_LABELS])
+# Standard symbol labels and kinds for architectural queries
+_SYMBOL_LABELS = ["Function", "Class", "Struct", "Trait", "Enum", "Method", "Protocol", "Interface", "Macro"]
+_SYMBOL_FILTER_CYPHER = "(" + " OR ".join([f"s:{l}" for l in _SYMBOL_LABELS]) + " OR s.kind IN " + str(_SYMBOL_LABELS) + ")"
 
 
 

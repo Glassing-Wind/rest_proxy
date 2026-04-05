@@ -130,10 +130,9 @@ async def build_symbol_graph(
                 return name
 
             if ext == "py":
-                m = re.match(r"from\s+[\w.]+\s+import\s+(.+)", src_text)
+                m = re.search(r"from\s+([\w.]+)\s+import\s+(.+)", src_text)
                 if m:
-                    block = m.group(1).strip()
-                    block = block.strip("()")
+                    block = m.group(2).strip().strip("()")
                     for part in block.split(","):
                         name = _clean(part)
                         if not name or name == "*":
@@ -141,40 +140,41 @@ async def build_symbol_graph(
                         if " as " in name:
                             name = name.split(" as ", 1)[0].strip()
                         names.append(name)
+                else:
+                    m2 = re.search(r"import\s+([\w.]+)", src_text)
+                    if m2:
+                        names.append(m2.group(1).split(".")[-1])
             elif ext in ("js", "ts", "jsx", "tsx", "mjs", "cjs"):
-                # import Default from 'x'
-                m_default = re.match(r"import\s+([\w$]+)\s+from\s+['\"]", src_text)
-                if m_default:
-                    names.append(m_default.group(1))
-                # import * as Name from 'x'
-                m_star = re.match(
-                    r"import\s+\*\s+as\s+([\w$]+)\s+from\s+['\"]", src_text
-                )
-                if m_star:
-                    names.append(m_star.group(1))
-                # import Default, {a as b, c} from 'x'
-                m_both = re.match(r"import\s+([\w$]+)\s*,\s*\{([^}]+)\}", src_text)
-                if m_both:
-                    names.append(m_both.group(1))
-                    block = m_both.group(2)
-                    for part in block.split(","):
-                        name = _clean(part)
-                        if not name:
-                            continue
-                        if " as " in name:
-                            name = name.split(" as ", 1)[0].strip()
-                        names.append(name)
-                # import {a as b, c} from 'x'
-                m = re.search(r"import\s+\{([^}]+)\}", src_text)
-                if m:
-                    block = m.group(1)
-                    for part in block.split(","):
-                        name = _clean(part)
-                        if not name:
-                            continue
-                        if " as " in name:
-                            name = name.split(" as ", 1)[0].strip()
-                        names.append(name)
+                # Case 1: Standard import line: import X from 'y' or import { X } from 'y'
+                m_from = re.search(r"from\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text)
+                if m_from:
+                    # Named imports: { a, b as c }
+                    m_named = re.search(r"\{([^}]+)\}", src_text)
+                    if m_named:
+                        for part in m_named.group(1).split(","):
+                            name = _clean(part)
+                            if name and " as " in name:
+                                name = name.split(" as ", 1)[0].strip()
+                            if name: names.append(name)
+                    # Default import: import X from 'y'
+                    m_def = re.search(r"import\s+([\w$]+)\s+from", src_text)
+                    if m_def:
+                        names.append(m_def.group(1))
+                    # Star import: import * as X from 'y'
+                    m_star = re.search(r"import\s+\*\s+as\s+([\w$]+)\s+from", src_text)
+                    if m_star:
+                        names.append(m_star.group(1))
+                else:
+                    # Case 2: Indexer-provided module name or partial line
+                    # If it has braces but no 'from', it might be the named block itself
+                    m_braces = re.search(r"\{([^}]+)\}", src_text)
+                    if m_braces:
+                        for part in m_braces.group(1).split(","):
+                            name = _clean(part)
+                            if name: names.append(name)
+                    # If it's just a identifier and no punctuation, it might be the default name
+                    elif src_text.isidentifier() and src_text not in {"import", "from", "export"}:
+                        names.append(src_text)
             elif ext == "swift":
                 m = re.match(r"^(?:@testable\s+)?import\s+(\w+)", src_text)
                 if m:
@@ -225,20 +225,19 @@ async def build_symbol_graph(
                 session,
                 """
                 MATCH (f:File {project_id:$p})-[:CONTAINS]->(imp:Import)
-                RETURN f.id AS src_fid, f.filepath AS src_fp, imp.source AS src_text
+                RETURN f.id AS src_fid, f.filepath AS src_fp, coalesce(imp.source, imp.text, imp.path) AS src_text, imp.is_wildcard AS is_wildcard
                 """,
                 p=project_id,
                 op="build_symbol_graph_imports",
             )
             imports = []
             for rec in r2:
-                imports.append((rec["src_fid"], rec["src_fp"], rec["src_text"] or ""))
+                imports.append((rec["src_fid"], rec["src_fp"], rec["src_text"] or "", rec.get("is_wildcard", False)))
 
         # Resolve file imports using same logic as build_import_graph
         files: dict[str, str] = {}
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
             rfiles = await execute_read(
-                session,
                 session,
                 "MATCH (f:File {project_id:$p}) RETURN f.filepath AS fp, f.id AS fid",
                 p=project_id,
@@ -273,21 +272,24 @@ async def build_symbol_graph(
                     if mod in stems and len(stems[mod]) == 1:
                         return stems[mod][0]
             elif ext in ("js", "ts", "jsx", "tsx", "mjs", "cjs"):
-                m = re.search(r"from\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text)
-                if m:
-                    imp = m.group(1)
+                # If src_text is just a path (common for indexer-provided Import nodes)
+                imp = src_text
+                if "from" in src_text:
+                    m = re.search(r"from\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text)
+                    if m:
+                        imp = m.group(1)
+                
+                if imp:
                     if imp.startswith("./") or imp.startswith("../"):
                         import posixpath
-
-                        base = posixpath.normpath(posixpath.join(src_dir, imp)).lstrip(
-                            "/"
-                        )
+                        base = posixpath.normpath(posixpath.join(src_dir, imp)).lstrip("/")
                     elif imp.startswith("@/") or imp.startswith("~/"):
                         base = imp[2:]
                     elif imp.startswith("src/"):
                         base = imp
                     else:
-                        base = None
+                        base = imp # Might be a package or relative-to-root
+                    
                     if base:
                         for suf in (
                             "",
@@ -365,21 +367,62 @@ async def build_symbol_graph(
 
         def _build_symbol_edges() -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
             import_edges_local: set[tuple[str, str]] = set()
-            for src_fid, src_fp, src_text in imports:
+            total_imports = len(imports)
+            log_interval = max(1, total_imports // 10)
+
+            debug_log("symbol_resolution_start", total_imports=total_imports)
+
+            for i, (src_fid, src_fp, src_text, is_wildcard) in enumerate(imports):
+                if i % log_interval == 0:
+                    debug_log("symbol_resolution_progress", current=i, total=total_imports, project_id=project_id)
+
                 tgt_fp = resolve(src_fp, src_text)
                 ext = os.path.splitext(src_fp)[1].lstrip(".")
+                
+                # If wildcard (e.g. import *), link to ALL exports in target
+                if is_wildcard and tgt_fp:
+                    target_exports = exports_by_file.get(tgt_fp, [])
+                    target_symbols = symbols_by_file.get(tgt_fp, {})
+                    for name in target_exports:
+                        sid = target_symbols.get(name)
+                        if sid:
+                            import_edges_local.add((src_fid, sid))
+                            if len(import_edges_local) >= 500000:
+                                break
+                    if len(import_edges_local) >= 500000:
+                        break
+                    continue
+
                 names = _parse_imported_names(ext, src_text)
                 if not names:
                     continue
-                if ext == "swift":
+
+                if ext == "swift" and swift_module_map:
                     for mod in names:
-                        for fp in swift_module_map.get(mod, []):
+                        # Optimization: only iterate over files in the module if it's an internal module we track
+                        target_files = swift_module_map.get(mod, [])
+                        if not target_files:
+                            continue
+                        
+                        # LIMIT: avoid combinatorial explosion for massive Swift modules
+                        if len(target_files) > 100:
+                            debug_log("swift_module_limit_reach", module=mod, files=len(target_files))
+                            target_files = target_files[:100]
+
+                        for fp in target_files:
                             if fp == src_fp:
                                 continue
                             target_symbols = symbols_by_file.get(fp, {})
                             for sid in target_symbols.values():
                                 import_edges_local.add((src_fid, sid))
+                                if len(import_edges_local) >= 500000:
+                                    break
+                            if len(import_edges_local) >= 500000:
+                                break
+                        if len(import_edges_local) >= 500000:
+                            break
                     continue
+
                 if not tgt_fp or tgt_fp == src_fp:
                     if not tgt_fp and names:
                         mod_stem = os.path.basename(src_text)
@@ -389,19 +432,40 @@ async def build_symbol_graph(
                         )
                         if m_path:
                             mod_stem = os.path.basename(m_path.group(1))
-                        if mod_stem in stems and len(stems[mod_stem]) == 1:
-                            tgt_fp = stems[mod_stem][0]
-                        elif mod_stem:
-                            matches = stems.get(mod_stem, [])
-                            if matches:
+                        
+                        if mod_stem in stems:
+                            matches = stems[mod_stem]
+                            if len(matches) == 1:
                                 tgt_fp = matches[0]
+                            elif len(matches) > 0:
+                                # Heuristic: pick the one closest to src_dir or first match
+                                tgt_fp = matches[0]
+
                     if not tgt_fp or tgt_fp == src_fp:
                         continue
+
                 target_symbols = symbols_by_file.get(tgt_fp, {})
+                if not names and target_symbols:
+                    # Fallback: if no specific names, try to find a 'default' or 'unnamed' symbol
+                    # or a symbol matching the module stem.
+                    stem = os.path.splitext(os.path.basename(tgt_fp))[0]
+                    if "unnamed" in target_symbols:
+                        names.append("unnamed")
+                    elif stem in target_symbols:
+                        names.append(stem)
+                    elif len(target_symbols) == 1:
+                        # If only one symbol, it's likely the intended import
+                        names.extend(target_symbols.keys())
+
                 for name in names:
                     sid = target_symbols.get(name)
                     if sid:
                         import_edges_local.add((src_fid, sid))
+                        if len(import_edges_local) >= 500000:
+                            break
+                if len(import_edges_local) >= 500000:
+                    debug_log("symbol_edge_cap_reached", cap=500000)
+                    break
 
             export_edges_local: set[tuple[str, str]] = set()
             for fp, names in exports_by_file.items():
@@ -442,7 +506,7 @@ async def build_symbol_graph(
                                 """
                                 UNWIND $batch AS edge
                                 MATCH (a:File {id: edge.src})
-                                MATCH (b {id: edge.tgt})
+                                MATCH (b:Node {id: edge.tgt})
                                 MERGE (a)-[:IMPORTS_SYMBOL]->(b)
                                 """,
                                 batch=batch,
@@ -452,6 +516,7 @@ async def build_symbol_graph(
                             "symbol_import_batch",
                             project_id=project_id,
                             batch=i // batch_size,
+                            total_batches=(len(edges) + batch_size - 1) // batch_size,
                             batch_size=len(batch),
                             elapsed_ms=int((time.perf_counter() - t0) * 1000),
                         )
@@ -482,7 +547,7 @@ async def build_symbol_graph(
                                 """
                                 UNWIND $batch AS edge
                                 MATCH (a:File {id: edge.src})
-                                MATCH (b {id: edge.tgt})
+                                MATCH (b:Node {id: edge.tgt})
                                 MERGE (a)-[:EXPORTS_SYMBOL]->(b)
                                 """,
                                 batch=batch,
@@ -492,6 +557,7 @@ async def build_symbol_graph(
                             "symbol_export_batch",
                             project_id=project_id,
                             batch=i // batch_size,
+                            total_batches=(len(edges) + batch_size - 1) // batch_size,
                             batch_size=len(batch),
                             elapsed_ms=int((time.perf_counter() - t0) * 1000),
                         )

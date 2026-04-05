@@ -47,6 +47,7 @@ async def build_import_graph(
             files: dict[str, str] = {}
             for rec in r:
                 files[rec["fp"]] = rec["fid"]
+            debug_log("build_import_graph_files_loaded", count=len(files))
 
             stems: dict[str, list[str]] = {}
             for fp in files:
@@ -63,6 +64,7 @@ async def build_import_graph(
             imports = []
             for rec in r2:
                 imports.append((rec["src_fid"], rec["src_fp"], rec["src_text"] or "", rec["imp_id"]))
+            debug_log("build_import_graph_imports_loaded", count=len(imports))
 
         # Build Swift SPM module → file mapping
         swift_module_map: dict[str, list[str]] = {}
@@ -146,6 +148,12 @@ async def build_import_graph(
                     re.search(r"import\s+[\x27\x22]([^\x27\x22]+)[\x27\x22]", src_text)
                 if m:
                     imp = m.group(1)
+                else:
+                    # Fallback: src_text might already be the module path (e.g. "@prisma/client" or "./App")
+                    # Many TS/JS parsers store just the path in the 'source' attribute.
+                    imp = src_text.strip("'\"")
+
+                if imp:
                     import posixpath
                     if imp.startswith("."):
                         base = posixpath.normpath(posixpath.join(src_dir, imp)).lstrip("/")
@@ -270,7 +278,7 @@ async def build_import_graph(
             edges.extend(await asyncio.to_thread(_scan_swift_import_edges))
 
         if not edges:
-            return "No resolvable imports found — IMPORTS graph not built."
+            return f"No resolvable imports found (files={len(files)}, imports={len(imports)}) — IMPORTS graph not built."
 
         edges = list(set(edges))
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
@@ -334,6 +342,7 @@ async def build_import_graph(
         )
         return (
             f"IMPORTS graph built for {project_path.split('/')[-1]}:\n"
+            f"  {len(files)} files loaded\n"
             f"  {len(imports)} import statements scanned\n"
             f"  {len(edges)} resolved IMPORTS edges written to Neo4j\n"
             f"\nPageRank and community detection are now meaningful.\n"
