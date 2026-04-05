@@ -18,6 +18,11 @@
   - `find_code_duplication`: Finds duplicate code via hashes, winnowing, and semantic similarity.
     - Winnowing guarantee: matches shorter than `t = w + k − 1` are not guaranteed; small blocks use k-gram/token fallback.
     - Tune with `winnow_*` parameters for repo size and noise tolerance.
+- **Reliability & Auditing**:
+  - `get_indexing_health(audit=True)`: Deep structural verification (Level 2).
+    - **Internal Import Resolution**: Validates that imports link to actual file nodes.
+    - **Symbol Density**: Detects "phantom" files with 0 symbols.
+    - **Structural Connectivity**: Identifies isolated source files via WCC analysis.
 - **LM Studio Optimization**: Automatic model-fallback logic for easy embedding generation.
 
 ## 🛠 Prerequisites

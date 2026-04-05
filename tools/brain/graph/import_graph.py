@@ -56,13 +56,13 @@ async def build_import_graph(
             r2 = await execute_read(
                 session,
                 "MATCH (f:File {project_id:$p})-[:CONTAINS]->(imp:Import) "
-                "RETURN f.id AS src_fid, f.filepath AS src_fp, imp.source AS src_text",
+                "RETURN f.id AS src_fid, f.filepath AS src_fp, imp.source AS src_text, imp.id AS imp_id",
                 operation="build_import_graph_imports",
                 p=project_id,
             )
             imports = []
             for rec in r2:
-                imports.append((rec["src_fid"], rec["src_fp"], rec["src_text"] or ""))
+                imports.append((rec["src_fid"], rec["src_fp"], rec["src_text"] or "", rec["imp_id"]))
 
         # Build Swift SPM module → file mapping
         swift_module_map: dict[str, list[str]] = {}
@@ -187,11 +187,11 @@ async def build_import_graph(
                         return candidates[0]
             return None
 
-        edges: list[tuple[str, str]] = []
-        for src_fid, src_fp, src_text in imports:
+        edges: list[tuple[str, str, str | None]] = []
+        for src_fid, src_fp, src_text, imp_id in imports:
             tgt_fp = resolve(src_fp, src_text)
             if tgt_fp and tgt_fp != src_fp:
-                edges.append((src_fid, files[tgt_fp]))
+                edges.append((src_fid, files[tgt_fp], imp_id))
 
         # Swift on-disk supplement
         SWIFT_IMPORT_RE = re.compile(
@@ -263,7 +263,7 @@ async def build_import_graph(
                     candidates = swift_module_map.get(mod, [])
                     for tgt_fp in candidates:
                         if tgt_fp != src_fp and tgt_fp in files:
-                            swift_edges.append((src_fid, files[tgt_fp]))
+                            swift_edges.append((src_fid, files[tgt_fp], None))
             return swift_edges
 
         if swift_files:
@@ -282,7 +282,7 @@ async def build_import_graph(
                 timeout=write_timeout_s,
             )
             for i in range(0, len(edges), batch_size):
-                batch = [{"src": s, "tgt": t} for s, t in edges[i : i + batch_size]]
+                batch = [{"src": s, "tgt": t, "imp": iid} for s, t, iid in edges[i : i + batch_size]]
                 t0 = time.perf_counter()
                 async with write_semaphore:
                     await execute_write(
@@ -292,6 +292,10 @@ async def build_import_graph(
                         MATCH (a:File {id: edge.src})
                         MATCH (b:File {id: edge.tgt})
                         MERGE (a)-[:IMPORTS]->(b)
+                        FOREACH (ignore IN CASE WHEN edge.imp IS NOT NULL THEN [1] ELSE [] END |
+                            MERGE (i:Import {id: edge.imp})
+                            MERGE (i)-[:RESOLVES_TO]->(b)
+                        )
                     """,
                         operation="build_import_graph_batch",
                         batch=batch,

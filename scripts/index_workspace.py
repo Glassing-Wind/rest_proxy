@@ -783,7 +783,7 @@ async def index_project(
     await memory_store.open_pool()
 
     # ── Database Preparation & Garbage Collection ──────────────────────────
-    if not store_core._pg_pool_available():
+    if not memory_store._pg_pool_available():
         print(
             "[lm-proxy:indexer] ERROR: PG pool unavailable — semantic indexing skipped",
             file=sys.stderr,
@@ -798,7 +798,7 @@ async def index_project(
                 file=sys.stderr,
                 flush=True,
             )
-            async with store_core._pg_pool.connection() as conn:
+            async with memory_store._pg_pool.connection() as conn:
                 await conn.execute(
                     "DELETE FROM codebase_embeddings WHERE project_id = %s",
                     (project_id,),
@@ -813,7 +813,7 @@ async def index_project(
     # 2. Prune Orphans (Files that existed in past index but are gone from manifest)
     try:
         t_prune = time.time()
-        async with store_core._pg_pool.connection() as conn:
+        async with memory_store._pg_pool.connection() as conn:
             # Get all filepaths currently in DB
             rows_cursor = await conn.execute(
                 "SELECT DISTINCT file_path FROM codebase_embeddings WHERE project_id = %s",

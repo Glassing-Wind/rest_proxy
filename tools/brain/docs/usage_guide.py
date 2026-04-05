@@ -19,11 +19,12 @@ def register(mcp: FastMCP) -> None:
 ### Recommended Workflow:
 1. `index_workspace(project_path)` → returns immediately with a `job_id`
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
-3. `get_project_overview(project_path)` → health, architecture clusters, key files
-4. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, and coupling for a folder
-5. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
-6. `search_codebase([project_path], query, ...)` → semantic search + metadata filters
-7. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
+3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
+4. `get_project_overview(project_path)` → health, architecture clusters, key files
+5. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, and coupling for a folder
+6. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
+7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters
+8. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
 ### Call Graph Traversal:
 - `get_call_chain(project_path, symbol_name, depth=3, direction='down', file_path=None, signature=None)` → trace CALLS N hops

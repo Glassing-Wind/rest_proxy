@@ -452,10 +452,14 @@ async def watch_project(workspace_id: str) -> str:
     return f"Started watching project: {abs_path}. Indexing will occur automatically on changes."
 
 
-async def get_indexing_health(workspace_id: str) -> str:
+async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     """
-    Check if the index for a project is stale compared to the files on disk.
-    Compares the 'indexed_at' timestamp in Neo4j with file modification times.
+    Check the status of the structural index (Neo4j) and semantic index (Postgres).
+    Compares disk mtime with recorded 'indexed_at' and 'vector_indexed_at' timestamps.
+
+    Args:
+        workspace_id: Logical workspace ID or absolute path.
+        audit: If True, perform a Level 2 Deep Audit of parsing fidelity and structural integrity.
     """
     project_path = get_workspace_path(workspace_id)
     if not os.path.exists(project_path):
@@ -474,12 +478,20 @@ async def get_indexing_health(workspace_id: str) -> str:
     parsed_true = 0
     parsed_false = 0
     parsed_unknown = 0
+    
+    # --- Structural Integrity Metrics (Level 2) ---
+    import_total = 0
+    import_resolved_internal = 0
+    isolated_files: List[str] = []
+    suspicious_files: List[Dict[str, object]] = []
+
     async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+        # 1. Basic Metadata (Level 1)
         records = await _execute_read(
             session,
             """
             MATCH (f:File {project_id: $pid}) 
-            RETURN f.filepath AS fp, f.indexed_at AS ts, f.vector_indexed_at AS vts
+            RETURN f.filepath AS fp, f.indexed_at AS ts, f.vector_indexed_at AS vts, f.parsed AS parsed
             """,
             pid=project_id,
             op="get_indexing_health_files",
@@ -490,24 +502,70 @@ async def get_indexing_health(workspace_id: str) -> str:
                 indexed_files[rec["fp"]] = rec["ts"] / 1000.0
             if rec["vts"]:
                 semantic_files[rec["fp"]] = rec["vts"] / 1000.0
+            
+            p = rec["parsed"]
+            if p is True: parsed_true += 1
+            elif p is False: parsed_false += 1
+            else: parsed_unknown += 1
 
-        records2 = await _execute_read(
-            session,
-            """
-            MATCH (f:File {project_id:$pid})
-            RETURN
-              sum(CASE WHEN coalesce(f.parsed, false) = true THEN 1 ELSE 0 END) AS parsed_true,
-              sum(CASE WHEN f.parsed = false THEN 1 ELSE 0 END) AS parsed_false,
-              sum(CASE WHEN f.parsed IS NULL THEN 1 ELSE 0 END) AS parsed_unknown
-            """,
-            pid=project_id,
-            op="get_indexing_health_counts",
-        )
-        rec2 = records2[0] if records2 else None
-        if rec2:
-            parsed_true = rec2["parsed_true"] or 0
-            parsed_false = rec2["parsed_false"] or 0
-            parsed_unknown = rec2["parsed_unknown"] or 0
+        if audit:
+            # 2. Internal Import Resolution Rate (Level 2)
+            import_records = await _execute_read(
+                session,
+                """
+                MATCH (f:File {project_id: $pid})-[:CONTAINS]->(i:Import)
+                OPTIONAL MATCH (i)-[:RESOLVES_TO]->(target:File {project_id: $pid})
+                RETURN count(i) AS total, count(target) AS resolved
+                """,
+                pid=project_id,
+                op="audit_import_resolution",
+            )
+            if import_records:
+                import_total = import_records[0]["total"] or 0
+                import_resolved_internal = import_records[0]["resolved"] or 0
+
+            # 3. Symbol Density Audit (Level 2)
+            density_records = await _execute_read(
+                session,
+                """
+                MATCH (f:File {project_id: $pid})
+                WHERE (f.parsed = true OR f.parsed IS NULL) AND NOT (f.filepath CONTAINS '/vendor/' OR f.filepath CONTAINS '/node_modules/')
+                OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+                WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Method OR s:Interface
+                WITH f, count(s) AS sym_count
+                WHERE sym_count = 0
+                RETURN f.filepath AS fp
+                ORDER BY f.filepath ASC
+                """,
+                pid=project_id,
+                op="audit_symbol_density",
+            )
+            symbol_bearing_exts = {".py", ".swift", ".ts", ".js", ".go", ".rs", ".c", ".cpp", ".h", ".hpp", ".rb", ".php"}
+            excluded_basenames = {"config.py", "setup.py", "__init__.py", "conftest.py"}
+            
+            for d_rec in density_records:
+                fp = d_rec["fp"]
+                ext = os.path.splitext(fp)[1].lower()
+                base = os.path.basename(fp)
+                if ext in symbol_bearing_exts and base not in excluded_basenames:
+                    suspicious_files.append({"path": fp})
+
+            # 4. Isolated File Detection (Heuristic)
+            isolated_records = await _execute_read(
+                session,
+                """
+                MATCH (f:File {project_id: $pid})
+                WHERE NOT EXISTS {
+                    MATCH (f)-[:IMPORTS|CALLS|ASSET_LINKS|CALLS_API|CALLS_SERVICE|CALLS_DB]-(other:File {project_id: $pid})
+                    WHERE f <> other
+                }
+                RETURN f.filepath AS fp
+                LIMIT 10
+                """,
+                pid=project_id,
+                op="audit_isolation",
+            )
+            isolated_files = [r["fp"] for r in isolated_records]
 
     if not indexed_files and not semantic_files:
         if file_nodes > 0:
@@ -518,6 +576,7 @@ async def get_indexing_health(workspace_id: str) -> str:
             )
         return f"Project '{project_path}' ({project_id}) is not indexed. Run index_workspace first."
 
+    # --- Phase 1: Synchronization Logic ---
     stale_graph: List[str] = []
     stale_vector: List[str] = []
     missing: List[str] = []
@@ -532,26 +591,19 @@ async def get_indexing_health(workspace_id: str) -> str:
             continue
         try:
             mtime = os.path.getmtime(abs_path)
-            # 1. Missing from graph entirely
             if rel not in indexed_files:
                 missing.append(rel)
                 continue
-            
-            # 2. Stale in graph (structural)
             if mtime > indexed_files[rel]:
                 stale_graph.append(rel)
-            
-            # 3. Missing or stale in vector (semantic)
             v_ts = semantic_files.get(rel, 0)
             if v_ts == 0 or mtime > v_ts:
                 stale_vector.append(rel)
         except (OSError, FileNotFoundError):
             continue
 
-    # 4. Detect Orphaned Files (In index but GONE from disk)
     orphans_graph = [fp for fp in indexed_files if fp not in manifest_paths]
     
-    # 5. Detect Ghost Chunks (In Vector Store but GONE from disk)
     ghost_chunks_count = 0
     ghost_files: List[str] = []
     if memory_store._pg_pool_available() and manifest_paths:
@@ -573,57 +625,81 @@ async def get_indexing_health(workspace_id: str) -> str:
         except Exception:
             pass
 
-    lines = [f"## Indexing Health for `{project_path}`"]
-    lines.append(f"  Project ID:           {project_id}")
-    lines.append(f"  Files in structural index: {len(indexed_files)}")
-    lines.append(f"  Files in semantic index:   {len(semantic_files)}")
-    lines.append(f"  Files on disk:             {total_checked_all}")
+    # --- Result Formatting ---
+    lines = [f"# Indexing Health Audit: `{project_path}`"]
+    lines.append(f"Project ID: `{project_id}`\n")
     
-    if file_nodes:
-        lines.append(
-            f"  Parsed successfully:       {parsed_true}"
-            f" (failed={parsed_false}, unknown={parsed_unknown})"
-        )
-
-    # Status Summary
-    if not stale_graph and not stale_vector and not missing and not orphans_graph and not ghost_files:
-        lines.append("\n✅ **Index is perfectly healthy (Graph & Vector).**")
-        return "\n".join(lines)
-
+    # Bucket 1: Synchronization
+    lines.append("## 1. Synchronization (Level 1)")
+    lines.append(f"  - Files on disk:             {total_checked_all}")
+    lines.append(f"  - Files in structural index: {len(indexed_files)}")
+    lines.append(f"  - Files in semantic index:   {len(semantic_files)}")
+    
+    sync_status = "✅ Healthy"
+    if stale_graph or stale_vector or missing or orphans_graph or ghost_files:
+        sync_status = "❌ Out of Sync"
+    lines.append(f"  - **Sync Status**: {sync_status}")
+    
     if stale_graph:
-        lines.append(f"\n❌ **{len(stale_graph)} Stale Structural Files** (Graph out of sync):")
-        for s in stale_graph[:3]: lines.append(f"  - {s}")
-        if len(stale_graph) > 3: lines.append(f"  - ... and {len(stale_graph) - 3} more")
-
+        lines.append(f"    - ❌ {len(stale_graph)} Stale Structural Files")
     if stale_vector:
-        lines.append(f"\n⚠️ **{len(stale_vector)} Stale Semantic Files** (Vector out of sync):")
-        for s in stale_vector[:3]: lines.append(f"  - {s}")
-        if len(stale_vector) > 3: lines.append(f"  - ... and {len(stale_vector) - 3} more")
-
+        lines.append(f"    - ⚠️ {len(stale_vector)} Stale Semantic Files")
     if missing:
-        lines.append(f"\n⚠️ **{len(missing)} Files Missing** from index entirely:")
-        for m in missing[:3]: lines.append(f"  - {m}")
-        if len(missing) > 3: lines.append(f"  - ... and {len(missing) - 3} more")
-
+        lines.append(f"    - ❓ {len(missing)} Files missing from index entirely")
     if orphans_graph:
-        lines.append(f"\n🧹 **{len(orphans_graph)} Orphaned File Nodes** (Deleted from disk but remain in Graph):")
-        for o in orphans_graph[:3]: lines.append(f"  - {o}")
-
+        lines.append(f"    - 🧹 {len(orphans_graph)} Orphaned nodes (files deleted from disk)")
     if ghost_files:
-        lines.append(f"\n👻 **{ghost_chunks_count} Ghost Chunks** from {len(ghost_files)} files (Deleted from disk but remain in Vector Store):")
-        for g in ghost_files[:3]: lines.append(f"  - {g}")
+        lines.append(f"    - 👻 {len(ghost_files)} Ghost files with {ghost_chunks_count} dangling chunks")
 
-    # Recommendations
-    lines.append("\n### Recommendations:")
+    # Bucket 2: Structural Integrity (Level 2)
+    lines.append("\n## 2. Structural Integrity (Level 2)")
+    parse_rate = (parsed_true / file_nodes * 100) if file_nodes > 0 else 0
+    lines.append(f"  - **Parse Success Rate**: {parse_rate:.1f}% ({parsed_true}/{file_nodes})")
+    
+    if audit:
+        import_rate = (import_resolved_internal / import_total * 100) if import_total > 0 else 0
+        lines.append(f"  - **Internal Import Resolution**: {import_rate:.1f}% ({import_resolved_internal}/{import_total} resolved)")
+        lines.append(f"  - **Isolated Source Files**: {len(isolated_files)} detected (supporting heuristic)")
+        lines.append(f"  - **Symbol-Poor Files**: {len(suspicious_files)} detected (parsed but 0 symbols)")
+    else:
+        lines.append("  - *Hint: Add `audit=True` to run a deep fidelity check.*")
+
+    # Bucket 3: Suspicious Files
+    if audit and (suspicious_files or isolated_files or parsed_false > 0):
+        lines.append("\n## 3. Suspicious Files / Parsing Issues")
+        if parsed_false > 0:
+            lines.append(f"  ### Explicit Parsing Failures ({parsed_false}):")
+        
+        if suspicious_files:
+            lines.append(f"  ### Symbol-Poor Source Files (Top {min(5, len(suspicious_files))}):")
+            for f in suspicious_files[:5]:
+                lines.append(f"    - `{f['path']}`")
+        
+        if isolated_files:
+            lines.append(f"  ### Isolated Files (No structural links):")
+            for f in isolated_files[:5]:
+                lines.append(f"    - `{f}`")
+            if len(isolated_files) > 5:
+                lines.append(f"    - ... and {len(isolated_files)-5} more")
+
+    # Bucket 4: Recommended Actions
+    lines.append("\n## 4. Recommended Actions")
+    recommendations = []
+    if missing or stale_graph or stale_vector:
+        recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}')` to synchronize stale/missing files.")
     if orphans_graph or ghost_files:
-        lines.append(f"- Run `index_workspace(workspace_id='{workspace_id}', mode='cleanup')` to prune orphaned nodes and ghost chunks.")
+        recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}', mode='cleanup')` to prune orphaned data.")
     
-    if stale_graph or stale_vector or missing:
-        lines.append(f"- Run `index_workspace(workspace_id='{workspace_id}')` to update out-of-sync files.")
+    if audit:
+        if parse_rate < 80 or (import_total > 0 and (import_resolved_internal/import_total) < 0.5):
+            recommendations.append(f"- ⚠️ **Strongly Recommended**: Run `index_workspace(workspace_id='{workspace_id}', mode='rebuild')` or investigate parser/grammar compatibility.")
+        elif suspicious_files:
+             recommendations.append("- Investigate suspicious files for language-specific parsing gaps or grammar mismatches.")
     
-    if (len(stale_graph) + len(stale_vector)) > (total_checked_all / 2) and total_checked_all > 10:
-        lines.append(f"- **Heuristic Alert**: More than 50% of the index is stale. Consider `index_workspace(workspace_id='{workspace_id}', mode='rebuild')` for a clean state.")
-
+    if not recommendations:
+        recommendations.append("- No actions required. Everything looks healthy!")
+    
+    lines.extend(recommendations)
     return "\n".join(lines)
 
 
