@@ -109,7 +109,8 @@ async def _pg_bootstrap() -> bool:
 
         async with pool.connection() as conn:
             await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            for i, ddl in enumerate(_CODEBASE_DDL_STEPS + _DOC_DDL_STEPS):
+            all_ddl = _CODEBASE_DDL_STEPS + _DOC_DDL_STEPS
+            for i, ddl in enumerate(all_ddl):
                 try:
                     await conn.execute(f"SAVEPOINT sp_{i}")
                     await conn.execute(ddl)

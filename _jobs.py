@@ -11,6 +11,10 @@ import threading
 import asyncio
 import time
 from typing import Dict, Any
+from contextvars import ContextVar
+
+# Context for session-scoped operations in multi-client Brain server
+client_session_id: ContextVar[str | None] = ContextVar("client_session_id", default=None)
 
 _JOBS: Dict[str, Dict[str, Any]] = {}
 _JOBS_LOCK = threading.Lock()
@@ -121,7 +125,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
         try:
             import asyncio
             import graph_bootstrap
-            from tools.project import enqueue_graph_build
+            from tools.hands.project import enqueue_graph_build
 
             async def _post_index_maintenance() -> str | None:
                 from neo4j import unit_of_work
@@ -139,11 +143,20 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
 
                     @unit_of_work(timeout=tx_timeout, metadata=metadata)
                     async def _tx(tx):
-                        res = await tx.run(
-                            "MATCH (f:File {project_id: $pid}) "
-                            "SET f.indexed_at = timestamp()",
-                            pid=project_id,
-                        )
+                        # Construct a multi-SET query based on success of phases
+                        # If structural indexing succeeded, refresh 'indexed_at'
+                        # If semantic indexing succeeded, refresh 'vector_indexed_at'
+                        set_bits = []
+                        if struct_rc == 0:
+                            set_bits.append("f.indexed_at = timestamp()")
+                        if sem_rc == 0:
+                            set_bits.append("f.vector_indexed_at = timestamp()")
+                        
+                        if not set_bits:
+                            return None
+
+                        cypher = f"MATCH (f:File {{project_id: $pid}}) SET {', '.join(set_bits)}"
+                        res = await tx.run(cypher, pid=project_id)
                         await res.consume()
 
                     if hasattr(session, "execute_write"):

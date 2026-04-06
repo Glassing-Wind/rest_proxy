@@ -18,6 +18,11 @@
   - `find_code_duplication`: Finds duplicate code via hashes, winnowing, and semantic similarity.
     - Winnowing guarantee: matches shorter than `t = w + k − 1` are not guaranteed; small blocks use k-gram/token fallback.
     - Tune with `winnow_*` parameters for repo size and noise tolerance.
+- **Reliability & Auditing**:
+  - `get_indexing_health(audit=True)`: Deep structural verification (Level 2).
+    - **Internal Import Resolution**: Validates that imports link to actual file nodes.
+    - **Symbol Density**: Detects "phantom" files with 0 symbols.
+    - **Structural Connectivity**: Identifies isolated source files via WCC analysis.
 - **LM Studio Optimization**: Automatic model-fallback logic for easy embedding generation.
 
 ## 🛠 Prerequisites
@@ -31,24 +36,81 @@
 ## 🏃 Quick Start
 
 1. **Configure Environment**: Copy `.env.example` (if available) to `.env` and fill in your database credentials.
-2. **Start the Proxy**:
+2. **Start the Shared MCP Brain**:
    ```bash
-   python3 mcp_server.py
+   ./scripts/start_brain_server_daemon.sh
    ```
-3. **Index your Workspace**:
+3. **Connect clients to** `http://localhost:8001/mcp`
+4. **Index your Workspace**:
    Use the `index_workspace` tool from your AI assistant to perform a full sync.
 
-## Codex App MCP Launch
+## HTTP MCP Operation
 
-For the Codex app, prefer launching the MCP through the supervisor wrapper so the
-server can be restarted without editing the app config each time.
+The recommended deployment mode is a single shared Streamable HTTP MCP daemon:
 
-Recommended launch:
+```bash
+./scripts/start_brain_server_daemon.sh
+./scripts/brain_server_status.sh
+./scripts/restart_brain_server.sh
+./scripts/stop_brain_server.sh
+```
+
+Point MCP-capable clients at:
+
+```text
+http://localhost:8001/mcp
+```
+
+After restarting the daemon, refresh or reconnect the MCP client so it picks up
+the new process and current tool list.
+
+## STDIO Fallback
+
+The legacy stdio MCP path is still available as a fallback for clients that
+cannot connect to the shared HTTP daemon.
+
+To start the stdio server directly:
+
+```bash
+python3 mcp_server.py
+```
+
+To use the supervisor wrapper:
 
 ```bash
 /opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python \
   /Users/michaelmarler/Projects/rest_proxy/scripts/graphrag_mcp_supervisor.py
 ```
+
+To restart the supervised stdio child:
+
+```bash
+./scripts/restart_graphrag_mcp.sh
+```
+
+## FastAPI Proxy
+
+Start the HTTP proxy separately when you want the LLM proxy itself:
+
+```bash
+uvicorn proxy:app --host 0.0.0.0 --port 8000
+```
+
+## Codex App MCP Launch
+
+For the Codex app, prefer the shared HTTP daemon configuration:
+
+```toml
+[mcp_servers.graphrag-brain]
+url = "http://localhost:8001/mcp"
+```
+
+If you need a stdio fallback instead, use the supervisor wrapper:
+
+   ```bash
+   /opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python \
+     /Users/michaelmarler/Projects/rest_proxy/scripts/graphrag_mcp_supervisor.py
+   ```
 
 Recommended working directory:
 
@@ -63,15 +125,6 @@ PYTHONUNBUFFERED=1
 LM_PROXY_MEMORY_ENABLED=1
 LM_PROXY_NEO4J_OP_PREFIX=lmproxy
 ```
-
-To restart the child MCP process after code changes:
-
-```bash
-/Users/michaelmarler/Projects/rest_proxy/scripts/restart_graphrag_mcp.sh
-```
-
-That restart script works only when the Codex app is launching the supervisor
-wrapper rather than `mcp_server.py` directly.
 
 ## 📁 Architecture
 

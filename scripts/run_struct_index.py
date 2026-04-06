@@ -560,13 +560,15 @@ def _ensure_manifest_file_nodes(
                         """
                         UNWIND $batch AS row
                         MERGE (f {id: row.id})
-                        SET f:Node, f:File
                         ON CREATE SET
+                            f:Node,
+                            f:File,
                             f.project_id = $pid,
                             f.filepath = row.filepath,
                             f.name = row.name,
                             f.indexed_at = timestamp(),
                             f.parsed = false
+                        SET f:Node, f:File
                         """,
                         batch=batch,
                         pid=project_id,

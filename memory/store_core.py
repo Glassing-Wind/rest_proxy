@@ -254,19 +254,23 @@ _pg_pool: Optional[Any] = None  # psycopg_pool.AsyncConnectionPool
 
 async def _open_pg_pool() -> None:
     global _pg_pool
+
     if not _PG_DSN or _pg_pool is not None:
         return
-    try:
-        from psycopg_pool import AsyncConnectionPool  # type: ignore
 
-        _pg_pool = AsyncConnectionPool(
-            _PG_DSN, min_size=_PG_POOL_MIN, max_size=_PG_POOL_MAX, open=False
-        )
-        await _pg_pool.open(wait=True, timeout=15)
-        _debug("pg_pool_opened", dsn=_PG_DSN[:40])
-    except Exception as exc:
-        _debug("pg_pool_open_failed", error=str(exc))
-        _pg_pool = None
+    from psycopg_pool import AsyncConnectionPool  # type: ignore
+
+    # Main Memory Pool
+    if _pg_pool is None and _PG_DSN:
+        try:
+            _pg_pool = AsyncConnectionPool(
+                _PG_DSN, min_size=_PG_POOL_MIN, max_size=_PG_POOL_MAX, open=False
+            )
+            await _pg_pool.open(wait=True, timeout=15)
+            _debug("pg_pool_opened", dsn=_PG_DSN[:40])
+        except Exception as exc:
+            _debug("pg_pool_open_failed", error=str(exc))
+            _pg_pool = None
 
 
 def _pg_pool_available() -> bool:

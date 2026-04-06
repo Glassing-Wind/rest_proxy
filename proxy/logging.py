@@ -20,12 +20,16 @@ def debug_log(message: str, **fields: Any) -> None:
     try:
         log_str = f"[lm-proxy] {stable_json(payload)}"
         print(log_str, file=sys.stderr, flush=True)
-        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(DEBUG_LOG_PATH, "a") as f:
-            f.write(log_str + "\n")
+
+        # Only attempt to write to file if DEBUG_LOG_PATH is set and writable
+        if DEBUG_LOG_PATH:
+            try:
+                DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                with open(DEBUG_LOG_PATH, "a") as f:
+                    f.write(log_str + "\n")
+            except (OSError, PermissionError):
+                # Fallback: don't crash if filesystem is read-only
+                pass
     except Exception as e:
         log_str = f"[lm-proxy] {message} {fields} - Exception: {e}"
         print(log_str, file=sys.stderr, flush=True)
-        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(DEBUG_LOG_PATH, "a") as f:
-            f.write(log_str + "\n")
