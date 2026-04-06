@@ -15,8 +15,8 @@ def get_memory_modules():
     import memory.retrieval as memory_retrieval
     import memory.summary as memory_summary
     import memory.skeleton_extractor as skeleton_extractor
-    import proxy.logging as proxy_logging
-    return memory_store, memory_retrieval, memory_summary, skeleton_extractor, proxy_logging
+    import proxy.models as proxy_models
+    return memory_store, memory_retrieval, memory_summary, skeleton_extractor, proxy_models
 
 
 class WorkspaceRegistry:

@@ -14,6 +14,23 @@ def register(mcp: FastMCP) -> None:
     _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
     _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "dev"}
 
+    def _which(name: str) -> str | None:
+        """Robust binary discovery across common paths and environments."""
+        import shutil
+        hit = shutil.which(name)
+        if hit:
+            return hit
+        # Try alongside the current Python interpreter (conda/venv)
+        py_bin = os.path.dirname(sys.executable)
+        candidate = os.path.join(py_bin, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+        # Common brew/system paths for Mac/Linux
+        for p in ["/opt/homebrew/bin/" + name, "/usr/local/bin/" + name, "/usr/bin/" + name]:
+            if os.path.exists(p):
+                return p
+        return None
+
     async def _execute_read(session, cypher: str, op: str | None = None, **params):
         metadata = dict(_TX_METADATA_BASE)
         op_value = op or "read"
@@ -103,12 +120,12 @@ def register(mcp: FastMCP) -> None:
             file_glob:    Optional glob to restrict files, e.g. '*.py' or '*.rs'.
                           Leave empty to search all non-ignored files.
         """
+        import subprocess
+        from collections import defaultdict
         project_path = get_workspace_path(workspace_id)
-        try:
-            import subprocess, shutil
-            from collections import defaultdict
 
-            rg = shutil.which("rg") or "rg"
+        try:
+            rg = _which("rg") or "rg"
             cmd = [
                 rg,
                 "--line-number",
@@ -351,19 +368,6 @@ def register(mcp: FastMCP) -> None:
 
         project_path = get_workspace_path(workspace_id)
         results = []
-
-        # Extend PATH with common conda/venv bin dirs so linters installed
-        # inside the MCP process's environment are always discoverable.
-        def _which(name: str) -> str | None:
-            hit = shutil.which(name)
-            if hit:
-                return hit
-            # Try alongside the current Python interpreter
-            py_bin = os.path.dirname(sys.executable)
-            candidate = os.path.join(py_bin, name)
-            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                return candidate
-            return None
 
         ruff = _which("ruff")
         pylint = _which("pylint")
@@ -729,9 +733,9 @@ def register(mcp: FastMCP) -> None:
         List models currently available in LM Studio via the proxy.
         """
         try:
-            _, _, _, _, proxy = get_memory_modules()
-            models_data = await proxy.fetch_lmstudio_models()
-            keys = proxy.extract_model_keys(models_data)
+            _, _, _, _, proxy_models = get_memory_modules()
+            models_data = await proxy_models.fetch_lmstudio_models()
+            keys = proxy_models.extract_model_keys(models_data)
             if keys:
                 return "\n".join(keys)
             return "No models found."
