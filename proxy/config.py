@@ -52,6 +52,18 @@ _MEMORY_ENABLE_INJECT = os.getenv(
 }
 _MEMORY_MAX_INJECT_TURNS = int(os.getenv("LM_PROXY_MEMORY_MAX_INJECT_TURNS", "10"))
 
+# Interlink (Multi-Agent Messaging)
+_INTERLINK_ENABLED = os.getenv("LM_PROXY_ENABLE_INTERLINK", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+_INTERLINK_DSN = os.getenv("LM_PROXY_INTERLINK_DSN", os.getenv("LM_PROXY_PG_DSN", ""))
+_INTERLINK_ID = os.getenv("LM_PROXY_INTERLINK_ID", os.path.basename(os.getcwd()))
+_INTERLINK_TTL = int(os.getenv("LM_PROXY_INTERLINK_TTL", "86400"))
+
+
 # Backward-compat flag; injection is now controlled by _MEMORY_ENABLED + _MEMORY_ENABLE_INJECT.
 _MEMORY_MODE = os.getenv("LM_PROXY_MEMORY_MODE", "stateless").strip().lower()
 

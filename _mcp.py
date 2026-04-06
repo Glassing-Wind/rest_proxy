@@ -14,7 +14,7 @@ from tools import register_all
 load_env()
 
 # Initialize the shared FastMCP instance
-mcp = FastMCP("rest_proxy")
+mcp = FastMCP("graphrag-brain")
 
 # Register all tool groups (partitioned into tools/brain and tools/hands)
 register_all(mcp)

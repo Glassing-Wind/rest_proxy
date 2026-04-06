@@ -58,23 +58,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error adding memory: {str(e)}"
 
     @mcp.tool()
-    async def get_session_summary(workspace_id: str) -> str:
-        """
-        Get the current rolling summary for a workspace.
-
-        Args:
-            workspace_id: The unique identifier for the workspace.
-        """
-        try:
-            memory_store, _, _, _, _ = get_memory_modules()
-            summary = await memory_store.get_rolling_summary(workspace_id)
-            if summary:
-                return summary
-            return "No summary available for this workspace."
-        except Exception as e:
-            return f"Error retrieving summary: {str(e)}"
-
-    @mcp.tool()
     async def list_memories(workspace_id: str, include_global: bool = False) -> str:
         """
         List all durable memories stored for a workspace/project.

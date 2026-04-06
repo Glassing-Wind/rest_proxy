@@ -95,6 +95,44 @@ _DOC_DDL_STEPS = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_de_chunk_id ON doc_embeddings (chunk_id) WHERE chunk_id IS NOT NULL",
 ]
 
+# INTERLINK (Multi-Agent Messaging and Discovery)
+_INTERLINK_REGISTRY_DDL = """
+CREATE TABLE IF NOT EXISTS agent_registry (
+    agent_id          TEXT        PRIMARY KEY,
+    workspace_id      TEXT        NOT NULL,
+    workspace_path    TEXT        NOT NULL,
+    last_seen         DOUBLE PRECISION NOT NULL DEFAULT extract(epoch from now()),
+    capabilities      TEXT[]      NOT NULL DEFAULT '{}',
+    current_goal      TEXT,
+    metadata          JSONB       NOT NULL DEFAULT '{}'
+)
+"""
+
+_INTERLINK_MESSAGES_DDL = """
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id         TEXT        NOT NULL,
+    receiver_id       TEXT,                   -- NULL means "broadcast" or "all"
+    source_workspace  TEXT        NOT NULL,
+    target_workspace  TEXT,                   -- optional filter
+    interaction_type  TEXT        NOT NULL DEFAULT 'query', -- query, review, ping, sync
+    session_id        TEXT,                   -- group related messages
+    subject           TEXT,
+    content           TEXT        NOT NULL,
+    status            TEXT        NOT NULL DEFAULT 'unread', -- unread, read, archived
+    metadata          JSONB       NOT NULL DEFAULT '{}',
+    created_at        DOUBLE PRECISION NOT NULL DEFAULT extract(epoch from now())
+)
+"""
+
+_INTERLINK_DDL_STEPS = [
+    _INTERLINK_REGISTRY_DDL,
+    _INTERLINK_MESSAGES_DDL,
+    "CREATE INDEX IF NOT EXISTS idx_ar_last_seen ON agent_registry (last_seen)",
+    "CREATE INDEX IF NOT EXISTS idx_am_receiver  ON agent_messages (receiver_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_am_created   ON agent_messages (created_at)",
+]
+
 
 async def _pg_bootstrap() -> bool:
     """Create pgvector extension and all tables/indexes."""
@@ -109,7 +147,8 @@ async def _pg_bootstrap() -> bool:
 
         async with pool.connection() as conn:
             await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            for i, ddl in enumerate(_CODEBASE_DDL_STEPS + _DOC_DDL_STEPS):
+            all_ddl = _CODEBASE_DDL_STEPS + _DOC_DDL_STEPS + _INTERLINK_DDL_STEPS
+            for i, ddl in enumerate(all_ddl):
                 try:
                     await conn.execute(f"SAVEPOINT sp_{i}")
                     await conn.execute(ddl)

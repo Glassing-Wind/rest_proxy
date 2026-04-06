@@ -23,12 +23,25 @@ from proxy.config import (
     LOOP_DETECT_THRESHOLD,
 )
 
+import os
+from pathlib import Path
+
+_RUNTIME_DIR = Path(__file__).resolve().parents[1] / ".runtime"
+_PROXY_PID_FILE = _RUNTIME_DIR / "proxy.pid"
+
 app = FastAPI(title="LM Studio Stateful Chat Proxy")
 
 
 @app.on_event("startup")
 async def _startup_event() -> None:
     """Run idempotent schema bootstrap and open the Postgres connection pool on startup."""
+    # Write PID for the 'Hot Reload' supervisor
+    try:
+        _RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        _PROXY_PID_FILE.write_text(str(os.getpid()))
+    except OSError:
+        pass
+
     if _MEMORY_ENABLED and _memory_store is not None and _ENABLE_PERSISTENCE:
         # Open Neo4j connection / bootstrap schema
         try:
@@ -39,6 +52,15 @@ async def _startup_event() -> None:
                 file=sys.stderr,
                 flush=True,
             )
+
+@app.on_event("shutdown")
+async def _shutdown_event() -> None:
+    """Clean up the proxy PID file on exit."""
+    try:
+        if _PROXY_PID_FILE.exists():
+            _PROXY_PID_FILE.unlink()
+    except OSError:
+        pass
 
 
 from proxy.logging import debug_log

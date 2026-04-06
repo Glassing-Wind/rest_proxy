@@ -90,6 +90,23 @@ def register(mcp: FastMCP) -> None:
                     op="get_directory_snapshot_outbound",
                 )
 
+                # 4. UI & Assets (New section)
+                r_assets = await graph_core._execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id: $p})
+                    WHERE f.filepath STARTS WITH $dir
+                    MATCH (f)-[r:ASSET_LINKS|CALLS_API]->(target:File {project_id: $p})
+                    RETURN f.filepath AS source, type(r) AS rel, target.filepath AS target
+                    ORDER BY source, rel
+                    LIMIT $limit
+                """,
+                    p=project_id,
+                    dir=dir_prefix,
+                    limit=limit * 3,
+                    op="get_directory_snapshot_assets",
+                )
+
             # Format Report
             lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
             if not r_files:
@@ -101,6 +118,17 @@ def register(mcp: FastMCP) -> None:
                 lines.append(
                     f"- **{rec['fp']}** ({rec['sym_count']} symbols: {samples})"
                 )
+
+            if r_assets:
+                lines.append(f"\n### 🎨 UI & Assets (Linkages & Wiring)")
+                for rec in r_assets:
+                    source = rec["source"]
+                    target = rec["target"]
+                    rel = rec["rel"]
+                    if rel == "ASSET_LINKS":
+                        lines.append(f"- `{source}` -> 📦 `{target}` (Asset/Style)")
+                    elif rel == "CALLS_API":
+                        lines.append(f"- `{source}` -> 🔌 `{target}` (API Endpoint)")
 
             if r_inbound:
                 lines.append(f"\n### 📥 Consumers (External files importing from here)")
