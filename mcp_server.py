@@ -31,60 +31,8 @@ def _compute_tool_fingerprint() -> str:
     return hashlib.sha256(json.dumps(tool_names).encode()).hexdigest()[:12]
 
 
-# Computed once at import time so the heartbeat loop can compare incoming
-# fingerprints against the version this process booted with.
+# Computed once at import time for health and startup logs.
 BOOT_FINGERPRINT: str = _compute_tool_fingerprint()
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Lifecycle
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def _start_interlink_heartbeat() -> None:
-    """Background task to update agent registry and clean up old messages."""
-    try:
-        from tools import interlink, workspace_context
-
-        # Resolve context once at startup
-        ctx = await workspace_context.resolve()
-
-        if not ctx.interlink_enabled:
-            return
-
-        print(
-            f"[lm-proxy] Starting Interlink heartbeat for {ctx.agent_id} "
-            f"(base: {ctx.base_id}) at {ctx.workspace_path}",
-            file=sys.stderr,
-        )
-
-        # Initial heartbeat and cleanup — reuse the resolved ctx
-        ctx = await interlink.heartbeat(ctx=ctx)
-        await interlink.cleanup_old_messages(ctx=ctx)
-
-        consecutive_failures = 0
-        count = 0
-        while True:
-            await asyncio.sleep(60)
-            try:
-                ctx = await interlink.heartbeat(ctx=ctx)
-                consecutive_failures = 0
-                count += 1
-                if count % 60 == 0:
-                    await interlink.cleanup_old_messages(ctx=ctx)
-            except Exception as e:
-                consecutive_failures += 1
-                print(
-                    f"[lm-proxy] Interlink heartbeat error "
-                    f"(failure #{consecutive_failures}): {e}",
-                    file=sys.stderr,
-                )
-                if consecutive_failures >= 5:
-                    print(
-                        "[lm-proxy] Interlink heartbeat: 5+ consecutive failures. "
-                        "Is Postgres reachable?",
-                        file=sys.stderr,
-                    )
-    except Exception as e:
-        print(f"[lm-proxy] Interlink heartbeat fatal error: {e}", file=sys.stderr)
 
 
 async def main() -> None:
@@ -107,18 +55,14 @@ async def main() -> None:
         # Restore stdout for the actual MCP communication
         sys.stdout = _REAL_STDOUT
         
-        # --- Hot Reload Refresh ---
-        # Signal the client to reload tools and broadcast fingerprint to all agents.
+        # Signal the client to reload tools after startup.
         async def _notify_client_on_start() -> None:
             await asyncio.sleep(1.0)
-            from tools import interlink, workspace_context
 
             # 1. Notify our own IDE immediately via the JSON-RPC pipe.
-            # Per MCP 2024-11-05 spec the correct method is notifications/tools/list_changed
             msg = {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
             print(json.dumps(msg), flush=True)
 
-            # 2. Log fingerprint for visibility.
             tool_count = 0
             try:
                 tool_count = len(list(mcp._tool_manager.list_tools()))
@@ -130,29 +74,7 @@ async def main() -> None:
                 file=sys.stderr,
             )
 
-            # 3. Broadcast via Interlink so other agents notify their own IDEs.
-            try:
-                ctx = await workspace_context.resolve()
-                if ctx.interlink_enabled:
-                    await interlink.broadcast_tool_reload(
-                        fingerprint=BOOT_FINGERPRINT, ctx=ctx
-                    )
-                    print(
-                        f"[lm-proxy] Interlink broadcast sent (fp={BOOT_FINGERPRINT}).",
-                        file=sys.stderr,
-                    )
-            except Exception as e:
-                print(
-                    f"[lm-proxy] Interlink broadcast failed (non-fatal): {e}",
-                    file=sys.stderr,
-                )
-
         asyncio.create_task(_notify_client_on_start())
-        # --------------------------
-
-        # --- Interlink Support ---
-        asyncio.create_task(_start_interlink_heartbeat())
-        # -------------------------
 
         await mcp.run_stdio_async()
     finally:

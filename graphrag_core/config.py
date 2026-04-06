@@ -66,13 +66,13 @@ def resolve_workspace_context(path: Optional[str] = None) -> str:
 
 def load_env(workspace_path: Optional[str] = None) -> None:
     """
-    Load .env files with surgical global registry overrides.
+    Load .env files with limited shared-infrastructure overrides.
     1. Base Fallback: shared engine root (rest_proxy)
     2. Fallback: CWD
     3. PRIMARY: Target Workspace (Settings for Neo4j, Indexing, and everything else)
-    4. Global Registry Policy (SHARED COORDINATION ONLY)
+    4. Shared Infrastructure Overrides
 
-    Note: For identity resolution, prefer tools/workspace_context.resolve() which
+    Note: For workspace resolution, prefer tools/workspace_context.resolve() which
     reads the same files without mutating os.environ.
     """
     # 1. Repo Root fallback (lowest priority)
@@ -86,24 +86,17 @@ def load_env(workspace_path: Optional[str] = None) -> None:
     if workspace_path and os.path.exists(os.path.join(workspace_path, ".env")):
         load_dotenv(os.path.join(workspace_path, ".env"), override=True)
     
-    # 4. Global Registry Policy (SHARED COORDINATION ONLY - Override specific keys)
+    # 4. Shared infrastructure overrides
     global_env = os.path.expanduser("~/.gemini/antigravity/.env")
     if os.path.exists(global_env):
-        # We load a TEMPORARY copy of the global env to surgically extract the coordination variables
-        # This prevents the global indexing settings from polluting the project.
+        # Load a temporary copy so only explicitly shared settings leak across workspaces.
         import dotenv
         global_vars = dotenv.dotenv_values(global_env)
-        
-        # Enforce ONLY these variables globally for coordination
-        coordination_vars = {
-            "LM_PROXY_INTERLINK_DSN",
-            "LM_PROXY_ENABLE_INTERLINK",
-            "LM_PROXY_INTERLINK_TTL",
-            "LM_PROXY_REDIS_URL" # Redis is often shared for state
+
+        shared_vars = {
+            "LM_PROXY_REDIS_URL",
         }
-        for key in coordination_vars:
+        for key in shared_vars:
             if key in global_vars:
                 os.environ[key] = global_vars[key]
     
-
-

@@ -48,9 +48,10 @@ def register(mcp: FastMCP) -> None:
             driver = await graph_bootstrap.require_driver()
             cypher = """
             MATCH (n)
-            WHERE (n:Class OR n:Function) AND n.name = $name
-            RETURN n.project_id AS project, n.filepath AS file,
-                   n.start_line AS line, labels(n)[0] AS type
+            WHERE (n:Class OR n:Function OR n:Struct OR n:Trait OR n:Enum) AND n.name = $name
+            OPTIONAL MATCH (p:Project {id: n.project_id})
+            RETURN n.project_id AS project_id, p.project_path AS project_path,
+                   n.filepath AS file, n.start_line AS line, labels(n)[0] AS type
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 output = [f"Found {symbol_name} in the following locations:"]
@@ -61,8 +62,9 @@ def register(mcp: FastMCP) -> None:
                     loc = record["file"] or "unknown"
                     line = record["line"]
                     loc_str = f"{loc}:{line}" if line is not None else loc
+                    project_display = record["project_path"] or record["project_id"]
                     output.append(
-                        f"- [{record['type']}] Project: {record['project']}, File: {loc_str}"
+                        f"- [{record['type']}] Project: {project_display}, File: {loc_str}"
                     )
             if len(output) == 1:
                 return f"Symbol '{symbol_name}' not found in any indexed project."

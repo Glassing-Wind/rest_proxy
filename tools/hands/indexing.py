@@ -824,21 +824,6 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(unwatch_project)
 
     @mcp.tool()
-    async def register_workspace(workspace_id: str, project_path: str) -> str:
-        """
-        Explicitly register a logical workspace ID to a local filesystem path.
-        This allows tools to use the workspace_id instead of absolute paths.
-
-        Args:
-            workspace_id: A logical name for the project (e.g. 'rest_proxy').
-            project_path: The absolute path to the local project root.
-        """
-        from _helpers import WorkspaceRegistry
-        project_id = get_project_id(project_path)
-        WorkspaceRegistry.register(workspace_id, project_id, project_path)
-        return f"Registered workspace '{workspace_id}' -> `{project_path}` (ID: {project_id})"
-
-    @mcp.tool()
     async def set_watcher_enabled(enabled: bool) -> str:
         """
         Enable or disable the background watcher loop (per-process).

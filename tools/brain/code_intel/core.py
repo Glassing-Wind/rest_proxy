@@ -479,7 +479,7 @@ def register(mcp: FastMCP) -> None:
         Diagnostic path for symbol query latency.
 
         Args:
-            project_path: Absolute path to the project root.
+            project_path: Absolute path or logical workspace identifier.
             query:        Substring to match against symbol name/signature.
             kind:         Label to filter (default: Enum).
         """

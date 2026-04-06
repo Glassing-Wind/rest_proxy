@@ -31,6 +31,17 @@ def register(mcp: FastMCP) -> None:
         return await _tx(session)
 
     @mcp.tool()
+    async def list_dir(DirectoryPath: str) -> str:
+        """
+        List the contents of a directory.
+        """
+        path = get_workspace_path(DirectoryPath)
+        try:
+            return "\n".join(os.listdir(path))
+        except Exception as e:
+            return f"Error listing directory: {str(e)}"
+
+    @mcp.tool()
     async def git_summary(workspace_id: str) -> str:
         """
         Show the current git state of a project: recent commits, working-tree

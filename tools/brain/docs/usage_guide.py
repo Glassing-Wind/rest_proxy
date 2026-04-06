@@ -26,11 +26,9 @@ def register(mcp: FastMCP) -> None:
 7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters
 8. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
-### Interlink (Multi-Agent Messaging):
-- `interlink_status()` → view online agents, their workspaces, and active goals
-- `interlink_message(action='send', target_agent='id', content='...')` → coordinate with other agents
-- `interlink_message(action='poll')` → check mailbox for new tasks or answers
-- `update_my_status(current_goal='...')` → self-report progress to the multi-agent registry
+### Workspace Context:
+- The MCP resolves workspace context from the active project path or the IDE session registry.
+- Session-scoped workspace resolution is used internally so multi-workspace IDE sessions can target the correct project without mutating global environment state.
 
 ### Call Graph Traversal:
 - `get_call_chain(project_path, symbol_name, depth=3, direction='down', file_path=None, signature=None)` → trace CALLS N hops

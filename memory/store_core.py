@@ -250,14 +250,12 @@ async def get_recent_turns(session_id: str) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 _pg_pool: Optional[Any] = None  # psycopg_pool.AsyncConnectionPool
-_interlink_pool: Optional[Any] = None
 
 
 async def _open_pg_pool() -> None:
-    global _pg_pool, _interlink_pool
-    import proxy.config as config
+    global _pg_pool
 
-    if not _PG_DSN or (_pg_pool is not None and config._INTERLINK_DSN == _PG_DSN):
+    if not _PG_DSN or _pg_pool is not None:
         return
 
     from psycopg_pool import AsyncConnectionPool  # type: ignore
@@ -274,30 +272,9 @@ async def _open_pg_pool() -> None:
             _debug("pg_pool_open_failed", error=str(exc))
             _pg_pool = None
 
-    # Interlink Pool
-    if config._INTERLINK_ENABLED:
-        if config._INTERLINK_DSN == _PG_DSN:
-            # Shared pool
-            _interlink_pool = _pg_pool
-        elif _interlink_pool is None and config._INTERLINK_DSN:
-            try:
-                _interlink_pool = AsyncConnectionPool(
-                    config._INTERLINK_DSN, min_size=1, max_size=_PG_POOL_MAX, open=False
-                )
-                await _interlink_pool.open(wait=True, timeout=15)
-                _debug("interlink_pool_opened", dsn=config._INTERLINK_DSN[:40])
-            except Exception as exc:
-                _debug("interlink_pool_open_failed", error=str(exc))
-                _interlink_pool = None
-
 
 def _pg_pool_available() -> bool:
     return _ENABLE_PERSISTENCE and _PG_DSN != "" and _pg_pool is not None
-
-
-def _interlink_pool_available() -> bool:
-    import proxy.config as config
-    return config._INTERLINK_ENABLED and config._INTERLINK_DSN != "" and _interlink_pool is not None
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +293,7 @@ async def open_pool() -> None:
 
 async def close_pool() -> None:
     """Close Postgres pool, Neo4j driver, and Redis client."""
-    global _redis_client, _pg_pool, _interlink_pool
+    global _redis_client, _pg_pool
     try:
         if _redis_client is not None:
             await _redis_client.close()
@@ -325,10 +302,6 @@ async def close_pool() -> None:
         if _pg_pool is not None:
             await _pg_pool.close()
             _pg_pool = None
-        if _interlink_pool is not None and _interlink_pool != _pg_pool:
-            # Only close if it's not the same object as _pg_pool (which was closed above)
-            await _interlink_pool.close()
-            _interlink_pool = None
             _debug("pg_pool_closed")
         await graph_bootstrap.close_graph_db()
     except Exception as exc:

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="$ROOT/.runtime/graphrag_mcp_supervisor.pid"
+RESTART_BRAIN_SCRIPT="$ROOT/scripts/restart_brain_server.sh"
 
 TARGET_ID="${1:-}" 
 PID_FILES=()
@@ -46,3 +47,7 @@ for pf in "${PID_FILES[@]}"; do
   fi
 done
 # Completed multi-restart logic
+
+if [[ -x "$RESTART_BRAIN_SCRIPT" ]]; then
+  "$RESTART_BRAIN_SCRIPT" --if-running
+fi

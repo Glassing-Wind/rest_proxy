@@ -112,6 +112,13 @@ def get_workspace_path(workspace_id: str) -> str:
     Resolve a workspace_id to a local filesystem path.
     Falls back to treating the ID as a path if not registered.
     """
+    # Side-effect: trigger session re-binding if we're in an active session
+    try:
+        from tools.workspace_context import rebind_session_sync
+        rebind_session_sync(workspace_id)
+    except Exception:
+        pass
+
     resolved = WorkspaceRegistry.resolve_path(workspace_id)
     if resolved:
         return resolved
