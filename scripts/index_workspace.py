@@ -464,6 +464,52 @@ async def _write_buffer(
     )
 
 
+async def _execute_semantic_index_rounds(
+    ts_pack,
+    new_chunks: List[Dict],
+    *,
+    batch_size: int,
+    concurrency: int,
+    embedding_svc,
+    target_dir: str,
+    project_id: str,
+) -> dict:
+    if not hasattr(ts_pack, "execute_semantic_index_rounds"):
+        raise RuntimeError("ts_pack.execute_semantic_index_rounds is required")
+
+    async def _embed(batch):
+        return await _embed_buffer(batch, embedding_svc)
+
+    async def _write(batch):
+        return await _write_buffer(batch, target_dir, project_id)
+
+    async def _progress(event: dict) -> None:
+        phase = event.get("phase")
+        if phase == "embed_start":
+            print(
+                f"[lm-proxy:indexer] Embedding round {event['round_index'] + 1}/{event['rounds']} "
+                f"— {event['batch_count']} concurrent batches — "
+                f"{event['written_so_far'] + event['group_size']}/{event['total_new']} chunks…",
+                file=sys.stderr,
+                flush=True,
+            )
+        elif phase == "round_done":
+            print(
+                f"[lm-proxy:indexer]   wrote {event.get('round_written', 0)} chunks",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    return await ts_pack.execute_semantic_index_rounds(
+        new_chunks,
+        batch_size=batch_size,
+        concurrency=concurrency,
+        embed_batch_fn=_embed,
+        write_batch_fn=_write,
+        progress_fn=_progress,
+    )
+
+
 def _report_chunking_results(
     manifest: List[Dict], all_results: List[Tuple[List[Dict], str | None]], elapsed: float
 ) -> tuple[list[list[dict]], int, int]:
@@ -651,47 +697,17 @@ async def index_project(
     all_new_chunks: List[Dict] = sync_plan.get("new_chunks") or []
     skipped = int(sync_plan.get("skipped_chunks") or 0)
     total_new = len(all_new_chunks)
-    batch_num = 0
-
-    # ── Concurrent embed + write (CONCURRENCY groups at a time) ──────────────
-    # Split all_new_chunks into groups of CONCURRENCY*bs chunks.
-    # For each group: asyncio.gather all embed calls (CONCURRENCY parallel
-    # HTTP requests to LM Studio), then asyncio.gather all Postgres writes.
     from embedding_service import _CONCURRENCY as CONCURRENCY
-
-    window = bs * CONCURRENCY  # e.g. 64 * 4 = 256 chunks per round
-    n_rounds = (total_new + window - 1) // window
-
-    for round_idx in range(n_rounds):
-        group = all_new_chunks[round_idx * window : (round_idx + 1) * window]
-        sub_bufs = [group[i : i + bs] for i in range(0, len(group), bs)]
-        actual_concurrent = len(sub_bufs)
-
-        # ── Embed phase: all sub-buffers sent to LM Studio concurrently ───
-        t_embed = time.time()
-        print(
-            f"[lm-proxy:indexer] Embedding round {round_idx + 1}/{n_rounds} "
-            f"— {actual_concurrent} concurrent batches — "
-            f"{total_indexed + len(group)}/{total_new} chunks…",
-            file=sys.stderr,
-            flush=True,
-        )
-        embedded_bufs = await asyncio.gather(
-            *[_embed_buffer(buf, embedding_svc) for buf in sub_bufs]
-        )
-        embed_ms = (time.time() - t_embed) * 1000
-
-        # ── Write phase: all embedded sub-buffers written to Postgres concurrently
-        write_counts = await asyncio.gather(
-            *[_write_buffer(buf, target_dir, project_id) for buf in embedded_bufs]
-        )
-        n_written = sum(write_counts)
-        total_indexed += n_written
-        print(
-            f"[lm-proxy:indexer]   embed={embed_ms:.0f}ms  wrote {n_written} chunks",
-            file=sys.stderr,
-            flush=True,
-        )
+    round_result = await _execute_semantic_index_rounds(
+        ts_pack,
+        all_new_chunks,
+        batch_size=bs,
+        concurrency=CONCURRENCY,
+        embedding_svc=embedding_svc,
+        target_dir=target_dir,
+        project_id=project_id,
+    )
+    total_indexed = int(round_result.get("written") or 0)
 
     elapsed = time.time() - t0
     print(

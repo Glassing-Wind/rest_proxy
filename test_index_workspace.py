@@ -74,6 +74,7 @@ class FakeTsPack:
         swift_chunks=None,
         line_window_chunks=None,
         sync_plan=None,
+        rounds_result=None,
     ):
         self._result = result or {}
         self._detected_language = detected_language
@@ -81,6 +82,7 @@ class FakeTsPack:
         self._swift_chunks = swift_chunks
         self._line_window_chunks = line_window_chunks
         self._sync_plan = sync_plan
+        self._rounds_result = rounds_result
 
     def has_language(self, language):
         return True
@@ -226,6 +228,49 @@ class FakeTsPack:
             "existing_ids": set(),
         }
 
+    async def execute_semantic_index_rounds(
+        self,
+        new_chunks,
+        *,
+        batch_size,
+        concurrency,
+        embed_batch_fn,
+        write_batch_fn,
+        progress_fn=None,
+    ):
+        if self._rounds_result is not None:
+            return self._rounds_result
+        total_written = 0
+        if progress_fn is not None:
+            await progress_fn(
+                {
+                    "round_index": 0,
+                    "rounds": 1,
+                    "group_size": len(new_chunks),
+                    "batch_count": 1,
+                    "written_so_far": 0,
+                    "total_new": len(new_chunks),
+                    "phase": "embed_start",
+                }
+            )
+        embedded = await embed_batch_fn(new_chunks)
+        written = await write_batch_fn(embedded)
+        total_written += int(written or 0)
+        if progress_fn is not None:
+            await progress_fn(
+                {
+                    "round_index": 0,
+                    "rounds": 1,
+                    "group_size": len(new_chunks),
+                    "batch_count": 1,
+                    "written_so_far": total_written,
+                    "total_new": len(new_chunks),
+                    "phase": "round_done",
+                    "round_written": total_written,
+                }
+            )
+        return {"written": total_written, "rounds": 1}
+
 
 class FakeCursor:
     def __init__(self):
@@ -340,6 +385,28 @@ class IndexWorkspaceTests(unittest.TestCase):
             )
         )
         self.assertEqual(plan, payload)
+
+    def test_execute_semantic_index_rounds_delegates_to_package(self):
+        fake_ts_pack = FakeTsPack(rounds_result={"written": 3, "rounds": 2})
+
+        async def _run():
+            svc = types.SimpleNamespace()
+            result = await self.module._execute_semantic_index_rounds(
+                fake_ts_pack,
+                [{"ref_id": "chunk-1", "text": "hello"}],
+                batch_size=2,
+                concurrency=2,
+                embedding_svc=svc,
+                target_dir="/tmp/project",
+                project_id="proj123",
+            )
+            return result
+
+        with mock.patch.object(self.module, "_embed_buffer", side_effect=AssertionError("should not call local embed loop")):
+            with mock.patch.object(self.module, "_write_buffer", side_effect=AssertionError("should not call local write loop")):
+                result = asyncio.run(_run())
+
+        self.assertEqual(result, {"written": 3, "rounds": 2})
 
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
