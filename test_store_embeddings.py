@@ -41,6 +41,7 @@ def load_store_embeddings_module():
 class FakeCursor:
     def __init__(self):
         self.executemany_calls = []
+        self.execute_calls = []
 
     async def __aenter__(self):
         return self
@@ -50,6 +51,9 @@ class FakeCursor:
 
     async def executemany(self, query, rows):
         self.executemany_calls.append((query, rows))
+
+    async def execute(self, query, params):
+        self.execute_calls.append((query, params))
 
 
 class FakeConnection:
@@ -78,32 +82,22 @@ class StoreEmbeddingsTests(unittest.TestCase):
     def setUp(self):
         self.module = load_store_embeddings_module()
 
-    def test_insert_embeddings_batch_uses_package_row_builder(self):
+    def test_insert_embeddings_batch_uses_package_executor(self):
         cursor = FakeCursor()
         self.module.store_core._pg_pool = FakePool(cursor)
 
         fake_ts_pack = types.SimpleNamespace()
         captured = {}
 
-        def _build_rows(batch, project_id, *, expected_dim=None, created_at=None):
+        async def _execute_upsert(cursor_obj, batch, project_id, *, expected_dim=None, created_at=None):
             captured["project_id"] = project_id
             captured["expected_dim"] = expected_dim
             captured["created_at"] = created_at
-            return [
-                (
-                    "chunk-1",
-                    project_id,
-                    "src/a.ts",
-                    "code_chunk",
-                    14,
-                    "hello",
-                    "[0.1,0.2]",
-                    '{"file":"src/a.ts","start_line":14}',
-                    created_at,
-                )
-            ]
+            captured["batch"] = batch
+            captured["cursor"] = cursor_obj
+            return 1
 
-        fake_ts_pack.build_codebase_embedding_rows = _build_rows
+        fake_ts_pack.execute_codebase_embedding_upsert = _execute_upsert
         self.module.ts_pack = fake_ts_pack
 
         batch = [
@@ -122,9 +116,45 @@ class StoreEmbeddingsTests(unittest.TestCase):
         self.assertEqual(written, 1)
         self.assertEqual(captured["project_id"], "proj123")
         self.assertEqual(captured["expected_dim"], 2)
-        self.assertEqual(len(cursor.executemany_calls), 1)
-        _, rows = cursor.executemany_calls[0]
-        self.assertEqual(rows[0][4], 14)
+        self.assertIs(captured["cursor"], cursor)
+        self.assertEqual(captured["batch"][0]["metadata"]["start_line"], 14)
+        self.assertEqual(len(cursor.executemany_calls), 0)
+
+    def test_insert_codebase_embedding_uses_package_executor(self):
+        cursor = FakeCursor()
+        self.module.store_core._pg_pool = FakePool(cursor)
+
+        fake_ts_pack = types.SimpleNamespace()
+        captured = {}
+
+        async def _execute_upsert(cursor_obj, batch, project_id, *, expected_dim=None, created_at=None):
+            captured["cursor"] = cursor_obj
+            captured["batch"] = batch
+            captured["project_id"] = project_id
+            captured["expected_dim"] = expected_dim
+            return 1
+
+        fake_ts_pack.execute_codebase_embedding_upsert = _execute_upsert
+        self.module.ts_pack = fake_ts_pack
+
+        ok = asyncio.run(
+            self.module.insert_codebase_embedding(
+                "chunk-1",
+                "proj123",
+                "src/a.ts",
+                9,
+                "hello",
+                [0.1, 0.2],
+                metadata={"language": "typescript"},
+            )
+        )
+
+        self.assertTrue(ok)
+        self.assertIs(captured["cursor"], cursor)
+        self.assertEqual(captured["project_id"], "proj123")
+        self.assertEqual(captured["expected_dim"], 2)
+        self.assertEqual(captured["batch"][0]["metadata"]["file"], "src/a.ts")
+        self.assertEqual(captured["batch"][0]["metadata"]["chunk_index"], 9)
 
 
 if __name__ == "__main__":

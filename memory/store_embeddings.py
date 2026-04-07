@@ -30,37 +30,29 @@ async def insert_codebase_embedding(
     """
     if not store_core._pg_pool_available():
         return False
-    if (
-        not isinstance(vector, list)
-        or len(vector) != store_core._EXPECTED_EMBEDDING_DIM
-    ):
-        store_core._debug("pg_insert_ce_dim_mismatch", project_id=project_id)
+    if not ts_pack or not hasattr(ts_pack, "execute_codebase_embedding_upsert"):
+        store_core._debug("pg_insert_ce_missing_ts_pack", project_id=project_id)
         return False
     try:
-        vec_str = "[" + ",".join(str(v) for v in vector) + "]"
-        meta_json = json.dumps(metadata or {})
+        batch = [
+            {
+                "ref_id": chunk_id,
+                "ref_type": ref_type,
+                "text": content,
+                "vector": vector,
+                "metadata": dict(metadata or {}, file=file_path, chunk_index=chunk_index),
+            }
+        ]
         async with store_core._pg_pool.connection() as conn:  # type: ignore[union-attr]
-            await conn.execute(
-                """
-                INSERT INTO codebase_embeddings
-                  (chunk_id, project_id, file_path, ref_type, chunk_index,
-                   content, embedding, metadata, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s::vector, %s::jsonb, to_timestamp(%s))
-                ON CONFLICT (chunk_id) DO NOTHING
-                """,
-                (
-                    chunk_id,
+            async with conn.cursor() as cur:
+                written = await ts_pack.execute_codebase_embedding_upsert(
+                    cur,
+                    batch,
                     project_id,
-                    file_path,
-                    ref_type,
-                    chunk_index,
-                    content,
-                    vec_str,
-                    meta_json,
-                    time.time(),
-                ),
-            )
-        return True
+                    expected_dim=store_core._EXPECTED_EMBEDDING_DIM,
+                    created_at=time.time(),
+                )
+        return written > 0
     except Exception as exc:
         store_core._debug(
             "pg_insert_ce_error",
@@ -99,59 +91,18 @@ async def insert_embeddings_batch(
         # ── Phase 1: Postgres batch upsert (single connection, one round-trip) ─
         written = 0
         if store_core._pg_pool_available():
-            _now = time.time()
-            rows = []
-            if ts_pack and hasattr(ts_pack, "build_codebase_embedding_rows"):
-                rows = ts_pack.build_codebase_embedding_rows(
-                    batch,
-                    project_id,
-                    expected_dim=store_core._EXPECTED_EMBEDDING_DIM,
-                    created_at=_now,
-                )
-            else:
-                for item in batch:
-                    chunk_id = item["ref_id"]
-                    meta = item.get("metadata", {})
-                    file_path = meta.get("file", "") if isinstance(meta, dict) else ""
-                    chunk_idx = int(meta.get("chunk_index") or meta.get("start_line") or 0) if isinstance(meta, dict) else 0
-                    vec = item.get("vector", [])
-
-                    if (
-                        not isinstance(vec, list)
-                        or len(vec) != store_core._EXPECTED_EMBEDDING_DIM
-                    ):
-                        continue
-
-                    vec_str = "[" + ",".join(str(v) for v in vec) + "]"
-                    meta_json = json.dumps(meta if isinstance(meta, dict) else {})
-                    rows.append(
-                        (
-                            chunk_id,
-                            project_id,
-                            file_path,
-                            item.get("ref_type", "code_chunk"),
-                            chunk_idx,
-                            item["text"],
-                            vec_str,
-                            meta_json,
-                            _now,
-                        )
-                    )
-
-            if rows:
+            if ts_pack and hasattr(ts_pack, "execute_codebase_embedding_upsert"):
                 async with store_core._pg_pool.connection() as conn:  # type: ignore[union-attr]
                     async with conn.cursor() as cur:
-                        await cur.executemany(
-                            """
-                            INSERT INTO codebase_embeddings
-                              (chunk_id, project_id, file_path, ref_type, chunk_index,
-                               content, embedding, metadata, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s::vector, %s::jsonb, to_timestamp(%s))
-                            ON CONFLICT (chunk_id) DO NOTHING
-                            """,
-                            rows,
+                        written = await ts_pack.execute_codebase_embedding_upsert(
+                            cur,
+                            batch,
+                            project_id,
+                            expected_dim=store_core._EXPECTED_EMBEDDING_DIM,
+                            created_at=time.time(),
                         )
-                written = len(rows)
+            else:
+                return 0
         else:
             # No Postgres — fall back to Neo4j full write
             return await _neo4j_insert_embeddings_batch(session_id, project_id, batch)
