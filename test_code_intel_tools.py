@@ -320,6 +320,48 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crates/api/src/lib.rs", output)
         self.assertIn("[crate:api]", output)
 
+    def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.louvainCommunity IS NOT NULL" in cypher:
+                return []
+            if "top_dir AS dominant_dir" in cypher:
+                return [
+                    {
+                        "comm": None,
+                        "dominant_dir": "crates",
+                        "file_count": 3,
+                        "total_syms": 20,
+                        "top_files": ["crates/api/src/lib.rs", "crates/api/src/routes.rs"],
+                    },
+                    {
+                        "comm": None,
+                        "dominant_dir": "crates",
+                        "file_count": 2,
+                        "total_syms": 12,
+                        "top_files": ["crates/core/src/lib.rs", "crates/core/src/service.rs"],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": ["CargoCrate"]}]
+            if "MATCH (c:CargoCrate" in cypher:
+                return [
+                    {"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml"},
+                    {"crate": "core", "crate_name": "core", "manifest_path": "crates/core/Cargo.toml"},
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/rustws"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("crate `api`", output)
+        self.assertIn("crate `core`", output)
+        self.assertIn("crates/api/src/lib.rs", output)
+
 
 if __name__ == "__main__":
     unittest.main()

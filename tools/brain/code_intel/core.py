@@ -40,6 +40,45 @@ def register(mcp: FastMCP) -> None:
             return await session.execute_read(_tx)
         return await _tx(session)
 
+    def _cargo_manifest_dir(manifest_path: str | None) -> str:
+        if not manifest_path:
+            return ""
+        return manifest_path[:-len("Cargo.toml")] if manifest_path.endswith("Cargo.toml") else manifest_path
+
+    def _match_cargo_crate(file_path: str | None, cargo_rows: list[dict]) -> str | None:
+        if not file_path:
+            return None
+        for row in cargo_rows:
+            crate_root = _cargo_manifest_dir(row.get("manifest_path"))
+            if crate_root and file_path.startswith(crate_root):
+                return row.get("crate") or row.get("crate_name")
+        return None
+
+    async def _load_cargo_crate_rows(session, project_id: str):
+        cargo_schema = await _execute_read(
+            session,
+            """
+            CALL db.labels() YIELD label
+            RETURN collect(label) AS labels
+            """,
+            op="cargo_schema_labels",
+        )
+        cargo_labels = set(cargo_schema[0].get("labels") or []) if cargo_schema else set()
+        if "CargoCrate" not in cargo_labels:
+            return []
+        return await _execute_read(
+            session,
+            """
+            MATCH (c:CargoCrate {project_id:$pid})-[:DEFINED_IN_FILE]->(mf:File {project_id:$pid})
+            RETURN c.name AS crate,
+                   c.crate_name AS crate_name,
+                   mf.filepath AS manifest_path
+            ORDER BY size(mf.filepath) DESC, c.name
+            """,
+            pid=project_id,
+            op="cargo_crates",
+        )
+
     @mcp.tool()
     async def get_symbol_context(
         workspace_id: str, symbol_name: str, include_source_preview: bool = True
@@ -472,29 +511,7 @@ def register(mcp: FastMCP) -> None:
                         op="get_code_importance_fallback",
                     )
 
-                cargo_schema = await _execute_read(
-                    session,
-                    """
-                    CALL db.labels() YIELD label
-                    RETURN collect(label) AS labels
-                    """,
-                    op="get_code_importance_cargo_schema_labels",
-                )
-                cargo_labels = set(cargo_schema[0].get("labels") or []) if cargo_schema else set()
-                cargo_rows = []
-                if "CargoCrate" in cargo_labels:
-                    cargo_rows = await _execute_read(
-                        session,
-                        """
-                        MATCH (c:CargoCrate {project_id:$pid})-[:DEFINED_IN_FILE]->(mf:File {project_id:$pid})
-                        RETURN c.name AS crate,
-                               c.crate_name AS crate_name,
-                               mf.filepath AS manifest_path
-                        ORDER BY size(mf.filepath) DESC, c.name
-                        """,
-                        pid=project_id,
-                        op="get_code_importance_cargo_crates",
-                    )
+                cargo_rows = await _load_cargo_crate_rows(session, project_id)
 
             scoring_method = (
                 "GDS PageRank (CALLS graph)"
@@ -502,27 +519,13 @@ def register(mcp: FastMCP) -> None:
                 else "heuristic (callers×3 + symbols)"
             )
 
-            def _cargo_manifest_dir(manifest_path: str | None) -> str:
-                if not manifest_path:
-                    return ""
-                return manifest_path[:-len("Cargo.toml")] if manifest_path.endswith("Cargo.toml") else manifest_path
-
-            def _match_cargo_crate(file_path: str | None) -> str | None:
-                if not file_path:
-                    return None
-                for row in cargo_rows:
-                    crate_root = _cargo_manifest_dir(row.get("manifest_path"))
-                    if crate_root and file_path.startswith(crate_root):
-                        return row.get("crate") or row.get("crate_name")
-                return None
-
             output = [f"Most important files [{scoring_method}, test/vendor excluded]:"]
             rendered_rows = []
             for record in records:
                 examples = (
                     ", ".join(record["sym_examples"]) if record["sym_examples"] else "—"
                 )
-                crate = _match_cargo_crate(record.get("file"))
+                crate = _match_cargo_crate(record.get("file"), cargo_rows)
                 pr_str = (
                     f"  pr:{record['top_pagerank']:.4f}"
                     if record["top_pagerank"]
@@ -632,21 +635,57 @@ def register(mcp: FastMCP) -> None:
                         pid=project_id,
                         op="get_code_communities_dir",
                     )
+                cargo_rows = await _load_cargo_crate_rows(session, project_id)
 
             method = (
                 "GDS Louvain (topology)" if using_louvain else "top-level directory"
             )
             output = [f"Architectural clusters [{method}]:"]
-            for record in records:
-                if using_louvain:
-                    comm_label = f"cluster #{record['comm']}"
-                else:
-                    comm_label = record["dominant_dir"]
-                output.append(
-                    f"\n\U0001f4e6 {comm_label}"
-                    f"  ({record['file_count']} files, {record['total_syms']} symbols)"
-                    f"\n   Top files: {', '.join(record['top_files'])}"
-                )
+            if cargo_rows and not using_louvain:
+                crate_groups: dict[str, list[dict]] = {}
+                for record in records:
+                    top_file = (record.get("top_files") or [None])[0]
+                    crate = _match_cargo_crate(top_file, cargo_rows) or record.get("dominant_dir") or "(unowned)"
+                    crate_groups.setdefault(crate, []).append(record)
+                for crate, items in crate_groups.items():
+                    total_files = sum(int(item.get("file_count") or 0) for item in items)
+                    total_syms = sum(int(item.get("total_syms") or 0) for item in items)
+                    top_files = []
+                    seen = set()
+                    for item in items:
+                        for fp in item.get("top_files") or []:
+                            if fp in seen:
+                                continue
+                            seen.add(fp)
+                            top_files.append(fp)
+                    output.append(
+                        f"\n\U0001f4e6 crate `{crate}`"
+                        f"  ({total_files} files, {total_syms} symbols)"
+                        f"\n   Top files: {', '.join(top_files[:5])}"
+                    )
+            else:
+                for record in records:
+                    if using_louvain:
+                        comm_label = f"cluster #{record['comm']}"
+                        if cargo_rows:
+                            dominant_crates: dict[str, int] = {}
+                            for fp in record.get("top_files") or []:
+                                crate = _match_cargo_crate(fp, cargo_rows) or "(unowned)"
+                                dominant_crates[crate] = dominant_crates.get(crate, 0) + 1
+                            crate_text = ", ".join(
+                                crate for crate, _ in sorted(dominant_crates.items(), key=lambda item: (-item[1], item[0]))[:3]
+                            )
+                        else:
+                            crate_text = ""
+                    else:
+                        comm_label = record["dominant_dir"]
+                        crate_text = ""
+                    output.append(
+                        f"\n\U0001f4e6 {comm_label}"
+                        f"  ({record['file_count']} files, {record['total_syms']} symbols)"
+                        + (f"  crates: {crate_text}" if crate_text else "")
+                        + f"\n   Top files: {', '.join(record['top_files'])}"
+                    )
             if len(output) == 1:
                 return "No communities found (ensure project is indexed)."
             return "\n".join(output)
