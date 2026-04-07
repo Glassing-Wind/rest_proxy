@@ -8,6 +8,7 @@ import re
 import time
 from pathlib import PurePosixPath
 from typing import Awaitable, Callable
+from xml.etree import ElementTree as ET
 
 import graph_bootstrap
 from _helpers import get_memory_modules, get_project_id
@@ -592,6 +593,142 @@ def _collect_xcode_target_edges(
     return targets, list(dict.fromkeys(file_edges)), list(dict.fromkeys(resource_target_edges))
 
 
+def _collect_xcode_workspace_scheme_edges(
+    project_path: str,
+    files: dict[str, str],
+    xcode_targets: dict[str, dict[str, str]],
+) -> tuple[
+    list[dict[str, str]],
+    list[tuple[str, str]],
+    list[dict[str, str]],
+    list[tuple[str, str]],
+    list[tuple[str, str]],
+]:
+    workspaces = _parse_xcode_workspaces(project_path, files)
+    schemes = _parse_xcode_schemes(project_path, files, xcode_targets)
+    workspace_rows = [
+        {"workspace_path": workspace_path, "name": PurePosixPath(workspace_path).parent.stem or PurePosixPath(workspace_path).stem}
+        for workspace_path in sorted(workspaces.keys())
+    ]
+    workspace_project_edges = [
+        (workspace_path, file_id)
+        for workspace_path, project_files in workspaces.items()
+        for file_id in sorted(project_files)
+    ]
+    scheme_rows = [
+        {
+            "scheme_path": scheme["scheme_path"],
+            "name": scheme["name"],
+            "container_path": scheme.get("container_path", ""),
+        }
+        for scheme in schemes
+    ]
+    scheme_target_edges = [
+        (scheme["scheme_path"], target_id)
+        for scheme in schemes
+        for target_id in scheme["target_ids"]
+    ]
+    scheme_file_edges = [
+        (scheme["scheme_path"], files[scheme["scheme_path"]])
+        for scheme in schemes
+        if scheme["scheme_path"] in files
+    ]
+    return (
+        workspace_rows,
+        workspace_project_edges,
+        scheme_rows,
+        scheme_target_edges,
+        scheme_file_edges,
+    )
+
+
+def _parse_xcode_workspaces(project_path: str, files: dict[str, str]) -> dict[str, set[str]]:
+    workspaces: dict[str, set[str]] = {}
+    workspace_files = [fp for fp in files if fp.endswith(".xcworkspace/contents.xcworkspacedata")]
+    for workspace_path in workspace_files:
+        abs_path = os.path.join(project_path, workspace_path)
+        text = _read_text(abs_path)
+        if not text:
+            continue
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            continue
+        workspace_dir = PurePosixPath(workspace_path).parent
+        for file_ref in root.findall(".//FileRef"):
+            location = file_ref.attrib.get("location", "")
+            if ":" in location:
+                _, rel_ref = location.split(":", 1)
+            else:
+                rel_ref = location
+            rel_ref = rel_ref.strip()
+            if not rel_ref.endswith(".xcodeproj"):
+                continue
+            candidates = [
+                rel_ref.lstrip("./"),
+                str((workspace_dir / rel_ref).as_posix()).lstrip("./"),
+                str((workspace_dir.parent / rel_ref).as_posix()).lstrip("./"),
+            ]
+            for candidate in candidates:
+                project_file = f"{candidate.rstrip('/')}/project.pbxproj"
+                file_id = files.get(project_file)
+                if file_id:
+                    workspaces.setdefault(workspace_path, set()).add(file_id)
+                    break
+    return workspaces
+
+
+def _parse_xcode_schemes(
+    project_path: str,
+    files: dict[str, str],
+    xcode_targets: dict[str, dict[str, str]],
+) -> list[dict[str, object]]:
+    schemes: list[dict[str, object]] = []
+    scheme_files = [fp for fp in files if fp.endswith(".xcscheme")]
+    for scheme_path in scheme_files:
+        abs_path = os.path.join(project_path, scheme_path)
+        text = _read_text(abs_path)
+        if not text:
+            continue
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            continue
+        target_ids: set[str] = set()
+        container_path = ""
+        for buildable in root.findall(".//BuildableReference"):
+            blueprint_id = buildable.attrib.get("BlueprintIdentifier", "").strip()
+            if blueprint_id in xcode_targets:
+                target_ids.add(blueprint_id)
+            container = buildable.attrib.get("ReferencedContainer", "").strip()
+            if container and not container_path:
+                container_path = _normalize_scheme_container_path(scheme_path, container)
+        schemes.append(
+            {
+                "scheme_path": scheme_path,
+                "name": PurePosixPath(scheme_path).stem,
+                "container_path": container_path,
+                "target_ids": sorted(target_ids),
+            }
+        )
+    return schemes
+
+
+def _normalize_scheme_container_path(scheme_path: str, container_ref: str) -> str:
+    if ":" in container_ref:
+        _, rel_ref = container_ref.split(":", 1)
+    else:
+        rel_ref = container_ref
+    rel_ref = rel_ref.strip().lstrip("./")
+    if rel_ref.endswith(".xcodeproj"):
+        return f"{rel_ref}/project.pbxproj"
+    scheme_dir = PurePosixPath(scheme_path).parent
+    candidate = (scheme_dir / rel_ref).as_posix().lstrip("./")
+    if candidate.endswith(".xcodeproj"):
+        return f"{candidate}/project.pbxproj"
+    return candidate
+
+
 def _collect_service_edges(project_path: str, files: dict[str, str]) -> list[tuple[str, str]]:
     service_files = {
         os.path.splitext(os.path.basename(fp))[0]: fid
@@ -657,7 +794,12 @@ async def _clear_existing_edges(session, execute_write: ExecuteWrite, project_id
         "MATCH (r:Resource {project_id:$p})-[rel:BACKED_BY_FILE]->() DELETE rel",
         "MATCH (:XcodeTarget {project_id:$p})-[rel:BUNDLES_FILE]->() DELETE rel",
         "MATCH (r:Resource {project_id:$p})-[rel:BUNDLED_IN_TARGET]->() DELETE rel",
+        "MATCH (:XcodeWorkspace {project_id:$p})-[rel:REFERENCES_PROJECT]->() DELETE rel",
+        "MATCH (:XcodeScheme {project_id:$p})-[rel:BUILDS_TARGET]->() DELETE rel",
+        "MATCH (:XcodeScheme {project_id:$p})-[rel:DEFINED_IN_FILE]->() DELETE rel",
         "MATCH (t:XcodeTarget {project_id:$p}) DELETE t",
+        "MATCH (s:XcodeScheme {project_id:$p}) DELETE s",
+        "MATCH (w:XcodeWorkspace {project_id:$p}) DELETE w",
     ]
     for query in statements:
         await execute_write(session, query, p=project_id, timeout=write_timeout_s)
@@ -877,6 +1019,74 @@ async def _write_xcode_target_edges(
                 await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
 
 
+async def _write_xcode_workspace_scheme_edges(
+    session,
+    execute_write: ExecuteWrite,
+    write_semaphore: asyncio.Semaphore,
+    batch_size: int,
+    write_timeout_s: float,
+    project_id: str,
+    workspace_rows: list[dict[str, str]],
+    workspace_project_edges: list[tuple[str, str]],
+    scheme_rows: list[dict[str, str]],
+    scheme_target_edges: list[tuple[str, str]],
+    scheme_file_edges: list[tuple[str, str]],
+) -> None:
+    if workspace_rows:
+        query = """
+        UNWIND $batch AS edge
+        MERGE (w:XcodeWorkspace {project_id: edge.project_id, filepath: edge.workspace_path})
+        SET w.name = edge.name
+        """
+        rows = [{"project_id": project_id, **row} for row in workspace_rows]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+    if workspace_project_edges:
+        query = """
+        UNWIND $batch AS edge
+        MATCH (w:XcodeWorkspace {project_id: edge.project_id, filepath: edge.workspace_path})
+        MATCH (f:File {id: edge.file_id})
+        MERGE (w)-[:REFERENCES_PROJECT]->(f)
+        """
+        rows = [{"project_id": project_id, "workspace_path": w, "file_id": f} for w, f in workspace_project_edges]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+    if scheme_rows:
+        query = """
+        UNWIND $batch AS edge
+        MERGE (s:XcodeScheme {project_id: edge.project_id, filepath: edge.scheme_path})
+        SET s.name = edge.name, s.container_path = edge.container_path
+        """
+        rows = [{"project_id": project_id, **row} for row in scheme_rows]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+    if scheme_target_edges:
+        query = """
+        UNWIND $batch AS edge
+        MATCH (s:XcodeScheme {project_id: edge.project_id, filepath: edge.scheme_path})
+        MATCH (t:XcodeTarget {project_id: edge.project_id, target_id: edge.target_id})
+        MERGE (s)-[:BUILDS_TARGET]->(t)
+        """
+        rows = [{"project_id": project_id, "scheme_path": s, "target_id": t} for s, t in scheme_target_edges]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+    if scheme_file_edges:
+        query = """
+        UNWIND $batch AS edge
+        MATCH (s:XcodeScheme {project_id: edge.project_id, filepath: edge.scheme_path})
+        MATCH (f:File {id: edge.file_id})
+        MERGE (s)-[:DEFINED_IN_FILE]->(f)
+        """
+        rows = [{"project_id": project_id, "scheme_path": s, "file_id": f} for s, f in scheme_file_edges]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+
+
 async def build_asset_graph(
     project_path: str,
     execute_read: ExecuteRead,
@@ -926,6 +1136,9 @@ async def build_asset_graph(
         xcode_targets, xcode_file_edges, xcode_resource_edges = _collect_xcode_target_edges(
             project_path, files, resource_edges
         )
+        workspace_rows, workspace_project_edges, scheme_rows, scheme_target_edges, scheme_file_edges = (
+            _collect_xcode_workspace_scheme_edges(project_path, files, xcode_targets)
+        )
 
         if not any(
             [
@@ -938,6 +1151,9 @@ async def build_asset_graph(
                 resource_edges,
                 xcode_file_edges,
                 xcode_resource_edges,
+                workspace_project_edges,
+                scheme_target_edges,
+                scheme_file_edges,
             ]
         ):
             return "No asset edges resolved."
@@ -971,6 +1187,19 @@ async def build_asset_graph(
                 xcode_file_edges,
                 xcode_resource_edges,
             )
+            await _write_xcode_workspace_scheme_edges(
+                session,
+                execute_write,
+                write_semaphore,
+                batch_size,
+                write_timeout_s,
+                project_id,
+                workspace_rows,
+                workspace_project_edges,
+                scheme_rows,
+                scheme_target_edges,
+                scheme_file_edges,
+            )
 
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         debug_log(
@@ -983,6 +1212,7 @@ async def build_asset_graph(
             external_api_links=len(external_edges),
             resource_links=len(resource_edges),
             xcode_target_links=len(xcode_file_edges) + len(xcode_resource_edges),
+            xcode_workspace_scheme_links=len(workspace_project_edges) + len(scheme_target_edges) + len(scheme_file_edges),
             service_links=len(service_edges),
             db_links=len(db_edges),
         )
@@ -995,6 +1225,9 @@ async def build_asset_graph(
             f"  {len(resource_edges)} resource edges\n"
             f"  {len(xcode_file_edges)} BUNDLES_FILE edges\n"
             f"  {len(xcode_resource_edges)} BUNDLED_IN_TARGET edges\n"
+            f"  {len(workspace_project_edges)} REFERENCES_PROJECT edges\n"
+            f"  {len(scheme_target_edges)} BUILDS_TARGET edges\n"
+            f"  {len(scheme_file_edges)} DEFINED_IN_FILE edges\n"
             f"  {len(service_edges)} CALLS_SERVICE edges\n"
             f"  {len(db_edges)} CALLS_DB edges\n"
             f"  elapsed={elapsed_ms}ms"

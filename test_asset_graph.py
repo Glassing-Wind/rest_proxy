@@ -191,11 +191,15 @@ class AssetGraphTests(unittest.TestCase):
             storyboard = project_path / "ios/App/Main.storyboard"
             xib = project_path / "ios/App/HeroView.xib"
             pbxproj = project_path / "ios/App.xcodeproj/project.pbxproj"
+            xcscheme = project_path / "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme"
+            workspace = project_path / "ios/App.xcworkspace/contents.xcworkspacedata"
             js_file.parent.mkdir(parents=True, exist_ok=True)
             swift_file.parent.mkdir(parents=True, exist_ok=True)
             asset_dir.mkdir(parents=True, exist_ok=True)
             color_dir.mkdir(parents=True, exist_ok=True)
             pbxproj.parent.mkdir(parents=True, exist_ok=True)
+            xcscheme.parent.mkdir(parents=True, exist_ok=True)
+            workspace.parent.mkdir(parents=True, exist_ok=True)
             js_file.write_text('await fetch("https://api.example.com/v1/users")\n', encoding="utf-8")
             swift_file.write_text('let image = Image("hero")\n', encoding="utf-8")
             (asset_dir / "Contents.json").write_text("{}", encoding="utf-8")
@@ -229,6 +233,34 @@ AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcas
                 + "\n",
                 encoding="utf-8",
             )
+            xcscheme.write_text(
+                """
+<Scheme>
+  <BuildAction>
+    <BuildActionEntries>
+      <BuildActionEntry>
+        <BuildableReference
+          BuildableIdentifier="primary"
+          BlueprintIdentifier="AA000001"
+          BlueprintName="App"
+          ReferencedContainer="container:App.xcodeproj" />
+      </BuildActionEntry>
+    </BuildActionEntries>
+  </BuildAction>
+</Scheme>
+                """.strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            workspace.write_text(
+                """
+<Workspace>
+  <FileRef location="group:App.xcodeproj" />
+</Workspace>
+                """.strip()
+                + "\n",
+                encoding="utf-8",
+            )
 
             files = [
                 {"fp": "src/public/assets/client.js", "fid": "js-file"},
@@ -237,6 +269,9 @@ AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcas
                 {"fp": "ios/App/Main.storyboard", "fid": "storyboard-file"},
                 {"fp": "ios/App/Assets.xcassets/hero.imageset/Contents.json", "fid": "hero-contents"},
                 {"fp": "ios/App/Assets.xcassets/brand.colorset/Contents.json", "fid": "brand-contents"},
+                {"fp": "ios/App.xcodeproj/project.pbxproj", "fid": "pbxproj-file"},
+                {"fp": "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme", "fid": "scheme-file"},
+                {"fp": "ios/App.xcworkspace/contents.xcworkspacedata", "fid": "workspace-file"},
             ]
             writes = []
 
@@ -450,6 +485,77 @@ AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcas
                 tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "Main", "kind": "storyboard"}.items())),
                 tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "hero", "kind": "image"}.items())),
             },
+        )
+
+        workspace_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "MERGE (w:XcodeWorkspace" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(
+            workspace_batches,
+            [[{
+                "project_id": "proj123",
+                "workspace_path": "ios/App.xcworkspace/contents.xcworkspacedata",
+                "name": "App",
+            }]],
+        )
+
+        workspace_project_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "REFERENCES_PROJECT" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(
+            workspace_project_batches,
+            [[{
+                "project_id": "proj123",
+                "workspace_path": "ios/App.xcworkspace/contents.xcworkspacedata",
+                "file_id": "pbxproj-file",
+            }]],
+        )
+
+        scheme_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "MERGE (s:XcodeScheme" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(
+            scheme_batches,
+            [[{
+                "project_id": "proj123",
+                "scheme_path": "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme",
+                "name": "App",
+                "container_path": "App.xcodeproj/project.pbxproj",
+            }]],
+        )
+
+        scheme_target_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "BUILDS_TARGET" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(
+            scheme_target_batches,
+            [[{
+                "project_id": "proj123",
+                "scheme_path": "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme",
+                "target_id": "AA000001",
+            }]],
+        )
+
+        scheme_file_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "DEFINED_IN_FILE" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(
+            scheme_file_batches,
+            [[{
+                "project_id": "proj123",
+                "scheme_path": "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme",
+                "file_id": "scheme-file",
+            }]],
         )
 
 

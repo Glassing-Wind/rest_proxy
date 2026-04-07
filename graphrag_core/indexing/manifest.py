@@ -37,7 +37,6 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
         ".nyc_output",
         "tmp",
         "temp",
-        ".xcworkspace",
         "target",
         "build",
         "dist",
@@ -60,7 +59,6 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
         "parsers",
     }
     skip_dir_suffixes = (
-        ".xcworkspace",
         ".xcuserdatad",
         ".dSYM",
         ".swiftpm",
@@ -123,9 +121,7 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
         ".gemspec",
         ".rbs",
         ".podspec",
-        ".xcscheme",
         ".xcbkptlist",
-        ".plist",
         ".resolved",
         ".typed",
         ".fbs",

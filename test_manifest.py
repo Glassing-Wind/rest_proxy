@@ -13,20 +13,28 @@ class ManifestTests(unittest.TestCase):
             color_contents = project_path / "ios/App/Assets.xcassets/brand.colorset/Contents.json"
             storyboard = project_path / "ios/App/Main.storyboard"
             xib = project_path / "ios/App/HeroView.xib"
+            plist = project_path / "ios/App/Info.plist"
             png = project_path / "ios/App/Assets.xcassets/hero.imageset/hero.png"
             pbxproj = project_path / "ios/App.xcodeproj/project.pbxproj"
+            xcscheme = project_path / "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme"
+            workspace = project_path / "ios/App.xcworkspace/contents.xcworkspacedata"
 
             image_contents.parent.mkdir(parents=True, exist_ok=True)
             color_contents.parent.mkdir(parents=True, exist_ok=True)
             storyboard.parent.mkdir(parents=True, exist_ok=True)
             pbxproj.parent.mkdir(parents=True, exist_ok=True)
+            xcscheme.parent.mkdir(parents=True, exist_ok=True)
+            workspace.parent.mkdir(parents=True, exist_ok=True)
 
             image_contents.write_text("{}", encoding="utf-8")
             color_contents.write_text("{}", encoding="utf-8")
             storyboard.write_text("<storyboard />", encoding="utf-8")
             xib.write_text("<xib />", encoding="utf-8")
+            plist.write_text("<plist />", encoding="utf-8")
             png.write_bytes(b"\x89PNG")
             pbxproj.write_text("// !$*UTF8*$!\n", encoding="utf-8")
+            xcscheme.write_text("<Scheme />\n", encoding="utf-8")
+            workspace.write_text("<Workspace />\n", encoding="utf-8")
 
             manifest = build_manifest(str(project_path))
             rel_paths = {entry["rel_path"] for entry in manifest}
@@ -35,7 +43,10 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("ios/App/Assets.xcassets/brand.colorset/Contents.json", rel_paths)
         self.assertIn("ios/App/Main.storyboard", rel_paths)
         self.assertIn("ios/App/HeroView.xib", rel_paths)
+        self.assertIn("ios/App/Info.plist", rel_paths)
         self.assertIn("ios/App.xcodeproj/project.pbxproj", rel_paths)
+        self.assertIn("ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme", rel_paths)
+        self.assertIn("ios/App.xcworkspace/contents.xcworkspacedata", rel_paths)
         self.assertNotIn("ios/App/Assets.xcassets/hero.imageset/hero.png", rel_paths)
 
 
