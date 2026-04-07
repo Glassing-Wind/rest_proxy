@@ -8,6 +8,7 @@ from unittest import mock
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/tools.py"
 OVERVIEW_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/overview.py"
+UTILITY_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/utility.py"
 
 
 class FakeMCP:
@@ -78,6 +79,10 @@ def load_tools_module():
     overview_module = importlib.util.module_from_spec(overview_spec)
     assert overview_spec.loader is not None
 
+    utility_spec = importlib.util.spec_from_file_location("tools.brain.graph.utility", UTILITY_PATH)
+    utility_module = importlib.util.module_from_spec(utility_spec)
+    assert utility_spec.loader is not None
+
     spec = importlib.util.spec_from_file_location("tools.brain.graph.tools", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -138,11 +143,14 @@ def load_tools_module():
             "tools.brain.graph": graph_subpkg,
             "tools.brain.graph.core": graph_core_mod,
             "tools.brain.graph.flow_summary": flow_summary_mod,
+            "tools.brain.graph.utility": utility_module,
             "tools.brain.graph.runtime": runtime_mod,
         },
     ):
         overview_spec.loader.exec_module(overview_module)
         sys.modules["tools.brain.graph.overview"] = overview_module
+        utility_spec.loader.exec_module(utility_module)
+        sys.modules["tools.brain.graph.utility"] = utility_module
         spec.loader.exec_module(module)
     return module
 

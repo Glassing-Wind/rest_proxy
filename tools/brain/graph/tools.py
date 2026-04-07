@@ -9,7 +9,7 @@ from _helpers import get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
 from tools.brain.graph import flow_summary as graph_flow_summary
 from tools.brain.graph import overview as graph_overview
-from tools.brain.graph import runtime as graph_runtime
+from tools.brain.graph import utility as graph_utility
 
 
 def register(mcp: FastMCP) -> None:
@@ -73,49 +73,7 @@ def register(mcp: FastMCP) -> None:
             limit: Number of recent batches to summarize (default 50).
         """
         try:
-            limit = max(1, min(int(limit), 200))
-            ib_count, ib_avg, ib_max = graph_core._summarize_batches(
-                "import_graph_batch", limit
-            )
-            si_count, si_avg, si_max = graph_core._summarize_batches(
-                "symbol_import_batch", limit
-            )
-            se_count, se_avg, se_max = graph_core._summarize_batches(
-                "symbol_export_batch", limit
-            )
-            last_build = graph_core.get_last_graph_build_metric()
-            recent = graph_runtime.get_recent_metrics(10)
-
-            lines = ["# Graph build metrics"]
-            if last_build:
-                lines.append(
-                    "Last build: "
-                    f"project={last_build.get('project_path')} "
-                    f"elapsed_ms={last_build.get('elapsed_ms')}"
-                )
-            else:
-                lines.append("Last build: none")
-
-            lines.append(
-                f"import_graph_batch: count={ib_count} avg_ms={ib_avg} max_ms={ib_max}"
-            )
-            lines.append(
-                f"symbol_import_batch: count={si_count} avg_ms={si_avg} max_ms={si_max}"
-            )
-            lines.append(
-                f"symbol_export_batch: count={se_count} avg_ms={se_avg} max_ms={se_max}"
-            )
-
-            lines.append("Recent events:")
-            for entry in recent:
-                evt = entry.get("event")
-                elapsed = entry.get("elapsed_ms")
-                proj = entry.get("project_path") or entry.get("project_id")
-                if elapsed is not None:
-                    lines.append(f"- {evt} {proj} elapsed_ms={elapsed}")
-                else:
-                    lines.append(f"- {evt} {proj}")
-            return "\n".join(lines)
+            return await graph_utility.get_graph_build_metrics_impl(limit)
         except Exception as exc:
             return f"Error reading metrics: {str(exc)}"
 
@@ -125,34 +83,7 @@ def register(mcp: FastMCP) -> None:
         Show available vs manifest languages for tree-sitter-language-pack.
         """
         try:
-            import tree_sitter_language_pack as ts_pack
-
-            auto_dl = os.getenv("LM_PROXY_TS_PACK_AUTO_DOWNLOAD", "1")
-            cache_dir = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
-            if cache_dir:
-                try:
-                    ts_pack.init({"cache_dir": cache_dir})
-                except Exception:
-                    pass
-            available = sorted(ts_pack.available_languages())
-            try:
-                manifest = sorted(ts_pack.manifest_languages())
-            except Exception:
-                manifest = []
-
-            missing = [lang for lang in manifest if lang not in available]
-            lines = ["# Language pack status"]
-            lines.append(f"Auto-download: {auto_dl}")
-            if cache_dir:
-                lines.append(f"Cache dir: {cache_dir}")
-            lines.append(f"Available languages: {len(available)}")
-            lines.append(f"Manifest languages: {len(manifest)}")
-            if missing:
-                lines.append(f"Missing languages: {len(missing)}")
-                lines.append("Missing sample: " + ", ".join(missing[:20]))
-            else:
-                lines.append("Missing languages: none")
-            return "\n".join(lines)
+            return await graph_utility.get_language_pack_status_impl()
         except Exception as e:
             return f"Error reading language pack status: {str(e)}"
 
@@ -179,29 +110,12 @@ def register(mcp: FastMCP) -> None:
         return await graph_core._build_import_graph_impl(workspace_id)
 
 
-    async def _rebuild_subgraph(fn, label: str, workspace_id: str) -> str:
-        """Helper to resolve path, time execution, and record metrics for graph builds."""
-        import time
-        from tools.brain.graph import runtime as graph_runtime
-
-        project_path = get_workspace_path(workspace_id)
-        start_time = time.time()
-        
-        graph_runtime.record_metric(f"rebuild_{label}_start", project_path=project_path)
-        try:
-            result = await fn(project_path)
-            elapsed = (time.time() - start_time) * 1000
-            graph_runtime.record_metric(f"rebuild_{label}_done", project_path=project_path, elapsed_ms=elapsed)
-            return result
-        except Exception as e:
-            return f"Error rebuilding {label} graph: {str(e)}"
-
     @mcp.tool()
     async def rebuild_symbol_graph(workspace_id: str) -> str:
         """
         Rebuild symbol-level IMPORTS/EXPORTS graph for a project.
         """
-        return await _rebuild_subgraph(
+        return await graph_utility.rebuild_subgraph_impl(
             graph_core._build_symbol_import_export_graph_impl, "symbols", workspace_id
         )
 
@@ -211,7 +125,7 @@ def register(mcp: FastMCP) -> None:
         Rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB).
         Used for App Flow visualization.
         """
-        return await _rebuild_subgraph(
+        return await graph_utility.rebuild_subgraph_impl(
             graph_core._build_asset_graph_impl, "assets", workspace_id
         )
 
@@ -422,50 +336,14 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(workspace_id)
             driver = await graph_bootstrap.require_driver()
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                # Optimized heuristic query: look for UI -> API -> Service -> Model chains
-                result = await graph_core._execute_read(
-                    session,
-                    """
-                    MATCH (f1:File {project_id: $p})
-                    WHERE (f1.filepath CONTAINS 'ui' OR f1.filepath CONTAINS 'view' OR f1.filepath CONTAINS 'component' OR f1.filepath CONTAINS 'pages')
-                      AND NOT (f1.filepath CONTAINS 'test' OR f1.filepath CONTAINS 'spec')
-                    MATCH (f1)-[:IMPORTS]->(f2:File {project_id: $p})
-                    WHERE (f2.filepath CONTAINS 'api' OR f2.filepath CONTAINS 'client' OR f2.filepath CONTAINS 'controller' OR f2.filepath CONTAINS 'routes')
-                    OPTIONAL MATCH (f2)-[:IMPORTS]->(f3:File {project_id: $p})
-                    WHERE (f3.filepath CONTAINS 'service' OR f3.filepath CONTAINS 'domain' OR f3.filepath CONTAINS 'provider' OR f3.filepath CONTAINS 'usecase')
-                    OPTIONAL MATCH (f3)-[:IMPORTS]->(f4:File {project_id: $p})
-                    WHERE (f4.filepath CONTAINS 'model' OR f4.filepath CONTAINS 'db' OR f4.filepath CONTAINS 'entity' OR f4.filepath CONTAINS 'schema')
-                    RETURN f1.filepath AS ui, f2.filepath AS api, f3.filepath AS svc, f4.filepath AS model
-                    ORDER BY ui, api
-                    LIMIT $limit
-                    """,
-                    p=project_id,
-                    limit=limit * 2,
-                    op="get_heuristic_flow_summary",
-                )
-                if not result:
-                    return "No heuristic paths found."
-
-                rows = []
-                for row in result:
-                    path = [v for v in [row.get("ui"), row.get("api"), row.get("svc"), row.get("model")] if v]
-                    if len(path) >= 2:
-                        rows.append(path)
-
-                if not rows:
-                    return "No heuristic paths found."
-
-                if as_table:
-                    out = ["| Origin | Endpoint | Secondary | Data |", "| --- | --- | --- | --- |"]
-                    for row in rows[:limit]:
-                        padded = row + [""] * (4 - len(row))
-                        out.append(f"| {' | '.join(padded)} |")
-                    return "\n".join(out)
-                else:
-                    return "\n".join([" -> ".join(r) for r in rows[:limit]])
+            return await graph_utility.get_heuristic_flow_summary_impl(
+                driver=driver,
+                neo4j_db=graph_bootstrap._NEO4J_DB,
+                workspace_id=workspace_id,
+                limit=limit,
+                as_table=as_table,
+            )
         except Exception as e:
             return f"Error in heuristic flow: {str(e)}"
 
@@ -474,31 +352,12 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(workspace_id)
             driver = await graph_bootstrap.require_driver()
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await graph_core._execute_read(
-                    session,
-                    """
-                    MATCH (f:File {project_id: $p})
-                    OPTIONAL MATCH (f)-[:IMPORTS]->(out:File {project_id: $p})
-                    OPTIONAL MATCH (in:File {project_id: $p})-[:IMPORTS]->(f)
-                    WITH f, count(DISTINCT out) AS outbound, count(DISTINCT in) AS inbound
-                    WHERE inbound + outbound > 0
-                    RETURN f.filepath AS fp, inbound, outbound
-                    ORDER BY inbound + outbound DESC
-                    LIMIT $limit
-                    """,
-                    p=project_id,
-                    limit=limit,
-                    op="get_topology_summary",
-                )
-                if not result:
-                    return "No architectural topology found (index might be empty)."
-
-                out = ["### Architectural Topology (Most Connected Files)\n"]
-                for rec in result:
-                    out.append(f"- `{rec['fp']}`: {rec['inbound']} incoming, {rec['outbound']} outgoing imports")
-                return "\n".join(out)
+            return await graph_utility.get_topology_summary_impl(
+                driver=driver,
+                neo4j_db=graph_bootstrap._NEO4J_DB,
+                workspace_id=workspace_id,
+                limit=limit,
+            )
         except Exception as e:
             return f"Error in topology summary: {str(e)}"
