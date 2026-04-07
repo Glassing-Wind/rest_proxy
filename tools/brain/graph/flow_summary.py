@@ -143,6 +143,45 @@ ORDER BY api, svc, model, schema, external
 LIMIT $limit
 """
 
+_BACKEND_FLOW_FALLBACK_QUERY = """
+MATCH (entry:File {project_id:$p})
+OPTIONAL MATCH (entry)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
+OPTIONAL MATCH (entry)-[:CALLS_DB_MODEL]->(direct_model:Model {project_id:$p})
+OPTIONAL MATCH (entry)-[:CALLS_DB]->(direct_schema:File {project_id:$p})
+OPTIONAL MATCH (entry)-[:CALLS_API_EXTERNAL]->(direct_ext:ExternalAPI {project_id:$p})
+OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(svc_model:Model {project_id:$p})
+OPTIONAL MATCH (svc)-[:CALLS_DB]->(svc_schema:File {project_id:$p})
+OPTIONAL MATCH (svc)-[:CALLS_API_EXTERNAL]->(svc_ext:ExternalAPI {project_id:$p})
+WHERE (
+    direct_model IS NOT NULL
+    OR direct_schema IS NOT NULL
+    OR direct_ext IS NOT NULL
+    OR svc IS NOT NULL
+    OR svc_model IS NOT NULL
+    OR svc_schema IS NOT NULL
+    OR svc_ext IS NOT NULL
+)
+  AND ($include_tests OR (
+    NOT entry.filepath STARTS WITH 'tests/'
+    AND NOT entry.filepath CONTAINS '/tests/'
+    AND NOT entry.filepath CONTAINS '__tests__'
+    AND NOT entry.filepath CONTAINS '.test.'
+    AND (svc IS NULL OR (
+      NOT svc.filepath STARTS WITH 'tests/'
+      AND NOT svc.filepath CONTAINS '/tests/'
+      AND NOT svc.filepath CONTAINS '__tests__'
+      AND NOT svc.filepath CONTAINS '.test.'
+    ))
+  ))
+RETURN entry.filepath AS api,
+   svc.filepath AS svc,
+   coalesce(svc_model.name, direct_model.name) AS model,
+   coalesce(svc_schema.filepath, direct_schema.filepath) AS schema,
+   coalesce(svc_ext.url, direct_ext.url) AS external
+ORDER BY api, svc, model, schema, external
+LIMIT $limit
+"""
+
 
 async def _load_cargo_crate_roots(session, project_id: str):
     schema_labels = await graph_core._execute_read(
@@ -509,6 +548,15 @@ async def get_backend_flow_summary_impl(
             limit=query_limit,
             op="get_backend_flow_summary",
         )
+        if not result:
+            result = await graph_core._execute_read(
+                session,
+                _BACKEND_FLOW_FALLBACK_QUERY,
+                p=project_id,
+                include_tests=include_tests,
+                limit=query_limit,
+                op="get_backend_flow_summary_fallback",
+            )
         cargo_crate_rows = await _load_cargo_crate_roots(session, project_id)
     rows = [
         {

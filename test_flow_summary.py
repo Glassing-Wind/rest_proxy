@@ -542,6 +542,60 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("crates/admin/src/routes.rs", output)
         self.assertNotIn("crates/api/src/routes.rs", output)
 
+    def test_get_backend_flow_summary_falls_back_for_rust_service_repos(self):
+        seen_ops = []
+
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            seen_ops.append(op)
+            if op == "get_backend_flow_summary":
+                return []
+            if op == "get_backend_flow_summary_fallback":
+                return [
+                    {
+                        "api": "crates/ts-pack-index/src/write_phase.rs",
+                        "svc": "crates/ts-pack-index/src/writers.rs",
+                        "model": None,
+                        "schema": None,
+                        "external": "neo4j://local",
+                    }
+                ]
+            if op == "backend_flow_cargo_schema_labels":
+                return [{"labels": ["CargoCrate"]}]
+            if op == "backend_flow_cargo_crates":
+                return [
+                    {
+                        "crate": "ts-pack-index",
+                        "crate_name": "ts-pack-index",
+                        "manifest_path": "crates/ts-pack-index/Cargo.toml",
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_backend_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/tree-sitter-language-pack",
+                    limit=20,
+                    as_table=False,
+                )
+            )
+
+        self.assertEqual(
+            [
+                "get_backend_flow_summary",
+                "get_backend_flow_summary_fallback",
+                "backend_flow_cargo_schema_labels",
+                "backend_flow_cargo_crates",
+            ],
+            seen_ops,
+        )
+        self.assertIn("Crate: ts-pack-index", output)
+        self.assertIn("crates/ts-pack-index/src/write_phase.rs", output)
+        self.assertIn("neo4j://local", output)
+
 
 if __name__ == "__main__":
     unittest.main()
