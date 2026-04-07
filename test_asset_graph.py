@@ -181,6 +181,71 @@ class AssetGraphTests(unittest.TestCase):
         self.assertEqual(len(broad_batches), 1)
         self.assertEqual(broad_batches[0], [{"src": "caller-file", "tgt": "handler-file"}])
 
+    def test_builds_external_api_and_swift_resource_edges(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            js_file = project_path / "src/public/assets/client.js"
+            swift_file = project_path / "ios/App/View.swift"
+            js_file.parent.mkdir(parents=True, exist_ok=True)
+            swift_file.parent.mkdir(parents=True, exist_ok=True)
+            js_file.write_text('await fetch("https://api.example.com/v1/users")\n', encoding="utf-8")
+            swift_file.write_text('let image = Image("hero")\n', encoding="utf-8")
+
+            files = [
+                {"fp": "src/public/assets/client.js", "fid": "js-file"},
+                {"fp": "ios/App/View.swift", "fid": "swift-file"},
+            ]
+            writes = []
+
+            async def fake_execute_read(session, query, **kwargs):
+                return files
+
+            async def fake_execute_write(session, query, **kwargs):
+                writes.append((query, kwargs))
+
+            with mock.patch.object(self.module, "get_project_id", return_value="proj123"):
+                with mock.patch.object(
+                    self.module.graph_bootstrap, "require_driver", return_value=FakeDriver()
+                ):
+                    with mock.patch.object(
+                        self.module,
+                        "_load_file_facts",
+                        return_value={
+                            "src/public/assets/client.js": {},
+                            "ios/App/View.swift": {
+                                "resource_refs": [{"kind": "image", "name": "hero", "callee": "Image"}]
+                            },
+                        },
+                    ):
+                        result = asyncio.run(
+                            self.module.build_asset_graph(
+                                str(project_path),
+                                fake_execute_read,
+                                fake_execute_write,
+                                lambda *args, **kwargs: None,
+                                asyncio.Semaphore(10),
+                                batch_size=100,
+                                write_timeout_s=5.0,
+                            )
+                        )
+
+        self.assertIn("CALLS_API_EXTERNAL edges", result)
+        self.assertIn("resource edges", result)
+
+        external_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "CALLS_API_EXTERNAL" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(external_batches, [[{"src": "js-file", "url": "https://api.example.com/v1/users", "project_id": "proj123"}]])
+
+        resource_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "USES_ASSET" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(resource_batches, [[{"src": "swift-file", "name": "hero", "kind": "USES_ASSET", "project_id": "proj123"}]])
+
 
 if __name__ == "__main__":
     unittest.main()
