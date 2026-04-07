@@ -112,6 +112,7 @@ class GraphUtilityTests(unittest.TestCase):
                     limit=10,
                 )
             )
+        self.assertIn("Crate: api", output)
         self.assertIn("[crate:api]", output)
 
     def test_heuristic_flow_summary_includes_cargo_crate_context(self):
@@ -145,6 +146,7 @@ class GraphUtilityTests(unittest.TestCase):
                     as_table=False,
                 )
             )
+        self.assertIn("Crate: api", output)
         self.assertIn("[api_crate=api, service_crate=core]", output)
         self.assertIn("crates/api/src/routes.rs", output)
 

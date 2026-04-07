@@ -517,6 +517,7 @@ def register(mcp: FastMCP) -> None:
                 return None
 
             output = [f"Most important files [{scoring_method}, test/vendor excluded]:"]
+            rendered_rows = []
             for record in records:
                 examples = (
                     ", ".join(record["sym_examples"]) if record["sym_examples"] else "—"
@@ -527,19 +528,34 @@ def register(mcp: FastMCP) -> None:
                     if record["top_pagerank"]
                     else ""
                 )
-                output.append(
-                    f"- {record['file']}"
-                    + (f"  [crate:{crate}]" if crate else "")
-                    + 
-                    f"  [score:{record['score'] or 0:.4f}{pr_str}  symbols:{record['sym_count'] or 0}"
-                    + (
-                        f"  bridge:{record['betweenness']:.1f}"
-                        if record.get("betweenness")
-                        else ""
-                    )
-                    + ("  ⚠️isolated" if record.get("isolated") else "")
-                    + f"]  ({examples})"
+                rendered_rows.append(
+                    {
+                        "crate": crate,
+                        "line": (
+                            f"{record['file']}"
+                            + (f"  [crate:{crate}]" if crate else "")
+                            + f"  [score:{record['score'] or 0:.4f}{pr_str}  symbols:{record['sym_count'] or 0}"
+                            + (
+                                f"  bridge:{record['betweenness']:.1f}"
+                                if record.get("betweenness")
+                                else ""
+                            )
+                            + ("  ⚠️isolated" if record.get("isolated") else "")
+                            + f"]  ({examples})"
+                        ),
+                    }
                 )
+            if any(row.get("crate") for row in rendered_rows):
+                groups: dict[str, list[str]] = {}
+                for row in rendered_rows:
+                    groups.setdefault(row.get("crate") or "(unowned)", []).append(row["line"])
+                for crate, items in groups.items():
+                    output.append(f"Crate: {crate}")
+                    for item in items:
+                        output.append(f"- {item}")
+            else:
+                for row in rendered_rows:
+                    output.append(f"- {row['line']}")
             if len(output) == 1:
                 return "No importance metrics found (ensure project is indexed)."
             return "\n".join(output)

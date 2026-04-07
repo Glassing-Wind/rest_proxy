@@ -200,6 +200,51 @@ def _format_backend_flow_row(api, svc, model, schema, external, api_crate=None, 
     return f"[{', '.join(crate_bits)}] {flow}"
 
 
+def _group_backend_flow_rows(rows: list[dict], limit: int) -> list[str]:
+    ordered = sorted(
+        rows,
+        key=lambda r: (
+            r.get("api_crate") or r.get("svc_crate") or "~",
+            0 if r.get("api_crate") == r.get("svc_crate") and r.get("api_crate") else 1,
+            r.get("api") or "",
+            r.get("svc") or "",
+            r.get("model") or "",
+            r.get("schema") or "",
+            r.get("external") or "",
+        ),
+    )
+    groups: dict[str, list[str]] = {}
+    for row in ordered:
+        group = row.get("api_crate") or row.get("svc_crate") or "(unowned)"
+        groups.setdefault(group, [])
+        groups[group].append(
+            _format_backend_flow_row(
+                row["api"],
+                row["svc"],
+                row["model"],
+                row["schema"],
+                row["external"],
+                api_crate=row["api_crate"],
+                svc_crate=row["svc_crate"],
+            )
+        )
+    output: list[str] = []
+    emitted = 0
+    for group, flows in groups.items():
+        unique = list(dict.fromkeys(flows))
+        if not unique:
+            continue
+        output.append(f"Crate: {group}")
+        for flow in unique:
+            if limit and emitted >= limit:
+                break
+            output.append(f"- {flow}")
+            emitted += 1
+        if limit and emitted >= limit:
+            break
+    return output
+
+
 async def _resolve_entry_files(session, project_id: str, entry_files, entry_glob):
     if entry_files or not entry_glob:
         return entry_files
@@ -509,18 +554,21 @@ async def get_backend_flow_summary_impl(
                 f"| {row['api_crate'] or ''} | {row['svc_crate'] or ''} | {row['api'] or ''} | {row['svc'] or ''} | {row['model'] or ''} | {row['schema'] or ''} | {row['external'] or ''} |"
             )
     else:
-        output = [
-            _format_backend_flow_row(
-                row["api"],
-                row["svc"],
-                row["model"],
-                row["schema"],
-                row["external"],
-                api_crate=row["api_crate"],
-                svc_crate=row["svc_crate"],
-            )
-            for row in rows
-        ]
+        if any(row.get("api_crate") or row.get("svc_crate") for row in rows):
+            output = _group_backend_flow_rows(rows, limit)
+        else:
+            output = [
+                _format_backend_flow_row(
+                    row["api"],
+                    row["svc"],
+                    row["model"],
+                    row["schema"],
+                    row["external"],
+                    api_crate=row["api_crate"],
+                    svc_crate=row["svc_crate"],
+                )
+                for row in rows
+            ]
 
     output = list(dict.fromkeys(output))
     if limit and len(output) > limit:

@@ -23,7 +23,7 @@ def register(mcp: FastMCP) -> None:
 3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
 4. `get_project_overview(project_path)` → health, architecture clusters, key files, and Apple/Cargo build context when present
 5. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, **UI asset wiring**, and local Apple/Cargo build context for a folder
-6. `get_code_importance(project_path)` → PageRank-ranked files, now including Cargo crate ownership when present
+6. `get_code_importance(project_path)` → PageRank-ranked files, now grouped by Cargo crate when present
 7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters, including Cargo crate context/filtering for Rust workspaces
 8. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
@@ -86,11 +86,11 @@ Doc indexing tips:
 - Symbol-level `IMPORTS_SYMBOL` / `EXPORTS_SYMBOL` edges are expected to come from `index_workspace` in the normal workflow. `IMPLICIT_IMPORTS_SYMBOL` is heuristic and should be treated as optional/experimental rather than part of the default graph contract.
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
-- `get_backend_flow_summary(project_path, api_contains?, crate_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls and Cargo crate context for Rust workspaces)
+- `get_backend_flow_summary(project_path, api_contains?, crate_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls and grouped Cargo crate context for Rust workspaces)
 - `get_apple_build_summary(project_path, source_contains?, resource_contains?, target_contains?, scheme_contains?, limit=20, as_table=false)` → Apple source → resource → target → scheme → workspace paths
 - `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, crate_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI, backend, Apple build, or CLI flow (auto tries UI → backend → Apple → CLI)
   - Tip: set `include_tests=true` when you want coverage paths from test files too
-- `get_topology_summary(project_path)` and `get_heuristic_flow_summary(project_path)` also annotate Rust workspace files with Cargo crate ownership when available
+- `get_topology_summary(project_path)` and `get_heuristic_flow_summary(project_path)` also group Rust workspace results by Cargo crate when available
 - Launch edges: enable `TS_PACK_LAUNCH_EDGES=1` to emit `LAUNCHES` file edges; set `TS_PACK_DEBUG_LAUNCH=1` to log launch resolution counts per file during indexing
 - `get_language_pack_status()` → available vs manifest languages (auto-download status)
 - `get_indexed_projects(query?)` → list indexed repo paths (filters by id prefix or path substring)

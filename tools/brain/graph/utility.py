@@ -114,6 +114,23 @@ def _match_cargo_crate(filepath: str | None, crate_rows) -> tuple[str | None, st
             return row.get("crate"), row.get("crate_name")
     return None, None
 
+
+def _group_by_crate(rows: list[dict], *, item_key: str, line_builder) -> list[str]:
+    groups: dict[str, list[str]] = {}
+    for row in rows:
+        crate = row.get(item_key) or "(unowned)"
+        groups.setdefault(crate, [])
+        groups[crate].append(line_builder(row))
+    lines: list[str] = []
+    for crate, items in groups.items():
+        unique = list(dict.fromkeys(items))
+        if not unique:
+            continue
+        lines.append(f"Crate: {crate}")
+        for item in unique:
+            lines.append(f"- {item}")
+    return lines
+
 async def get_heuristic_flow_summary_impl(
     *,
     driver,
@@ -178,10 +195,24 @@ async def get_heuristic_flow_summary_impl(
         if row["svc_crate"] and row["svc_crate"] != row["api_crate"]:
             prefix_bits.append(f"service_crate={row['svc_crate']}")
         if prefix_bits:
-            rendered.append(f"[{', '.join(prefix_bits)}] " + " -> ".join(row["path"]))
+            rendered.append(
+                {
+                    "crate": row["api_crate"] or row["svc_crate"],
+                    "line": f"[{', '.join(prefix_bits)}] " + " -> ".join(row["path"]),
+                }
+            )
         else:
-            rendered.append(" -> ".join(row["path"]))
-    return "\n".join(rendered)
+            rendered.append(
+                {
+                    "crate": row["api_crate"] or row["svc_crate"],
+                    "line": " -> ".join(row["path"]),
+                }
+            )
+    if any(row.get("crate") for row in rendered):
+        return "\n".join(
+            _group_by_crate(rendered, item_key="crate", line_builder=lambda row: row["line"])
+        )
+    return "\n".join(row["line"] for row in rendered)
 
 
 async def get_topology_summary_impl(
@@ -214,10 +245,18 @@ async def get_topology_summary_impl(
         return "No architectural topology found (index might be empty)."
 
     output = ["### Architectural Topology (Most Connected Files)\n"]
+    rendered = []
     for rec in result:
         crate, _ = _match_cargo_crate(rec.get("fp"), cargo_rows)
         crate_part = f" [crate:{crate}]" if crate else ""
-        output.append(
-            f"- `{rec['fp']}`{crate_part}: {rec['inbound']} incoming, {rec['outbound']} outgoing imports"
+        rendered.append(
+            {
+                "crate": crate,
+                "line": f"`{rec['fp']}`{crate_part}: {rec['inbound']} incoming, {rec['outbound']} outgoing imports",
+            }
         )
+    if any(row.get("crate") for row in rendered):
+        output.extend(_group_by_crate(rendered, item_key="crate", line_builder=lambda row: row["line"]))
+    else:
+        output.extend(f"- {row['line']}" for row in rendered)
     return "\n".join(output)

@@ -316,6 +316,7 @@ class CodeIntelToolTests(unittest.TestCase):
             finally:
                 CURRENT_EXECUTOR = None
 
+        self.assertIn("Crate: api", output)
         self.assertIn("crates/api/src/lib.rs", output)
         self.assertIn("[crate:api]", output)
 

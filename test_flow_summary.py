@@ -493,6 +493,7 @@ class FlowSummaryTests(unittest.TestCase):
                 )
             )
 
+        self.assertIn("Crate: api", output)
         self.assertIn("[api_crate=api, service_crate=core]", output)
         self.assertIn("crates/api/src/routes.rs -> crates/core/src/service.rs -> User", output)
 
