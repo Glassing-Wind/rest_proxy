@@ -15,6 +15,36 @@ if REPO_ROOT not in sys.path:
 import tree_sitter_language_pack as ts_pack
 
 
+def _count_file_metric(neo4j_uri: str, neo4j_user: str, neo4j_pass: str, neo4j_db: str, project_id: str, property_name: str) -> int:
+    import neo4j
+
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            record = session.run(
+                f"MATCH (f:File {{project_id:$pid}}) WHERE f.{property_name} IS NOT NULL RETURN count(f) AS n",
+                pid=project_id,
+            ).single()
+            return int(record["n"]) if record else 0
+    finally:
+        driver.close()
+
+
+def _count_isolated_files(neo4j_uri: str, neo4j_user: str, neo4j_pass: str, neo4j_db: str, project_id: str) -> int:
+    import neo4j
+
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            record = session.run(
+                "MATCH (f:File {project_id:$pid}) WHERE f.isolated = true RETURN count(f) AS n",
+                pid=project_id,
+            ).single()
+            return int(record["n"]) if record else 0
+    finally:
+        driver.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Structural (Rust-native) indexer")
     parser.add_argument("project_path")
@@ -115,26 +145,26 @@ def main() -> int:
                 file=sys.stderr,
                 flush=True,
             )
+        pagerank_count = _count_file_metric(
+            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id, "pagerank"
+        )
+        louvain_count = _count_file_metric(
+            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id, "louvainCommunity"
+        )
+        betweenness_count = _count_file_metric(
+            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id, "betweenness"
+        )
+        isolated_count = _count_isolated_files(
+            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id
+        )
+        print(f"[ts-pack:pagerank] Done — pagerank written to {pagerank_count} File nodes.", file=sys.stderr, flush=True)
+        print(f"[ts-pack:leiden] Done — community written to {louvain_count} File nodes.", file=sys.stderr, flush=True)
         print(
-            f"[ts-pack:pagerank] Done — pagerank written to {finalize.get('pagerank', 0)} File nodes.",
+            f"[ts-pack:betweenness] Done — betweenness written to {betweenness_count} File nodes.",
             file=sys.stderr,
             flush=True,
         )
-        print(
-            f"[ts-pack:leiden] Done — community written to {finalize.get('louvain', 0)} File nodes.",
-            file=sys.stderr,
-            flush=True,
-        )
-        print(
-            f"[ts-pack:betweenness] Done — betweenness written to {finalize.get('betweenness', 0)} File nodes.",
-            file=sys.stderr,
-            flush=True,
-        )
-        print(
-            f"[ts-pack:wcc] Done — {finalize.get('isolated', 0)} isolated File nodes marked.",
-            file=sys.stderr,
-            flush=True,
-        )
+        print(f"[ts-pack:wcc] Done — {isolated_count} isolated File nodes marked.", file=sys.stderr, flush=True)
     except Exception as exc:
         print(
             f"[ts-pack:struct] WARNING: Rust graph finalization failed: {exc}",
