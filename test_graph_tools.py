@@ -220,6 +220,14 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"workspace": "Cargo.toml", "crates": ["api", "core"]}]
             if op == "cargo_context_dependencies":
                 return [{"crate": "api", "deps": ["core", "serde"]}]
+            if op == "cargo_directory_schema_labels":
+                return [{"labels": ["CargoCrate"]}]
+            if op == "cargo_directory_schema_relationship_types":
+                return [{"rels": ["DEPENDS_ON_PACKAGE"]}]
+            if op == "cargo_directory_dependencies_outbound":
+                return [{"crate": "api", "deps": ["core", "serde"]}]
+            if op == "cargo_directory_dependencies_inbound":
+                return [{"crate": "api", "dependents": ["cli", "admin"]}]
             return []
 
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
@@ -230,6 +238,7 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("crate `api` (api) via `crates/api/Cargo.toml`", output)
         self.assertIn("workspace `Cargo.toml` includes api, core", output)
         self.assertIn("crate `api` depends on core, serde", output)
+        self.assertIn("local crate `api` is used by cli, admin", output)
 
     def test_project_overview_includes_apple_build_context(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -329,6 +338,8 @@ class GraphToolsTests(unittest.TestCase):
                 raise AssertionError(f"unexpected Apple query: {op}")
             if op in {"cargo_context_crates", "cargo_context_workspaces", "cargo_context_dependencies", "cargo_context_schema_labels", "cargo_context_schema_relationship_types"}:
                 raise AssertionError(f"unexpected Cargo query: {op}")
+            if op in {"cargo_directory_schema_labels", "cargo_directory_schema_relationship_types", "cargo_directory_dependencies_outbound", "cargo_directory_dependencies_inbound"}:
+                raise AssertionError(f"unexpected Cargo dependency query: {op}")
             return []
 
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):

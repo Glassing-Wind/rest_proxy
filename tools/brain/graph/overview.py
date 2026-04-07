@@ -186,6 +186,63 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
     return crates, workspaces, dependencies
 
 
+async def load_cargo_directory_dependencies(session, project_id: str, dir_prefix: str = "", limit: int = 5):
+    schema_labels = await graph_core._execute_read(
+        session,
+        """
+        CALL db.labels() YIELD label
+        RETURN collect(label) AS labels
+        """,
+        op="cargo_directory_schema_labels",
+    )
+    schema_rels = await graph_core._execute_read(
+        session,
+        """
+        CALL db.relationshipTypes() YIELD relationshipType
+        RETURN collect(relationshipType) AS rels
+        """,
+        op="cargo_directory_schema_relationship_types",
+    )
+    labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
+    rels = set(schema_rels[0].get("rels") or []) if schema_rels else set()
+    if "CargoCrate" not in labels or "DEPENDS_ON_PACKAGE" not in rels:
+        return [], []
+
+    outbound = await graph_core._execute_read(
+        session,
+        """
+        MATCH (src:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        WHERE $dir <> ''
+          AND (mf.filepath STARTS WITH $dir OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', ''))
+        MATCH (src)-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$p})
+        RETURN src.name AS crate, collect(DISTINCT tgt.name)[..10] AS deps
+        ORDER BY crate
+        LIMIT $limit
+        """,
+        p=project_id,
+        dir=dir_prefix,
+        limit=limit,
+        op="cargo_directory_dependencies_outbound",
+    )
+    inbound = await graph_core._execute_read(
+        session,
+        """
+        MATCH (tgt:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        WHERE $dir <> ''
+          AND (mf.filepath STARTS WITH $dir OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', ''))
+        MATCH (src:CargoCrate {project_id:$p})-[:DEPENDS_ON_PACKAGE]->(tgt)
+        RETURN tgt.name AS crate, collect(DISTINCT src.name)[..10] AS dependents
+        ORDER BY crate
+        LIMIT $limit
+        """,
+        p=project_id,
+        dir=dir_prefix,
+        limit=limit,
+        op="cargo_directory_dependencies_inbound",
+    )
+    return outbound, inbound
+
+
 async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: str, directory_path: str, limit: int = 5) -> str:
     project_id = get_project_id(workspace_id)
     dir_prefix = directory_path.strip("./")
@@ -265,8 +322,12 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             r_cargo_crates, r_cargo_workspaces, r_cargo_dependencies = await load_cargo_build_context(
                 session, project_id, dir_prefix=dir_prefix, limit=limit
             )
+            r_cargo_dep_out, r_cargo_dep_in = await load_cargo_directory_dependencies(
+                session, project_id, dir_prefix=dir_prefix, limit=limit
+            )
         else:
             r_cargo_crates, r_cargo_workspaces, r_cargo_dependencies = [], [], []
+            r_cargo_dep_out, r_cargo_dep_in = [], []
 
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:
@@ -311,6 +372,12 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         for rec in r_cargo_dependencies:
             deps = ", ".join(rec.get("deps") or [])
             lines.append(f"- crate `{rec['crate']}` depends on {deps}")
+        for rec in r_cargo_dep_out:
+            deps = ", ".join(rec.get("deps") or [])
+            lines.append(f"- local crate `{rec['crate']}` depends on {deps}")
+        for rec in r_cargo_dep_in:
+            dependents = ", ".join(rec.get("dependents") or [])
+            lines.append(f"- local crate `{rec['crate']}` is used by {dependents}")
 
     if r_inbound:
         lines.append("\n### 📥 Consumers (External files importing from here)")

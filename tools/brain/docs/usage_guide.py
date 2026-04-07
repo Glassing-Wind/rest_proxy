@@ -22,7 +22,7 @@ def register(mcp: FastMCP) -> None:
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
 4. `get_project_overview(project_path)` → health, architecture clusters, key files, and Apple/Cargo build context when present
-5. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, **UI asset wiring**, and local Apple/Cargo build context for a folder
+5. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, **UI asset wiring**, local Apple/Cargo build context, and Cargo crate dependency context for a folder
 6. `get_code_importance(project_path)` → PageRank-ranked files, now grouped by Cargo crate when present
 6a. `get_code_communities(project_path)` → architectural clusters; Rust workspace fallback now groups by Cargo crate instead of only top-level directory
 7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters, including Cargo crate context/filtering for Rust workspaces
