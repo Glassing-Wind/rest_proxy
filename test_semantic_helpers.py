@@ -66,6 +66,23 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertIn("lang=python", output)
         self.assertIn("def run()", output)
 
+    def test_cargo_helpers_attach_and_filter(self):
+        rows = [
+            {"file_path": "crates/api/src/lib.rs", "project_id": "proj", "rrf": 1.0, "content": "fn run() {}", "_meta": {}},
+            {"file_path": "crates/core/src/lib.rs", "project_id": "proj", "rrf": 0.9, "content": "fn serve() {}", "_meta": {}},
+        ]
+        crate_rows = [
+            {"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml"},
+            {"crate": "core", "crate_name": "core_lib", "manifest_path": "crates/core/Cargo.toml"},
+        ]
+        module.attach_cargo_crate_meta(rows, crate_rows)
+        self.assertEqual(rows[0]["_meta"]["cargo_crate"], "api")
+        self.assertEqual(rows[1]["_meta"]["cargo_crate_name"], "core_lib")
+        filtered = module.filter_by_cargo_crate(rows, "core")
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["file_path"], "crates/core/src/lib.rs")
+        self.assertTrue(any("crate=api" in line for line in module.format_meta(rows[0]["_meta"])))
+
 
 if __name__ == "__main__":
     unittest.main()

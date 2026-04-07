@@ -472,16 +472,56 @@ def register(mcp: FastMCP) -> None:
                         op="get_code_importance_fallback",
                     )
 
+                cargo_schema = await _execute_read(
+                    session,
+                    """
+                    CALL db.labels() YIELD label
+                    RETURN collect(label) AS labels
+                    """,
+                    op="get_code_importance_cargo_schema_labels",
+                )
+                cargo_labels = set(cargo_schema[0].get("labels") or []) if cargo_schema else set()
+                cargo_rows = []
+                if "CargoCrate" in cargo_labels:
+                    cargo_rows = await _execute_read(
+                        session,
+                        """
+                        MATCH (c:CargoCrate {project_id:$pid})-[:DEFINED_IN_FILE]->(mf:File {project_id:$pid})
+                        RETURN c.name AS crate,
+                               c.crate_name AS crate_name,
+                               mf.filepath AS manifest_path
+                        ORDER BY size(mf.filepath) DESC, c.name
+                        """,
+                        pid=project_id,
+                        op="get_code_importance_cargo_crates",
+                    )
+
             scoring_method = (
                 "GDS PageRank (CALLS graph)"
                 if using_pagerank
                 else "heuristic (callers×3 + symbols)"
             )
+
+            def _cargo_manifest_dir(manifest_path: str | None) -> str:
+                if not manifest_path:
+                    return ""
+                return manifest_path[:-len("Cargo.toml")] if manifest_path.endswith("Cargo.toml") else manifest_path
+
+            def _match_cargo_crate(file_path: str | None) -> str | None:
+                if not file_path:
+                    return None
+                for row in cargo_rows:
+                    crate_root = _cargo_manifest_dir(row.get("manifest_path"))
+                    if crate_root and file_path.startswith(crate_root):
+                        return row.get("crate") or row.get("crate_name")
+                return None
+
             output = [f"Most important files [{scoring_method}, test/vendor excluded]:"]
             for record in records:
                 examples = (
                     ", ".join(record["sym_examples"]) if record["sym_examples"] else "—"
                 )
+                crate = _match_cargo_crate(record.get("file"))
                 pr_str = (
                     f"  pr:{record['top_pagerank']:.4f}"
                     if record["top_pagerank"]
@@ -489,6 +529,8 @@ def register(mcp: FastMCP) -> None:
                 )
                 output.append(
                     f"- {record['file']}"
+                    + (f"  [crate:{crate}]" if crate else "")
+                    + 
                     f"  [score:{record['score'] or 0:.4f}{pr_str}  symbols:{record['sym_count'] or 0}"
                     + (
                         f"  bridge:{record['betweenness']:.1f}"

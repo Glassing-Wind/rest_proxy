@@ -8,6 +8,43 @@ from tools.brain.search import core as search_core
 from tools.brain.search import semantic_helpers as sem_helpers
 
 
+async def _load_cargo_crate_rows(driver, neo4j_db: str, project_ids: list[str]) -> dict[str, list[dict]]:
+    if not driver or not project_ids:
+        return {}
+    project_ids = [pid for pid in project_ids if pid]
+    if not project_ids:
+        return {}
+    async with driver.session(database=neo4j_db) as session:
+        schema_rows = await search_core._execute_read(
+            session,
+            """
+            CALL db.labels() YIELD label
+            RETURN collect(label) AS labels
+            """,
+            op="search_codebase_cargo_schema_labels",
+        )
+        labels = set(schema_rows[0].get("labels") or []) if schema_rows else set()
+        if "CargoCrate" not in labels:
+            return {}
+        rows_by_pid: dict[str, list[dict]] = {}
+        for pid in project_ids:
+            rows = await search_core._execute_read(
+                session,
+                """
+                MATCH (c:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+                RETURN c.name AS crate,
+                       c.crate_name AS crate_name,
+                       mf.filepath AS manifest_path
+                ORDER BY size(mf.filepath) DESC, c.name
+                """,
+                p=pid,
+                op="search_codebase_cargo_crates",
+            )
+            if rows:
+                rows_by_pid[pid] = rows
+        return rows_by_pid
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -32,6 +69,7 @@ def register(mcp: FastMCP) -> None:
         min_symbols: int = 0,
         require_diagnostics: bool = False,
         require_context: bool = False,
+        crate_contains: str | None = None,
         include_paths: list|None = None,
         exclude_paths: list|None = None,
     ) -> str:
@@ -64,6 +102,7 @@ def register(mcp: FastMCP) -> None:
             min_symbols: Require at least N file symbols in metadata.
             require_diagnostics: Only return chunks with diagnostics.
             require_context: Only return chunks with a non-empty context_path.
+            crate_contains: Optional Cargo crate filter for Rust workspace files.
             include_paths: Optional list of glob patterns to include (file_path).
             exclude_paths: Optional list of glob patterns to exclude (file_path).
         """
@@ -205,6 +244,7 @@ def register(mcp: FastMCP) -> None:
                     min_symbols > 0,
                     require_diagnostics,
                     require_context,
+                    crate_contains,
                     include_paths,
                     exclude_paths,
                 ]
@@ -217,6 +257,26 @@ def register(mcp: FastMCP) -> None:
             }
             if filters_active or clone_dedup or meta_boost > 0:
                 include_metadata = True
+
+            cargo_rows_by_pid: dict[str, list[dict]] = {}
+            if all_results and (crate_contains or include_metadata):
+                try:
+                    import graph_bootstrap
+
+                    driver = await graph_bootstrap.require_driver()
+                    cargo_rows_by_pid = await _load_cargo_crate_rows(
+                        driver, graph_bootstrap._NEO4J_DB, list(pid_to_name.keys())
+                    )
+                except Exception:
+                    cargo_rows_by_pid = {}
+                if cargo_rows_by_pid:
+                    grouped: dict[str, list[dict]] = {}
+                    for result in all_results:
+                        pid = result.get("project_id")
+                        if pid:
+                            grouped.setdefault(pid, []).append(result)
+                    for pid, rows in grouped.items():
+                        sem_helpers.attach_cargo_crate_meta(rows, cargo_rows_by_pid.get(pid) or [])
 
             if include_metadata:
                 for r in all_results:
@@ -241,6 +301,8 @@ def register(mcp: FastMCP) -> None:
                             exclude_paths=exclude_paths,
                         )
                     ]
+                if crate_contains:
+                    all_results = sem_helpers.filter_by_cargo_crate(all_results, crate_contains)
                 for r in all_results:
                     base_score = r.get("rrf", 0.0)
                     try:

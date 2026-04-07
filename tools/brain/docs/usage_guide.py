@@ -23,8 +23,8 @@ def register(mcp: FastMCP) -> None:
 3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
 4. `get_project_overview(project_path)` → health, architecture clusters, key files, and Apple/Cargo build context when present
 5. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, **UI asset wiring**, and local Apple/Cargo build context for a folder
-6. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
-7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters
+6. `get_code_importance(project_path)` → PageRank-ranked files, now including Cargo crate ownership when present
+7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters, including Cargo crate context/filtering for Rust workspaces
 8. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
 ### Workspace Context & Troubleshooting:

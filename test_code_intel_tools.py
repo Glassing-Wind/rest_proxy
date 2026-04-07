@@ -282,6 +282,43 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("no named callers", output)
         self.assertNotIn("`unnamed`", output)
 
+    def test_get_code_importance_includes_cargo_crate_context(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.pagerank IS NOT NULL" in cypher:
+                return [
+                    {
+                        "file": "crates/api/src/lib.rs",
+                        "sym_count": 6,
+                        "sym_examples": ["run", "serve"],
+                        "top_pagerank": 1.2345,
+                        "score": 2.3456,
+                        "betweenness": 4.0,
+                        "isolated": False,
+                    }
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": ["CargoCrate"]}]
+            if "MATCH (c:CargoCrate" in cypher:
+                return [
+                    {
+                        "crate": "api",
+                        "crate_name": "api",
+                        "manifest_path": "crates/api/Cargo.toml",
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_importance"]("/tmp/rustws"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("crates/api/src/lib.rs", output)
+        self.assertIn("[crate:api]", output)
+
 
 if __name__ == "__main__":
     unittest.main()

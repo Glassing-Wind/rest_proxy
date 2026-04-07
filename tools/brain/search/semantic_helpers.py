@@ -33,6 +33,9 @@ def format_meta(meta: dict) -> list[str]:
         total_lines = metrics.get("total_lines")
         if isinstance(total_lines, int):
             parts.append(f"lines={total_lines}")
+    cargo_crate = meta.get("cargo_crate")
+    if cargo_crate:
+        parts.append(f"crate={cargo_crate}")
     ctx = meta.get("context_path")
     ctx_line = ""
     if isinstance(ctx, list) and ctx:
@@ -43,6 +46,52 @@ def format_meta(meta: dict) -> list[str]:
     if ctx_line:
         output.append(ctx_line)
     return output
+
+
+def cargo_manifest_dir(manifest_path: str | None) -> str:
+    if not manifest_path:
+        return ""
+    return manifest_path[:-len("Cargo.toml")] if manifest_path.endswith("Cargo.toml") else manifest_path
+
+
+def match_cargo_crate(file_path: str | None, crate_rows) -> tuple[str | None, str | None]:
+    if not file_path:
+        return None, None
+    for row in crate_rows:
+        manifest_path = row.get("manifest_path")
+        crate_root = cargo_manifest_dir(manifest_path)
+        if crate_root and file_path.startswith(crate_root):
+            return row.get("crate"), row.get("crate_name")
+    return None, None
+
+
+def attach_cargo_crate_meta(results: list[dict], crate_rows) -> list[dict]:
+    if not crate_rows:
+        return results
+    for result in results:
+        meta = coerce_meta(result)
+        crate, crate_name = match_cargo_crate(result.get("file_path"), crate_rows)
+        if crate:
+            meta["cargo_crate"] = crate
+        if crate_name:
+            meta["cargo_crate_name"] = crate_name
+    return results
+
+
+def filter_by_cargo_crate(results: list[dict], crate_contains: str) -> list[dict]:
+    needle = (crate_contains or "").strip().lower()
+    if not needle:
+        return results
+    filtered: list[dict] = []
+    for result in results:
+        meta = coerce_meta(result)
+        crate = meta.get("cargo_crate")
+        crate_name = meta.get("cargo_crate_name")
+        if (crate and needle in str(crate).lower()) or (
+            crate_name and needle in str(crate_name).lower()
+        ):
+            filtered.append(result)
+    return filtered
 
 
 def meta_score(meta: dict) -> int:
