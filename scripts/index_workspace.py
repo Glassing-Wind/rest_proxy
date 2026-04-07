@@ -291,26 +291,6 @@ async def _execute_semantic_sync(conn, ts_pack, project_id: str, all_chunks: Lis
     raise RuntimeError("ts_pack.execute_semantic_sync is required")
 
 
-async def _execute_semantic_index_prepare(
-    conn,
-    ts_pack,
-    project_id: str,
-    manifest_paths: List[str],
-    all_chunks: List[List[Dict]],
-    *,
-    rebuild: bool,
-) -> dict:
-    if hasattr(ts_pack, "execute_semantic_index_prepare"):
-        return await ts_pack.execute_semantic_index_prepare(
-            conn,
-            project_id,
-            manifest_paths,
-            all_chunks,
-            rebuild=rebuild,
-        )
-    raise RuntimeError("ts_pack.execute_semantic_index_prepare is required")
-
-
 def _read_and_chunk(
     abs_path: str, rel_path: str, project_id: str
 ) -> Tuple[List[Dict], str | None]:
@@ -464,18 +444,21 @@ async def _write_buffer(
     )
 
 
-async def _execute_semantic_index_rounds(
+async def _execute_semantic_index_driver(
+    conn,
     ts_pack,
-    new_chunks: List[Dict],
+    manifest_paths: List[str],
+    all_chunks: List[List[Dict]],
     *,
+    rebuild: bool,
     batch_size: int,
     concurrency: int,
     embedding_svc,
     target_dir: str,
     project_id: str,
 ) -> dict:
-    if not hasattr(ts_pack, "execute_semantic_index_rounds"):
-        raise RuntimeError("ts_pack.execute_semantic_index_rounds is required")
+    if not hasattr(ts_pack, "execute_semantic_index_driver"):
+        raise RuntimeError("ts_pack.execute_semantic_index_driver is required")
 
     async def _embed(batch):
         return await _embed_buffer(batch, embedding_svc)
@@ -500,8 +483,12 @@ async def _execute_semantic_index_rounds(
                 flush=True,
             )
 
-    return await ts_pack.execute_semantic_index_rounds(
-        new_chunks,
+    return await ts_pack.execute_semantic_index_driver(
+        conn,
+        project_id,
+        manifest_paths,
+        all_chunks,
+        rebuild=rebuild,
         batch_size=batch_size,
         concurrency=concurrency,
         embed_batch_fn=_embed,
@@ -639,36 +626,43 @@ async def index_project(
     manifest_paths = [entry.get("rel_path") or "" for entry in manifest]
     try:
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
-            sync_plan = await _execute_semantic_index_prepare(
+            from embedding_service import _CONCURRENCY as CONCURRENCY
+            index_result = await _execute_semantic_index_driver(
                 conn,
                 ts_pack,
-                project_id,
                 manifest_paths,
                 all_chunks,
                 rebuild=rebuild,
+                batch_size=bs,
+                concurrency=CONCURRENCY,
+                embedding_svc=embedding_svc,
+                target_dir=target_dir,
+                project_id=project_id,
             )
     except Exception as exc:
         print(
-            f"[lm-proxy:indexer] WARN: semantic index prepare failed: {exc}",
+            f"[lm-proxy:indexer] WARN: semantic index driver failed: {exc}",
             file=sys.stderr,
             flush=True,
         )
-        sync_plan = {
+        index_result = {
             "new_chunks": [],
             "skipped_chunks": 0,
             "pruned_total": 0,
             "existing_ids": set(),
             "wiped": False,
             "orphan_pruned": 0,
+            "written": 0,
+            "rounds": 0,
         }
 
-    if rebuild and sync_plan.get("wiped"):
+    if rebuild and index_result.get("wiped"):
         print(
             f"[lm-proxy:indexer] Total rebuild requested — wiped project '{project_id}'",
             file=sys.stderr,
             flush=True,
         )
-    orphan_pruned = int(sync_plan.get("orphan_pruned") or 0)
+    orphan_pruned = int(index_result.get("orphan_pruned") or 0)
     if orphan_pruned > 0:
         print(
             f"[lm-proxy:indexer] Pruned {orphan_pruned} orphaned files (ghosts)",
@@ -679,13 +673,13 @@ async def index_project(
         print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
         return 0
 
-    existing_count = len(sync_plan.get("existing_ids") or set())
+    existing_count = len(index_result.get("existing_ids") or set())
     print(
         f"[lm-proxy:indexer] {existing_count} chunks already indexed — skipping unchanged",
         file=sys.stderr,
         flush=True,
     )
-    pruned_total = int(sync_plan.get("pruned_total") or 0)
+    pruned_total = int(index_result.get("pruned_total") or 0)
     if pruned_total > 0:
         print(
             f"[lm-proxy:indexer] Surgically pruned {pruned_total} ghost chunks",
@@ -693,21 +687,8 @@ async def index_project(
             flush=True,
         )
 
-    # ── Filter to only new chunks (already have stable content-hash ref_ids) ──
-    all_new_chunks: List[Dict] = sync_plan.get("new_chunks") or []
-    skipped = int(sync_plan.get("skipped_chunks") or 0)
-    total_new = len(all_new_chunks)
-    from embedding_service import _CONCURRENCY as CONCURRENCY
-    round_result = await _execute_semantic_index_rounds(
-        ts_pack,
-        all_new_chunks,
-        batch_size=bs,
-        concurrency=CONCURRENCY,
-        embedding_svc=embedding_svc,
-        target_dir=target_dir,
-        project_id=project_id,
-    )
-    total_indexed = int(round_result.get("written") or 0)
+    skipped = int(index_result.get("skipped_chunks") or 0)
+    total_indexed = int(index_result.get("written") or 0)
 
     elapsed = time.time() - t0
     print(

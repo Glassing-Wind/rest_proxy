@@ -271,6 +271,54 @@ class FakeTsPack:
             )
         return {"written": total_written, "rounds": 1}
 
+    async def execute_semantic_index_driver(
+        self,
+        conn,
+        project_id,
+        manifest_paths,
+        all_chunks,
+        *,
+        rebuild=False,
+        batch_size,
+        concurrency,
+        embed_batch_fn,
+        write_batch_fn,
+        progress_fn=None,
+    ):
+        if self._sync_plan is not None or self._rounds_result is not None:
+            sync_plan = await self.execute_semantic_index_prepare(
+                conn,
+                project_id,
+                manifest_paths,
+                all_chunks,
+                rebuild=rebuild,
+            )
+            round_result = await self.execute_semantic_index_rounds(
+                sync_plan.get("new_chunks") or [],
+                batch_size=batch_size,
+                concurrency=concurrency,
+                embed_batch_fn=embed_batch_fn,
+                write_batch_fn=write_batch_fn,
+                progress_fn=progress_fn,
+            )
+            return {**sync_plan, **round_result}
+        sync_plan = await self.execute_semantic_index_prepare(
+            conn,
+            project_id,
+            manifest_paths,
+            all_chunks,
+            rebuild=rebuild,
+        )
+        round_result = await self.execute_semantic_index_rounds(
+            sync_plan.get("new_chunks") or [],
+            batch_size=batch_size,
+            concurrency=concurrency,
+            embed_batch_fn=embed_batch_fn,
+            write_batch_fn=write_batch_fn,
+            progress_fn=progress_fn,
+        )
+        return {**sync_plan, **round_result}
+
 
 class FakeCursor:
     def __init__(self):
@@ -359,10 +407,9 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(captured["chunk_max_size"], self.module.CHUNK_MAX_BYTES)
         self.assertEqual(captured["chunk_overlap"], self.module.CHUNK_OVERLAP_BYTES)
 
-    def test_execute_semantic_index_prepare_delegates_to_package(self):
-        all_chunks = [[{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}}]]
+    def test_execute_semantic_index_driver_delegates_to_package(self):
         payload = {
-            "new_chunks": [],
+            "new_chunks": [{"ref_id": "chunk-1", "text": "hello"}],
             "skipped_chunks": 1,
             "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1"]}],
             "total_chunks": 1,
@@ -371,29 +418,16 @@ class IndexWorkspaceTests(unittest.TestCase):
             "wiped": True,
             "orphan_pruned": 2,
         }
-        fake_ts_pack = FakeTsPack(sync_plan=payload)
-        conn = object()
-
-        plan = asyncio.run(
-            self.module._execute_semantic_index_prepare(
-                conn,
-                fake_ts_pack,
-                "proj123",
-                ["src/a.ts"],
-                all_chunks,
-                rebuild=True,
-            )
-        )
-        self.assertEqual(plan, payload)
-
-    def test_execute_semantic_index_rounds_delegates_to_package(self):
-        fake_ts_pack = FakeTsPack(rounds_result={"written": 3, "rounds": 2})
+        fake_ts_pack = FakeTsPack(sync_plan=payload, rounds_result={"written": 3, "rounds": 2})
 
         async def _run():
             svc = types.SimpleNamespace()
-            result = await self.module._execute_semantic_index_rounds(
+            result = await self.module._execute_semantic_index_driver(
+                object(),
                 fake_ts_pack,
-                [{"ref_id": "chunk-1", "text": "hello"}],
+                ["src/a.ts"],
+                [[{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}, "text": "hello"}]],
+                rebuild=True,
                 batch_size=2,
                 concurrency=2,
                 embedding_svc=svc,
@@ -402,11 +436,26 @@ class IndexWorkspaceTests(unittest.TestCase):
             )
             return result
 
-        with mock.patch.object(self.module, "_embed_buffer", side_effect=AssertionError("should not call local embed loop")):
-            with mock.patch.object(self.module, "_write_buffer", side_effect=AssertionError("should not call local write loop")):
+        with mock.patch.object(
+            self.module,
+            "_embed_buffer",
+            side_effect=AssertionError("should not call local embed loop"),
+        ):
+            with mock.patch.object(
+                self.module,
+                "_write_buffer",
+                side_effect=AssertionError("should not call local write loop"),
+            ):
                 result = asyncio.run(_run())
 
-        self.assertEqual(result, {"written": 3, "rounds": 2})
+        self.assertEqual(
+            result,
+            {
+                **payload,
+                "written": 3,
+                "rounds": 2,
+            },
+        )
 
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
