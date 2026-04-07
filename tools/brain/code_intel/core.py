@@ -238,8 +238,17 @@ def register(mcp: FastMCP) -> None:
                      count(DISTINCT caller) AS callers_in
                 WHERE rank < 99
                 RETURN elementId(s) AS eid, s.name AS name, s.qualified_name AS qualified_name,
-                       s.signature AS signature, s.filepath AS filepath, rank
-                ORDER BY rank ASC, callers_in DESC, size(coalesce(s.qualified_name, s.name)) ASC
+                       s.signature AS signature, s.filepath AS filepath, rank,
+                       CASE
+                         WHEN s.filepath IS NULL THEN 2
+                         WHEN s.filepath CONTAINS '/api/' OR s.filepath CONTAINS '/routes/' OR s.filepath CONTAINS '/services/' OR s.filepath CONTAINS '/db/'
+                           OR s.filepath STARTS WITH 'api/' OR s.filepath STARTS WITH 'routes/' OR s.filepath STARTS WITH 'services/' OR s.filepath STARTS WITH 'db/'
+                           THEN 0
+                         WHEN s.filepath CONTAINS '/public/' OR s.filepath STARTS WITH 'public/' OR s.filepath ENDS WITH '.html' OR s.filepath ENDS WITH '.css'
+                           THEN 3
+                         ELSE 1
+                       END AS path_rank
+                ORDER BY rank ASC, path_rank ASC, callers_in DESC, size(coalesce(s.qualified_name, s.name)) ASC
                 LIMIT 5
             """
 
@@ -312,7 +321,56 @@ def register(mcp: FastMCP) -> None:
                 resolved_name = (
                     picked.get("qualified_name") or picked.get("name") or symbol_name
                 )
+                resolved_filepath = picked.get("filepath") or ""
 
+                is_backend_root = (
+                    "/api/" in resolved_filepath
+                    or "/routes/" in resolved_filepath
+                    or "/services/" in resolved_filepath
+                    or "/db/" in resolved_filepath
+                    or resolved_filepath.startswith(("api/", "routes/", "services/", "db/"))
+                )
+
+                if direction == "up":
+                    hop_label = "caller"
+                    path_filter = ""
+                    if is_backend_root:
+                        path_filter = (
+                            " AND NOT (coalesce(hop.filepath, '') CONTAINS '/public/'"
+                            " OR coalesce(hop.filepath, '') STARTS WITH 'public/'"
+                            " OR coalesce(hop.filepath, '') ENDS WITH '.html'"
+                            " OR coalesce(hop.filepath, '') ENDS WITH '.css')"
+                        )
+                    cypher = (
+                        f"MATCH (start) WHERE elementId(start) = $eid "
+                        f"MATCH path = (start)"
+                        f"<-[:CALLS|CALLS_INFERRED*1..{depth}]-(hop)"
+                        " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
+                        + path_filter
+                        + " RETURN [n IN nodes(path) | n.name] AS chain,"
+                        "        [n IN nodes(path) | n.filepath] AS files"
+                        " LIMIT 40"
+                    )
+                else:
+                    hop_label = "callee"
+                    path_filter = ""
+                    if is_backend_root:
+                        path_filter = (
+                            " AND NOT (coalesce(hop.filepath, '') CONTAINS '/public/'"
+                            " OR coalesce(hop.filepath, '') STARTS WITH 'public/'"
+                            " OR coalesce(hop.filepath, '') ENDS WITH '.html'"
+                            " OR coalesce(hop.filepath, '') ENDS WITH '.css')"
+                        )
+                    cypher = (
+                        f"MATCH (start) WHERE elementId(start) = $eid "
+                        f"MATCH path = (start)"
+                        f"-[:CALLS|CALLS_INFERRED*1..{depth}]->(hop)"
+                        " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
+                        + path_filter
+                        + " RETURN [n IN nodes(path) | n.name] AS chain,"
+                        "        [n IN nodes(path) | n.filepath] AS files"
+                        " LIMIT 40"
+                    )
                 rows = await _execute_read(
                     session, cypher, eid=resolved_eid, op="get_call_chain"
                 )

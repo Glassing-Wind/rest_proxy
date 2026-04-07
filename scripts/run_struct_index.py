@@ -565,10 +565,11 @@ def _ensure_manifest_file_nodes(
                             f:File,
                             f.project_id = $pid,
                             f.filepath = row.filepath,
+                            f.file_path = row.filepath,
                             f.name = row.name,
                             f.indexed_at = timestamp(),
                             f.parsed = false
-                        SET f:Node, f:File
+                        SET f:Node, f:File, f.file_path = row.filepath
                         """,
                         batch=batch,
                         pid=project_id,
@@ -625,6 +626,36 @@ def _mark_manifest_parsed(
                 paths=parsed_paths,
                 timeout=_NEO4J_WRITE_TIMEOUT_S,
                 op="mark_manifest_parsed",
+            )
+            return record["updated"] if record else 0
+    finally:
+        driver.close()
+
+
+def _sync_file_path_alias(
+    project_id: str,
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_pass: str,
+    neo4j_db: str = "proxy",
+) -> int:
+    """Backfill `file_path` compatibility alias for File nodes."""
+    import neo4j as _neo4j
+
+    driver = _neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            record = _execute_write_fetch(
+                session,
+                """
+                MATCH (f:File {project_id:$pid})
+                WHERE f.filepath IS NOT NULL
+                SET f.file_path = f.filepath
+                RETURN count(f) AS updated
+                """,
+                pid=project_id,
+                timeout=_NEO4J_WRITE_TIMEOUT_S,
+                op="sync_file_path_alias",
             )
             return record["updated"] if record else 0
     finally:
@@ -878,6 +909,27 @@ def main() -> int:
     except Exception as exc:
         print(
             f"[ts-pack:struct] WARNING: manifest-only File nodes failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    try:
+        aliased = _sync_file_path_alias(
+            project_id=args.project_id,
+            neo4j_uri=args.neo4j_uri,
+            neo4j_user=args.neo4j_user,
+            neo4j_pass=args.neo4j_pass,
+            neo4j_db=args.neo4j_db,
+        )
+        if aliased:
+            print(
+                f"[ts-pack:struct] Synced file_path alias on {aliased} File nodes.",
+                file=sys.stderr,
+                flush=True,
+            )
+    except Exception as exc:
+        print(
+            f"[ts-pack:struct] WARNING: file_path alias sync failed: {exc}",
             file=sys.stderr,
             flush=True,
         )

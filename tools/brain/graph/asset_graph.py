@@ -10,12 +10,13 @@ from pathlib import PurePosixPath
 from typing import Awaitable, Callable
 
 import graph_bootstrap
-from _helpers import get_project_id
+from _helpers import get_memory_modules, get_project_id
 
 
 ExecuteRead = Callable[..., Awaitable[list[dict[str, object]]]]
 ExecuteWrite = Callable[..., Awaitable[None]]
 DebugLog = Callable[..., None]
+HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 
 
 async def build_asset_graph(
@@ -49,6 +50,30 @@ async def build_asset_graph(
 
         if not files:
             return "No files found for asset graph."
+
+        file_facts: dict[str, dict[str, object]] = {}
+        try:
+            memory_store, _, _, _, _ = get_memory_modules()
+            await memory_store.open_pool()
+            if memory_store._pg_pool_available():
+                async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+                    async with conn.cursor() as cur:
+                        await cur.execute(
+                            """
+                            SELECT DISTINCT ON (file_path) file_path, metadata->'file_facts'
+                            FROM codebase_embeddings
+                            WHERE project_id = %s AND metadata ? 'file_facts'
+                            ORDER BY file_path, chunk_index
+                            """,
+                            (project_id,),
+                        )
+                        async for row in cur:
+                            fp = row[0]
+                            facts = row[1] or {}
+                            if fp and isinstance(facts, dict):
+                                file_facts[fp] = facts
+        except Exception:
+            file_facts = {}
 
         html_files = [
             (fp, fid) for fp, fid in files.items() if fp.endswith((".html", ".astro"))
@@ -170,16 +195,46 @@ async def build_asset_graph(
                 return "/api/" + "/".join(rel)
             return None
 
-        route_targets: dict[str, str] = {}
+        def _normalize_http_method(method: str | None) -> str:
+            method = (method or "").strip().upper()
+            return method if method in HTTP_METHODS else "ANY"
+
+        def _extract_next_route_methods(content: str) -> list[str]:
+            methods: set[str] = set()
+            if not content:
+                return ["ANY"]
+            for pattern in (
+                r"\bexport\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b",
+                r"\bexport\s+const\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b",
+            ):
+                for match in re.findall(pattern, content, re.IGNORECASE):
+                    methods.add(_normalize_http_method(match))
+            return sorted(methods) or ["ANY"]
+
+        route_targets: dict[tuple[str, str], str] = {}
         for fp, fid in files.items():
             route_path = _route_path_from_file(fp)
-            if route_path:
-                route_targets.setdefault(route_path, fid)
+            if not route_path:
+                continue
+            methods = ["ANY"]
+            if PurePosixPath(fp).name.startswith("route."):
+                methods = _extract_next_route_methods(_read_text(os.path.join(project_path, fp)))
+            for method in methods:
+                route_targets.setdefault((route_path, method), fid)
+        for fp, fid in files.items():
+            facts = file_facts.get(fp) or {}
+            for route in facts.get("route_defs") or []:
+                if not isinstance(route, dict):
+                    continue
+                path = route.get("path")
+                method = _normalize_http_method(route.get("method")) or "ANY"
+                if isinstance(path, str) and path.startswith("/"):
+                    route_targets.setdefault((path, method), fid)
 
-        def _collect_express_routes() -> dict[str, str]:
-            routes: dict[str, str] = {}
+        def _collect_express_routes() -> list[tuple[str, str, str]]:
+            routes: list[tuple[str, str, str]] = []
             route_re = re.compile(
-                r"\brouter\.(?:get|post|put|patch|delete|all)\s*\(\s*([\"'`])([^\"'`]+)\1",
+                r"\brouter\.(get|post|put|patch|delete|all|head|options)\s*\(\s*([\"'`])([^\"'`]+)\2",
                 re.IGNORECASE,
             )
             for fp, fid in files.items():
@@ -192,13 +247,14 @@ async def build_asset_graph(
                 if not content:
                     continue
                 for match in route_re.findall(content):
-                    raw = match[1].strip()
+                    method = _normalize_http_method(match[0])
+                    raw = match[2].strip()
                     if not raw.startswith("/"):
                         continue
                     for prefix in api_prefixes:
                         full_path = f"{prefix}{raw}".replace("//", "/")
-                        routes.setdefault(full_path, fid)
-                    routes.setdefault(raw, fid)
+                        routes.append((full_path, method, fid))
+                    routes.append((raw, method, fid))
             return routes
 
         express_routes = _collect_express_routes()
@@ -216,9 +272,29 @@ async def build_asset_graph(
             pattern = "^/" + "/".join(pattern_parts) + "/?$"
             return re.compile(pattern)
 
-        express_route_patterns: list[tuple[re.Pattern[str], str]] = [
-            (_route_regex_from_path(path), fid) for path, fid in express_routes.items()
+        express_route_patterns: list[tuple[re.Pattern[str], str, str]] = [
+            (_route_regex_from_path(path), method, fid)
+            for path, method, fid in express_routes
         ]
+
+        def _collect_route_calls(content: str) -> list[tuple[str, str | None]]:
+            calls: list[tuple[str, str | None]] = []
+            if not content:
+                return calls
+
+            fetch_method_re = re.compile(
+                r"""\bfetch\(\s*([\"'`])(/[^\"'`]+)\1\s*,\s*\{[^{}]{0,300}?\bmethod\s*:\s*([\"'`])([A-Za-z]+)\3""",
+                re.IGNORECASE | re.DOTALL,
+            )
+            client_method_re = re.compile(
+                r"""\b(?:axios|ky)\.(get|post|put|patch|delete|head|options)\(\s*([\"'`])(/[^\"'`]+)\2""",
+                re.IGNORECASE,
+            )
+            for _, path, _, method in fetch_method_re.findall(content):
+                calls.append((path, _normalize_http_method(method)))
+            for method, _, path in client_method_re.findall(content):
+                calls.append((path, _normalize_http_method(method)))
+            return calls
 
         def _resolve_href(src_fp: str, raw: str) -> str | None:
             raw = raw.split("#", 1)[0].split("?", 1)[0].strip()
@@ -260,8 +336,8 @@ async def build_asset_graph(
                     html_edges.append((fid, files[target]))
 
         api_edges: list[tuple[str, str]] = []
-        api_route_edges: list[tuple[str, str]] = []
-        api_route_handler_edges: list[tuple[str, str]] = []
+        api_route_edges: list[tuple[str, str, str]] = []
+        api_route_handler_edges: list[tuple[str, str, str]] = []
         if api_targets or route_targets:
             api_re = re.compile(r"[\"'](/api/[^\"']+)[\"']")
             client_re = re.compile(r"\b(fetch|axios|ky|ofetch)\b")
@@ -271,28 +347,49 @@ async def build_asset_graph(
                 if not content:
                     continue
                 if not api_re.search(content) and not client_re.search(content):
-                    continue
+                    facts = file_facts.get(fp) or {}
+                    if not (facts.get("http_calls") or []):
+                        continue
                 matched_targets: set[str] = set()
-                matched_routes: set[str] = set()
-                literal_paths: list[str] = []
-                for m in re.finditer(r"[\"'](/[^\"']+)[\"']", content):
-                    literal_paths.append(m.group(1))
-                for m in re.finditer(r"`([^`]+)`", content):
-                    literal = m.group(1)
-                    if "${" in literal:
-                        literal = literal.split("${", 1)[0]
-                    if literal.startswith("/"):
-                        literal_paths.append(literal)
+                matched_routes: set[tuple[str, str]] = set()
+                facts = file_facts.get(fp) or {}
+                literal_paths: list[tuple[str, str | None]] = []
+                for call in facts.get("http_calls") or []:
+                    if not isinstance(call, dict):
+                        continue
+                    path = call.get("path")
+                    method = call.get("method")
+                    if isinstance(path, str) and path.startswith("/"):
+                        literal_paths.append((path, _normalize_http_method(method)))
 
-                for literal in literal_paths:
+                if not literal_paths:
+                    literal_paths = _collect_route_calls(content)
+                    for m in re.finditer(r"[\"'](/[^\"']+)[\"']", content):
+                        literal_paths.append((m.group(1), None))
+                    for m in re.finditer(r"`([^`]+)`", content):
+                        literal = m.group(1)
+                        if "${" in literal:
+                            literal = literal.split("${", 1)[0]
+                        if literal.startswith("/"):
+                            literal_paths.append((literal, None))
+
+                for literal, method_hint in literal_paths:
                     cleaned = literal.split("?", 1)[0].split("#", 1)[0]
-                    for pattern, target in express_route_patterns:
+                    for pattern, route_method, target in express_route_patterns:
                         if pattern.match(cleaned):
+                            if method_hint and route_method not in {"ANY", method_hint}:
+                                continue
                             matched_targets.add(target)
-                            matched_routes.add(cleaned)
-                    if cleaned in route_targets:
-                        matched_targets.add(route_targets[cleaned])
-                        matched_routes.add(cleaned)
+                            matched_routes.add((cleaned, route_method))
+                    route_matches = [
+                        ((path, method), target)
+                        for (path, method), target in route_targets.items()
+                        if path == cleaned and (method_hint is None or method in {"ANY", method_hint})
+                    ]
+                    if route_matches:
+                        for (path, method), target in route_matches:
+                            matched_targets.add(target)
+                            matched_routes.add((path, method))
                     elif cleaned.startswith("/api/") and api_targets:
                         matched_targets.update(api_targets)
                 if not matched_targets and api_re.search(content):
@@ -300,11 +397,22 @@ async def build_asset_graph(
                 for tgt in matched_targets:
                     if tgt != fid:
                         api_edges.append((fid, tgt))
-                for route in matched_routes:
-                    api_route_edges.append((fid, route))
-                    handler_fid = express_routes.get(route)
-                    if handler_fid and handler_fid != fid:
-                        api_route_handler_edges.append((route, handler_fid))
+                for route_path, route_method in matched_routes:
+                    api_route_edges.append((fid, route_path, route_method))
+                    for path, method, handler_fid in express_routes:
+                        if path != route_path:
+                            continue
+                        if route_method not in {"ANY", method} and method != "ANY":
+                            continue
+                        if handler_fid != fid:
+                            api_route_handler_edges.append((route_path, method, handler_fid))
+                    for (path, method), handler_fid in route_targets.items():
+                        if path != route_path:
+                            continue
+                        if route_method not in {"ANY", method} and method != "ANY":
+                            continue
+                        if handler_fid != fid:
+                            api_route_handler_edges.append((route_path, method, handler_fid))
 
         service_edges: list[tuple[str, str]] = []
         service_files = {
@@ -451,8 +559,8 @@ async def build_asset_graph(
             if api_route_edges:
                 for i in range(0, len(api_route_edges), batch_size):
                     batch = [
-                        {"src": s, "path": p, "project_id": project_id}
-                        for s, p in api_route_edges[i : i + batch_size]
+                        {"src": s, "path": p, "method": m, "project_id": project_id}
+                        for s, p, m in api_route_edges[i : i + batch_size]
                     ]
                     async with write_semaphore:
                         await execute_write(
@@ -460,7 +568,9 @@ async def build_asset_graph(
                             """
                             UNWIND $batch AS edge
                             MATCH (a:File {id: edge.src})
-                            MERGE (r:ApiRoute {project_id: edge.project_id, path: edge.path})
+                            MERGE (r:ApiRoute {project_id: edge.project_id, path: edge.path, method: edge.method})
+                            ON CREATE SET r.name = edge.method + ' ' + edge.path
+                            SET r.filepath = edge.path
                             MERGE (a)-[:CALLS_API_ROUTE]->(r)
                             """,
                             batch=batch,
@@ -470,15 +580,15 @@ async def build_asset_graph(
             if api_route_handler_edges:
                 for i in range(0, len(api_route_handler_edges), batch_size):
                     batch = [
-                        {"path": p, "tgt": t, "project_id": project_id}
-                        for p, t in api_route_handler_edges[i : i + batch_size]
+                        {"path": p, "method": m, "tgt": t, "project_id": project_id}
+                        for p, m, t in api_route_handler_edges[i : i + batch_size]
                     ]
                     async with write_semaphore:
                         await execute_write(
                             session,
                             """
                             UNWIND $batch AS edge
-                            MATCH (r:ApiRoute {project_id: edge.project_id, path: edge.path})
+                            MATCH (r:ApiRoute {project_id: edge.project_id, path: edge.path, method: edge.method})
                             MATCH (b:File {id: edge.tgt})
                             MERGE (r)-[:HANDLED_BY]->(b)
                             """,

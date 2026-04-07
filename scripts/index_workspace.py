@@ -34,6 +34,7 @@ if REPO_ROOT not in sys.path:
 import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
+from graphrag_core.ts_pack_facts import extract_file_facts
 from ts_diagnostics import normalize_ts_pack_result
 
 # AST-chunk size: target upper bound for native ts_pack chunks.
@@ -591,6 +592,9 @@ def _read_and_chunk(
                 "file_metrics": _extract_metrics(result.get("metrics", {})),
                 "file_extractions": _compact_extractions(result.get("extractions", {})),
             }
+            file_facts = extract_file_facts(ts_pack, source, "swift", rel_path)
+            if file_facts:
+                file_meta["file_facts"] = file_facts
             if os.getenv("LM_PROXY_SKIP_DIAGNOSTIC_FILES", "").lower() in (
                 "1",
                 "true",
@@ -649,6 +653,9 @@ def _read_and_chunk(
                 "file_metrics": _extract_metrics(result.get("metrics", {})),
                 "file_extractions": _compact_extractions(result.get("extractions", {})),
             }
+            file_facts = extract_file_facts(ts_pack, source, lang, rel_path)
+            if file_facts:
+                file_meta["file_facts"] = file_facts
             if os.getenv("LM_PROXY_SKIP_DIAGNOSTIC_FILES", "").lower() in (
                 "1",
                 "true",

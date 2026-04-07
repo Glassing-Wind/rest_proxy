@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
+from tools.brain.graph import flow_summary as graph_flow_summary
 from tools.brain.graph import runtime as graph_runtime
 from .core import _SYMBOL_FILTER_CYPHER
 
@@ -439,253 +440,24 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(workspace_id)
-            query_limit = limit
-            if model_contains:
-                query_limit = max(limit * 10, 200)
             driver = await graph_bootstrap.require_driver()
-            rows: list[str] = []
-            coverage_lines: list[str] = []
-            ui_routes: dict[str, list[str]] = {}
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                if entry_glob and not entry_files:
-                    import fnmatch
-                    ui_result = await graph_core._execute_read(
-                        session,
-                        """
-                        MATCH (f:File {project_id:$p})
-                        WHERE f.filepath ENDS WITH '.html' OR f.filepath ENDS WITH '.astro'
-                        RETURN f.filepath AS ui
-                        """,
-                        p=project_id,
-                        op="get_app_flow_summary_entry_glob",
-                    )
-                    ui_paths = [row.get("ui") for row in ui_result if row.get("ui")]
-                    entry_files = [
-                        path for path in ui_paths if fnmatch.fnmatch(path, entry_glob)
-                    ]
-
-                if include_coverage:
-                    coverage_result = await graph_core._execute_read(
-                        session,
-                        """
-                        MATCH (f:File {project_id:$p})
-                        WITH collect(f) AS files
-                        RETURN
-                          size([f IN files WHERE f.filepath ENDS WITH '.html' OR f.filepath ENDS WITH '.astro']) AS ui_files,
-                          size([f IN files WHERE f.filepath ENDS WITH '.js' OR f.filepath ENDS WITH '.ts' OR f.filepath ENDS WITH '.tsx']) AS js_files
-                        """,
-                        p=project_id,
-                        op="get_app_flow_summary_coverage_files",
-                    )
-                    edge_result = await graph_core._execute_read(
-                        session,
-                        """
-                        MATCH (:File {project_id:$p})-[r:ASSET_LINKS]->() RETURN count(r) AS asset_links
-                        """,
-                        p=project_id,
-                        op="get_app_flow_summary_coverage_assets",
-                    )
-                    api_result = await graph_core._execute_read(
-                        session,
-                        """
-                        MATCH (:File {project_id:$p})-[r:CALLS_API]->() RETURN count(r) AS api_links
-                        """,
-                        p=project_id,
-                        op="get_app_flow_summary_coverage_api",
-                    )
-                    svc_result = await graph_core._execute_read(
-                        session,
-                        """
-                        MATCH (:File {project_id:$p})-[r:CALLS_SERVICE]->() RETURN count(r) AS service_links
-                        """,
-                        p=project_id,
-                        op="get_app_flow_summary_coverage_service",
-                    )
-                    db_result = await graph_core._execute_read(
-                        session,
-                        """
-                        MATCH (:File {project_id:$p})-[r:CALLS_DB]->() RETURN count(r) AS db_links
-                        """,
-                        p=project_id,
-                        op="get_app_flow_summary_coverage_db",
-                    )
-                    ui_files = coverage_result[0].get("ui_files") if coverage_result else 0
-                    js_files = coverage_result[0].get("js_files") if coverage_result else 0
-                    asset_links = edge_result[0].get("asset_links") if edge_result else 0
-                    api_links = api_result[0].get("api_links") if api_result else 0
-                    service_links = svc_result[0].get("service_links") if svc_result else 0
-                    db_links = db_result[0].get("db_links") if db_result else 0
-                    route_result = await graph_core._execute_read(
-                        session,
-                        """
-                        MATCH (:File {project_id:$p})-[r:CALLS_API_ROUTE]->() RETURN count(r) AS api_route_links
-                        """,
-                        p=project_id,
-                        op="get_app_flow_summary_coverage_api_routes",
-                    )
-                    api_route_links = route_result[0].get("api_route_links") if route_result else 0
-                    coverage_lines.append(
-                        "Coverage: "
-                        f"ui_files={ui_files} js_files={js_files} "
-                        f"asset_links={asset_links} api_links={api_links} "
-                        f"api_route_links={api_route_links} service_links={service_links} db_links={db_links}"
-                    )
-
-                result = await graph_core._execute_read(
-                    session,
-                    """
-                    CALL {
-                        MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
-                        MATCH (js)-[:CALLS_API]->(api:File {project_id:$p})
-                        OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-                        OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-                        OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-                        OPTIONAL MATCH (js)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
-                        WHERE ($ui_filter IS NULL OR ui.filepath CONTAINS $ui_filter)
-                          AND ($ui_list IS NULL OR ui.filepath IN $ui_list)
-                          AND ($include_tests OR (
-                            NOT ui.filepath STARTS WITH 'tests/'
-                            AND NOT ui.filepath CONTAINS '/tests/'
-                            AND NOT ui.filepath CONTAINS '__tests__'
-                            AND NOT ui.filepath CONTAINS '.test.'
-                            AND NOT js.filepath STARTS WITH 'tests/'
-                            AND NOT js.filepath CONTAINS '/tests/'
-                            AND NOT js.filepath CONTAINS '__tests__'
-                            AND NOT js.filepath CONTAINS '.test.'
-                          ))
-                        RETURN ui.filepath AS ui,
-                           js.filepath AS js,
-                           api.filepath AS api,
-                           svc.filepath AS svc,
-                           model.name AS model,
-                           schema.filepath AS schema,
-                           ext.url AS external
-                        UNION
-                        MATCH (ui:File {project_id:$p})-[:CALLS_API]->(api:File {project_id:$p})
-                        OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-                        OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-                        OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-                        OPTIONAL MATCH (ui)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
-                        WHERE ($ui_filter IS NULL OR ui.filepath CONTAINS $ui_filter)
-                          AND ($ui_list IS NULL OR ui.filepath IN $ui_list)
-                          AND ($include_tests OR (
-                            NOT ui.filepath STARTS WITH 'tests/'
-                            AND NOT ui.filepath CONTAINS '/tests/'
-                            AND NOT ui.filepath CONTAINS '__tests__'
-                            AND NOT ui.filepath CONTAINS '.test.'
-                          ))
-                        RETURN ui.filepath AS ui,
-                           ui.filepath AS js,
-                           api.filepath AS api,
-                           svc.filepath AS svc,
-                           model.name AS model,
-                           schema.filepath AS schema,
-                           ext.url AS external
-                    }
-                    RETURN ui, js, api, svc, model, schema, external
-                    LIMIT $limit
-                    """,
-                    p=project_id,
-                    ui_filter=ui_contains,
-                    ui_list=entry_files,
-                    include_tests=include_tests,
-                    limit=query_limit,
-                    op="get_app_flow_summary",
-                )
-                raw_rows = []
-                for row in result:
-                    raw_rows.append(
-                        (
-                            row.get("ui"),
-                            row.get("js"),
-                            row.get("api"),
-                            row.get("svc"),
-                            row.get("model"),
-                            row.get("schema"),
-                            row.get("external"),
-                        )
-                    )
-
-                if expand_api_calls:
-                    ui_candidates = sorted({row[0] for row in raw_rows if row[0]})
-                    if entry_files:
-                        ui_candidates = [ui for ui in entry_files if ui in ui_candidates]
-                    if ui_contains:
-                        ui_candidates = [ui for ui in ui_candidates if ui_contains in ui]
-                    for ui_path in ui_candidates:
-                        api_calls_result = await graph_core._execute_read(
-                            session,
-                            """
-                            MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
-                            MATCH (js)-[:CALLS_API_ROUTE]->(route:ApiRoute {project_id:$p})
-                            WHERE ui.filepath = $ui_path
-                            RETURN collect(distinct route.path) AS routes
-                            """,
-                            p=project_id,
-                            ui_path=ui_path,
-                            op="get_app_flow_summary_api_routes",
-                        )
-                        routes = api_calls_result[0].get("routes") if api_calls_result else []
-                        ui_routes[ui_path] = sorted(routes)
-
-            if entry_files:
-                raw_rows = [r for r in raw_rows if r[0] and r[0] in entry_files]
-            if ui_contains:
-                raw_rows = [r for r in raw_rows if r[0] and ui_contains in r[0]]
-            if model_contains:
-                raw_rows = [r for r in raw_rows if r[4] and model_contains in r[4]]
-            if service_contains:
-                raw_rows = [r for r in raw_rows if r[3] and service_contains in r[3]]
-
-            if as_table:
-                rows = [
-                    "| UI | JS | API | Service | Model | Schema | External |",
-                    "| --- | --- | --- | --- | --- | --- | --- |",
-                ]
-                for ui, js, api, svc, model, schema, external in raw_rows:
-                    rows.append(
-                        f"| {ui or ''} | {js or ''} | {api or ''} | {svc or ''} | {model or ''} | {schema or ''} | {external or ''} |"
-                    )
-            else:
-                if group_by_ui:
-                    grouped: dict[str, list[str]] = {}
-                    for ui, js, api, svc, model, schema, external in raw_rows:
-                        if not ui:
-                            continue
-                        flow = " -> ".join(
-                            [v for v in [ui, js, api, svc, model, schema, external] if v]
-                        )
-                        grouped.setdefault(ui, []).append(flow)
-                    ordered_uis = entry_files or sorted(grouped.keys())
-                    for ui in ordered_uis:
-                        flows = grouped.get(ui, [])
-                        if not flows:
-                            continue
-                        rows.append(f"UI: {ui}")
-                        if expand_api_calls:
-                            routes = ui_routes.get(ui) or []
-                            if routes:
-                                rows.append(f"API routes: {', '.join(routes)}")
-                        deduped = list(dict.fromkeys(flows))
-                        rows.extend(deduped[:max_per_ui])
-                else:
-                    rows = [
-                        " -> ".join(
-                            [v for v in [ui, js, api, svc, model, schema, external] if v]
-                        )
-                        for ui, js, api, svc, model, schema, external in raw_rows
-                    ]
-            if limit and len(rows) > limit:
-                rows = rows[:limit]
-            if not rows:
-                return "No UI → API → Service → DB paths found."
-            rows = list(dict.fromkeys(rows))
-            output = []
-            if coverage_lines:
-                output.extend(coverage_lines)
-            output.extend(rows)
-            return "\n".join(output)
+            return await graph_flow_summary.get_app_flow_summary_impl(
+                driver=driver,
+                neo4j_db=graph_bootstrap._NEO4J_DB,
+                workspace_id=workspace_id,
+                ui_contains=ui_contains,
+                entry_files=entry_files,
+                entry_glob=entry_glob,
+                model_contains=model_contains,
+                service_contains=service_contains,
+                include_tests=include_tests,
+                limit=limit,
+                as_table=as_table,
+                group_by_ui=group_by_ui,
+                include_coverage=include_coverage,
+                max_per_ui=max_per_ui,
+                expand_api_calls=expand_api_calls,
+            )
         except Exception as exc:
             return f"Error building flow summary: {str(exc)}"
 
@@ -705,86 +477,18 @@ def register(mcp: FastMCP) -> None:
         try:
             import graph_bootstrap
 
-            project_id = get_project_id(workspace_id)
-            query_limit = limit
-            if model_contains:
-                query_limit = max(limit * 10, 200)
             driver = await graph_bootstrap.require_driver()
-            rows = []
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                result = await graph_core._execute_read(
-                    session,
-                    """
-                    MATCH (api:File {project_id:$p})
-                    OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-                    OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-                    OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-                    OPTIONAL MATCH (api)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
-                    WHERE ($api_filter IS NULL OR api.filepath CONTAINS $api_filter)
-                      AND ($service_filter IS NULL OR svc.filepath CONTAINS $service_filter)
-                      AND ($model_filter IS NULL OR model.name CONTAINS $model_filter)
-                      AND (svc IS NOT NULL OR model IS NOT NULL OR schema IS NOT NULL OR ext IS NOT NULL)
-                      AND ($include_tests OR (
-                        NOT api.filepath STARTS WITH 'tests/'
-                        AND NOT api.filepath CONTAINS '/tests/'
-                        AND NOT api.filepath CONTAINS '__tests__'
-                        AND NOT api.filepath CONTAINS '.test.'
-                        AND (svc IS NULL OR (
-                          NOT svc.filepath STARTS WITH 'tests/'
-                          AND NOT svc.filepath CONTAINS '/tests/'
-                          AND NOT svc.filepath CONTAINS '__tests__'
-                          AND NOT svc.filepath CONTAINS '.test.'
-                        ))
-                      ))
-                    RETURN api.filepath AS api,
-                       svc.filepath AS svc,
-                       model.name AS model,
-                       schema.filepath AS schema,
-                       ext.url AS external
-                    LIMIT $limit
-                    """,
-                    p=project_id,
-                    api_filter=api_contains,
-                    service_filter=service_contains,
-                    model_filter=model_contains,
-                    include_tests=include_tests,
-                    limit=query_limit,
-                    op="get_backend_flow_summary",
-                )
-                for row in result:
-                    rows.append(
-                        (
-                            row.get("api"),
-                            row.get("svc"),
-                            row.get("model"),
-                            row.get("schema"),
-                            row.get("external"),
-                        )
-                    )
-
-            rows = [r for r in rows if r[1] or r[2] or r[3] or r[4]]
-            if not rows:
-                return "No API → Service → DB paths found."
-
-            if as_table:
-                output = [
-                    "| API | Service | Model | Schema | External |",
-                    "| --- | --- | --- | --- | --- |",
-                ]
-                for api, svc, model, schema, external in rows[:limit]:
-                    output.append(
-                        f"| {api or ''} | {svc or ''} | {model or ''} | {schema or ''} | {external or ''} |"
-                    )
-            else:
-                output = [
-                    " -> ".join([v for v in [api, svc, model, schema, external] if v])
-                    for api, svc, model, schema, external in rows
-                ]
-
-            output = list(dict.fromkeys(output))
-            if limit and len(output) > limit:
-                output = output[:limit]
-            return "\n".join(output)
+            return await graph_flow_summary.get_backend_flow_summary_impl(
+                driver=driver,
+                neo4j_db=graph_bootstrap._NEO4J_DB,
+                workspace_id=workspace_id,
+                api_contains=api_contains,
+                model_contains=model_contains,
+                service_contains=service_contains,
+                include_tests=include_tests,
+                limit=limit,
+                as_table=as_table,
+            )
         except Exception as exc:
             return f"Error building backend flow summary: {str(exc)}"
 
