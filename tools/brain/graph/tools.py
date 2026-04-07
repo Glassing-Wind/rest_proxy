@@ -499,8 +499,10 @@ def register(mcp: FastMCP) -> None:
         resource_contains: str | None = None,
         target_contains: str | None = None,
         scheme_contains: str | None = None,
+        workspace_contains: str | None = None,
         limit: int = 20,
         as_table: bool = False,
+        group_by: str = "target",
     ) -> str:
         """
         Summarize Apple build graph paths from source file → resource → target → scheme → workspace.
@@ -517,8 +519,10 @@ def register(mcp: FastMCP) -> None:
                 resource_contains=resource_contains,
                 target_contains=target_contains,
                 scheme_contains=scheme_contains,
+                workspace_contains=workspace_contains,
                 limit=limit,
                 as_table=as_table,
+                group_by=group_by,
             )
         except Exception as exc:
             return f"Error building Apple build summary: {str(exc)}"
@@ -587,6 +591,7 @@ def register(mcp: FastMCP) -> None:
             source_contains=ui_contains,
             resource_contains=model_contains,
             target_contains=service_contains,
+            group_by="target",
             limit=limit,
             as_table=as_table,
         )
