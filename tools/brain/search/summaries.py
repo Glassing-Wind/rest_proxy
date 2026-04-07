@@ -131,6 +131,7 @@ async def get_symbol_imports_overview_impl(
                 session,
                 """
                 MATCH (f:File {project_id:$p})-[:IMPLICIT_IMPORTS_SYMBOL]->(s)
+                WHERE f.filepath ENDS WITH '.swift'
                 RETURN s.name AS symbol, count(*) AS n
                 ORDER BY n DESC
                 LIMIT $limit
@@ -145,6 +146,7 @@ async def get_symbol_imports_overview_impl(
                 session,
                 """
                 MATCH (f:File {project_id:$p})-[:IMPLICIT_IMPORTS_SYMBOL]->(s)
+                WHERE f.filepath ENDS WITH '.swift'
                 WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
                 ORDER BY n DESC
                 LIMIT $limit

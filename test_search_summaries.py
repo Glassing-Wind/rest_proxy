@@ -108,6 +108,49 @@ class SearchSummaryTests(unittest.TestCase):
         self.assertIn("src/app.py", output)
         self.assertNotIn("tests/test_app.py", output)
 
+    def test_symbol_imports_overview_limits_implicit_sources_to_swift_files(self):
+        captured_queries = []
+
+        async def fake_execute_read(session, query, **kwargs):
+            captured_queries.append((kwargs.get("op"), query))
+            op = kwargs.get("op")
+            if op == "get_symbol_imports_overview_exp_count":
+                return [{"n": 1}]
+            if op == "get_symbol_imports_overview_imp_count":
+                return [{"n": 2}]
+            if op == "get_symbol_imports_overview_exp_symbols":
+                return [{"symbol": "Foo", "n": 1}]
+            if op == "get_symbol_imports_overview_exp_files":
+                return [{"file": "src/a.py", "n": 1, "symbols": ["Foo"]}]
+            if op == "get_symbol_imports_overview_imp_symbols":
+                return [{"symbol": "Bar", "n": 2}]
+            if op == "get_symbol_imports_overview_imp_files":
+                return [{"file": "Sources/App/View.swift", "n": 2, "symbols": ["Bar"]}]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_imports_overview_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                    include_implicit=True,
+                )
+            )
+
+        self.assertIn("Sources/App/View.swift", output)
+        implicit_queries = {
+            op: query
+            for op, query in captured_queries
+            if op in {
+                "get_symbol_imports_overview_imp_symbols",
+                "get_symbol_imports_overview_imp_files",
+            }
+        }
+        self.assertIn("WHERE f.filepath ENDS WITH '.swift'", implicit_queries["get_symbol_imports_overview_imp_symbols"])
+        self.assertIn("WHERE f.filepath ENDS WITH '.swift'", implicit_queries["get_symbol_imports_overview_imp_files"])
+
 
 if __name__ == "__main__":
     unittest.main()
