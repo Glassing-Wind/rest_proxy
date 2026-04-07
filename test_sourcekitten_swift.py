@@ -20,14 +20,14 @@ class SourceKittenSwiftTests(unittest.TestCase):
         self.module = load_module()
 
     def test_extract_symbol_records_from_structure_data(self):
-        raw = b"struct Foo: View {\n    /// Body docs\n    var body: some View { Text(\"x\") }\n}\n"
+        raw = b"/// Foo docs\nstruct Foo: View {\n    /// Body docs\n    var body: some View { Text(\"x\") }\n}\n"
         structure = {
             "key.substructure": [
                 {
                     "key.kind": "source.lang.swift.decl.struct",
                     "key.name": "Foo",
-                    "key.offset": 0,
-                    "key.length": len(raw),
+                    "key.offset": len(b"/// Foo docs\n"),
+                    "key.length": len(raw) - len(b"/// Foo docs\n"),
                     "key.inheritedtypes": [{"key.name": "SwiftUI.View"}],
                     "key.substructure": [
                         {
@@ -46,6 +46,7 @@ class SourceKittenSwiftTests(unittest.TestCase):
         )
         self.assertEqual([r.name for r in records], ["Foo", "body"])
         self.assertEqual(records[0].inherited_types, ["View"])
+        self.assertEqual(records[0].doc_comment, "Foo docs")
         self.assertEqual(records[1].doc_comment, "Body docs")
 
     def test_match_symbol_record_prefers_line_overlap(self):
@@ -73,6 +74,18 @@ class SourceKittenSwiftTests(unittest.TestCase):
         self.assertEqual(self.module._clean_inherited_type_name("SwiftUI.View"), "View")
         self.assertEqual(self.module._clean_inherited_type_name("Foo<Bar>"), "Foo")
         self.assertEqual(self.module._clean_inherited_type_name("ProtocolA & ProtocolB"), "ProtocolA")
+
+    def test_extract_preceding_block_doc_comment(self):
+        lines = [
+            "/**",
+            " * Block docs",
+            " */",
+            "struct Foo {}",
+        ]
+        self.assertEqual(
+            self.module._extract_preceding_doc_comment(lines, 4),
+            "Block docs",
+        )
 
 
 if __name__ == "__main__":

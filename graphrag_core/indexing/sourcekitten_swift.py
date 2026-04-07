@@ -57,6 +57,49 @@ def _line_number(raw: bytes, offset: int) -> int:
     return raw[: max(0, offset)].count(b"\n") + 1
 
 
+def _extract_preceding_doc_comment(lines: list[str], start_line: int) -> str | None:
+    if start_line <= 1:
+        return None
+    idx = start_line - 2
+    while idx >= 0 and not lines[idx].strip():
+        idx -= 1
+    if idx < 0:
+        return None
+    line = lines[idx].strip()
+    if line.startswith("///"):
+        collected: list[str] = []
+        while idx >= 0:
+            current = lines[idx].strip()
+            if not current.startswith("///"):
+                break
+            collected.append(current[3:].lstrip())
+            idx -= 1
+        collected.reverse()
+        text = "\n".join(part.rstrip() for part in collected).strip()
+        return text or None
+    if line.endswith("*/"):
+        collected = []
+        while idx >= 0:
+            current = lines[idx].rstrip()
+            collected.append(current)
+            if "/**" in current:
+                break
+            idx -= 1
+        if collected and "/**" in collected[-1]:
+            collected.reverse()
+            normalized: list[str] = []
+            for part in collected:
+                piece = part.strip()
+                piece = piece.removeprefix("/**").removesuffix("*/").strip()
+                if piece.startswith("*"):
+                    piece = piece[1:].lstrip()
+                if piece:
+                    normalized.append(piece)
+            text = "\n".join(normalized).strip()
+            return text or None
+    return None
+
+
 def _clean_name(name: str) -> str:
     return (name or "").strip()
 
@@ -80,6 +123,7 @@ def _extract_symbol_records_from_structure_data(
     structure: dict[str, Any], filepath: str, raw: bytes
 ) -> list[SwiftSymbolRecord]:
     records: list[SwiftSymbolRecord] = []
+    lines = raw.decode("utf-8", errors="ignore").splitlines()
 
     def _walk(items: list[dict[str, Any]]) -> None:
         for item in items or []:
@@ -104,7 +148,10 @@ def _extract_symbol_records_from_structure_data(
                         start_line=start_line,
                         end_line=end_line,
                         usr=_clean_name(item.get("key.usr", "")) or None,
-                        doc_comment=_clean_name(item.get("key.doc.comment", "")) or None,
+                        doc_comment=(
+                            _clean_name(item.get("key.doc.comment", "")) or
+                            _extract_preceding_doc_comment(lines, start_line)
+                        ),
                         inherited_types=sorted(set(inherited_types)),
                     )
                 )
