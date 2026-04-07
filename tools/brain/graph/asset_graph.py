@@ -195,6 +195,15 @@ async def build_asset_graph(
                 return "/api/" + "/".join(rel)
             return None
 
+        def _is_backend_route_file(fp: str) -> bool:
+            path = PurePosixPath(fp)
+            parts = path.parts
+            if "/api/" in fp or fp.startswith("api/"):
+                return True
+            if "pages" in parts and "api" in parts:
+                return True
+            return path.name.startswith("route.") and "app" in parts
+
         def _normalize_http_method(method: str | None) -> str:
             method = (method or "").strip().upper()
             return method if method in HTTP_METHODS else "ANY"
@@ -364,14 +373,15 @@ async def build_asset_graph(
 
                 if not literal_paths:
                     literal_paths = _collect_route_calls(content)
-                    for m in re.finditer(r"[\"'](/[^\"']+)[\"']", content):
-                        literal_paths.append((m.group(1), None))
-                    for m in re.finditer(r"`([^`]+)`", content):
-                        literal = m.group(1)
-                        if "${" in literal:
-                            literal = literal.split("${", 1)[0]
-                        if literal.startswith("/"):
-                            literal_paths.append((literal, None))
+                    if not _is_backend_route_file(fp):
+                        for m in re.finditer(r"[\"'](/[^\"']+)[\"']", content):
+                            literal_paths.append((m.group(1), None))
+                        for m in re.finditer(r"`([^`]+)`", content):
+                            literal = m.group(1)
+                            if "${" in literal:
+                                literal = literal.split("${", 1)[0]
+                            if literal.startswith("/"):
+                                literal_paths.append((literal, None))
 
                 for literal, method_hint in literal_paths:
                     cleaned = literal.split("?", 1)[0].split("#", 1)[0]
