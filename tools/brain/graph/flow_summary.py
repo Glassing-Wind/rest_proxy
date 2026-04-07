@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import fnmatch
+import os
+import re
 
-from _helpers import get_project_id
+from _helpers import get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
 from tools.brain.graph import flow_summary_apple
 
@@ -353,6 +355,121 @@ def _format_app_flow_row(ui, js, route, api, svc, model, schema, external) -> st
     return " -> ".join(parts)
 
 
+def _row_has_app_signal(row) -> bool:
+    return any(row[idx] for idx in (2, 3, 4, 5, 6, 7))
+
+
+def _normalize_route_literal(path: str | None) -> str | None:
+    if not path:
+        return None
+    normalized = path.split("?", 1)[0].split("#", 1)[0].strip()
+    normalized = re.sub(r"\$\{[^}]+\}", "", normalized)
+    normalized = re.sub(r"/{2,}", "/", normalized)
+    normalized = normalized.rstrip("/")
+    return normalized or None
+
+
+def _extract_literal_api_paths(source_text: str) -> list[str]:
+    matches = re.findall(r"([\"'`])(/api/[^\"'`\n]+)\1", source_text)
+    seen: list[str] = []
+    for _, raw_path in matches:
+        normalized = _normalize_route_literal(raw_path)
+        if normalized and normalized not in seen:
+            seen.append(normalized)
+    return seen
+
+
+async def _load_route_catalog(session, project_id: str):
+    result = await graph_core._execute_read(
+        session,
+        """
+        MATCH (route:ApiRoute {project_id:$p})
+        OPTIONAL MATCH (route)-[:HANDLED_BY]->(api:File {project_id:$p})
+        RETURN route.path AS path,
+               route.method AS method,
+               api.filepath AS api
+        ORDER BY path, method, api
+        """,
+        p=project_id,
+        op="get_app_flow_summary_route_catalog",
+    )
+    catalog: dict[str, list[tuple[str | None, str | None]]] = {}
+    for row in result:
+        path = _normalize_route_literal(row.get("path"))
+        if not path:
+            continue
+        catalog.setdefault(path, [])
+        candidate = (row.get("method"), row.get("api"))
+        if candidate not in catalog[path]:
+            catalog[path].append(candidate)
+    return catalog
+
+
+async def _load_asset_js_pairs(session, project_id: str):
+    result = await graph_core._execute_read(
+        session,
+        """
+        MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
+        WHERE js.filepath ENDS WITH '.js'
+           OR js.filepath ENDS WITH '.ts'
+           OR js.filepath ENDS WITH '.tsx'
+           OR js.filepath ENDS WITH '.jsx'
+        RETURN ui.filepath AS ui, js.filepath AS js
+        ORDER BY ui, js
+        """,
+        p=project_id,
+        op="get_app_flow_summary_asset_pairs",
+    )
+    return [(row.get("ui"), row.get("js")) for row in result if row.get("ui") and row.get("js")]
+
+
+async def _build_app_flow_literal_fallback(session, project_id: str, workspace_id: str, raw_rows):
+    js_pairs = sorted(
+        {
+            (ui, js)
+            for ui, js, route, api, svc, model, schema, external in raw_rows
+            if ui and js and js.endswith((".js", ".ts", ".tsx", ".jsx"))
+        }
+    )
+    if not js_pairs:
+        js_pairs = await _load_asset_js_pairs(session, project_id)
+        js_pairs = [
+            (ui, js)
+            for ui, js in js_pairs
+            if not _is_test_like_path(ui) and not _is_test_like_path(js)
+        ]
+    if not js_pairs:
+        return []
+
+    route_catalog = await _load_route_catalog(session, project_id)
+    if not route_catalog:
+        return []
+
+    fallback_rows = []
+    workspace_path = get_workspace_path(workspace_id)
+    if not workspace_path:
+        return []
+    for ui, js in js_pairs:
+        js_abs = os.path.join(workspace_path, js)
+        try:
+            with open(js_abs, "r", encoding="utf-8") as fh:
+                source_text = fh.read()
+        except Exception:
+            continue
+        matched_rows = []
+        unmatched_rows = []
+        for path in _extract_literal_api_paths(source_text):
+            targets = route_catalog.get(path) or []
+            if not targets:
+                unmatched_rows.append((ui, js, f"ANY {path}", None, None, None, None, None))
+                continue
+            for method, api in targets:
+                route = f"{method or 'ANY'} {path}"
+                matched_rows.append((ui, js, route, api, None, None, None, None))
+        fallback_rows.extend(matched_rows or unmatched_rows)
+    return fallback_rows
+
+
 async def _coverage_lines(session, project_id: str) -> list[str]:
     coverage_result = await graph_core._execute_read(
         session,
@@ -476,6 +593,15 @@ async def get_app_flow_summary_impl(
                 for row in raw_rows
                 if not any(_is_test_like_path(path) for path in [row[0], row[1], row[3], row[4]])
             ]
+        if raw_rows and not any(_row_has_app_signal(row) for row in raw_rows):
+            raw_rows = []
+        if not raw_rows:
+            raw_rows = await _build_app_flow_literal_fallback(
+                session,
+                project_id,
+                workspace_id,
+                raw_rows,
+            )
         raw_rows = _prefer_concrete_app_rows(raw_rows)
 
         if expand_api_calls:

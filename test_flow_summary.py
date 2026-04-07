@@ -13,6 +13,7 @@ APPLE_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/
 def load_flow_summary_module():
     helpers_mod = types.ModuleType("_helpers")
     helpers_mod.get_project_id = lambda workspace_id: "proj123"
+    helpers_mod.get_workspace_path = lambda workspace_id: "/tmp/repo"
 
     graph_pkg = types.ModuleType("tools")
     brain_pkg = types.ModuleType("tools.brain")
@@ -238,6 +239,56 @@ class FlowSummaryTests(unittest.TestCase):
 
         self.assertIn("src/public/financial-summary.html", output)
         self.assertNotIn("tests/routes.test.ts", output)
+
+    def test_get_app_flow_summary_falls_back_to_literal_api_paths_in_js(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary":
+                return []
+            if op == "get_app_flow_summary_asset_pairs":
+                return [
+                    {
+                        "ui": "src/public/financial-summary.html",
+                        "js": "src/public/assets/financial-summary.js",
+                    }
+                ]
+            if op == "get_app_flow_summary_route_catalog":
+                return [
+                    {
+                        "path": "/api/financials/tax-package",
+                        "method": "GET",
+                        "api": "src/api/routes/financeAdminRoutes.ts",
+                    }
+                ]
+            return []
+
+        source_text = """
+        async function api(path) {
+          return fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+        }
+        async function loadSummary() {
+          return api(`/api/financials/tax-package?year=${year}`);
+        }
+        """
+
+        with (
+            mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+            mock.patch("builtins.open", mock.mock_open(read_data=source_text)),
+        ):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    include_coverage=False,
+                    limit=20,
+                    group_by_ui=True,
+                )
+            )
+
+        self.assertIn("src/public/financial-summary.html", output)
+        self.assertIn("GET /api/financials/tax-package", output)
+        self.assertIn("src/api/routes/financeAdminRoutes.ts", output)
 
     def test_get_apple_build_summary_formats_target_aware_paths(self):
         async def fake_execute_read(session, query, **kwargs):
