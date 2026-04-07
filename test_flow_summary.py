@@ -1,0 +1,137 @@
+import asyncio
+import importlib.util
+import sys
+import types
+import unittest
+from unittest import mock
+
+
+MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/flow_summary.py"
+
+
+def load_flow_summary_module():
+    spec = importlib.util.spec_from_file_location("flow_summary_under_test", MODULE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+
+    helpers_mod = types.ModuleType("_helpers")
+    helpers_mod.get_project_id = lambda workspace_id: "proj123"
+
+    graph_pkg = types.ModuleType("tools")
+    brain_pkg = types.ModuleType("tools.brain")
+    graph_subpkg = types.ModuleType("tools.brain.graph")
+    core_mod = types.ModuleType("tools.brain.graph.core")
+
+    async def _execute_read(*args, **kwargs):
+        return []
+
+    core_mod._execute_read = _execute_read
+
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "_helpers": helpers_mod,
+            "tools": graph_pkg,
+            "tools.brain": brain_pkg,
+            "tools.brain.graph": graph_subpkg,
+            "tools.brain.graph.core": core_mod,
+        },
+    ):
+        spec.loader.exec_module(module)
+    return module
+
+
+class FakeSession:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class FakeDriver:
+    def session(self, database=None):
+        return FakeSession()
+
+
+class FlowSummaryTests(unittest.TestCase):
+    def setUp(self):
+        self.module = load_flow_summary_module()
+
+    def test_prefer_concrete_app_rows_drops_broad_duplicates(self):
+        rows = [
+            (
+                "src/public/properties.html",
+                "src/public/assets/properties.js",
+                "POST /api/leases",
+                "src/api/leaseRoutes.ts",
+                "src/services/leaseService.ts",
+                None,
+                None,
+                None,
+            ),
+            (
+                "src/public/properties.html",
+                "src/public/assets/properties.js",
+                None,
+                "src/api/leaseRoutes.ts",
+                "src/services/leaseService.ts",
+                None,
+                None,
+                None,
+            ),
+        ]
+        filtered = self.module._prefer_concrete_app_rows(rows)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0][2], "POST /api/leases")
+
+    def test_get_app_flow_summary_prefers_route_rows_in_output(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary":
+                return [
+                    {
+                        "ui": "src/public/properties.html",
+                        "js": "src/public/assets/properties.js",
+                        "route": "POST /api/leases",
+                        "api": "src/api/leaseRoutes.ts",
+                        "svc": "src/services/leaseService.ts",
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    },
+                    {
+                        "ui": "src/public/properties.html",
+                        "js": "src/public/assets/properties.js",
+                        "route": None,
+                        "api": "src/api/leaseRoutes.ts",
+                        "svc": "src/services/leaseService.ts",
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    include_coverage=False,
+                    limit=20,
+                    group_by_ui=True,
+                )
+            )
+
+        self.assertIn("POST /api/leases", output)
+        self.assertEqual(output.count("src/api/leaseRoutes.ts"), 1)
+        self.assertNotIn(
+            "src/public/properties.html -> src/public/assets/properties.js -> src/api/leaseRoutes.ts -> src/services/leaseService.ts",
+            output,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

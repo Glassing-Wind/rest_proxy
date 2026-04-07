@@ -174,6 +174,21 @@ def _filtered_app_rows(raw_rows, entry_files, ui_contains, model_contains, servi
     return rows
 
 
+def _prefer_concrete_app_rows(raw_rows):
+    concrete_keys = {
+        (ui, js, api, svc, model, schema, external)
+        for ui, js, route, api, svc, model, schema, external in raw_rows
+        if route
+    }
+    filtered = []
+    for row in raw_rows:
+        ui, js, route, api, svc, model, schema, external = row
+        if route is None and (ui, js, api, svc, model, schema, external) in concrete_keys:
+            continue
+        filtered.append(row)
+    return filtered
+
+
 async def _coverage_lines(session, project_id: str) -> list[str]:
     coverage_result = await graph_core._execute_read(
         session,
@@ -291,6 +306,7 @@ async def get_app_flow_summary_impl(
             model_contains=model_contains,
             service_contains=service_contains,
         )
+        raw_rows = _prefer_concrete_app_rows(raw_rows)
 
         if expand_api_calls:
             ui_candidates = sorted({row[0] for row in raw_rows if row[0]})
