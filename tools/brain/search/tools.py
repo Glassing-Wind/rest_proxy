@@ -31,7 +31,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_symbol_imports_overview(
-        project_path: str, limit: int = 20, include_implicit: bool = True
+        project_path: str, limit: int = 20, include_implicit: bool = False
     ) -> str:
         """
         Summarize explicit (IMPORTS_SYMBOL) and implicit (IMPLICIT_IMPORTS_SYMBOL)
@@ -40,7 +40,7 @@ def register(mcp: FastMCP) -> None:
         Args:
             project_path: Absolute path to the project root.
             limit: Max rows to return per section (default 20).
-            include_implicit: Include IMPLICIT_IMPORTS_SYMBOL edges when true.
+            include_implicit: Include heuristic IMPLICIT_IMPORTS_SYMBOL edges when true.
         """
         try:
             import graph_bootstrap

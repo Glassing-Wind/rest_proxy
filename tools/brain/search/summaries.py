@@ -71,7 +71,7 @@ async def get_symbol_imports_overview_impl(
     neo4j_db: str,
     project_path: str,
     limit: int = 20,
-    include_implicit: bool = True,
+    include_implicit: bool = False,
 ) -> str:
     project_id = get_project_id(project_path)
     limit = max(1, min(int(limit), 100))
