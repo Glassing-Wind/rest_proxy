@@ -129,6 +129,14 @@ _EXTRACTIONS_BY_LANG = {
 }
 
 
+def _skip_diagnostic_files_enabled() -> bool:
+    return os.getenv("LM_PROXY_SKIP_DIAGNOSTIC_FILES", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 def _ensure_ts_pack_initialized() -> None:
     global _TS_PACK_INIT_DONE
     if _TS_PACK_INIT_DONE:
@@ -480,6 +488,131 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
     return chunks
 
 
+def _build_ts_pack_process_config(ts_pack, lang: str):
+    kwargs = {
+        "structure": True,
+        "imports": True,
+        "exports": True,
+        "comments": True,
+        "docstrings": True,
+        "symbols": True,
+        "diagnostics": True,
+    }
+    if lang != "swift":
+        kwargs["chunk_max_size"] = CHUNK_MAX_BYTES
+        kwargs["chunk_overlap"] = CHUNK_OVERLAP_BYTES
+        if lang in _EXTRACTIONS_BY_LANG:
+            kwargs["extractions"] = _EXTRACTIONS_BY_LANG.get(lang)
+    try:
+        return ts_pack.ProcessConfig(lang, **kwargs)
+    except TypeError:
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs.pop("chunk_overlap", None)
+        fallback_kwargs.pop("extractions", None)
+        return ts_pack.ProcessConfig(lang, **fallback_kwargs)
+
+
+def _build_file_meta(result: dict, file_facts: dict | None) -> dict:
+    file_meta = {
+        "file_imports": _compact_imports(result.get("imports", [])),
+        "file_exports": _compact_exports(result.get("exports", [])),
+        "file_symbols": _compact_symbols(result.get("symbols", [])),
+        "file_diagnostics": _compact_diagnostics(result.get("diagnostics", [])),
+        "file_metrics": _extract_metrics(result.get("metrics", {})),
+        "file_extractions": _compact_extractions(result.get("extractions", {})),
+    }
+    if file_facts:
+        file_meta["file_facts"] = file_facts
+    return file_meta
+
+
+def _should_skip_diagnostic_file(file_meta: dict) -> bool:
+    if not _skip_diagnostic_files_enabled():
+        return False
+    return file_meta.get("file_diagnostics", {}).get("count", 0) > 0
+
+
+def _line_window_chunks(
+    source: str,
+    rel_path: str,
+    project_id: str,
+    language: str | None,
+    file_meta: dict,
+) -> List[Dict]:
+    file_header = f"// File: {rel_path}\n"
+    chunks: List[Dict] = []
+    lines = source.splitlines()
+    i = 0
+    while i < len(lines):
+        block = lines[i : i + CHUNK_LINES]
+        if not block:
+            break
+        text = file_header + "\n".join(block)
+        cid = _chunk_id(project_id, rel_path, i, text)
+        chunks.append(
+            {
+                "ref_id": cid,
+                "text": text,
+                "metadata": {
+                    "file": rel_path,
+                    "project_id": project_id,
+                    "language": language,
+                    **file_meta,
+                },
+            }
+        )
+        i += CHUNK_LINES - OVERLAP_LINES
+    return chunks
+
+
+def _chunks_from_ts_pack_result(
+    result: dict,
+    rel_path: str,
+    project_id: str,
+    language: str,
+    file_meta: dict,
+) -> List[Dict]:
+    file_header = f"// File: {rel_path}\n"
+    chunks: List[Dict] = []
+    for chunk in result.get("chunks", []):
+        cmeta = chunk.get("metadata", {})
+        if cmeta.get("has_error_nodes"):
+            continue
+        content = chunk.get("content", "")
+        if not content.strip():
+            continue
+        text = file_header + content
+        cid = _chunk_id(project_id, rel_path, chunk.get("start_byte", 0), content)
+        chunks.append(
+            {
+                "ref_id": cid,
+                "text": text,
+                "metadata": {
+                    "file": rel_path,
+                    "project_id": project_id,
+                    "language": language,
+                    "symbols": cmeta.get("symbols_defined", []),
+                    "start_line": chunk.get("start_line", 0) + 1,
+                    "end_line": chunk.get("end_line", 0) + 1,
+                    "docstrings": cmeta.get("docstrings", []),
+                    "context_path": cmeta.get("context_path", []),
+                    "node_types": cmeta.get("node_types", []),
+                    "comments": cmeta.get("comments", []),
+                    "has_error_nodes": bool(cmeta.get("has_error_nodes")),
+                    **file_meta,
+                },
+            }
+        )
+    return chunks
+
+
+def _collect_ts_pack_file_meta(ts_pack, source: str, lang: str, rel_path: str) -> tuple[dict, dict]:
+    config = _build_ts_pack_process_config(ts_pack, lang)
+    result = normalize_ts_pack_result(source, lang, ts_pack.process(source, config))
+    file_facts = extract_file_facts(ts_pack, source, lang, rel_path)
+    return result, _build_file_meta(result, file_facts)
+
+
 def _read_and_chunk(
     abs_path: str, rel_path: str, project_id: str
 ) -> Tuple[List[Dict], str | None]:
@@ -560,48 +693,15 @@ def _read_and_chunk(
     if not source.strip():
         return [], "empty"
 
-    file_header = f"// File: {rel_path}\n"
     chunks: List[Dict] = []
     file_meta: dict = {}
 
     # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
     if lang == "swift":
-        # Try to enrich file-level metadata from ts_pack.
         try:
-            try:
-                cfg = ts_pack.ProcessConfig(
-                    "swift",
-                    structure=True,
-                    imports=True,
-                    exports=True,
-                    comments=True,
-                    docstrings=True,
-                    symbols=True,
-                    diagnostics=True,
-                )
-            except TypeError:
-                cfg = ts_pack.ProcessConfig("swift")
-            result = normalize_ts_pack_result(
-                source, "swift", ts_pack.process(source, cfg)
-            )
-            file_meta = {
-                "file_imports": _compact_imports(result.get("imports", [])),
-                "file_exports": _compact_exports(result.get("exports", [])),
-                "file_symbols": _compact_symbols(result.get("symbols", [])),
-                "file_diagnostics": _compact_diagnostics(result.get("diagnostics", [])),
-                "file_metrics": _extract_metrics(result.get("metrics", {})),
-                "file_extractions": _compact_extractions(result.get("extractions", {})),
-            }
-            file_facts = extract_file_facts(ts_pack, source, "swift", rel_path)
-            if file_facts:
-                file_meta["file_facts"] = file_facts
-            if os.getenv("LM_PROXY_SKIP_DIAGNOSTIC_FILES", "").lower() in (
-                "1",
-                "true",
-                "yes",
-            ):
-                if file_meta.get("file_diagnostics", {}).get("count", 0) > 0:
-                    return [], "diagnostics"
+            _, file_meta = _collect_ts_pack_file_meta(ts_pack, source, "swift", rel_path)
+            if _should_skip_diagnostic_file(file_meta):
+                return [], "diagnostics"
         except Exception:
             file_meta = {}
 
@@ -616,112 +716,18 @@ def _read_and_chunk(
     # ── Native ts_pack chunking ───────────────────────────────────────────────
     if lang and lang != "swift":
         try:
-            try:
-                config = ts_pack.ProcessConfig(
-                    lang,
-                    structure=True,
-                    imports=True,
-                    exports=True,
-                    comments=True,
-                    docstrings=True,
-                    symbols=True,
-                    diagnostics=True,
-                    chunk_max_size=CHUNK_MAX_BYTES,
-                    chunk_overlap=CHUNK_OVERLAP_BYTES,
-                    extractions=_EXTRACTIONS_BY_LANG.get(lang),
-                )
-            except TypeError:
-                config = ts_pack.ProcessConfig(
-                    lang,
-                    structure=True,
-                    imports=True,
-                    exports=True,
-                    comments=True,
-                    docstrings=True,
-                    symbols=True,
-                    diagnostics=True,
-                    chunk_max_size=CHUNK_MAX_BYTES,
-                )
-            result = normalize_ts_pack_result(
-                source, lang, ts_pack.process(source, config)
+            result, file_meta = _collect_ts_pack_file_meta(ts_pack, source, lang, rel_path)
+            if _should_skip_diagnostic_file(file_meta):
+                return [], "diagnostics"
+            chunks = _chunks_from_ts_pack_result(
+                result, rel_path, project_id, lang, file_meta
             )
-            file_meta = {
-                "file_imports": _compact_imports(result.get("imports", [])),
-                "file_exports": _compact_exports(result.get("exports", [])),
-                "file_symbols": _compact_symbols(result.get("symbols", [])),
-                "file_diagnostics": _compact_diagnostics(result.get("diagnostics", [])),
-                "file_metrics": _extract_metrics(result.get("metrics", {})),
-                "file_extractions": _compact_extractions(result.get("extractions", {})),
-            }
-            file_facts = extract_file_facts(ts_pack, source, lang, rel_path)
-            if file_facts:
-                file_meta["file_facts"] = file_facts
-            if os.getenv("LM_PROXY_SKIP_DIAGNOSTIC_FILES", "").lower() in (
-                "1",
-                "true",
-                "yes",
-            ):
-                if file_meta.get("file_diagnostics", {}).get("count", 0) > 0:
-                    return [], "diagnostics"
-            for chunk in result.get("chunks", []):
-                cmeta = chunk.get("metadata", {})
-                # Skip chunks that contain parse errors — embeddings for broken
-                # syntax are low-quality and waste embedding budget.
-                if cmeta.get("has_error_nodes"):
-                    continue
-                content = chunk.get("content", "")
-                if not content.strip():
-                    continue
-                text = file_header + content
-                cid = _chunk_id(
-                    project_id, rel_path, chunk.get("start_byte", 0), content
-                )
-                chunks.append(
-                    {
-                        "ref_id": cid,
-                        "text": text,
-                        "metadata": {
-                            "file": rel_path,
-                            "project_id": project_id,
-                            "language": lang,
-                            "symbols": cmeta.get("symbols_defined", []),
-                            "start_line": chunk.get("start_line", 0) + 1,
-                            "end_line": chunk.get("end_line", 0) + 1,
-                            "docstrings": cmeta.get("docstrings", []),
-                            "context_path": cmeta.get("context_path", []),
-                            "node_types": cmeta.get("node_types", []),
-                            "comments": cmeta.get("comments", []),
-                            "has_error_nodes": bool(cmeta.get("has_error_nodes")),
-                            **file_meta,
-                        },
-                    }
-                )
         except Exception:
             pass  # Fall through to line-window below
 
     # ── Line-window fallback (unsupported lang or empty result) ──────────────
     if not chunks:
-        lines = source.splitlines()
-        i = 0
-        while i < len(lines):
-            block = lines[i : i + CHUNK_LINES]
-            if not block:
-                break
-            text = file_header + "\n".join(block)
-            cid = _chunk_id(project_id, rel_path, i, text)
-            chunks.append(
-                {
-                    "ref_id": cid,
-                    "text": text,
-                    "metadata": {
-                        "file": rel_path,
-                        "project_id": project_id,
-                        "language": lang,
-                        **file_meta,
-                    },
-                }
-            )
-            i += CHUNK_LINES - OVERLAP_LINES
+        chunks = _line_window_chunks(source, rel_path, project_id, lang, file_meta)
 
     return chunks, None
 
@@ -763,6 +769,185 @@ async def _write_buffer(
     )
 
 
+async def _wipe_project_embeddings(project_id: str) -> bool:
+    try:
+        print(
+            f"[lm-proxy:indexer] Total rebuild requested — wiping project '{project_id}'...",
+            file=sys.stderr,
+            flush=True,
+        )
+        async with memory_store._pg_pool.connection() as conn:
+            await conn.execute(
+                "DELETE FROM codebase_embeddings WHERE project_id = %s",
+                (project_id,),
+            )
+        print("[lm-proxy:indexer]   Project wiped.", file=sys.stderr, flush=True)
+        return True
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] ERROR: rebuild wipe failed: {exc}", file=sys.stderr
+        )
+        return False
+
+
+async def _prune_orphaned_files(project_id: str, manifest: List[Dict]) -> bool:
+    try:
+        t_prune = time.time()
+        async with memory_store._pg_pool.connection() as conn:
+            rows_cursor = await conn.execute(
+                "SELECT DISTINCT file_path FROM codebase_embeddings WHERE project_id = %s",
+                (project_id,),
+            )
+            db_paths = {r[0] async for r in rows_cursor}
+
+            if db_paths:
+                manifest_paths = {entry.get("rel_path") for entry in manifest}
+                orphans = db_paths - manifest_paths
+                if orphans:
+                    print(
+                        f"[lm-proxy:indexer] Pruning {len(orphans)} orphaned files (ghosts)...",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    for path in orphans:
+                        await conn.execute(
+                            "DELETE FROM codebase_embeddings WHERE project_id = %s AND file_path = %s",
+                            (project_id, path),
+                        )
+                    print(
+                        f"[lm-proxy:indexer]   Pruned in {(time.time() - t_prune) * 1000:.0f}ms",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+        return True
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] WARN: orphan pruning failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False
+
+
+def _report_chunking_results(
+    manifest: List[Dict], all_results: List[Tuple[List[Dict], str | None]], elapsed: float
+) -> tuple[list[list[dict]], int, int]:
+    all_chunks: List[List[Dict]] = [result[0] for result in all_results]
+    skipped_reasons: Counter[str] = Counter(
+        (reason or "unknown") for chunks, reason in all_results if not chunks
+    )
+    skipped_samples: dict[str, list[str]] = {}
+    for entry, (chunks, reason) in zip(manifest, all_results):
+        if chunks:
+            continue
+        reason_key = reason or "unknown"
+        bucket = skipped_samples.setdefault(reason_key, [])
+        if len(bucket) < 5:
+            bucket.append(entry.get("rel_path") or "")
+
+    total_files = len(manifest)
+    parsed_files = sum(1 for chunks in all_chunks if chunks)
+    skipped_files = total_files - parsed_files
+    print(
+        f"[lm-proxy:indexer] Chunked {total_files} files in {elapsed:.2f}s",
+        file=sys.stderr,
+        flush=True,
+    )
+    reason_bits = ""
+    if skipped_files:
+        reason_bits = (
+            " ("
+            + ", ".join(
+                f"{reason}={count}" for reason, count in skipped_reasons.most_common()
+            )
+            + ")"
+        )
+    print(
+        f"[lm-proxy:indexer] File parse summary — parsed={parsed_files} "
+        f"skipped={skipped_files}{reason_bits}",
+        file=sys.stderr,
+        flush=True,
+    )
+    if skipped_samples:
+        for reason, samples in skipped_samples.items():
+            if not samples:
+                continue
+            sample_text = ", ".join(s for s in samples if s)
+            if not sample_text:
+                continue
+            print(
+                f"[lm-proxy:indexer] Skipped samples ({reason}): {sample_text}",
+                file=sys.stderr,
+                flush=True,
+            )
+    return all_chunks, parsed_files, skipped_files
+
+
+async def _fetch_existing_chunk_ids(project_id: str) -> set:
+    existing_ids: set = set()
+    if not memory_store._pg_pool_available():
+        return existing_ids
+    try:
+        async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+            cur = await conn.execute(
+                "SELECT chunk_id FROM codebase_embeddings WHERE project_id = %s",
+                [project_id],
+            )
+            existing_ids = {row[0] for row in await cur.fetchall()}
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] WARN: could not fetch existing ids: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+    print(
+        f"[lm-proxy:indexer] {len(existing_ids)} chunks already indexed — skipping unchanged",
+        file=sys.stderr,
+        flush=True,
+    )
+    return existing_ids
+
+
+async def _prune_ghost_chunks(project_id: str, all_chunks: List[List[Dict]]) -> None:
+    if not (memory_store._pg_pool_available() and all_chunks):
+        return
+    try:
+        t_prune = time.time()
+        pruned_total = 0
+        async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+            async with conn.cursor() as cur:
+                for file_chunks in all_chunks:
+                    if not file_chunks:
+                        continue
+                    rel_path = file_chunks[0]["metadata"].get("file")
+                    if not rel_path:
+                        continue
+                    valid_ids = [c["ref_id"] for c in file_chunks]
+                    await cur.execute(
+                        """
+                        DELETE FROM codebase_embeddings
+                        WHERE project_id = %s
+                          AND file_path = %s
+                          AND NOT (chunk_id = ANY(%s))
+                        """,
+                        (project_id, rel_path, valid_ids),
+                    )
+                    pruned_total += cur.rowcount
+        if pruned_total > 0:
+            print(
+                f"[lm-proxy:indexer] Surgically pruned {pruned_total} ghost chunks in "
+                f"{(time.time() - t_prune) * 1000:.0f}ms",
+                file=sys.stderr,
+                flush=True,
+            )
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] WARN: surgical pruning failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
 async def index_project(
     target_dir: str,
     project_id: str,
@@ -800,65 +985,14 @@ async def index_project(
 
     # 1. Total Rebuild (Wipe project clean)
     if rebuild:
-        try:
-            print(
-                f"[lm-proxy:indexer] Total rebuild requested — wiping project '{project_id}'...",
-                file=sys.stderr,
-                flush=True,
-            )
-            async with memory_store._pg_pool.connection() as conn:
-                await conn.execute(
-                    "DELETE FROM codebase_embeddings WHERE project_id = %s",
-                    (project_id,),
-                )
-            print("[lm-proxy:indexer]   Project wiped.", file=sys.stderr, flush=True)
-        except Exception as exc:
-            print(
-                f"[lm-proxy:indexer] ERROR: rebuild wipe failed: {exc}", file=sys.stderr
-            )
+        if not await _wipe_project_embeddings(project_id):
             return 0
 
     # 2. Prune Orphans (Files that existed in past index but are gone from manifest)
-    try:
-        t_prune = time.time()
-        async with memory_store._pg_pool.connection() as conn:
-            # Get all filepaths currently in DB
-            rows_cursor = await conn.execute(
-                "SELECT DISTINCT file_path FROM codebase_embeddings WHERE project_id = %s",
-                (project_id,),
-            )
-            db_paths = {r[0] async for r in rows_cursor}
-
-            if db_paths:
-                manifest_paths = {entry.get("rel_path") for entry in manifest}
-                orphans = db_paths - manifest_paths
-                if orphans:
-                    print(
-                        f"[lm-proxy:indexer] Pruning {len(orphans)} orphaned files (ghosts)...",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                    for path in orphans:
-                        await conn.execute(
-                            "DELETE FROM codebase_embeddings WHERE project_id = %s AND file_path = %s",
-                            (project_id, path),
-                        )
-                    print(
-                        f"[lm-proxy:indexer]   Pruned in {(time.time() - t_prune) * 1000:.0f}ms",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-
-        if cleanup_only:
-            print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
-            return 0
-
-    except Exception as exc:
-        print(
-            f"[lm-proxy:indexer] WARN: orphan pruning failed: {exc}",
-            file=sys.stderr,
-            flush=True,
-        )
+    await _prune_orphaned_files(project_id, manifest)
+    if cleanup_only:
+        print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
+        return 0
     embedding_svc = get_embedding_service()
 
     bs = embedding_svc.effective_batch_size
@@ -891,119 +1025,17 @@ async def index_project(
     all_results: List[Tuple[List[Dict], str | None]] = await asyncio.gather(
         *[_chunk_manifest_entry(e) for e in manifest]
     )
-    all_chunks: List[List[Dict]] = [result[0] for result in all_results]
-    skipped_reasons: Counter[str] = Counter(
-        (reason or "unknown") for chunks, reason in all_results if not chunks
+    all_chunks, parsed_files, skipped_files = _report_chunking_results(
+        manifest, all_results, time.time() - t_chunk
     )
-    skipped_samples: dict[str, list[str]] = {}
-    for entry, (chunks, reason) in zip(manifest, all_results):
-        if chunks:
-            continue
-        reason_key = reason or "unknown"
-        bucket = skipped_samples.setdefault(reason_key, [])
-        if len(bucket) < 5:
-            bucket.append(entry.get("rel_path") or "")
-    parsed_files = sum(1 for chunks in all_chunks if chunks)
-    skipped_files = total_files - parsed_files
-    print(
-        f"[lm-proxy:indexer] Chunked {total_files} files in "
-        f"{time.time() - t_chunk:.2f}s",
-        file=sys.stderr,
-        flush=True,
-    )
-    reason_bits = ""
-    if skipped_files:
-        reason_bits = (
-            " ("
-            + ", ".join(
-                f"{reason}={count}" for reason, count in skipped_reasons.most_common()
-            )
-            + ")"
-        )
-    print(
-        f"[lm-proxy:indexer] File parse summary — parsed={parsed_files} "
-        f"skipped={skipped_files}{reason_bits}",
-        file=sys.stderr,
-        flush=True,
-    )
-    if skipped_samples:
-        for reason, samples in skipped_samples.items():
-            if not samples:
-                continue
-            sample_text = ", ".join(s for s in samples if s)
-            if not sample_text:
-                continue
-            print(
-                f"[lm-proxy:indexer] Skipped samples ({reason}): {sample_text}",
-                file=sys.stderr,
-                flush=True,
-            )
 
     # ── Fetch already-indexed chunk_ids (one Postgres round-trip) ────────────
-    existing_ids: set = set()
-    if memory_store._pg_pool_available():
-        try:
-            async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
-                cur = await conn.execute(
-                    "SELECT chunk_id FROM codebase_embeddings WHERE project_id = %s",
-                    [project_id],
-                )
-                existing_ids = {row[0] for row in await cur.fetchall()}
-        except Exception as exc:
-            print(
-                f"[lm-proxy:indexer] WARN: could not fetch existing ids: {exc}",
-                file=sys.stderr,
-                flush=True,
-            )
-    print(
-        f"[lm-proxy:indexer] {len(existing_ids)} chunks already indexed — skipping unchanged",
-        file=sys.stderr,
-        flush=True,
-    )
+    existing_ids = await _fetch_existing_chunk_ids(project_id)
 
     # ── Surgical Pruning: Remove ghost chunks for modified files ────────────────
     # For every file in the manifest, we must ensure Postgres only contains the
     # chunks we just generated. This removes "orphaned" chunks from old versions.
-    if memory_store._pg_pool_available() and all_chunks:
-        try:
-            t_prune = time.time()
-            pruned_total = 0
-            async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
-                async with conn.cursor() as cur:
-                    for file_chunks in all_chunks:
-                        if not file_chunks:
-                            continue
-                        rel_path = file_chunks[0]["metadata"].get("file")
-                        if not rel_path:
-                            continue
-                        
-                        # Current valid chunk IDs for this file
-                        valid_ids = [c["ref_id"] for c in file_chunks]
-                        
-                        # Delete any chunks for this file NOT in current manifest
-                        await cur.execute(
-                            """
-                            DELETE FROM codebase_embeddings
-                            WHERE project_id = %s 
-                              AND file_path = %s
-                              AND NOT (chunk_id = ANY(%s))
-                            """,
-                            (project_id, rel_path, valid_ids),
-                        )
-                        pruned_total += cur.rowcount
-            if pruned_total > 0:
-                print(
-                    f"[lm-proxy:indexer] Surgically pruned {pruned_total} ghost chunks in "
-                    f"{(time.time() - t_prune) * 1000:.0f}ms",
-                    file=sys.stderr,
-                    flush=True,
-                )
-        except Exception as exc:
-            print(
-                f"[lm-proxy:indexer] WARN: surgical pruning failed: {exc}",
-                file=sys.stderr,
-                flush=True,
-            )
+    await _prune_ghost_chunks(project_id, all_chunks)
 
     # ── Filter to only new chunks (already have stable content-hash ref_ids) ──
     all_new_chunks: List[Dict] = [
