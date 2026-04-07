@@ -6,6 +6,7 @@ PYTHON_BIN="${LM_PROXY_PYTHON:-/opt/homebrew/Caskroom/miniforge/base/envs/lmprox
 
 MATRIX=(
   "/Users/michaelmarler/Projects/rental"
+  "/Users/michaelmarler/Projects/tree-sitter-language-pack"
   "/Users/michaelmarler/Projects/FrameCreator"
   "/Users/michaelmarler/draw-things-community"
 )

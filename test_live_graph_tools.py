@@ -154,6 +154,21 @@ async def _count_apple_files(mcp: FakeMCP, workspace_id: str) -> int:
     return int(rows[0].get("apple_file_count") or 0)
 
 
+async def _count_cargo_files(mcp: FakeMCP, workspace_id: str) -> int:
+    raw = await mcp.tools["query_graph"](
+        """
+        MATCH (f:File {project_id: $pid})
+        WHERE f.filepath ENDS WITH 'Cargo.toml'
+        RETURN count(f) AS cargo_file_count
+        """,
+        workspace_id=workspace_id,
+    )
+    rows = json.loads(raw)
+    if not rows:
+        return 0
+    return int(rows[0].get("cargo_file_count") or 0)
+
+
 def _require_non_error(name: str, output: str) -> None:
     if not output or output.startswith("Error "):
         raise RuntimeError(f"{name} failed:\n{output}")
@@ -198,6 +213,35 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
     )
     _require_non_error("query_graph", raw_query_output)
 
+    cargo_file_count = await _count_cargo_files(mcp, workspace_id)
+    cargo_runs: list[ToolRun] = [
+        ToolRun(
+            "cargo_presence",
+            json.dumps({"cargo_file_count": cargo_file_count}, indent=2),
+        )
+    ]
+    if cargo_file_count > 0:
+        if "Cargo Workspace Context" not in overview_output:
+            raise RuntimeError(
+                "Cargo repo appears indexed but project overview did not include Cargo Workspace Context."
+            )
+
+        code_importance_output = await mcp.tools["get_code_importance"](workspace_id)
+        _require_non_error("get_code_importance", code_importance_output)
+        if "Crate:" not in code_importance_output:
+            raise RuntimeError(
+                f"Cargo repo appears indexed but code importance did not include crate grouping:\n{code_importance_output}"
+            )
+
+        related_output = await mcp.tools["get_related_files"](workspace_id, symbol_file or "")
+        _require_non_error("get_related_files", related_output)
+        cargo_runs.extend(
+            [
+                ToolRun("get_code_importance", code_importance_output),
+                ToolRun("get_related_files", related_output),
+            ]
+        )
+
     apple_file_count = await _count_apple_files(mcp, workspace_id)
     apple_runs: list[ToolRun] = [
         ToolRun(
@@ -228,6 +272,7 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
         ToolRun("get_symbol_context", symbol_output),
         ToolRun("get_call_chain", call_chain_output),
         ToolRun("query_graph", raw_query_output),
+        *cargo_runs,
         *apple_runs,
     ]
 
