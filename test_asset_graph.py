@@ -190,20 +190,53 @@ class AssetGraphTests(unittest.TestCase):
             color_dir = project_path / "ios/App/Assets.xcassets/brand.colorset"
             storyboard = project_path / "ios/App/Main.storyboard"
             xib = project_path / "ios/App/HeroView.xib"
+            pbxproj = project_path / "ios/App.xcodeproj/project.pbxproj"
             js_file.parent.mkdir(parents=True, exist_ok=True)
             swift_file.parent.mkdir(parents=True, exist_ok=True)
             asset_dir.mkdir(parents=True, exist_ok=True)
             color_dir.mkdir(parents=True, exist_ok=True)
+            pbxproj.parent.mkdir(parents=True, exist_ok=True)
             js_file.write_text('await fetch("https://api.example.com/v1/users")\n', encoding="utf-8")
             swift_file.write_text('let image = Image("hero")\n', encoding="utf-8")
             (asset_dir / "Contents.json").write_text("{}", encoding="utf-8")
             (color_dir / "Contents.json").write_text("{}", encoding="utf-8")
             storyboard.write_text("<storyboard></storyboard>\n", encoding="utf-8")
             xib.write_text("<xib></xib>\n", encoding="utf-8")
+            pbxproj.write_text(
+                """
+AA000001 /* App */ = {
+    isa = PBXNativeTarget;
+    buildPhases = (
+        AA000010 /* Resources */,
+    );
+    name = App;
+};
+AA000010 /* Resources */ = {
+    isa = PBXResourcesBuildPhase;
+    files = (
+        AA000101 /* HeroView.xib in Resources */,
+        AA000102 /* Main.storyboard in Resources */,
+        AA000103 /* Contents.json in Resources */,
+    );
+};
+AA000101 /* HeroView.xib in Resources */ = { isa = PBXBuildFile; fileRef = AA000201 /* HeroView.xib */; };
+AA000102 /* Main.storyboard in Resources */ = { isa = PBXBuildFile; fileRef = AA000202 /* Main.storyboard */; };
+AA000103 /* Contents.json in Resources */ = { isa = PBXBuildFile; fileRef = AA000203 /* Contents.json */; };
+AA000201 /* HeroView.xib */ = { isa = PBXFileReference; path = "App/HeroView.xib"; sourceTree = "<group>"; };
+AA000202 /* Main.storyboard */ = { isa = PBXFileReference; path = "App/Main.storyboard"; sourceTree = "<group>"; };
+AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcassets/hero.imageset/Contents.json"; sourceTree = "<group>"; };
+                """.strip()
+                + "\n",
+                encoding="utf-8",
+            )
 
             files = [
                 {"fp": "src/public/assets/client.js", "fid": "js-file"},
                 {"fp": "ios/App/View.swift", "fid": "swift-file"},
+                {"fp": "ios/App/HeroView.xib", "fid": "xib-file"},
+                {"fp": "ios/App/Main.storyboard", "fid": "storyboard-file"},
+                {"fp": "ios/App/Assets.xcassets/hero.imageset/Contents.json", "fid": "hero-contents"},
+                {"fp": "ios/App/Assets.xcassets/brand.colorset/Contents.json", "fid": "brand-contents"},
             ]
             writes = []
 
@@ -365,6 +398,57 @@ class AssetGraphTests(unittest.TestCase):
                         }.items()
                     )
                 ),
+            },
+        )
+
+        xcode_target_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "MERGE (t:XcodeTarget" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(
+            xcode_target_batches,
+            [[{
+                "project_id": "proj123",
+                "target_id": "AA000001",
+                "name": "App",
+                "project_file": "ios/App.xcodeproj",
+            }]],
+        )
+
+        bundled_file_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "BUNDLES_FILE" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(len(bundled_file_batches), 1)
+        self.assertEqual(
+            {
+                tuple(sorted(item.items()))
+                for item in bundled_file_batches[0]
+            },
+            {
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "file_id": "xib-file"}.items())),
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "file_id": "storyboard-file"}.items())),
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "file_id": "hero-contents"}.items())),
+            },
+        )
+
+        bundled_resource_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "BUNDLED_IN_TARGET" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(len(bundled_resource_batches), 1)
+        self.assertEqual(
+            {
+                tuple(sorted(item.items()))
+                for item in bundled_resource_batches[0]
+            },
+            {
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "HeroView", "kind": "nib"}.items())),
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "Main", "kind": "storyboard"}.items())),
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "hero", "kind": "image"}.items())),
             },
         )
 

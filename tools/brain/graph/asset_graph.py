@@ -465,6 +465,133 @@ def _discover_apple_resources(project_path: str) -> dict[tuple[str, str], str]:
     return discovered
 
 
+def _parse_xcode_target_membership(project_path: str) -> tuple[dict[str, dict[str, str]], list[tuple[str, str]]]:
+    project_files = sorted(PurePosixPath(path) for path in os.listdir(project_path) if path.endswith(".xcodeproj"))
+    for root, dirnames, _ in os.walk(project_path):
+        for dirname in dirnames:
+            if dirname.endswith(".xcodeproj"):
+                rel = os.path.relpath(os.path.join(root, dirname), project_path)
+                project_files.append(PurePosixPath(rel))
+    unique_projects = []
+    seen_projects: set[str] = set()
+    for rel in project_files:
+        rel_str = rel.as_posix()
+        if rel_str in seen_projects:
+            continue
+        seen_projects.add(rel_str)
+        unique_projects.append(rel)
+
+    targets: dict[str, dict[str, str]] = {}
+    memberships: list[tuple[str, str]] = []
+    for project_rel in unique_projects:
+        pbxproj = os.path.join(project_path, project_rel.as_posix(), "project.pbxproj")
+        if not os.path.exists(pbxproj):
+            continue
+        text = _read_text(pbxproj)
+        if not text:
+            continue
+        targets.update(_extract_xcode_targets(text, project_rel.as_posix()))
+        memberships.extend(_extract_xcode_resource_memberships(text))
+    return targets, list(dict.fromkeys(memberships))
+
+
+def _extract_xcode_targets(text: str, project_file: str) -> dict[str, dict[str, str]]:
+    targets: dict[str, dict[str, str]] = {}
+    for target_id, name in re.findall(
+        r"([A-F0-9]{8,}) /\* [^*]+ \*/ = \{\s*isa = PBXNativeTarget;.*?\bname = ([^;]+);",
+        text,
+        re.DOTALL,
+    ):
+        clean_name = name.strip().strip('"')
+        if clean_name:
+            targets[target_id] = {"name": clean_name, "project_file": project_file}
+    return targets
+
+
+def _extract_xcode_resource_memberships(text: str) -> list[tuple[str, str]]:
+    build_file_to_ref: dict[str, str] = {}
+    file_ref_to_path: dict[str, str] = {}
+    build_phase_to_files: dict[str, list[str]] = {}
+    target_to_build_phases: dict[str, list[str]] = {}
+
+    for build_file_id, file_ref_id in re.findall(
+        r"([A-F0-9]{8,}) /\* [^*]+ \*/ = \{\s*isa = PBXBuildFile;\s*fileRef = ([A-F0-9]{8,})",
+        text,
+        re.DOTALL,
+    ):
+        build_file_to_ref[build_file_id] = file_ref_id
+
+    for file_ref_id, path, source_tree in re.findall(
+        r"([A-F0-9]{8,}) /\* [^*]+ \*/ = \{\s*isa = PBXFileReference;.*?\bpath = ([^;]+);.*?\bsourceTree = ([^;]+);",
+        text,
+        re.DOTALL,
+    ):
+        clean_path = path.strip().strip('"')
+        clean_source = source_tree.strip().strip('"')
+        if clean_path and clean_source != "BUILT_PRODUCTS_DIR":
+            file_ref_to_path[file_ref_id] = clean_path
+
+    for phase_id, files_blob in re.findall(
+        r"([A-F0-9]{8,}) /\* Resources \*/ = \{\s*isa = PBXResourcesBuildPhase;.*?\bfiles = \((.*?)\);",
+        text,
+        re.DOTALL,
+    ):
+        build_phase_to_files[phase_id] = re.findall(r"([A-F0-9]{8,}) /\*", files_blob)
+
+    for target_id, phases_blob in re.findall(
+        r"([A-F0-9]{8,}) /\* [^*]+ \*/ = \{\s*isa = PBXNativeTarget;.*?\bbuildPhases = \((.*?)\);",
+        text,
+        re.DOTALL,
+    ):
+        target_to_build_phases[target_id] = re.findall(r"([A-F0-9]{8,}) /\*", phases_blob)
+
+    memberships: list[tuple[str, str]] = []
+    for target_id, phase_ids in target_to_build_phases.items():
+        for phase_id in phase_ids:
+            for build_file_id in build_phase_to_files.get(phase_id, []):
+                file_ref_id = build_file_to_ref.get(build_file_id)
+                file_path = file_ref_to_path.get(file_ref_id or "")
+                if file_path:
+                    memberships.append((target_id, file_path))
+    return memberships
+
+
+def _collect_xcode_target_edges(
+    project_path: str,
+    files: dict[str, str],
+    resource_edges: list[tuple[str, str, str, str | None, str]],
+) -> tuple[dict[str, dict[str, str]], list[tuple[str, str]], list[tuple[str, str, str]]]:
+    targets, raw_memberships = _parse_xcode_target_membership(project_path)
+    if not targets or not raw_memberships:
+        return targets, [], []
+
+    file_edges: list[tuple[str, str]] = []
+    resource_target_edges: list[tuple[str, str, str]] = []
+    resource_by_path = {
+        resource_path: (name, kind)
+        for _, _, name, resource_path, kind in resource_edges
+        if resource_path
+    }
+    for target_id, raw_path in raw_memberships:
+        normalized = raw_path.replace("\\", "/").lstrip("./")
+        normalized = normalized.strip('"')
+        candidates = [normalized]
+        project_file = targets.get(target_id, {}).get("project_file")
+        if project_file:
+            project_dir = PurePosixPath(project_file).parent
+            if str(project_dir) not in {"", "."}:
+                candidates.append(str((project_dir / normalized).as_posix()))
+        target_path = next((candidate for candidate in candidates if candidate in files), None)
+        target_file_id = files.get(target_path) if target_path else None
+        if target_file_id:
+            file_edges.append((target_id, target_file_id))
+        resource_path = next((candidate for candidate in candidates if candidate in resource_by_path), None)
+        resource_info = resource_by_path.get(resource_path or "")
+        if resource_info:
+            resource_target_edges.append((target_id, resource_info[0], resource_info[1]))
+    return targets, list(dict.fromkeys(file_edges)), list(dict.fromkeys(resource_target_edges))
+
+
 def _collect_service_edges(project_path: str, files: dict[str, str]) -> list[tuple[str, str]]:
     service_files = {
         os.path.splitext(os.path.basename(fp))[0]: fid
@@ -528,6 +655,9 @@ async def _clear_existing_edges(session, execute_write: ExecuteWrite, project_id
         "MATCH (a:File {project_id:$p})-[r:CALLS_API_EXTERNAL]->() DELETE r",
         "MATCH (a:File {project_id:$p})-[r:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->() DELETE r",
         "MATCH (r:Resource {project_id:$p})-[rel:BACKED_BY_FILE]->() DELETE rel",
+        "MATCH (:XcodeTarget {project_id:$p})-[rel:BUNDLES_FILE]->() DELETE rel",
+        "MATCH (r:Resource {project_id:$p})-[rel:BUNDLED_IN_TARGET]->() DELETE rel",
+        "MATCH (t:XcodeTarget {project_id:$p}) DELETE t",
     ]
     for query in statements:
         await execute_write(session, query, p=project_id, timeout=write_timeout_s)
@@ -694,6 +824,59 @@ async def _write_resource_backing_edges(
             await execute_write(session, query, batch=batch, timeout=write_timeout_s)
 
 
+async def _write_xcode_target_edges(
+    session,
+    execute_write: ExecuteWrite,
+    write_semaphore: asyncio.Semaphore,
+    batch_size: int,
+    write_timeout_s: float,
+    project_id: str,
+    xcode_targets: dict[str, dict[str, str]],
+    xcode_file_edges: list[tuple[str, str]],
+    xcode_resource_edges: list[tuple[str, str, str]],
+) -> None:
+    if xcode_targets:
+        query = """
+        UNWIND $batch AS edge
+        MERGE (t:XcodeTarget {project_id: edge.project_id, target_id: edge.target_id})
+        SET t.name = edge.name, t.project_file = edge.project_file
+        """
+        rows = [
+            {
+                "project_id": project_id,
+                "target_id": target_id,
+                "name": meta["name"],
+                "project_file": meta["project_file"],
+            }
+            for target_id, meta in xcode_targets.items()
+        ]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+    if xcode_file_edges:
+        query = """
+        UNWIND $batch AS edge
+        MATCH (t:XcodeTarget {project_id: edge.project_id, target_id: edge.target_id})
+        MATCH (f:File {id: edge.file_id})
+        MERGE (t)-[:BUNDLES_FILE]->(f)
+        """
+        rows = [{"project_id": project_id, "target_id": t, "file_id": f} for t, f in xcode_file_edges]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+    if xcode_resource_edges:
+        query = """
+        UNWIND $batch AS edge
+        MATCH (t:XcodeTarget {project_id: edge.project_id, target_id: edge.target_id})
+        MATCH (r:Resource {project_id: edge.project_id, name: edge.name, kind: edge.kind})
+        MERGE (r)-[:BUNDLED_IN_TARGET]->(t)
+        """
+        rows = [{"project_id": project_id, "target_id": t, "name": n, "kind": k} for t, n, k in xcode_resource_edges]
+        for i in range(0, len(rows), batch_size):
+            async with write_semaphore:
+                await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)
+
+
 async def build_asset_graph(
     project_path: str,
     execute_read: ExecuteRead,
@@ -740,8 +923,23 @@ async def build_asset_graph(
         service_edges = _collect_service_edges(project_path, files)
         db_edges = _collect_db_edges(project_path, files)
         resource_edges = _collect_swift_resource_edges(project_path, file_facts, files)
+        xcode_targets, xcode_file_edges, xcode_resource_edges = _collect_xcode_target_edges(
+            project_path, files, resource_edges
+        )
 
-        if not any([html_edges, api_edges, api_route_edges, external_edges, service_edges, db_edges, resource_edges]):
+        if not any(
+            [
+                html_edges,
+                api_edges,
+                api_route_edges,
+                external_edges,
+                service_edges,
+                db_edges,
+                resource_edges,
+                xcode_file_edges,
+                xcode_resource_edges,
+            ]
+        ):
             return "No asset edges resolved."
 
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
@@ -762,6 +960,17 @@ async def build_asset_graph(
             await _write_resource_backing_edges(
                 session, execute_write, write_semaphore, batch_size, write_timeout_s, project_id, resource_edges
             )
+            await _write_xcode_target_edges(
+                session,
+                execute_write,
+                write_semaphore,
+                batch_size,
+                write_timeout_s,
+                project_id,
+                xcode_targets,
+                xcode_file_edges,
+                xcode_resource_edges,
+            )
 
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         debug_log(
@@ -773,6 +982,7 @@ async def build_asset_graph(
             api_route_links=len(api_route_edges),
             external_api_links=len(external_edges),
             resource_links=len(resource_edges),
+            xcode_target_links=len(xcode_file_edges) + len(xcode_resource_edges),
             service_links=len(service_edges),
             db_links=len(db_edges),
         )
@@ -783,6 +993,8 @@ async def build_asset_graph(
             f"  {len(api_route_edges)} CALLS_API_ROUTE edges\n"
             f"  {len(external_edges)} CALLS_API_EXTERNAL edges\n"
             f"  {len(resource_edges)} resource edges\n"
+            f"  {len(xcode_file_edges)} BUNDLES_FILE edges\n"
+            f"  {len(xcode_resource_edges)} BUNDLED_IN_TARGET edges\n"
             f"  {len(service_edges)} CALLS_SERVICE edges\n"
             f"  {len(db_edges)} CALLS_DB edges\n"
             f"  elapsed={elapsed_ms}ms"
