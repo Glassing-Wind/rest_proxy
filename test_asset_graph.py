@@ -60,6 +60,14 @@ def load_asset_graph_module():
     return module
 
 
+def load_apple_module():
+    spec = importlib.util.spec_from_file_location("asset_graph_apple_test", APPLE_MODULE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 class FakeSession:
     async def __aenter__(self):
         return self
@@ -121,6 +129,7 @@ class FakeMemoryStore:
 class AssetGraphTests(unittest.TestCase):
     def setUp(self):
         self.module = load_asset_graph_module()
+        self.apple_module = load_apple_module()
 
     def test_routes_link_callers_to_handlers_without_self_call_edges(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -579,6 +588,82 @@ AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcas
                 "file_id": "scheme-file",
             }]],
         )
+
+    def test_filesystem_synced_targets_and_self_workspace_are_supported(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            synced_root = project_path / "FrameCreator"
+            asset = synced_root / "Assets.xcassets/hero.imageset/Contents.json"
+            storyboard = synced_root / "Main.storyboard"
+            plist = synced_root / "Info.plist"
+            xcodeproj = project_path / "FrameCreator.xcodeproj"
+            pbxproj = xcodeproj / "project.pbxproj"
+            workspace = xcodeproj / "project.xcworkspace/contents.xcworkspacedata"
+            synced_root.mkdir(parents=True, exist_ok=True)
+            asset.parent.mkdir(parents=True, exist_ok=True)
+            xcodeproj.mkdir(parents=True, exist_ok=True)
+            workspace.parent.mkdir(parents=True, exist_ok=True)
+            asset.write_text("{}", encoding="utf-8")
+            storyboard.write_text("<storyboard />\n", encoding="utf-8")
+            plist.write_text("{}", encoding="utf-8")
+            pbxproj.write_text(
+                """
+AA000001 /* FrameCreator */ = {
+    isa = PBXNativeTarget;
+    buildPhases = (
+        AA000010 /* Resources */,
+    );
+    fileSystemSynchronizedGroups = (
+        AA000020 /* FrameCreator */,
+    );
+    name = FrameCreator;
+};
+AA000010 /* Resources */ = {
+    isa = PBXResourcesBuildPhase;
+    files = (
+    );
+};
+AA000020 /* FrameCreator */ = {
+    isa = PBXFileSystemSynchronizedRootGroup;
+    path = FrameCreator;
+    sourceTree = "<group>";
+};
+                """.strip()
+                + "\n",
+                encoding="utf-8",
+            )
+            workspace.write_text(
+                """
+<Workspace version="1.0">
+  <FileRef location="self:" />
+</Workspace>
+                """.strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            targets, memberships = self.apple_module.parse_xcode_target_membership(str(project_path))
+            self.assertEqual(
+                targets,
+                {"AA000001": {"name": "FrameCreator", "project_file": "FrameCreator.xcodeproj"}},
+            )
+            self.assertEqual(
+                set(memberships),
+                {
+                    ("AA000001", "FrameCreator/Assets.xcassets/hero.imageset/Contents.json"),
+                    ("AA000001", "FrameCreator/Main.storyboard"),
+                    ("AA000001", "FrameCreator/Info.plist"),
+                },
+            )
+
+            workspaces = self.apple_module.parse_xcode_workspaces(
+                str(project_path),
+                {"FrameCreator.xcodeproj/project.pbxproj": "pbxproj-file", "FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata": "workspace-file"},
+            )
+            self.assertEqual(
+                workspaces,
+                {"FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata": {"pbxproj-file"}},
+            )
 
 
 if __name__ == "__main__":

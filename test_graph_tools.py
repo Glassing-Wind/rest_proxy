@@ -185,6 +185,10 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"target": "App", "project_file": "ios/App.xcodeproj/project.pbxproj", "bundled_files": 4}]
             if op == "apple_context_schemes":
                 return [{"scheme": "App", "targets": ["App"]}]
+            if op == "apple_context_schema_labels":
+                return [{"labels": []}]
+            if op == "apple_context_schema_relationship_types":
+                return [{"rels": []}]
             if op == "apple_context_workspaces":
                 return []
             return []
@@ -214,6 +218,10 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"target": "App", "project_file": "ios/App.xcodeproj/project.pbxproj", "bundled_files": 4}]
             if op == "apple_context_schemes":
                 return [{"scheme": "App", "targets": ["App"]}]
+            if op == "apple_context_schema_labels":
+                return [{"labels": ["XcodeWorkspace"]}]
+            if op == "apple_context_schema_relationship_types":
+                return [{"rels": ["REFERENCES_PROJECT"]}]
             if op == "apple_context_workspaces":
                 return [{"workspace": "ios/App.xcworkspace/contents.xcworkspacedata", "projects": ["ios/App.xcodeproj/project.pbxproj"]}]
             return []
@@ -243,7 +251,7 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"fp": "src/app.js", "n": 4, "ex": ["start", "stop"]}]
             if op == "apple_context_presence":
                 return [{"n": 0}]
-            if op in {"apple_context_targets", "apple_context_schemes", "apple_context_workspaces"}:
+            if op in {"apple_context_targets", "apple_context_schemes", "apple_context_schema_labels", "apple_context_schema_relationship_types", "apple_context_workspaces"}:
                 raise AssertionError(f"unexpected Apple query: {op}")
             return []
 

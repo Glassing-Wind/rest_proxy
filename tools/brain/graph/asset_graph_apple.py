@@ -164,6 +164,7 @@ def collect_xcode_workspace_scheme_edges(
 def parse_xcode_target_membership(project_path: str) -> tuple[dict[str, dict[str, str]], list[tuple[str, str]]]:
     project_files = sorted(PurePosixPath(path) for path in os.listdir(project_path) if path.endswith(".xcodeproj"))
     for root, dirnames, _ in os.walk(project_path):
+        dirnames[:] = [dirname for dirname in dirnames if dirname not in {".git", ".build", "DerivedData", "node_modules"}]
         for dirname in dirnames:
             if dirname.endswith(".xcodeproj"):
                 rel = os.path.relpath(os.path.join(root, dirname), project_path)
@@ -188,6 +189,9 @@ def parse_xcode_target_membership(project_path: str) -> tuple[dict[str, dict[str
             continue
         targets.update(extract_xcode_targets(text, project_rel.as_posix()))
         memberships.extend(extract_xcode_resource_memberships(text))
+        memberships.extend(
+            extract_xcode_filesystem_synced_memberships(project_path, project_rel.as_posix(), text)
+        )
     return targets, list(dict.fromkeys(memberships))
 
 
@@ -252,6 +256,62 @@ def extract_xcode_resource_memberships(text: str) -> list[tuple[str, str]]:
     return memberships
 
 
+def extract_xcode_filesystem_synced_memberships(
+    project_path: str,
+    project_file: str,
+    text: str,
+) -> list[tuple[str, str]]:
+    group_id_to_path: dict[str, str] = {}
+    target_to_group_ids: dict[str, list[str]] = {}
+    project_dir = PurePosixPath(project_file).parent
+
+    for group_id, path in re.findall(
+        r"([A-F0-9]{8,}) /\* [^*]+ \*/ = \{\s*isa = PBXFileSystemSynchronizedRootGroup;.*?\bpath = ([^;]+);",
+        text,
+        re.DOTALL,
+    ):
+        clean_path = path.strip().strip('"')
+        if clean_path:
+            group_id_to_path[group_id] = clean_path
+
+    for target_id, groups_blob in re.findall(
+        r"([A-F0-9]{8,}) /\* [^*]+ \*/ = \{\s*isa = PBXNativeTarget;.*?\bfileSystemSynchronizedGroups = \((.*?)\);",
+        text,
+        re.DOTALL,
+    ):
+        target_to_group_ids[target_id] = re.findall(r"([A-F0-9]{8,}) /\*", groups_blob)
+
+    memberships: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for target_id, group_ids in target_to_group_ids.items():
+        for group_id in group_ids:
+            group_path = group_id_to_path.get(group_id)
+            if not group_path:
+                continue
+            rel_root = (project_dir / group_path).as_posix().lstrip("./")
+            abs_root = os.path.join(project_path, rel_root)
+            if not os.path.isdir(abs_root):
+                continue
+            for current_root, dirnames, filenames in os.walk(abs_root):
+                dirnames[:] = [dirname for dirname in dirnames if dirname not in {".git", ".build", "DerivedData", "node_modules"}]
+                rel_current = os.path.relpath(current_root, project_path).replace("\\", "/").lstrip("./")
+                for filename in filenames:
+                    rel_path = f"{rel_current}/{filename}" if rel_current else filename
+                    if not _is_indexable_apple_resource_path(rel_path):
+                        continue
+                    key = (target_id, rel_path)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    memberships.append(key)
+    return memberships
+
+
+def _is_indexable_apple_resource_path(rel_path: str) -> bool:
+    path = rel_path.lower()
+    return path.endswith((".storyboard", ".xib", ".plist", ".xcworkspacedata", ".xcscheme", "project.pbxproj")) or "xcassets/" in path
+
+
 def parse_xcode_workspaces(project_path: str, files: dict[str, str]) -> dict[str, set[str]]:
     workspaces: dict[str, set[str]] = {}
     workspace_files = [fp for fp in files if fp.endswith(".xcworkspace/contents.xcworkspacedata")]
@@ -266,6 +326,12 @@ def parse_xcode_workspaces(project_path: str, files: dict[str, str]) -> dict[str
         workspace_dir = PurePosixPath(workspace_path).parent
         for file_ref in root.findall(".//FileRef"):
             location = file_ref.attrib.get("location", "")
+            if location == "self:":
+                project_file = f"{workspace_dir.parent.as_posix().rstrip('/')}/project.pbxproj".lstrip("./")
+                file_id = files.get(project_file)
+                if file_id:
+                    workspaces.setdefault(workspace_path, set()).add(file_id)
+                continue
             rel_ref = location.split(":", 1)[1] if ":" in location else location
             rel_ref = rel_ref.strip()
             if not rel_ref.endswith(".xcodeproj"):

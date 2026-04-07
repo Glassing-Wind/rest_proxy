@@ -27,27 +27,103 @@ async def _has_apple_build_files(session, project_id: str) -> bool:
     return bool(rows and rows[0].get("n"))
 
 
-_APPLE_BUILD_QUERY = """
-MATCH (res:Resource {project_id:$p})-[:BUNDLED_IN_TARGET]->(target:XcodeTarget {project_id:$p})
-OPTIONAL MATCH (src:File {project_id:$p})-[rel:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->(res)
-OPTIONAL MATCH (res)-[:BACKED_BY_FILE]->(backing:File {project_id:$p})
-OPTIONAL MATCH (scheme:XcodeScheme {project_id:$p})-[:BUILDS_TARGET]->(target)
-OPTIONAL MATCH (scheme)-[:DEFINED_IN_FILE]->(scheme_file:File {project_id:$p})
-OPTIONAL MATCH (workspace:XcodeWorkspace {project_id:$p})-[:REFERENCES_PROJECT]->(project_file:File {project_id:$p})
-WHERE project_file.filepath = target.project_file OR project_file IS NULL
-RETURN src.filepath AS src,
-   type(rel) AS rel,
-   res.name AS resource,
-   res.kind AS kind,
-   backing.filepath AS backing,
-   target.name AS target,
-   target.project_file AS project_file,
-   scheme.name AS scheme,
-   scheme_file.filepath AS scheme_file,
-   workspace.filepath AS workspace
-ORDER BY src, resource, backing, target, scheme, workspace
-LIMIT $limit
-"""
+async def _get_graph_schema_info(session) -> tuple[set[str], set[str]]:
+    labels_rows = await graph_core._execute_read(
+        session,
+        """
+        CALL db.labels() YIELD label
+        RETURN collect(label) AS labels
+        """,
+        op="graph_schema_labels",
+    )
+    rel_rows = await graph_core._execute_read(
+        session,
+        """
+        CALL db.relationshipTypes() YIELD relationshipType
+        RETURN collect(relationshipType) AS rels
+        """,
+        op="graph_schema_relationship_types",
+    )
+    labels = set(labels_rows[0].get("labels") or []) if labels_rows else set()
+    rels = set(rel_rows[0].get("rels") or []) if rel_rows else set()
+    return labels, rels
+
+
+async def _has_apple_resource_graph(session, project_id: str, *, labels: set[str], rels: set[str]) -> bool:
+    if "Resource" not in labels or "BUNDLED_IN_TARGET" not in rels:
+        return False
+    rows = await graph_core._execute_read(
+        session,
+        """
+        MATCH (r:Resource {project_id:$p})
+        RETURN count(r) AS n
+        """,
+        p=project_id,
+        op="apple_resource_presence",
+    )
+    return bool(rows and rows[0].get("n"))
+
+
+async def _has_apple_workspace_graph(session, project_id: str, *, labels: set[str], rels: set[str]) -> bool:
+    if "XcodeWorkspace" not in labels or "REFERENCES_PROJECT" not in rels:
+        return False
+    rows = await graph_core._execute_read(
+        session,
+        """
+        MATCH (w:XcodeWorkspace {project_id:$p})
+        RETURN count(w) AS n
+        """,
+        p=project_id,
+        op="apple_workspace_presence",
+    )
+    return bool(rows and rows[0].get("n"))
+
+
+def _apple_build_query(*, include_resources: bool, include_workspaces: bool) -> str:
+    lines = ["MATCH (target:XcodeTarget {project_id:$p})"]
+    if include_resources:
+        lines.extend(
+            [
+                "OPTIONAL MATCH (res:Resource {project_id:$p})-[:BUNDLED_IN_TARGET]->(target)",
+                "OPTIONAL MATCH (src:File {project_id:$p})-[rel:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->(res)",
+                "OPTIONAL MATCH (res)-[:BACKED_BY_FILE]->(res_backing:File {project_id:$p})",
+            ]
+        )
+    else:
+        lines.append("WITH target, null AS src, null AS rel, null AS res, null AS res_backing")
+    lines.extend(
+        [
+            "OPTIONAL MATCH (target)-[:BUNDLES_FILE]->(bundled:File {project_id:$p})",
+            "OPTIONAL MATCH (scheme:XcodeScheme {project_id:$p})-[:BUILDS_TARGET]->(target)",
+            "OPTIONAL MATCH (scheme)-[:DEFINED_IN_FILE]->(scheme_file:File {project_id:$p})",
+        ]
+    )
+    if include_workspaces:
+        lines.extend(
+            [
+                "OPTIONAL MATCH (workspace:XcodeWorkspace {project_id:$p})-[:REFERENCES_PROJECT]->(project_file:File {project_id:$p})",
+                "WHERE project_file.filepath = target.project_file OR project_file IS NULL",
+            ]
+        )
+    else:
+        lines.append("WITH target, src, rel, res, res_backing, bundled, scheme, scheme_file, null AS workspace")
+    lines.extend(
+        [
+            "RETURN src.filepath AS src,",
+            "   type(rel) AS rel,",
+            "   res.name AS resource,",
+            "   res.kind AS kind,",
+            "   coalesce(res_backing.filepath, bundled.filepath) AS backing,",
+            "   target.name AS target,",
+            "   target.project_file AS project_file,",
+            "   scheme.name AS scheme,",
+            "   scheme_file.filepath AS scheme_file,",
+            "   workspace.filepath AS workspace",
+            "ORDER BY src, resource, backing, target, scheme, workspace",
+            "LIMIT $limit",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _apple_rank_key(
@@ -93,7 +169,9 @@ def _format_apple_build_line(row) -> str:
         parts.append(f"{rel}:{resource}")
     elif resource:
         parts.append(resource)
-    if backing:
+    elif backing:
+        parts.append(f"BUNDLES_FILE:{backing}")
+    if backing and (not parts or parts[-1] != f"BUNDLES_FILE:{backing}"):
         parts.append(backing)
     if target:
         parts.append(f"target={target}")
@@ -126,9 +204,14 @@ async def get_apple_build_summary_impl(
     async with driver.session(database=neo4j_db) as session:
         if not await _has_apple_build_files(session, project_id):
             return "No Apple build graph paths found."
+        labels, rels = await _get_graph_schema_info(session)
+        query = _apple_build_query(
+            include_resources=await _has_apple_resource_graph(session, project_id, labels=labels, rels=rels),
+            include_workspaces=await _has_apple_workspace_graph(session, project_id, labels=labels, rels=rels),
+        )
         result = await graph_core._execute_read(
             session,
-            _APPLE_BUILD_QUERY,
+            query,
             p=project_id,
             limit=query_limit,
             op="get_apple_build_summary",
@@ -161,7 +244,7 @@ async def get_apple_build_summary_impl(
     if workspace_contains:
         rows = [r for r in rows if r[9] and workspace_contains in r[9]]
 
-    rows = [r for r in rows if r[2] and r[5]]
+    rows = [r for r in rows if r[5] and (r[2] or r[4])]
     if not rows:
         return "No Apple build graph paths found."
 

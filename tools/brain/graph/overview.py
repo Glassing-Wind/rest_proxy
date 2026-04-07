@@ -54,18 +54,39 @@ async def load_apple_build_context(session, project_id: str, dir_prefix: str = "
         limit=limit,
         op="apple_context_schemes",
     )
-    workspaces = await graph_core._execute_read(
+    schema_labels = await graph_core._execute_read(
         session,
         """
-        MATCH (w:XcodeWorkspace {project_id:$p})-[:REFERENCES_PROJECT]->(f:File {project_id:$p})
-        RETURN w.filepath AS workspace, collect(DISTINCT f.filepath)[..10] AS projects
-        ORDER BY workspace
-        LIMIT $limit
+        CALL db.labels() YIELD label
+        RETURN collect(label) AS labels
         """,
-        p=project_id,
-        limit=limit,
-        op="apple_context_workspaces",
+        op="apple_context_schema_labels",
     )
+    schema_rels = await graph_core._execute_read(
+        session,
+        """
+        CALL db.relationshipTypes() YIELD relationshipType
+        RETURN collect(relationshipType) AS rels
+        """,
+        op="apple_context_schema_relationship_types",
+    )
+    labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
+    rels = set(schema_rels[0].get("rels") or []) if schema_rels else set()
+    if "XcodeWorkspace" in labels and "REFERENCES_PROJECT" in rels:
+        workspaces = await graph_core._execute_read(
+            session,
+            """
+            MATCH (w:XcodeWorkspace {project_id:$p})-[:REFERENCES_PROJECT]->(f:File {project_id:$p})
+            RETURN w.filepath AS workspace, collect(DISTINCT f.filepath)[..10] AS projects
+            ORDER BY workspace
+            LIMIT $limit
+            """,
+            p=project_id,
+            limit=limit,
+            op="apple_context_workspaces",
+        )
+    else:
+        workspaces = []
     return targets, schemes, workspaces
 
 

@@ -200,6 +200,14 @@ class FlowSummaryTests(unittest.TestCase):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "apple_build_presence":
                 return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": ["Resource", "XcodeWorkspace"]}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": ["BUNDLED_IN_TARGET", "REFERENCES_PROJECT"]}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 1}]
             if kwargs.get("op") == "get_apple_build_summary":
                 return [
                     {
@@ -254,6 +262,14 @@ class FlowSummaryTests(unittest.TestCase):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "apple_build_presence":
                 return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": ["Resource", "XcodeWorkspace"]}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": ["BUNDLED_IN_TARGET", "REFERENCES_PROJECT"]}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 1}]
             if kwargs.get("op") == "get_apple_build_summary":
                 return [
                     {
@@ -299,6 +315,54 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("ios/App/View.swift", output)
         self.assertIn("ios/App/Settings.swift", output)
 
+    def test_get_apple_build_summary_falls_back_to_bundled_files(self):
+        async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": []}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": []}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 0}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 0}]
+            if kwargs.get("op") == "get_apple_build_summary":
+                return [
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": None,
+                        "kind": None,
+                        "backing": "FrameCreator/Assets.xcassets/AppIcon.appiconset/Contents.json",
+                        "target": "FrameCreator",
+                        "project_file": "FrameCreator.xcodeproj/project.pbxproj",
+                        "scheme": "FrameCreator",
+                        "scheme_file": "FrameCreator.xcodeproj/xcshareddata/xcschemes/FrameCreator.xcscheme",
+                        "workspace": "FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata",
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/framecreator",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("Target: FrameCreator", output)
+        self.assertIn(
+            "BUNDLES_FILE:FrameCreator/Assets.xcassets/AppIcon.appiconset/Contents.json",
+            output,
+        )
+        self.assertIn("target=FrameCreator", output)
+
     def test_get_apple_build_summary_skips_non_apple_repo(self):
         seen_ops = []
 
@@ -307,7 +371,7 @@ class FlowSummaryTests(unittest.TestCase):
             seen_ops.append(op)
             if op == "apple_build_presence":
                 return [{"n": 0}]
-            if op == "get_apple_build_summary":
+            if op in {"apple_resource_presence", "apple_workspace_presence", "get_apple_build_summary"}:
                 raise AssertionError("unexpected Apple build query on non-Apple repo")
             return []
 
