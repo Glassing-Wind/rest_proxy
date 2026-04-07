@@ -26,6 +26,20 @@ async def has_apple_build_context(session, project_id: str) -> bool:
     return bool(rows and rows[0].get("n"))
 
 
+async def has_cargo_build_context(session, project_id: str) -> bool:
+    rows = await graph_core._execute_read(
+        session,
+        """
+        MATCH (f:File {project_id:$p})
+        WHERE f.filepath ENDS WITH 'Cargo.toml'
+        RETURN count(f) AS n
+        """,
+        p=project_id,
+        op="cargo_context_presence",
+    )
+    return bool(rows and rows[0].get("n"))
+
+
 async def load_apple_build_context(session, project_id: str, dir_prefix: str = "", limit: int = 5):
     targets = await graph_core._execute_read(
         session,
@@ -88,6 +102,88 @@ async def load_apple_build_context(session, project_id: str, dir_prefix: str = "
     else:
         workspaces = []
     return targets, schemes, workspaces
+
+
+async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "", limit: int = 5):
+    schema_labels = await graph_core._execute_read(
+        session,
+        """
+        CALL db.labels() YIELD label
+        RETURN collect(label) AS labels
+        """,
+        op="cargo_context_schema_labels",
+    )
+    schema_rels = await graph_core._execute_read(
+        session,
+        """
+        CALL db.relationshipTypes() YIELD relationshipType
+        RETURN collect(relationshipType) AS rels
+        """,
+        op="cargo_context_schema_relationship_types",
+    )
+    labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
+    rels = set(schema_rels[0].get("rels") or []) if schema_rels else set()
+    if "CargoCrate" not in labels:
+        return [], [], []
+
+    crates = await graph_core._execute_read(
+        session,
+        """
+        MATCH (c:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        WHERE $dir = ''
+           OR mf.filepath STARTS WITH $dir
+           OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', '')
+        RETURN c.name AS crate,
+               c.crate_name AS crate_name,
+               mf.filepath AS manifest_path,
+               count(DISTINCT mf) AS manifest_files
+        ORDER BY crate
+        LIMIT $limit
+        """,
+        p=project_id,
+        dir=dir_prefix,
+        limit=limit,
+        op="cargo_context_crates",
+    )
+
+    if "CargoWorkspace" in labels and "HAS_PACKAGE" in rels:
+        workspaces = await graph_core._execute_read(
+            session,
+            """
+            MATCH (w:CargoWorkspace {project_id:$p})-[:HAS_PACKAGE]->(c:CargoCrate {project_id:$p})
+            RETURN w.filepath AS workspace, collect(DISTINCT c.name)[..10] AS crates
+            ORDER BY workspace
+            LIMIT $limit
+            """,
+            p=project_id,
+            limit=limit,
+            op="cargo_context_workspaces",
+        )
+    else:
+        workspaces = []
+
+    if "DEPENDS_ON_PACKAGE" in rels:
+        dependencies = await graph_core._execute_read(
+            session,
+            """
+            MATCH (src:CargoCrate {project_id:$p})-[r:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$p})
+            MATCH (src)-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+            WHERE $dir = ''
+               OR mf.filepath STARTS WITH $dir
+               OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', '')
+            RETURN src.name AS crate, collect(DISTINCT tgt.name)[..10] AS deps
+            ORDER BY crate
+            LIMIT $limit
+            """,
+            p=project_id,
+            dir=dir_prefix,
+            limit=limit,
+            op="cargo_context_dependencies",
+        )
+    else:
+        dependencies = []
+
+    return crates, workspaces, dependencies
 
 
 async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: str, directory_path: str, limit: int = 5) -> str:
@@ -165,6 +261,12 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             )
         else:
             r_apple_targets, r_apple_schemes = [], []
+        if await has_cargo_build_context(session, project_id):
+            r_cargo_crates, r_cargo_workspaces, r_cargo_dependencies = await load_cargo_build_context(
+                session, project_id, dir_prefix=dir_prefix, limit=limit
+            )
+        else:
+            r_cargo_crates, r_cargo_workspaces, r_cargo_dependencies = [], [], []
 
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:
@@ -196,6 +298,19 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         for rec in r_apple_schemes:
             targets = ", ".join(rec.get("targets") or [])
             lines.append(f"- scheme `{rec['scheme']}` builds {targets}")
+
+    if r_cargo_crates or r_cargo_workspaces or r_cargo_dependencies:
+        lines.append("\n### 🦀 Cargo Context")
+        for rec in r_cargo_crates:
+            manifest = rec.get("manifest_path") or "(external crate)"
+            crate_name = rec.get("crate_name") or rec["crate"]
+            lines.append(f"- crate `{rec['crate']}` ({crate_name}) via `{manifest}`")
+        for rec in r_cargo_workspaces:
+            crates = ", ".join(rec.get("crates") or [])
+            lines.append(f"- workspace `{rec['workspace']}` includes {crates}")
+        for rec in r_cargo_dependencies:
+            deps = ", ".join(rec.get("deps") or [])
+            lines.append(f"- crate `{rec['crate']}` depends on {deps}")
 
     if r_inbound:
         lines.append("\n### 📥 Consumers (External files importing from here)")
@@ -277,6 +392,12 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
             )
         else:
             apple_targets, apple_schemes, apple_workspaces = [], [], []
+        if await has_cargo_build_context(session, project_id):
+            cargo_crates, cargo_workspaces, cargo_dependencies = await load_cargo_build_context(
+                session, project_id, limit=5
+            )
+        else:
+            cargo_crates, cargo_workspaces, cargo_dependencies = [], [], []
 
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
@@ -328,4 +449,16 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
         for rec in apple_workspaces:
             projects = ", ".join(rec.get("projects") or [])
             lines.append(f"  - workspace `{rec['workspace']}` references {projects}")
+    if cargo_crates or cargo_workspaces or cargo_dependencies:
+        lines.extend(["", "## Cargo Workspace Context"])
+        for rec in cargo_crates:
+            manifest = rec.get("manifest_path") or "(external crate)"
+            crate_name = rec.get("crate_name") or rec["crate"]
+            lines.append(f"  - crate `{rec['crate']}` ({crate_name}) via `{manifest}`")
+        for rec in cargo_workspaces:
+            crates = ", ".join(rec.get("crates") or [])
+            lines.append(f"  - workspace `{rec['workspace']}` includes {crates}")
+        for rec in cargo_dependencies:
+            deps = ", ".join(rec.get("deps") or [])
+            lines.append(f"  - crate `{rec['crate']}` depends on {deps}")
     return "\n".join(lines)

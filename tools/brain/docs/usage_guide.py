@@ -21,8 +21,8 @@ def register(mcp: FastMCP) -> None:
    - **Normal path**: wait for `DONE`, then the project should be graph-ready for normal tool use.
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
-4. `get_project_overview(project_path)` → health, architecture clusters, key files
-5. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, and **UI asset wiring** for a folder
+4. `get_project_overview(project_path)` → health, architecture clusters, key files, and Apple/Cargo build context when present
+5. `get_directory_snapshot(project_path, directory_path)` → top files, symbols, **UI asset wiring**, and local Apple/Cargo build context for a folder
 6. `get_code_importance(project_path)` → PageRank-ranked files (requires Neo4j GDS for PageRank)
 7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters
 8. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
@@ -40,7 +40,7 @@ def register(mcp: FastMCP) -> None:
 ### File & Symbol Inspection (no indexing required):
 - `describe_file("", "/abs/path/file.swift")` → fast outline
 - `describe_file(project_path, "rel/path")` → symbols + semantic preview
-- `get_directory_snapshot(project_path, directory_path, limit=5)` → architectural onboarding + **UI/Asset wiring** (HTML -> JS -> API)
+- `get_directory_snapshot(project_path, directory_path, limit=5)` → architectural onboarding + **UI/Asset wiring** (HTML -> JS -> API) + Apple/Cargo ownership context
 - `list_symbol_matches(project_path, query, limit=30)` → name/signature substring matches (supports EnumCase)
 - `extract_function_body(file_path, symbol_name)` → exact source by AST
 - `extract_class_interface(file_path, class_name)` → public method signatures

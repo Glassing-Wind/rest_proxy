@@ -165,6 +165,8 @@ class GraphToolsTests(unittest.TestCase):
             op = kwargs.get("op")
             if op == "apple_context_presence":
                 return [{"n": 1}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
             if op == "get_directory_snapshot_files":
                 return [{"fp": "ios/App/View.swift", "sym_count": 3, "samples": ["body", "preview"]}]
             if op == "get_directory_snapshot_inbound":
@@ -193,6 +195,42 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("target `App` bundles 4 file(s)", output)
         self.assertIn("scheme `App` builds App", output)
 
+    def test_directory_snapshot_includes_cargo_context(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 1}]
+            if op == "get_directory_snapshot_files":
+                return [{"fp": "crates/api/src/lib.rs", "sym_count": 5, "samples": ["run", "serve"]}]
+            if op == "get_directory_snapshot_inbound":
+                return []
+            if op == "get_directory_snapshot_outbound":
+                return []
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op == "cargo_context_schema_labels":
+                return [{"labels": ["CargoCrate", "CargoWorkspace"]}]
+            if op == "cargo_context_schema_relationship_types":
+                return [{"rels": ["HAS_PACKAGE", "DEPENDS_ON_PACKAGE"]}]
+            if op == "cargo_context_crates":
+                return [{"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml", "manifest_files": 1}]
+            if op == "cargo_context_workspaces":
+                return [{"workspace": "Cargo.toml", "crates": ["api", "core"]}]
+            if op == "cargo_context_dependencies":
+                return [{"crate": "api", "deps": ["core", "serde"]}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_directory_snapshot"]("/tmp/rustws", "crates/api", 5))
+
+        self.assertIn("Cargo Context", output)
+        self.assertIn("crate `api` (api) via `crates/api/Cargo.toml`", output)
+        self.assertIn("workspace `Cargo.toml` includes api, core", output)
+        self.assertIn("crate `api` depends on core, serde", output)
+
     def test_project_overview_includes_apple_build_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -206,6 +244,8 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"fp": "ios/App/View.swift", "n": 4, "ex": ["body", "preview"]}]
             if op == "apple_context_presence":
                 return [{"n": 1}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
             if op == "apple_context_targets":
                 return [{"target": "App", "project_file": "ios/App.xcodeproj/project.pbxproj", "bundled_files": 4}]
             if op == "apple_context_schemes":
@@ -227,6 +267,46 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("scheme `App` builds App", output)
         self.assertIn("workspace `ios/App.xcworkspace/contents.xcworkspacedata` references ios/App.xcodeproj/project.pbxproj", output)
 
+    def test_project_overview_includes_cargo_workspace_context(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 24}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 40}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "crates", "files": 18, "syms": 31}]
+            if op == "get_project_overview_key_files":
+                return [{"fp": "crates/api/src/lib.rs", "n": 6, "ex": ["run", "serve"]}]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 1}]
+            if op == "cargo_context_schema_labels":
+                return [{"labels": ["CargoCrate", "CargoWorkspace"]}]
+            if op == "cargo_context_schema_relationship_types":
+                return [{"rels": ["HAS_PACKAGE", "DEPENDS_ON_PACKAGE"]}]
+            if op == "cargo_context_crates":
+                return [
+                    {"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml", "manifest_files": 1},
+                    {"crate": "core-lib", "crate_name": "core_lib", "manifest_path": "crates/core/Cargo.toml", "manifest_files": 1},
+                ]
+            if op == "cargo_context_workspaces":
+                return [{"workspace": "Cargo.toml", "crates": ["api", "core-lib"]}]
+            if op == "cargo_context_dependencies":
+                return [{"crate": "api", "deps": ["core-lib", "serde"]}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/rustws"))
+
+        self.assertIn("## Cargo Workspace Context", output)
+        self.assertIn("crate `api` (api) via `crates/api/Cargo.toml`", output)
+        self.assertIn("crate `core-lib` (core_lib) via `crates/core/Cargo.toml`", output)
+        self.assertIn("workspace `Cargo.toml` includes api, core-lib", output)
+        self.assertIn("crate `api` depends on core-lib, serde", output)
+
     def test_project_overview_skips_apple_queries_for_non_apple_repo(self):
         seen_ops = []
 
@@ -243,8 +323,12 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"fp": "src/app.js", "n": 4, "ex": ["start", "stop"]}]
             if op == "apple_context_presence":
                 return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
             if op in {"apple_context_targets", "apple_context_schemes", "apple_context_schema_labels", "apple_context_schema_relationship_types", "apple_context_workspaces"}:
                 raise AssertionError(f"unexpected Apple query: {op}")
+            if op in {"cargo_context_crates", "cargo_context_workspaces", "cargo_context_dependencies", "cargo_context_schema_labels", "cargo_context_schema_relationship_types"}:
+                raise AssertionError(f"unexpected Cargo query: {op}")
             return []
 
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
@@ -253,6 +337,7 @@ class GraphToolsTests(unittest.TestCase):
 
         self.assertNotIn("## Apple Build Context", output)
         self.assertIn("apple_context_presence", seen_ops)
+        self.assertIn("cargo_context_presence", seen_ops)
 
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
