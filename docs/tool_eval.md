@@ -10,7 +10,6 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `cancel_index_job` | **Medium** | Fix session ID drift between tool calls or provide a "force" override for admins. | **Tested**: Received "Access Denied" despite starting the job in the same conversation. Reveals strict session-locking. |
 | `delete_documentation` | **Medium** | Implement "delete by age" or "unused" filters. Link with usage metrics. | **Tested**: Safety check intercepted attempt with a hint. Excellent guardrail against accidental wipes. |
 | `describe_file` | **Very High** | Include an LLM-generated natural language summary in the output. | **Tested**: Correctly identified 5 symbols in `mcp_server.py`. Fails if file/path is ambiguous or parser lags. |
-| `diagnose_symbol_query` | **Low-Medium** | Default to searching all `kind` types instead of just `Enum`. | **Tested**: Returned 0 rows for a function because of `Enum` default. Good for performance debugging. |
 | `download_documentation` | **High** | Improve status polling/reporting for background crawl jobs. | **Value**: Essential for expanding context beyond the repo. Idempotent updates are a plus. |
 | `extract_class_interface` | **High** | Include decorators (e.g., `@classmethod`) and property markers. | **Tested**: Successfully extracted `WorkspaceRegistry` methods. Perfect for quick API surface review. |
 | `extract_function_body` | **Very High** | None - very precise. | **Tested**: Extracted `get_project_id` cleanly using AST. Superior to manual line-range reading. |
@@ -26,25 +25,19 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `get_code_importance` | **Critical** | None - PageRank implementation is solid. | **Tested**: Ranked `memory/store_core.py` as most important. Uses functional centrality, not just file size. |
 | `get_directory_snapshot` | **Very High** | Add an AI-generated directory purpose summary. | **Tested**: Successfully mapped `proxy/` dependency coupling. Great for "landing" in a new part of the repo. |
 | `get_flow_summary` | **High** | Annotate relationships with flow types (e.g., "Request Path" vs "Utility"). | **Tested**: Provided a clean file-to-file dependency map. Much more readable than a raw graph for architecture. |
-| `get_graph_build_metrics` | **Medium** | Include "Predicted Finish Time" for active builds based on file counts. | **Tested**: Logged sub-second batch timings for `import_graph`. Great for debugging pipeline efficiency. |
-| `get_graph_usage_guide` | **High** | None - critical for agent onboarding. | **Tested**: Comprehensive documentation on GraphRAG best practices. Self-documenting server. |
 | `get_index_status` | **Critical** | List status string (e.g., 'indexing', 'queued') next to active job IDs. | **Tested**: correctly handled missing IDs and listed current job queue. Essential for async job management. |
 | `get_indexed_projects` | **High** | None - solid source of truth. | **Tested**: Found two registered views for `rest_proxy`. Correctly derived path-to-id mapping. |
 | `get_indexing_health` | **Critical** | Explain the impact of 'isolated' files (e.g., "cannot trace call chains"). | **Tested**: Found 69 stale semantic files in `rest_proxy`. Indispensable for ensuring data integrity before reasoning. |
-| `get_language_pack_status` | **Low-Medium** | Add a way to trigger pre-fetch for missing languages. | **Tested**: Identified 40 available grammars. Good for troubleshooting "no symbols found" in niche languages. |
 | `get_project_overview` | **Critical** | None - perfect first-call tool. | **Tested**: Summarized `rest_proxy` architecture (memory vs tools) and key files in one shot. Best for onboarding. |
 | `get_related_files` | **Very High** | Annotate the *reason* for the relationship (e.g., "caller" vs "importer"). | **Tested**: linked `_helpers.py` to `proxy/config.py`. Essential for identifying blast radius of refactors. |
-| `get_session_summary` | **Niche/High** | Fallback to summarizing the last 5 turns if no formal summary exists. | **Tested**: Returned "No summary". High value for long-term project context across multiple days/sessions. |
 | `get_symbol_context` | **Critical** | Increase source preview window or add a 'full' flag to prevent truncation. | **Tested**: Single-call dive into `get_project_id`. Replaces 4-5 manual steps. Indispensable for deep-sea coding. |
 | `get_symbol_exports_summary` | **Low-Medium** | Add a Python-specific heuristic (symbols not starting with '_') if graph edges are missing. | **Tested**: Returned no results. Highly dependent on granular export-indexing which may be language-specific. |
 | `get_symbol_imports_overview` | **High** | Same as above. | **Tested**: Essential for granular refactoring (e.g., "what specifically do we use from this 5k-line module?"). |
-| `get_symbol_imports_summary` | **High** | None. | **Tested**: Complements the overview with a condensed view. |
 | `get_test_coverage_for` | **Very High** | Add semantic similarity search for tests if name/import patterns fail. | **Tested**: Failed to find tests for `_helpers.py`. Vital for TDD workflows to ensure "no regression" before commits. |
 | `git_summary` | **High** | None. | **Tested**: Summarized branch, untracked files, and 10+ recent commits. Perfect for checking recent project velocity. |
 | `grep_codebase` | **Critical** | Group results by file (implemented). Recommend adding pre-filtering for binary files. | **Fixed**: Updated `_which` to resolve environment-specific `rg` paths. Now successfully searching across all files. |
 | `index_workspace` | **Critical** | None. | **Tested**: Successfully identified an existing background process. Safely gates resource-intensive tasks. |
 | `lint_project_subset` | **High** | Add a `fix=True` flag to auto-apply linter suggestions. | **Tested**: Ran `ruff` on `_helpers.py`. Great for ensuring high-quality edits before the user sees them. |
-| `list_available_models` | **Medium** | Filter out non-LLM models if the list becomes too large. | **Fixed**: Corrected import paths following the proxy refactor. Now successfully fetching LM Studio models. |
 | `list_dir` | **Low-Medium** | Add directory/file type markers and sizes for visual parity with shell tools. | **Tested**: Listed `proxy/` contents. Useful but basic. |
 | `list_documentation_sources` | **High** | None. | **Tested**: Identified 5 documentation topics including `neo4j-gds`. Vital for verifying what external context is available. |
 | `list_memories` | **Critical** | None. | **Tested**: Successfully retrieved 6 architectural and task memories. Essential for cross-session continuity. |
@@ -55,7 +48,6 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `search_codebase` | **Critical** | None. | **Tested**: Answered "How is project_id derived?" with high-fidelity chunks. The foundation of codebase understanding. |
 | `search_documentation` | **Critical** | None. | **Tested**: Retrieved specific `maxIterations` parameter for Neo4j GDS. Outstanding for technical accuracy. |
 | `search_memory` | **Critical** | None. | **Tested**: Recalled architectural decisions from previous sessions. Key to agent consistency. |
-| `set_watcher_enabled` | **High** | None. | **Tested**: Verified global watcher state. Essential for background sync management. |
 | `swift_doc_lookup` | **Niche** | Requires SourceKitten. Only works for Swift projects. | **Value**: Essential for Apple platform development but irrelevant for Python/JS repos. |
 | `trace_symbol_cross_project` | **Very High** | None. | **Value**: Invaluable for gRPC and monorepo workflows to trace impact across boundaries. |
 | `unwatch_project` | **Medium** | None. | **Tested**: Companion tool for resource management. |

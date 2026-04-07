@@ -794,49 +794,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error finding usages: {str(e)}"
 
     @mcp.tool()
-    async def list_available_models() -> str:
-        """
-        List models currently available in LM Studio via the proxy.
-        """
-        try:
-            _, _, _, _, proxy_models = get_memory_modules()
-            models_data = await proxy_models.fetch_lmstudio_models()
-            keys = proxy_models.extract_model_keys(models_data)
-            if keys:
-                return "\n".join(keys)
-            return "No models found."
-        except Exception as e:
-            return f"Error listing models: {str(e)}"
-
-    @mcp.tool()
-    async def brain_server_status() -> str:
-        """
-        Show whether the shared HTTP brain server daemon is currently running.
-        """
-        import subprocess
-
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        script_path = os.path.join(repo_root, "scripts", "brain_server_status.sh")
-        if not os.path.exists(script_path):
-            return f"Status script not found: {script_path}"
-
-        try:
-            result = subprocess.run(
-                [script_path],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            output = (result.stdout or result.stderr).strip()
-            if output:
-                return output
-            if result.returncode == 0:
-                return "brain_server running"
-            return "brain_server stopped"
-        except Exception as e:
-            return f"Error checking brain server status: {str(e)}"
-
-    @mcp.tool()
     async def restart_brain_server(delay_seconds: float = 1.0) -> str:
         """
         Schedule a restart of the shared HTTP brain server daemon.

@@ -381,60 +381,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error listing symbols: {str(e)}"
 
     @mcp.tool()
-    async def diagnose_symbol_query(
-        project_path: str, query: str, kind: str = "Enum"
-    ) -> str:
-        """
-        Diagnostic path for symbol query latency.
-
-        Args:
-            project_path: Absolute path or logical workspace identifier.
-            query:        Substring to match against symbol name/signature.
-            kind:         Label to filter (default: Enum).
-        """
-        try:
-            project_id = get_project_id(project_path)
-            import graph_bootstrap
-
-            driver = await graph_bootstrap.require_driver()
-
-            q = (query or "").strip()
-            if not q:
-                return "Query is empty. Provide a symbol name substring to match."
-
-            cypher = """
-                MATCH (s:Node {project_id: $pid})
-                WHERE $kind IN labels(s)
-                AND (
-                  s.name CONTAINS $q
-                  OR (s.qualified_name IS NOT NULL AND s.qualified_name CONTAINS $q)
-                  OR (s.signature IS NOT NULL AND s.signature CONTAINS $q)
-                )
-                RETURN count(s) AS n
-            """
-
-            start = time.perf_counter()
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                records = await _execute_read(
-                    session,
-                    cypher,
-                    pid=project_id,
-                    q=q,
-                    kind=kind,
-                    timeout=float(os.getenv("LM_PROXY_NEO4J_READ_TIMEOUT", "3.0")),
-                    op="diagnose_symbol_query",
-                )
-                rec = records[0] if records else None
-
-            elapsed_ms = int((time.perf_counter() - start) * 1000)
-            return (
-                f"diagnose_symbol_query: kind={kind} query='{q}' "
-                f"rows={rec['n'] if rec else 0} elapsed_ms={elapsed_ms}"
-            )
-        except Exception as e:
-            return f"Error diagnosing symbol query: {str(e)}"
-
-    @mcp.tool()
     async def get_code_importance(workspace_id: str) -> str:
         """
         Identify the most important files in a project using GDS PageRank on the

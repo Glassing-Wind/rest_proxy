@@ -826,27 +826,5 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(cancel_index_job)
     mcp.tool()(watch_project)
     mcp.tool()(unwatch_project)
-
-    @mcp.tool()
-    async def set_watcher_enabled(enabled: bool) -> str:
-        """
-        Enable or disable the background watcher loop (per-process).
-
-        Args:
-            enabled: True to start the watcher (if configured), False to stop it.
-        """
-        if enabled:
-            if index_watcher.is_enabled() and index_watcher.get_task():
-                return "Watcher is already enabled."
-            index_watcher.set_enabled(True)
-            if index_watcher.get_index_fn() is None:
-                return "Watcher enabled, but no index function is available yet."
-            await start_watcher(index_watcher.get_index_fn())
-            return "Watcher enabled."
-
-        index_watcher.set_enabled(False)
-        await stop_watcher()
-        return "Watcher disabled."
-
     mcp.tool()(get_indexing_health)
     mcp.tool()(get_indexed_projects)
