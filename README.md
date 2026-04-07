@@ -126,6 +126,17 @@ LM_PROXY_MEMORY_ENABLED=1
 LM_PROXY_NEO4J_OP_PREFIX=lmproxy
 ```
 
+## Graph Regression Checks
+
+Run the focused GraphRAG regression suite with:
+
+```bash
+./scripts/check_graph_pipeline.sh
+```
+
+This covers parser-fact precision, semantic indexer helper behavior, asset-graph
+route attribution, flow-summary stability, and the integrated fixture contract.
+
 ## 📁 Architecture
 
 - `proxy.py`: Core FastAPI proxy logic.
