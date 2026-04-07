@@ -72,6 +72,48 @@ async def get_language_pack_status_impl() -> str:
         lines.append("Missing languages: none")
     return "\n".join(lines)
 
+
+async def _load_cargo_crate_rows(session, project_id: str):
+    schema_rows = await graph_core._execute_read(
+        session,
+        """
+        CALL db.labels() YIELD label
+        RETURN collect(label) AS labels
+        """,
+        op="utility_cargo_schema_labels",
+    )
+    labels = set(schema_rows[0].get("labels") or []) if schema_rows else set()
+    if "CargoCrate" not in labels:
+        return []
+    return await graph_core._execute_read(
+        session,
+        """
+        MATCH (c:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        RETURN c.name AS crate,
+               c.crate_name AS crate_name,
+               mf.filepath AS manifest_path
+        ORDER BY size(mf.filepath) DESC, c.name
+        """,
+        p=project_id,
+        op="utility_cargo_crates",
+    )
+
+
+def _cargo_manifest_dir(manifest_path: str | None) -> str:
+    if not manifest_path:
+        return ""
+    return manifest_path[:-len("Cargo.toml")] if manifest_path.endswith("Cargo.toml") else manifest_path
+
+
+def _match_cargo_crate(filepath: str | None, crate_rows) -> tuple[str | None, str | None]:
+    if not filepath:
+        return None, None
+    for row in crate_rows:
+        crate_root = _cargo_manifest_dir(row.get("manifest_path"))
+        if crate_root and filepath.startswith(crate_root):
+            return row.get("crate"), row.get("crate_name")
+    return None, None
+
 async def get_heuristic_flow_summary_impl(
     *,
     driver,
@@ -102,6 +144,7 @@ async def get_heuristic_flow_summary_impl(
             limit=limit * 2,
             op="get_heuristic_flow_summary",
         )
+        cargo_rows = await _load_cargo_crate_rows(session, project_id)
     if not result:
         return "No heuristic paths found."
 
@@ -109,18 +152,36 @@ async def get_heuristic_flow_summary_impl(
     for row in result:
         path = [value for value in [row.get("ui"), row.get("api"), row.get("svc"), row.get("model")] if value]
         if len(path) >= 2:
-            rows.append(path)
+            api_crate, _ = _match_cargo_crate(row.get("api"), cargo_rows)
+            svc_crate, _ = _match_cargo_crate(row.get("svc"), cargo_rows)
+            rows.append({"path": path, "api_crate": api_crate, "svc_crate": svc_crate})
 
     if not rows:
         return "No heuristic paths found."
 
     if as_table:
-        output = ["| Origin | Endpoint | Secondary | Data |", "| --- | --- | --- | --- |"]
+        output = [
+            "| API Crate | Service Crate | Origin | Endpoint | Secondary | Data |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
         for row in rows[:limit]:
-            padded = row + [""] * (4 - len(row))
-            output.append(f"| {' | '.join(padded)} |")
+            padded = row["path"] + [""] * (4 - len(row["path"]))
+            output.append(
+                f"| {row['api_crate'] or ''} | {row['svc_crate'] or ''} | {' | '.join(padded)} |"
+            )
         return "\n".join(output)
-    return "\n".join([" -> ".join(row) for row in rows[:limit]])
+    rendered = []
+    for row in rows[:limit]:
+        prefix_bits = []
+        if row["api_crate"]:
+            prefix_bits.append(f"api_crate={row['api_crate']}")
+        if row["svc_crate"] and row["svc_crate"] != row["api_crate"]:
+            prefix_bits.append(f"service_crate={row['svc_crate']}")
+        if prefix_bits:
+            rendered.append(f"[{', '.join(prefix_bits)}] " + " -> ".join(row["path"]))
+        else:
+            rendered.append(" -> ".join(row["path"]))
+    return "\n".join(rendered)
 
 
 async def get_topology_summary_impl(
@@ -148,10 +209,15 @@ async def get_topology_summary_impl(
             limit=limit,
             op="get_topology_summary",
         )
+        cargo_rows = await _load_cargo_crate_rows(session, project_id)
     if not result:
         return "No architectural topology found (index might be empty)."
 
     output = ["### Architectural Topology (Most Connected Files)\n"]
     for rec in result:
-        output.append(f"- `{rec['fp']}`: {rec['inbound']} incoming, {rec['outbound']} outgoing imports")
+        crate, _ = _match_cargo_crate(rec.get("fp"), cargo_rows)
+        crate_part = f" [crate:{crate}]" if crate else ""
+        output.append(
+            f"- `{rec['fp']}`{crate_part}: {rec['inbound']} incoming, {rec['outbound']} outgoing imports"
+        )
     return "\n".join(output)

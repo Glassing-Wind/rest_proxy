@@ -73,7 +73,12 @@ class GraphUtilityTests(unittest.TestCase):
 
     def test_topology_summary_formats_rows(self):
         async def fake_execute_read(session, query, **kwargs):
-            return [{"fp": "src/a.py", "inbound": 2, "outbound": 3}]
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [{"fp": "src/a.py", "inbound": 2, "outbound": 3}]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
 
         with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
             output = asyncio.run(
@@ -86,6 +91,62 @@ class GraphUtilityTests(unittest.TestCase):
             )
         self.assertIn("src/a.py", output)
         self.assertIn("2 incoming, 3 outgoing", output)
+
+    def test_topology_summary_includes_cargo_crate_context(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [{"fp": "crates/api/src/lib.rs", "inbound": 4, "outbound": 5}]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": ["CargoCrate"]}]
+            if op == "utility_cargo_crates":
+                return [{"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml"}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rustws",
+                    limit=10,
+                )
+            )
+        self.assertIn("[crate:api]", output)
+
+    def test_heuristic_flow_summary_includes_cargo_crate_context(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_heuristic_flow_summary":
+                return [
+                    {
+                        "ui": "apps/web/src/pages/index.tsx",
+                        "api": "crates/api/src/routes.rs",
+                        "svc": "crates/core/src/service.rs",
+                        "model": "crates/core/src/model.rs",
+                    }
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": ["CargoCrate"]}]
+            if op == "utility_cargo_crates":
+                return [
+                    {"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml"},
+                    {"crate": "core", "crate_name": "core", "manifest_path": "crates/core/Cargo.toml"},
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_heuristic_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rustws",
+                    limit=10,
+                    as_table=False,
+                )
+            )
+        self.assertIn("[api_crate=api, service_crate=core]", output)
+        self.assertIn("crates/api/src/routes.rs", output)
 
 
 if __name__ == "__main__":
