@@ -2,7 +2,8 @@
 """Live graph smoke test against a real indexed workspace.
 
 Usage:
-    python3 test_live_graph_tools.py /abs/path/to/project [--reindex] [--mode incremental]
+    python3 test_live_graph_tools.py /abs/path/to/project [/abs/path/to/project ...]
+    python3 test_live_graph_tools.py /abs/path/to/project --reindex --mode incremental
 """
 
 from __future__ import annotations
@@ -133,6 +134,26 @@ async def _pick_live_symbol(mcp: FakeMCP, workspace_id: str) -> tuple[str, str]:
     return row["name"], row.get("filepath") or ""
 
 
+async def _count_apple_files(mcp: FakeMCP, workspace_id: str) -> int:
+    raw = await mcp.tools["query_graph"](
+        """
+        MATCH (f:File {project_id: $pid})
+        WHERE f.filepath ENDS WITH '.xcodeproj/project.pbxproj'
+           OR f.filepath ENDS WITH '.xcworkspace/contents.xcworkspacedata'
+           OR f.filepath ENDS WITH '.xcscheme'
+           OR f.filepath ENDS WITH '.storyboard'
+           OR f.filepath ENDS WITH '.xib'
+           OR f.filepath CONTAINS '.xcassets/'
+        RETURN count(f) AS apple_file_count
+        """,
+        workspace_id=workspace_id,
+    )
+    rows = json.loads(raw)
+    if not rows:
+        return 0
+    return int(rows[0].get("apple_file_count") or 0)
+
+
 def _require_non_error(name: str, output: str) -> None:
     if not output or output.startswith("Error "):
         raise RuntimeError(f"{name} failed:\n{output}")
@@ -177,6 +198,26 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
     )
     _require_non_error("query_graph", raw_query_output)
 
+    apple_file_count = await _count_apple_files(mcp, workspace_id)
+    apple_runs: list[ToolRun] = [
+        ToolRun(
+            "apple_presence",
+            json.dumps({"apple_file_count": apple_file_count}, indent=2),
+        )
+    ]
+    if apple_file_count > 0:
+        apple_summary_output = await mcp.tools["get_flow_summary"](
+            workspace_id,
+            mode="apple",
+            limit=10,
+        )
+        _require_non_error("get_flow_summary(mode=apple)", apple_summary_output)
+        if apple_summary_output.startswith("No Apple build graph paths found."):
+            raise RuntimeError(
+                f"Apple repo appears indexed but Apple flow summary returned no paths:\n{apple_summary_output}"
+            )
+        apple_runs.append(ToolRun("get_flow_summary(mode=apple)", apple_summary_output))
+
     return [
         ToolRun("resolve_graph_project", resolve_output),
         ToolRun("get_project_overview", overview_output),
@@ -187,12 +228,17 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
         ToolRun("get_symbol_context", symbol_output),
         ToolRun("get_call_chain", call_chain_output),
         ToolRun("query_graph", raw_query_output),
+        *apple_runs,
     ]
 
 
 async def _main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("workspace_id", help="Logical workspace ID or absolute project path")
+    parser.add_argument(
+        "workspace_ids",
+        nargs="+",
+        help="Logical workspace IDs or absolute project paths",
+    )
     parser.add_argument("--reindex", action="store_true", help="Run index_workspace before checks")
     parser.add_argument(
         "--mode",
@@ -202,20 +248,33 @@ async def _main() -> int:
     )
     args = parser.parse_args()
 
-    workspace_id = args.workspace_id
-    if not workspace_id:
+    if not args.workspace_ids:
         raise RuntimeError("workspace_id is required")
 
-    print(f"[live-graph] workspace={workspace_id}")
-    if args.reindex:
-        print(f"[live-graph] reindex mode={args.mode}")
-        result = await _ensure_indexed(workspace_id, args.mode)
-        print(result)
+    failures: list[tuple[str, str]] = []
+    for workspace_id in args.workspace_ids:
+        print(f"[live-graph] workspace={workspace_id}")
+        try:
+            if args.reindex:
+                print(f"[live-graph] reindex mode={args.mode}")
+                result = await _ensure_indexed(workspace_id, args.mode)
+                print(result)
 
-    runs = await _run_live_checks(workspace_id)
-    for run in runs:
-        print(f"\n=== {run.name} ===")
-        print(run.output.strip())
+            runs = await _run_live_checks(workspace_id)
+            for run in runs:
+                print(f"\n=== {run.name} ===")
+                print(run.output.strip())
+        except Exception as exc:
+            failures.append((workspace_id, str(exc)))
+            print(f"\n[live-graph] FAILED: {workspace_id}")
+            print(str(exc).strip())
+        print()
+
+    if failures:
+        print("[live-graph] failures:")
+        for workspace_id, error in failures:
+            print(f"- {workspace_id}: {error.splitlines()[0]}")
+        return 1
 
     print("\n[live-graph] smoke checks passed")
     return 0

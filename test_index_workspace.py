@@ -191,6 +191,21 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertTrue(chunks[0]["text"].startswith(f"// File: {rel_path}\n"))
         self.assertIsNone(chunks[0]["metadata"]["language"])
 
+    def test_read_and_chunk_xcode_metadata_uses_line_window_fallback(self):
+        fake_ts_pack = types.SimpleNamespace()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "project.pbxproj"
+            rel_path = "App.xcodeproj/project.pbxproj"
+            abs_path.write_text("// !$*UTF8*$!\narchiveVersion = 1;\n", encoding="utf-8")
+
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                chunks, reason = self.module._read_and_chunk(str(abs_path), rel_path, "proj123")
+
+        self.assertIsNone(reason)
+        self.assertEqual(len(chunks), 1)
+        self.assertTrue(chunks[0]["text"].startswith(f"// File: {rel_path}\n"))
+        self.assertIsNone(chunks[0]["metadata"]["language"])
+
     def test_read_and_chunk_native_ts_pack_propagates_file_meta(self):
         fake_result = {
             "imports": [{"source": "./api", "names": ["client"]}],
