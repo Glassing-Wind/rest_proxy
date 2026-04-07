@@ -5,6 +5,7 @@ from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules, get_project_id
 from tools.brain.search import core as search_core
+from tools.brain.search import duplication_helpers as dup_helpers
 
 
 def register(mcp: FastMCP) -> None:
@@ -90,8 +91,6 @@ def register(mcp: FastMCP) -> None:
             fallback to avoid misses.
         """
         try:
-            import fnmatch
-            import hashlib
             import itertools
             import re
             from _helpers import WorkspaceRegistry
@@ -150,15 +149,8 @@ def register(mcp: FastMCP) -> None:
             exclude_patterns = exclude_paths or []
             include_patterns = include_paths or []
 
-            def _glob_to_like(pattern: str) -> str:
-                pattern = pattern.replace("%", "\%")
-                pattern = pattern.replace("_", "\_")
-                pattern = pattern.replace("*", "%")
-                pattern = pattern.replace("?", "_")
-                return pattern
-
             include_like_patterns = [
-                _glob_to_like(p) for p in include_patterns if isinstance(p, str)
+                dup_helpers.glob_to_like(p) for p in include_patterns if isinstance(p, str)
             ]
             include_filter_sql = (
                 " AND file_path LIKE ANY(%(include_paths)s)"
@@ -167,15 +159,11 @@ def register(mcp: FastMCP) -> None:
             )
 
             def _path_allowed(file_path: str) -> bool:
-                if not file_path:
-                    return False
-                if include_patterns:
-                    if not any(fnmatch.fnmatch(file_path, p) for p in include_patterns):
-                        return False
-                if exclude_patterns:
-                    if any(fnmatch.fnmatch(file_path, p) for p in exclude_patterns):
-                        return False
-                return True
+                return dup_helpers.path_allowed(
+                    file_path,
+                    include_patterns=include_patterns,
+                    exclude_patterns=exclude_patterns,
+                )
 
             exact_sql = f"""
                 WITH base AS (
@@ -415,35 +403,16 @@ def register(mcp: FastMCP) -> None:
 
             lines: list[str] = []
 
-            def _pick_pair(
-                group: list[dict], cross_file: bool
-            ) -> tuple[dict, dict] | None:
-                if len(group) < 2:
-                    return None
-                if cross_file:
-                    for i in range(len(group)):
-                        for j in range(i + 1, len(group)):
-                            if group[i]["file_path"] != group[j]["file_path"]:
-                                return group[i], group[j]
-                return group[0], group[1]
-
-            def _tokenize(text: str) -> list[str]:
-                if not text:
-                    return []
-                return re.findall(
-                    r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]",
-                    text,
-                )
-
             def _same_file_allowed(
                 file_path: str, content: str, counts: dict[str, int]
             ) -> bool:
-                if counts.get(file_path, 0) >= max_same_file_pairs_per_file:
-                    return False
-                if same_file_min_tokens > 0:
-                    if len(_tokenize(content)) < same_file_min_tokens:
-                        return False
-                return True
+                return dup_helpers.same_file_allowed(
+                    file_path,
+                    content,
+                    counts,
+                    max_same_file_pairs_per_file=max_same_file_pairs_per_file,
+                    same_file_min_tokens=same_file_min_tokens,
+                )
 
             def _emit_pairs(
                 title: str,
@@ -457,7 +426,7 @@ def register(mcp: FastMCP) -> None:
                 lines.append(f"{title} ({len(groups)})")
                 count = 0
                 for group in groups:
-                    pair = _pick_pair(group, cross_file=cross_file)
+                    pair = dup_helpers.pick_pair(group, cross_file=cross_file)
                     if not pair:
                         continue
                     a, b = pair
@@ -473,8 +442,8 @@ def register(mcp: FastMCP) -> None:
                     b_start = meta_b.get("start_line")
                     a_line = f":{a_start}" if isinstance(a_start, int) else ""
                     b_line = f":{b_start}" if isinstance(b_start, int) else ""
-                    preview_a = (a["content"] or "").strip().splitlines()[0][:200]
-                    preview_b = (b["content"] or "").strip().splitlines()[0][:200]
+                    preview_a = dup_helpers.preview_line(a.get("content") or "")
+                    preview_b = dup_helpers.preview_line(b.get("content") or "")
                     lines.append(
                         f"- {a['file_path']}{a_line} ↔ {b['file_path']}{b_line}"
                     )
@@ -487,94 +456,6 @@ def register(mcp: FastMCP) -> None:
                     count += 1
                     if count >= max_pairs:
                         break
-
-            def _node_type_jaccard(meta_a: dict, meta_b: dict) -> float:
-                types_a = meta_a.get("node_types") or []
-                types_b = meta_b.get("node_types") or []
-                if not types_a or not types_b:
-                    return 0.0
-                set_a = set(types_a)
-                set_b = set(types_b)
-                denom = len(set_a | set_b)
-                if denom == 0:
-                    return 0.0
-                return len(set_a & set_b) / denom
-
-            def _winnow_fingerprints(
-                tokens: list[str], k: int, window: int
-            ) -> set[int]:
-                if len(tokens) < k:
-                    return set()
-                hashes: list[int] = []
-                for i in range(len(tokens) - k + 1):
-                    gram = " ".join(tokens[i : i + k])
-                    h = int(hashlib.md5(gram.encode()).hexdigest()[:16], 16)
-                    hashes.append(h)
-                if not hashes:
-                    return set()
-                if len(hashes) <= window:
-                    return {min(hashes)}
-                fingerprints: set[int] = set()
-                min_hash = None
-                min_pos = -1
-                for i in range(len(hashes) - window + 1):
-                    window_hashes = hashes[i : i + window]
-                    current_min = min(window_hashes)
-                    if min_hash != current_min or min_pos < i:
-                        min_hash = current_min
-                        min_pos = i + window_hashes.index(current_min)
-                        fingerprints.add(min_hash)
-                return fingerprints
-
-            def _kgrams(tokens: list[str], k: int) -> set[tuple[str, ...]]:
-                if len(tokens) < k:
-                    return set()
-                return {tuple(tokens[i : i + k]) for i in range(len(tokens) - k + 1)}
-
-            def _normalize_tokens(tokens: list[str]) -> list[str]:
-                if not tokens:
-                    return []
-                normalized: list[str] = []
-                for tok in tokens:
-                    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", tok):
-                        normalized.append("<id>")
-                    elif re.match(r"^\d+$", tok):
-                        normalized.append("<num>")
-                    else:
-                        normalized.append(tok)
-                return normalized
-
-            def _is_code_file(file_path: str, metadata: dict | None) -> bool:
-                if not file_path:
-                    return False
-                if metadata and isinstance(metadata, dict):
-                    lang = metadata.get("language")
-                    if isinstance(lang, str) and lang:
-                        if lang.lower() in {
-                            "json",
-                            "markdown",
-                            "md",
-                            "yaml",
-                            "toml",
-                            "ini",
-                            "text",
-                        }:
-                            return False
-                _, ext = os.path.splitext(file_path.lower())
-                if ext in {
-                    ".md",
-                    ".json",
-                    ".yaml",
-                    ".yml",
-                    ".toml",
-                    ".ini",
-                    ".txt",
-                    ".csv",
-                    ".lock",
-                    ".env",
-                }:
-                    return False
-                return True
 
             if include_exact:
                 exact_items = [g for g in exact_groups.values() if len(g) > 1]
@@ -665,12 +546,8 @@ def register(mcp: FastMCP) -> None:
                         b_start = meta_b.get("start_line")
                         a_line = f":{a_start}" if isinstance(a_start, int) else ""
                         b_line = f":{b_start}" if isinstance(b_start, int) else ""
-                        preview_a = (
-                            (row["content_a"] or "").strip().splitlines()[0][:200]
-                        )
-                        preview_b = (
-                            (row["content_b"] or "").strip().splitlines()[0][:200]
-                        )
+                        preview_a = dup_helpers.preview_line(row.get("content_a") or "")
+                        preview_b = dup_helpers.preview_line(row.get("content_b") or "")
                         lines.append(
                             f"- {row['file_a']}{a_line} ↔ {row['file_b']}{b_line}  (sim={sim:.3f})"
                         )
@@ -699,13 +576,15 @@ def register(mcp: FastMCP) -> None:
                     fp = row["file_path"]
                     if not _path_allowed(fp):
                         continue
-                    if winnow_code_only and not _is_code_file(fp, row.get("metadata")):
+                    if winnow_code_only and not dup_helpers.is_code_file(
+                        fp, row.get("metadata")
+                    ):
                         continue
                     content = row.get("content") or ""
                     content = re.sub(r"^// File: .*?\n", "", content)
-                    tokens = _tokenize(content)
+                    tokens = dup_helpers.tokenize(content)
                     if winnow_normalize_identifiers:
-                        tokens = _normalize_tokens(tokens)
+                        tokens = dup_helpers.normalize_tokens(tokens)
                     if not tokens:
                         continue
 
@@ -715,7 +594,9 @@ def register(mcp: FastMCP) -> None:
                     chunk_token_set[cid] = set(tokens)
 
                     if len(tokens) < winnow_small_token_threshold:
-                        kgrams = _kgrams(tokens, min(winnow_small_k, len(tokens)))
+                        kgrams = dup_helpers.kgrams(
+                            tokens, min(winnow_small_k, len(tokens))
+                        )
                         if kgrams:
                             chunk_kgrams[cid] = kgrams
                         continue
@@ -724,7 +605,7 @@ def register(mcp: FastMCP) -> None:
                     for label, k, window in scales:
                         if len(tokens) < k:
                             continue
-                        fps = _winnow_fingerprints(tokens, k, window)
+                        fps = dup_helpers.winnow_fingerprints(tokens, k, window)
                         if not fps or len(fps) < winnow_min_fingerprints:
                             continue
                         chunk_fps_by_scale[cid][label] = fps
@@ -733,7 +614,9 @@ def register(mcp: FastMCP) -> None:
                             fp_counts[label][h] = fp_counts[label].get(h, 0) + 1
 
                     if not chunk_fps_by_scale[cid]:
-                        kgrams = _kgrams(tokens, min(winnow_small_k, len(tokens)))
+                        kgrams = dup_helpers.kgrams(
+                            tokens, min(winnow_small_k, len(tokens))
+                        )
                         if kgrams:
                             chunk_kgrams[cid] = kgrams
 
@@ -833,7 +716,7 @@ def register(mcp: FastMCP) -> None:
                         continue
 
                     base_score = max(max_overlap, token_jaccard, kgram_jaccard)
-                    struct_score = _node_type_jaccard(
+                    struct_score = dup_helpers.node_type_jaccard(
                         row_a.get("metadata") or {}, row_b.get("metadata") or {}
                     )
                     score = base_score * (0.5 + 0.5 * struct_score)
@@ -897,15 +780,11 @@ def register(mcp: FastMCP) -> None:
                             b_start = meta_b.get("start_line")
                             a_line = f":{a_start}" if isinstance(a_start, int) else ""
                             b_line = f":{b_start}" if isinstance(b_start, int) else ""
-                            preview_a = (
-                                (row_a.get("content") or "")
-                                .strip()
-                                .splitlines()[0][:200]
+                            preview_a = dup_helpers.preview_line(
+                                row_a.get("content") or ""
                             )
-                            preview_b = (
-                                (row_b.get("content") or "")
-                                .strip()
-                                .splitlines()[0][:200]
+                            preview_b = dup_helpers.preview_line(
+                                row_b.get("content") or ""
                             )
                             lines.append(
                                 f"- {row_a['file_path']}{a_line} ↔ {row_b['file_path']}{b_line}  "
