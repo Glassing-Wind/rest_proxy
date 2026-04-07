@@ -132,6 +132,42 @@ class FlowSummaryTests(unittest.TestCase):
             output,
         )
 
+    def test_get_apple_build_summary_formats_target_aware_paths(self):
+        async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "get_apple_build_summary":
+                return [
+                    {
+                        "src": "ios/App/View.swift",
+                        "rel": "USES_ASSET",
+                        "resource": "hero",
+                        "kind": "image",
+                        "backing": "ios/App/Assets.xcassets/hero.imageset/Contents.json",
+                        "target": "App",
+                        "project_file": "ios/App.xcodeproj/project.pbxproj",
+                        "scheme": "App",
+                        "scheme_file": "ios/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme",
+                        "workspace": "ios/App.xcworkspace/contents.xcworkspacedata",
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/framecreator",
+                    limit=20,
+                    as_table=False,
+                )
+            )
+
+        self.assertIn("ios/App/View.swift", output)
+        self.assertIn("USES_ASSET:hero", output)
+        self.assertIn("target=App", output)
+        self.assertIn("scheme=App", output)
+        self.assertIn("workspace=ios/App.xcworkspace/contents.xcworkspacedata", output)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -493,6 +493,37 @@ def register(mcp: FastMCP) -> None:
             return f"Error building backend flow summary: {str(exc)}"
 
     @mcp.tool()
+    async def get_apple_build_summary(
+        workspace_id: str,
+        source_contains: str | None = None,
+        resource_contains: str | None = None,
+        target_contains: str | None = None,
+        scheme_contains: str | None = None,
+        limit: int = 20,
+        as_table: bool = False,
+    ) -> str:
+        """
+        Summarize Apple build graph paths from source file → resource → target → scheme → workspace.
+        """
+        try:
+            import graph_bootstrap
+
+            driver = await graph_bootstrap.require_driver()
+            return await graph_flow_summary.get_apple_build_summary_impl(
+                driver=driver,
+                neo4j_db=graph_bootstrap._NEO4J_DB,
+                workspace_id=workspace_id,
+                source_contains=source_contains,
+                resource_contains=resource_contains,
+                target_contains=target_contains,
+                scheme_contains=scheme_contains,
+                limit=limit,
+                as_table=as_table,
+            )
+        except Exception as exc:
+            return f"Error building Apple build summary: {str(exc)}"
+
+    @mcp.tool()
     async def get_flow_summary(
         workspace_id: str,
         mode: str = "auto",
@@ -509,7 +540,7 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             workspace_id: Logical workspace name or absolute project path.
-            mode: 'auto', 'ui', 'backend', or 'cli'.
+        mode: 'auto', 'ui', 'backend', 'apple', or 'cli'.
             ui_contains: Filter UI files (ui mode only).
             api_contains: Filter API files (backend mode only).
             model_contains: Filter model names.
@@ -519,8 +550,8 @@ def register(mcp: FastMCP) -> None:
             as_table: Render as table when supported.
         """
         mode_norm = (mode or "auto").strip().lower()
-        if mode_norm not in {"auto", "ui", "backend", "cli"}:
-            return "Invalid mode. Use 'auto', 'ui', 'backend', or 'cli'."
+        if mode_norm not in {"auto", "ui", "backend", "apple", "cli"}:
+            return "Invalid mode. Use 'auto', 'ui', 'backend', 'apple', or 'cli'."
 
         if mode_norm in {"auto", "ui"}:
             ui_result = await get_app_flow_summary(
@@ -550,6 +581,17 @@ def register(mcp: FastMCP) -> None:
             "No API → Service → DB paths found"
         ):
             return backend_result
+
+        apple_result = await get_apple_build_summary(
+            workspace_id,
+            source_contains=ui_contains,
+            resource_contains=model_contains,
+            target_contains=service_contains,
+            limit=limit,
+            as_table=as_table,
+        )
+        if mode_norm == "apple" or not apple_result.startswith("No Apple build graph paths found"):
+            return apple_result
 
         if mode_norm in {"auto", "cli"}:
             cli_result = await graph_core._get_cli_flow_summary(

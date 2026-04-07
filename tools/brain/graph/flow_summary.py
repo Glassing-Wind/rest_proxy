@@ -144,6 +144,29 @@ LIMIT $limit
 """
 
 
+_APPLE_BUILD_QUERY = """
+MATCH (res:Resource {project_id:$p})-[:BUNDLED_IN_TARGET]->(target:XcodeTarget {project_id:$p})
+OPTIONAL MATCH (src:File {project_id:$p})-[rel:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->(res)
+OPTIONAL MATCH (res)-[:BACKED_BY_FILE]->(backing:File {project_id:$p})
+OPTIONAL MATCH (scheme:XcodeScheme {project_id:$p})-[:BUILDS_TARGET]->(target)
+OPTIONAL MATCH (scheme)-[:DEFINED_IN_FILE]->(scheme_file:File {project_id:$p})
+OPTIONAL MATCH (workspace:XcodeWorkspace {project_id:$p})-[:REFERENCES_PROJECT]->(project_file:File {project_id:$p})
+WHERE project_file.filepath = target.project_file OR project_file IS NULL
+RETURN src.filepath AS src,
+   type(rel) AS rel,
+   res.name AS resource,
+   res.kind AS kind,
+   backing.filepath AS backing,
+   target.name AS target,
+   target.project_file AS project_file,
+   scheme.name AS scheme,
+   scheme_file.filepath AS scheme_file,
+   workspace.filepath AS workspace
+ORDER BY src, resource, backing, target, scheme, workspace
+LIMIT $limit
+"""
+
+
 async def _resolve_entry_files(session, project_id: str, entry_files, entry_glob):
     if entry_files or not entry_glob:
         return entry_files
@@ -438,4 +461,100 @@ async def get_backend_flow_summary_impl(
     output = list(dict.fromkeys(output))
     if limit and len(output) > limit:
         output = output[:limit]
+    return "\n".join(output)
+
+
+async def get_apple_build_summary_impl(
+    *,
+    driver,
+    neo4j_db: str,
+    workspace_id: str,
+    source_contains: str | None = None,
+    resource_contains: str | None = None,
+    target_contains: str | None = None,
+    scheme_contains: str | None = None,
+    limit: int = 20,
+    as_table: bool = False,
+) -> str:
+    project_id = get_project_id(workspace_id)
+    query_limit = max(limit, 50)
+    if any([source_contains, resource_contains, target_contains, scheme_contains]):
+        query_limit = max(limit * 10, 300)
+
+    async with driver.session(database=neo4j_db) as session:
+        result = await graph_core._execute_read(
+            session,
+            _APPLE_BUILD_QUERY,
+            p=project_id,
+            limit=query_limit,
+            op="get_apple_build_summary",
+        )
+
+    rows = [
+        (
+            row.get("src"),
+            row.get("rel"),
+            row.get("resource"),
+            row.get("kind"),
+            row.get("backing"),
+            row.get("target"),
+            row.get("project_file"),
+            row.get("scheme"),
+            row.get("scheme_file"),
+            row.get("workspace"),
+        )
+        for row in result
+    ]
+
+    if source_contains:
+        rows = [r for r in rows if r[0] and source_contains in r[0]]
+    if resource_contains:
+        rows = [r for r in rows if r[2] and resource_contains in r[2]]
+    if target_contains:
+        rows = [r for r in rows if r[5] and target_contains in r[5]]
+    if scheme_contains:
+        rows = [r for r in rows if r[7] and scheme_contains in r[7]]
+
+    rows = [r for r in rows if r[2] and r[5]]
+    if not rows:
+        return "No Apple build graph paths found."
+
+    if as_table:
+        output = [
+            "| Source | Link | Resource | Kind | Backing File | Target | Project | Scheme | Scheme File | Workspace |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for src, rel, resource, kind, backing, target, project_file, scheme, scheme_file, workspace in rows[:limit]:
+            output.append(
+                f"| {src or ''} | {rel or ''} | {resource or ''} | {kind or ''} | {backing or ''} | {target or ''} | {project_file or ''} | {scheme or ''} | {scheme_file or ''} | {workspace or ''} |"
+            )
+        return "\n".join(output)
+
+    output = []
+    seen = set()
+    for src, rel, resource, kind, backing, target, project_file, scheme, scheme_file, workspace in rows:
+        parts = []
+        if src:
+            parts.append(src)
+        if rel and resource:
+            parts.append(f"{rel}:{resource}")
+        elif resource:
+            parts.append(resource)
+        if backing:
+            parts.append(backing)
+        if target:
+            parts.append(f"target={target}")
+        if scheme:
+            parts.append(f"scheme={scheme}")
+        if workspace:
+            parts.append(f"workspace={workspace}")
+        if not parts:
+            continue
+        line = " -> ".join(parts)
+        if line in seen:
+            continue
+        seen.add(line)
+        output.append(line)
+        if limit and len(output) >= limit:
+            break
     return "\n".join(output)

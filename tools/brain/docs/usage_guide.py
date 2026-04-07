@@ -82,11 +82,12 @@ Doc indexing tips:
 - `get_symbol_imports_overview(project_path, limit=20, include_implicit=true)` → summarize explicit + implicit symbol import edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
 - `rebuild_symbol_graph(project_path)` → rebuild symbol-level IMPORTS/EXPORTS graph
-- `rebuild_asset_graph(project_path)` → rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB)
+- `rebuild_asset_graph(project_path)` → rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB, plus Apple resource/target/scheme/workspace links)
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
 - `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)
-- `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI, backend, or CLI flow (auto tries UI → backend → CLI)
+- `get_apple_build_summary(project_path, source_contains?, resource_contains?, target_contains?, scheme_contains?, limit=20, as_table=false)` → Apple source → resource → target → scheme → workspace paths
+- `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI, backend, Apple build, or CLI flow (auto tries UI → backend → Apple → CLI)
   - Tip: set `include_tests=true` when you want coverage paths from test files too
 - Launch edges: enable `TS_PACK_LAUNCH_EDGES=1` to emit `LAUNCHES` file edges; set `TS_PACK_DEBUG_LAUNCH=1` to log launch resolution counts per file during indexing
 - `get_language_pack_status()` → available vs manifest languages (auto-download status)
