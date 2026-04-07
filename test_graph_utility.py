@@ -109,6 +109,29 @@ class GraphUtilityTests(unittest.TestCase):
         self.assertIn("Crate: api", output)
         self.assertIn("[crate:api]", output)
 
+    def test_topology_summary_prefers_non_test_files(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [
+                    {"fp": "tests/services.test.ts", "inbound": 0, "outbound": 11},
+                    {"fp": "src/api/routes.ts", "inbound": 2, "outbound": 34},
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                )
+            )
+        self.assertLess(output.find("src/api/routes.ts"), output.find("tests/services.test.ts"))
+
     def test_heuristic_flow_summary_includes_cargo_crate_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -143,6 +166,43 @@ class GraphUtilityTests(unittest.TestCase):
         self.assertIn("Crate: api", output)
         self.assertIn("[api_crate=api, service_crate=core]", output)
         self.assertIn("crates/api/src/routes.rs", output)
+
+    def test_heuristic_flow_summary_falls_back_to_cargo_dependencies(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_heuristic_flow_summary":
+                return []
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": ["CargoCrate"]}]
+            if op == "utility_cargo_crates":
+                return [
+                    {"crate": "ts-pack-index", "crate_name": "ts-pack-index", "manifest_path": "crates/ts-pack-index/Cargo.toml"},
+                    {"crate": "tree-sitter-language-pack", "crate_name": "tree-sitter-language-pack", "manifest_path": "crates/ts-pack-core/Cargo.toml"},
+                ]
+            if op == "utility_cargo_dependency_rows":
+                return [
+                    {
+                        "src_crate": "ts-pack-index",
+                        "src_manifest": "crates/ts-pack-index/Cargo.toml",
+                        "dep_crate": "tree-sitter-language-pack",
+                        "dep_manifest": "crates/ts-pack-core/Cargo.toml",
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_heuristic_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rustws",
+                    limit=10,
+                    as_table=False,
+                )
+            )
+        self.assertIn("Cargo crate dependencies", output)
+        self.assertIn("Crate: ts-pack-index", output)
+        self.assertIn("ts-pack-index -> tree-sitter-language-pack", output)
 
 
 if __name__ == "__main__":

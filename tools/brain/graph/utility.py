@@ -64,6 +64,42 @@ def _group_by_crate(rows: list[dict], *, item_key: str, line_builder) -> list[st
             lines.append(f"- {item}")
     return lines
 
+
+def _is_test_like_path(filepath: str | None) -> bool:
+    if not filepath:
+        return False
+    return (
+        filepath.startswith("tests/")
+        or "/tests/" in filepath
+        or "__tests__" in filepath
+        or ".test." in filepath
+        or filepath.endswith("_test.py")
+        or filepath.endswith("_spec.rb")
+    )
+
+
+async def _load_cargo_dependency_rows(session, project_id: str, limit: int):
+    return await graph_core._execute_read(
+        session,
+        """
+        MATCH (src:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(src_mf:File {project_id:$p})
+        MATCH (src)-[:DEPENDS_ON_PACKAGE]->(dep:CargoCrate {project_id:$p})
+        OPTIONAL MATCH (dep)-[:DEFINED_IN_FILE]->(dep_mf:File {project_id:$p})
+        RETURN src.name AS src_crate,
+               src_mf.filepath AS src_manifest,
+               dep.name AS dep_crate,
+               dep_mf.filepath AS dep_manifest
+        ORDER BY
+          CASE WHEN dep_mf.filepath IS NULL THEN 1 ELSE 0 END,
+          src.name,
+          dep.name
+        LIMIT $limit
+        """,
+        p=project_id,
+        limit=limit,
+        op="utility_cargo_dependency_rows",
+    )
+
 async def get_heuristic_flow_summary_impl(
     *,
     driver,
@@ -96,6 +132,31 @@ async def get_heuristic_flow_summary_impl(
         )
         cargo_rows = await _load_cargo_crate_rows(session, project_id)
     if not result:
+        if cargo_rows:
+            async with driver.session(database=neo4j_db) as session:
+                dep_rows = await _load_cargo_dependency_rows(session, project_id, limit * 3)
+            if dep_rows:
+                rendered = []
+                for row in dep_rows[:limit]:
+                    src_crate = row.get("src_crate")
+                    dep_crate = row.get("dep_crate")
+                    if not src_crate or not dep_crate:
+                        continue
+                    relation = f"{src_crate} -> {dep_crate}"
+                    src_manifest = row.get("src_manifest")
+                    dep_manifest = row.get("dep_manifest")
+                    detail_bits = []
+                    if src_manifest:
+                        detail_bits.append(src_manifest)
+                    if dep_manifest:
+                        detail_bits.append(dep_manifest)
+                    detail = f" ({' -> '.join(detail_bits)})" if detail_bits else ""
+                    rendered.append({"crate": src_crate, "line": relation + detail})
+                if rendered:
+                    return "\n".join(
+                        ["### Heuristic Flow (Cargo crate dependencies)\n"]
+                        + _group_by_crate(rendered, item_key="crate", line_builder=lambda row: row["line"])
+                    )
         return "No heuristic paths found."
 
     rows = []
@@ -188,6 +249,9 @@ async def get_topology_summary_impl(
                 "line": f"`{rec['fp']}`{crate_part}: {rec['inbound']} incoming, {rec['outbound']} outgoing imports",
             }
         )
+    non_test = [row for row in rendered if not _is_test_like_path(row["line"])]
+    test_like = [row for row in rendered if _is_test_like_path(row["line"])]
+    rendered = non_test + test_like
     if any(row.get("crate") for row in rendered):
         output.extend(_group_by_crate(rendered, item_key="crate", line_builder=lambda row: row["line"]))
     else:
