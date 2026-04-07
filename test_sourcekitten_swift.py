@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import types
 import unittest
 from unittest import mock
 
@@ -20,46 +21,22 @@ class SourceKittenSwiftTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
 
-    def test_base_name_strips_signature(self):
-        self.assertEqual(self.module._base_name("moveSelectedReferenceUp()"), "moveSelectedReferenceUp")
-        self.assertEqual(self.module._base_name("SidebarView"), "SidebarView")
-
-    def test_match_symbol_record_prefers_line_overlap(self):
-        record = {
-            "filepath": "Views/Foo.swift",
-            "name": "body",
-            "base_name": "body",
-            "kind": "source.lang.swift.decl.var.instance",
-            "start_line": 10,
-            "end_line": 12,
-            "usr": None,
-            "doc_comment": None,
-            "inherited_types": [],
-        }
-        match = self.module._match_symbol_record(
-            record,
-            [
-                {"sid": "a", "name": "body", "start_line": 3, "end_line": 4},
-                {"sid": "b", "name": "body", "start_line": 10, "end_line": 12},
-            ],
+    def test_enrich_swift_graph_delegates_to_ts_pack_binding(self):
+        fake_ts_pack = types.SimpleNamespace(
+            enrich_swift_graph=mock.Mock(return_value={"enabled": True, "files": 2, "symbols": 7})
         )
-        self.assertEqual(match["sid"], "b")
-
-    def test_enrich_swift_graph_fail_opens_when_parser_extractor_returns_empty(self):
-        fake_ts_pack = mock.Mock()
-        fake_ts_pack.extract_swift_semantic_facts.return_value = {}
-        with mock.patch.object(self.module, "_load_ts_pack", return_value=fake_ts_pack):
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
             result = self.module.enrich_swift_graph(
                 project_path="/tmp/project",
                 project_id="pid",
-                indexed_files=[],
+                indexed_files=["/tmp/project/Foo.swift"],
                 neo4j_uri="bolt://localhost:7687",
                 neo4j_user="neo4j",
                 neo4j_pass="password",
+                neo4j_db="proxy",
             )
-        self.assertEqual(result["enabled"], self.module._enabled())
-        if self.module._enabled():
-            self.assertFalse(result["available"])
+        self.assertEqual(result["symbols"], 7)
+        fake_ts_pack.enrich_swift_graph.assert_called_once()
 
 
 if __name__ == "__main__":

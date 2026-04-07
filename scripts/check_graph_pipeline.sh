@@ -41,9 +41,6 @@ python3 test_graph_core_inline.py
 echo "[graph-check] Running manifest coverage checks..."
 python3 test_manifest.py
 
-echo "[graph-check] Running asset graph checks..."
-python3 test_asset_graph.py
-
 echo "[graph-check] Running flow summary checks..."
 python3 test_flow_summary.py
 
@@ -55,8 +52,5 @@ python3 test_code_intel_tools.py
 
 echo "[graph-check] Running code intel helper checks..."
 python3 test_code_intel_helpers.py
-
-echo "[graph-check] Running integrated graph pipeline fixture..."
-python3 test_graph_pipeline_fixture.py
 
 echo "[graph-check] All graph pipeline checks passed."

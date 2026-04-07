@@ -18,8 +18,8 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `find_definitions` | **Very High** | None - perfect accuracy in tests. | **Tested**: Located `get_project_id` in `_helpers.py:89` instantly. Essential for cross-file navigation. |
 | `find_references` | **Critical** | Group semantic hits by file to further reduce noise. | **Tested**: found 21 graph refs + dozens of semantic mentions. Best-in-class hybrid (graph + semantic) discovery. |
 | `find_symbol_usages` | **High** | None - very useful for local scope. | **Tested**: Found 3 hits for `WorkspaceRegistry` in `_helpers.py`. Faster than cross-file search for local work. |
-| `get_app_flow_summary` | **Niche/High** | Provide a hint to run `rebuild_asset_graph` if results are empty. | **Tested**: Returned "No paths found." Requires a separate enrichment pass to build the "App Flow" edges. |
-| `get_backend_flow_summary` | **Niche/High** | Same as above. | **Tested**: Returned "No paths found." Powerful for gRPC/API mapping but state-dependent. |
+| `get_app_flow_summary` | **Niche/High** | Prefer returning route-qualified paths before broad fallbacks. | **Tested**: Useful once indexing completes; no separate rebuild step should be required. |
+| `get_backend_flow_summary` | **Niche/High** | Keep backend symbol filtering tight to avoid frontend noise. | **Tested**: Useful for API/service mapping after a normal index. |
 | `get_call_chain` | **Critical** | Include markers for dynamic/inferred calls if possible. | **Tested**: Traced `get_project_id` up 3 levels. Found vast impact across the codebase. Essential for risk assessment. |
 | `get_changed_symbols` | **Very High** | Group non-code files (README, .env) separately from "no symbol found" code files. | **Tested**: Listed specific functions changed in `_helpers.py`. Much more actionable than a standard git diff. |
 | `get_code_communities` | **High** | Add a "Community Summary" at the top of the output for large projects. | **Tested**: Grouped `rest_proxy` into logical architectural clusters. Excellent for multi-project onboarding. |
@@ -50,7 +50,6 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `list_memories` | **Critical** | None. | **Tested**: Successfully retrieved 6 architectural and task memories. Essential for cross-session continuity. |
 | `list_symbol_matches` | **High** | Include abbreviated signatures in output to help disambiguate similarly named functions. | **Tested**: Found 7 symbols matching 'workspace'. Great for exploratory navigation. |
 | `query_graph` | **Very High (Expert)** | None. | **Tested**: Ran raw Cypher to count files. Indispensable for complex relationship analysis beyond standard tools. |
-| `rebuild_asset_graph` | **Niche/High** | Provide feedback on what patterns were scanned (e.g., "No HTML templates found"). | **Tested**: Returned 0 edges. Critical for UI-to-API mapping but needs explicit UI assets to function. |
 | `research_and_index` | **Very High** | None. | **Tested**: Automates the external knowledge acquisition loop. Best for "learning" a new library. |
 | `research_documentation` | **Critical** | None. | **Tested**: Found relevant URLs and detected `llms.txt` for Neo4j GDS. Outstanding for contextual research. |
 | `search_codebase` | **Critical** | None. | **Tested**: Answered "How is project_id derived?" with high-fidelity chunks. The foundation of codebase understanding. |

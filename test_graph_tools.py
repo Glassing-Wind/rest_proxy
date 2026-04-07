@@ -99,7 +99,6 @@ def load_tools_module():
         return []
 
     graph_core_mod._execute_read = _execute_read
-    graph_core_mod._build_asset_graph_impl = mock.AsyncMock(return_value="ok")
     graph_core_mod._get_cli_flow_summary = mock.AsyncMock(return_value="No CLI flows found.")
     graph_core_mod._summarize_batches = lambda *args, **kwargs: (0, 0, 0)
     graph_core_mod.get_last_graph_build_metric = lambda: None
@@ -108,10 +107,6 @@ def load_tools_module():
     flow_summary_mod.get_app_flow_summary_impl = mock.AsyncMock(return_value="No UI → API → Service → DB paths found.")
     flow_summary_mod.get_backend_flow_summary_impl = mock.AsyncMock(return_value="No API → Service → DB paths found.")
     flow_summary_mod.get_apple_build_summary_impl = mock.AsyncMock(return_value="No Apple build graph paths found.")
-
-    runtime_mod = types.ModuleType("tools.brain.graph.runtime")
-    runtime_mod.record_metric = lambda *args, **kwargs: None
-    runtime_mod.get_recent_metrics = lambda *args, **kwargs: []
 
     graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
 
@@ -142,7 +137,6 @@ def load_tools_module():
             "tools.brain.graph.core": graph_core_mod,
             "tools.brain.graph.flow_summary": flow_summary_mod,
             "tools.brain.graph.utility": utility_module,
-            "tools.brain.graph.runtime": runtime_mod,
         },
     ):
         overview_spec.loader.exec_module(overview_module)

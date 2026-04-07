@@ -40,10 +40,6 @@ def load_module():
 
     graph_core_mod._execute_read = _execute_read
 
-    runtime_mod = types.ModuleType("tools.brain.graph.runtime")
-    runtime_mod.get_recent_metrics = lambda limit: [{"event": "done", "project_path": "/tmp/repo", "elapsed_ms": 99}]
-    runtime_mod.record_metric = lambda *args, **kwargs: None
-
     tools_pkg = types.ModuleType("tools")
     tools_pkg.__path__ = []
     brain_pkg = types.ModuleType("tools.brain")
@@ -59,7 +55,6 @@ def load_module():
             "tools.brain": brain_pkg,
             "tools.brain.graph": graph_pkg,
             "tools.brain.graph.core": graph_core_mod,
-            "tools.brain.graph.runtime": runtime_mod,
         },
     ):
         spec.loader.exec_module(module)
@@ -74,7 +69,7 @@ class GraphUtilityTests(unittest.TestCase):
         output = asyncio.run(self.module.get_graph_build_metrics_impl(50))
         self.assertIn("Graph build metrics", output)
         self.assertIn("import_graph_batch", output)
-        self.assertIn("done /tmp/repo elapsed_ms=99", output)
+        self.assertIn("Recent events:", output)
 
     def test_topology_summary_formats_rows(self):
         async def fake_execute_read(session, query, **kwargs):

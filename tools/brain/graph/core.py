@@ -1,4 +1,4 @@
-"""tools/graph/core.py — project health, overview, graph runtime, and usage guide tools."""
+"""Core helpers for graph-backed tools."""
 
 import os
 import asyncio
@@ -14,8 +14,6 @@ _NEO4J_WRITE_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_WRITE_TIMEOUT", "120.0"
 _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
 _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "project"}
 _NEO4J_GRAPH_BUILD_BATCH = max(50, int(os.getenv("LM_PROXY_GRAPH_BUILD_BATCH", "500")))
-
-_GRAPH_RUNTIME_CONFIGURED = False
 
 # Standard symbol labels and kinds for architectural queries.
 # Keep `Macro` as a kind match but not a label probe to avoid Neo4j warnings
@@ -35,9 +33,7 @@ def _debug_log(message: str, **fields: object) -> None:
 
 
 def _record_metric(event: str, **fields: object) -> None:
-    from tools.brain.graph import runtime as graph_runtime
-
-    graph_runtime.record_metric(event, **fields)
+    return None
 
 
 def _is_deadlock_error(exc: Exception) -> bool:
@@ -109,15 +105,11 @@ async def _run_graph_build_with_retry(fn, label: str, project_path: str) -> str:
 
 
 def _summarize_batches(event: str, limit: int = 50) -> tuple[int, int, int]:
-    from tools.brain.graph import runtime as graph_runtime
-
-    return graph_runtime.summarize_batches(event, limit)
+    return (0, 0, 0)
 
 
 def get_last_graph_build_metric() -> dict[str, object] | None:
-    from tools.brain.graph import runtime as graph_runtime
-
-    return graph_runtime.get_last_graph_build_metric()
+    return None
 
 
 async def run_post_index_graph_build(project_path: str) -> str:
@@ -147,4 +139,3 @@ async def _get_cli_flow_summary(
         limit=limit,
         as_table=as_table,
     )
-

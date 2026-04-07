@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import os
-import time
 
 from _helpers import get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
-from tools.brain.graph import runtime as graph_runtime
 
 
 async def get_graph_build_metrics_impl(limit: int = 50) -> str:
@@ -16,7 +14,7 @@ async def get_graph_build_metrics_impl(limit: int = 50) -> str:
     si_count, si_avg, si_max = graph_core._summarize_batches("symbol_import_batch", limit)
     se_count, se_avg, se_max = graph_core._summarize_batches("symbol_export_batch", limit)
     last_build = graph_core.get_last_graph_build_metric()
-    recent = graph_runtime.get_recent_metrics(10)
+    recent: list[dict[str, object]] = []
 
     lines = ["# Graph build metrics"]
     if last_build:
@@ -73,23 +71,6 @@ async def get_language_pack_status_impl() -> str:
     else:
         lines.append("Missing languages: none")
     return "\n".join(lines)
-
-
-async def rebuild_subgraph_impl(fn, label: str, workspace_id: str) -> str:
-    project_path = get_workspace_path(workspace_id)
-    start_time = time.time()
-
-    graph_runtime.record_metric(f"rebuild_{label}_start", project_path=project_path)
-    try:
-        result = await fn(project_path)
-        elapsed = (time.time() - start_time) * 1000
-        graph_runtime.record_metric(
-            f"rebuild_{label}_done", project_path=project_path, elapsed_ms=elapsed
-        )
-        return result
-    except Exception as exc:
-        return f"Error rebuilding {label} graph: {str(exc)}"
-
 
 async def get_heuristic_flow_summary_impl(
     *,
