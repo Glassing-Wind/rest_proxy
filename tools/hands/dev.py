@@ -413,7 +413,11 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def swift_doc_lookup(workspace_id: str, file_path: str, symbol_name: str) -> str:
         """
-        Extract documentation comments for a Swift symbol using SourceKitten.
+        Extract documentation comments for a Swift symbol.
+
+        Prefers graph-enriched Swift metadata from indexing (`swift_doc_comment`,
+        `swift_usr`, kind, span) and falls back to SourceKitten structure lookup
+        when the graph does not have a matching symbol yet.
 
         Args:
             workspace_id: The logical workspace ID or absolute path to the project root.
@@ -426,11 +430,73 @@ def register(mcp: FastMCP) -> None:
         import sys
 
         project_path = get_workspace_path(workspace_id)
+        project_id = get_project_id(workspace_id)
+        neo4j_file_path = normalize_neo4j_path(file_path)
         if not os.path.isabs(file_path):
             file_path = os.path.join(project_path, file_path)
 
         if not os.path.exists(file_path):
             return f"File not found: {file_path}"
+
+        try:
+            import graph_bootstrap
+
+            driver = await graph_bootstrap.require_driver()
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                rows = await _execute_read(
+                    session,
+                    """
+                    MATCH (s:Symbol {project_id: $pid})
+                    WHERE s.filepath ENDS WITH $fp
+                      AND (
+                        s.name = $name
+                        OR s.name STARTS WITH ($name + "(")
+                        OR s.qualified_name = $name
+                        OR (s.qualified_name IS NOT NULL AND s.qualified_name ENDS WITH ("." + $name))
+                        OR (s.qualified_name IS NOT NULL AND s.qualified_name CONTAINS ("." + $name + "("))
+                      )
+                    RETURN s.name AS name,
+                           s.kind AS kind,
+                           s.start_line AS start_line,
+                           s.end_line AS end_line,
+                           s.swift_doc_comment AS swift_doc_comment,
+                           s.doc_comment AS doc_comment,
+                           s.swift_usr AS swift_usr
+                    ORDER BY
+                      CASE
+                        WHEN s.name = $name THEN 0
+                        WHEN s.name STARTS WITH ($name + "(") THEN 1
+                        WHEN s.qualified_name = $name THEN 2
+                        WHEN s.qualified_name IS NOT NULL AND s.qualified_name ENDS WITH ("." + $name) THEN 3
+                        ELSE 4
+                      END ASC,
+                      s.start_line ASC
+                    LIMIT 1
+                    """,
+                    pid=project_id,
+                    fp=neo4j_file_path,
+                    name=symbol_name,
+                    op="swift_doc_lookup_graph",
+                )
+            if rows:
+                rec = rows[0]
+                kind = (rec.get("kind") or "?").split(".")[-1]
+                start_line = rec.get("start_line") or "?"
+                end_line = rec.get("end_line") or start_line
+                resolved_name = rec.get("name") or symbol_name
+                lines = [
+                    f"**{resolved_name}** ({kind})",
+                    f"File: `{file_path}`  L{start_line}–{end_line}",
+                ]
+                usr = rec.get("swift_usr")
+                if usr:
+                    lines += ["", f"USR: `{usr}`"]
+                doc = (rec.get("swift_doc_comment") or rec.get("doc_comment") or "").strip()
+                if doc:
+                    lines += ["", doc]
+                return "\n".join(lines)
+        except Exception:
+            pass
 
         # Prefer SourceKitten — gives full AST including doc_comment fields
         sk = shutil.which("sourcekitten") or os.path.join(
