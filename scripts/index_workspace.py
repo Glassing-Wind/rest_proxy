@@ -228,57 +228,6 @@ def _should_skip_diagnostic_file(file_meta: dict) -> bool:
     return file_meta.get("file_diagnostics", {}).get("count", 0) > 0
 
 
-def _build_semantic_payload(ts_pack, source: str, lang: str, rel_path: str, project_id: str) -> dict:
-    if hasattr(ts_pack, "build_semantic_payload"):
-        return ts_pack.build_semantic_payload(
-            source,
-            lang,
-            rel_path,
-            project_id,
-            chunk_id_version=CHUNK_ID_VERSION,
-            chunk_max_size=CHUNK_MAX_BYTES,
-            chunk_overlap=CHUNK_OVERLAP_BYTES,
-        )
-    raise RuntimeError("ts_pack.build_semantic_payload is required")
-
-
-def _build_swift_chunks(ts_pack, source: str, rel_path: str, project_id: str, file_meta: dict) -> List[Dict]:
-    if hasattr(ts_pack, "build_swift_chunks"):
-        return ts_pack.build_swift_chunks(
-            source,
-            rel_path,
-            project_id,
-            file_meta=file_meta,
-            chunk_id_version=CHUNK_ID_VERSION,
-            chunk_max_size=CHUNK_MAX_BYTES,
-            chunk_lines=CHUNK_LINES,
-            overlap_lines=OVERLAP_LINES,
-        )
-    raise RuntimeError("ts_pack.build_swift_chunks is required")
-
-
-def _build_line_window_chunks(
-    ts_pack,
-    source: str,
-    rel_path: str,
-    project_id: str,
-    language: str | None,
-    file_meta: dict,
-) -> List[Dict]:
-    if hasattr(ts_pack, "build_line_window_chunks"):
-        return ts_pack.build_line_window_chunks(
-            source,
-            rel_path,
-            project_id,
-            language=language,
-            file_meta=file_meta,
-            chunk_id_version=CHUNK_ID_VERSION,
-            chunk_lines=CHUNK_LINES,
-            overlap_lines=OVERLAP_LINES,
-        )
-    raise RuntimeError("ts_pack.build_line_window_chunks is required")
-
-
 def _read_and_chunk(
     abs_path: str, rel_path: str, project_id: str
 ) -> Tuple[List[Dict], str | None]:
@@ -365,14 +314,31 @@ def _read_and_chunk(
     # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
     if lang == "swift":
         try:
-            payload = _build_semantic_payload(ts_pack, source, "swift", rel_path, project_id)
+            payload = ts_pack.build_semantic_payload(
+                source,
+                "swift",
+                rel_path,
+                project_id,
+                chunk_id_version=CHUNK_ID_VERSION,
+                chunk_max_size=CHUNK_MAX_BYTES,
+                chunk_overlap=CHUNK_OVERLAP_BYTES,
+            )
             file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"
         except Exception:
             file_meta = {}
 
-        swift_chunks = _build_swift_chunks(ts_pack, source, rel_path, project_id, file_meta)
+        swift_chunks = ts_pack.build_swift_chunks(
+            source,
+            rel_path,
+            project_id,
+            file_meta=file_meta,
+            chunk_id_version=CHUNK_ID_VERSION,
+            chunk_max_size=CHUNK_MAX_BYTES,
+            chunk_lines=CHUNK_LINES,
+            overlap_lines=OVERLAP_LINES,
+        )
         if swift_chunks:
             return swift_chunks, None
         # fall through to ts_pack / line-window if structure[] was empty
@@ -380,7 +346,15 @@ def _read_and_chunk(
     # ── Native ts_pack chunking ───────────────────────────────────────────────
     if lang and lang != "swift":
         try:
-            payload = _build_semantic_payload(ts_pack, source, lang, rel_path, project_id)
+            payload = ts_pack.build_semantic_payload(
+                source,
+                lang,
+                rel_path,
+                project_id,
+                chunk_id_version=CHUNK_ID_VERSION,
+                chunk_max_size=CHUNK_MAX_BYTES,
+                chunk_overlap=CHUNK_OVERLAP_BYTES,
+            )
             file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"
@@ -390,7 +364,16 @@ def _read_and_chunk(
 
     # ── Line-window fallback (unsupported lang or empty result) ──────────────
     if not chunks:
-        chunks = _build_line_window_chunks(ts_pack, source, rel_path, project_id, lang, file_meta)
+        chunks = ts_pack.build_line_window_chunks(
+            source,
+            rel_path,
+            project_id,
+            language=lang,
+            file_meta=file_meta,
+            chunk_id_version=CHUNK_ID_VERSION,
+            chunk_lines=CHUNK_LINES,
+            overlap_lines=OVERLAP_LINES,
+        )
 
     return chunks, None
 
@@ -429,59 +412,6 @@ async def _write_buffer(
         project_id=project_id,
         batch=buffer,
         project_path=target_dir,
-    )
-
-
-async def _execute_semantic_index_driver(
-    conn,
-    ts_pack,
-    manifest_paths: List[str],
-    all_chunks: List[List[Dict]],
-    *,
-    rebuild: bool,
-    batch_size: int,
-    concurrency: int,
-    embedding_svc,
-    target_dir: str,
-    project_id: str,
-) -> dict:
-    if not hasattr(ts_pack, "execute_semantic_index_driver"):
-        raise RuntimeError("ts_pack.execute_semantic_index_driver is required")
-
-    async def _embed(batch):
-        return await _embed_buffer(batch, embedding_svc)
-
-    async def _write(batch):
-        return await _write_buffer(batch, target_dir, project_id)
-
-    async def _progress(event: dict) -> None:
-        phase = event.get("phase")
-        if phase == "embed_start":
-            print(
-                f"[lm-proxy:indexer] Embedding round {event['round_index'] + 1}/{event['rounds']} "
-                f"— {event['batch_count']} concurrent batches — "
-                f"{event['written_so_far'] + event['group_size']}/{event['total_new']} chunks…",
-                file=sys.stderr,
-                flush=True,
-            )
-        elif phase == "round_done":
-            print(
-                f"[lm-proxy:indexer]   wrote {event.get('round_written', 0)} chunks",
-                file=sys.stderr,
-                flush=True,
-            )
-
-    return await ts_pack.execute_semantic_index_driver(
-        conn,
-        project_id,
-        manifest_paths,
-        all_chunks,
-        rebuild=rebuild,
-        batch_size=batch_size,
-        concurrency=concurrency,
-        embed_batch_fn=_embed,
-        write_batch_fn=_write,
-        progress_fn=_progress,
     )
 
 
@@ -611,17 +541,41 @@ async def index_project(
     try:
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
             from embedding_service import _CONCURRENCY as CONCURRENCY
-            index_result = await _execute_semantic_index_driver(
+
+            async def _embed(batch):
+                return await _embed_buffer(batch, embedding_svc)
+
+            async def _write(batch):
+                return await _write_buffer(batch, target_dir, project_id)
+
+            async def _progress(event: dict) -> None:
+                phase = event.get("phase")
+                if phase == "embed_start":
+                    print(
+                        f"[lm-proxy:indexer] Embedding round {event['round_index'] + 1}/{event['rounds']} "
+                        f"— {event['batch_count']} concurrent batches — "
+                        f"{event['written_so_far'] + event['group_size']}/{event['total_new']} chunks…",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                elif phase == "round_done":
+                    print(
+                        f"[lm-proxy:indexer]   wrote {event.get('round_written', 0)} chunks",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+
+            index_result = await ts_pack.execute_semantic_index_driver(
                 conn,
-                ts_pack,
+                project_id,
                 manifest_paths,
                 all_chunks,
                 rebuild=rebuild,
                 batch_size=bs,
                 concurrency=CONCURRENCY,
-                embedding_svc=embedding_svc,
-                target_dir=target_dir,
-                project_id=project_id,
+                embed_batch_fn=_embed,
+                write_batch_fn=_write,
+                progress_fn=_progress,
             )
     except Exception as exc:
         print(

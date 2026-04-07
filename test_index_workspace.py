@@ -362,10 +362,19 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.module = load_index_workspace_module()
         self.module._TS_PACK_INIT_DONE = True
 
-    def test_build_semantic_payload_forwards_chunking_config(self):
+    def test_read_and_chunk_forwards_semantic_payload_config(self):
         captured = {}
 
         class _BuildTsPack:
+            def detect_language_from_extension(self, ext):
+                return "typescript" if ext == "ts" else None
+
+            def detect_language(self, path):
+                return "typescript"
+
+            def has_language(self, language):
+                return True
+
             def build_semantic_payload(
                 self,
                 source,
@@ -388,17 +397,30 @@ class IndexWorkspaceTests(unittest.TestCase):
                         "chunk_overlap": chunk_overlap,
                     }
                 )
-                return {"file_meta": {"file_symbols": ["Widget"]}, "chunks": []}
+                return {
+                    "file_meta": {"file_symbols": ["Widget"]},
+                    "chunks": [
+                        {
+                            "ref_id": "proj123:v6:src/index.ts:abc123",
+                            "text": "// File: src/index.ts\nconst x = 1;",
+                            "metadata": {"file": "src/index.ts"},
+                        }
+                    ],
+                }
 
-        payload = self.module._build_semantic_payload(
-            _BuildTsPack(),
-            "const x = 1;",
-            "typescript",
-            "src/index.ts",
-            "proj123",
-        )
+        fake_ts_pack = _BuildTsPack()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "index.ts"
+            abs_path.write_text("const x = 1;", encoding="utf-8")
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                chunks, reason = self.module._read_and_chunk(
+                    str(abs_path),
+                    "src/index.ts",
+                    "proj123",
+                )
 
-        self.assertEqual(payload["file_meta"]["file_symbols"], ["Widget"])
+        self.assertIsNone(reason)
+        self.assertEqual(len(chunks), 1)
         self.assertEqual(captured["source"], "const x = 1;")
         self.assertEqual(captured["language"], "typescript")
         self.assertEqual(captured["file_path"], "src/index.ts")
@@ -407,7 +429,7 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(captured["chunk_max_size"], self.module.CHUNK_MAX_BYTES)
         self.assertEqual(captured["chunk_overlap"], self.module.CHUNK_OVERLAP_BYTES)
 
-    def test_execute_semantic_index_driver_delegates_to_package(self):
+    def test_index_project_delegates_to_package_driver(self):
         payload = {
             "new_chunks": [{"ref_id": "chunk-1", "text": "hello"}],
             "skipped_chunks": 1,
@@ -420,42 +442,58 @@ class IndexWorkspaceTests(unittest.TestCase):
         }
         fake_ts_pack = FakeTsPack(sync_plan=payload, rounds_result={"written": 3, "rounds": 2})
 
-        async def _run():
-            svc = types.SimpleNamespace()
-            result = await self.module._execute_semantic_index_driver(
-                object(),
-                fake_ts_pack,
-                ["src/a.ts"],
-                [[{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}, "text": "hello"}]],
-                rebuild=True,
-                batch_size=2,
-                concurrency=2,
-                embedding_svc=svc,
-                target_dir="/tmp/project",
-                project_id="proj123",
-            )
-            return result
+        manifest = [{"abs_path": "/tmp/src/a.ts", "rel_path": "src/a.ts"}]
 
-        with mock.patch.object(
-            self.module,
-            "_embed_buffer",
-            side_effect=AssertionError("should not call local embed loop"),
-        ):
-            with mock.patch.object(
-                self.module,
-                "_write_buffer",
-                side_effect=AssertionError("should not call local write loop"),
-            ):
-                result = asyncio.run(_run())
+        class _PoolConnection:
+            async def __aenter__(self):
+                return object()
 
-        self.assertEqual(
-            result,
-            {
-                **payload,
-                "written": 3,
-                "rounds": 2,
-            },
-        )
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        class _Pool:
+            def connection(self):
+                return _PoolConnection()
+
+        self.module.memory_store._pg_pool_available = lambda: True
+        self.module.memory_store._pg_pool = _Pool()
+
+        async def _bootstrap():
+            return None
+
+        async def _open_pool():
+            return None
+
+        self.module.memory_bootstrap.bootstrap_schema = _bootstrap
+        self.module.memory_store.open_pool = _open_pool
+
+        svc = types.SimpleNamespace(effective_batch_size=2, _device="cpu")
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+            with mock.patch.object(self.module, "_preflight_ts_pack", return_value=None):
+                with mock.patch.object(
+                    self.module,
+                    "chunk_file",
+                    return_value=(
+                        [{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}, "text": "hello"}],
+                        None,
+                    ),
+                ):
+                    with mock.patch.object(
+                        self.module,
+                        "get_embedding_service",
+                        return_value=svc,
+                    ):
+                        result = asyncio.run(
+                            self.module.index_project(
+                                "/tmp/project",
+                                "proj123",
+                                manifest,
+                                rebuild=True,
+                                cleanup_only=False,
+                            )
+                        )
+
+        self.assertEqual(result, 3)
 
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
