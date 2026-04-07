@@ -44,6 +44,9 @@ python3 test_graph_tools.py
 echo "[graph-check] Running code intel graph tool checks..."
 python3 test_code_intel_tools.py
 
+echo "[graph-check] Running code intel helper checks..."
+python3 test_code_intel_helpers.py
+
 echo "[graph-check] Running integrated graph pipeline fixture..."
 python3 test_graph_pipeline_fixture.py
 

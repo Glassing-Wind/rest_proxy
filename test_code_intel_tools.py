@@ -8,6 +8,8 @@ from unittest import mock
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/core.py"
 HELPER_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/symbol_graph.py"
+FILE_DESCRIBE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/file_describe.py"
+REFERENCES_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/references.py"
 
 
 class FakeMCP:
@@ -59,6 +61,18 @@ def load_code_intel_module():
     helper_module = importlib.util.module_from_spec(helper_spec)
     assert helper_spec.loader is not None
 
+    file_describe_spec = importlib.util.spec_from_file_location(
+        "tools.brain.code_intel.file_describe", FILE_DESCRIBE_PATH
+    )
+    file_describe_module = importlib.util.module_from_spec(file_describe_spec)
+    assert file_describe_spec.loader is not None
+
+    references_spec = importlib.util.spec_from_file_location(
+        "tools.brain.code_intel.references", REFERENCES_PATH
+    )
+    references_module = importlib.util.module_from_spec(references_spec)
+    assert references_spec.loader is not None
+
     spec = importlib.util.spec_from_file_location("tools.brain.code_intel.core", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -101,9 +115,13 @@ def load_code_intel_module():
             "tools.brain": brain_pkg,
             "tools.brain.code_intel": code_intel_pkg,
             "tools.brain.code_intel.symbol_graph": helper_module,
+            "tools.brain.code_intel.file_describe": file_describe_module,
+            "tools.brain.code_intel.references": references_module,
         },
     ):
         helper_spec.loader.exec_module(helper_module)
+        file_describe_spec.loader.exec_module(file_describe_module)
+        references_spec.loader.exec_module(references_module)
         spec.loader.exec_module(module)
     return module
 

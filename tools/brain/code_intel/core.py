@@ -7,6 +7,8 @@ from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules, get_project_id
 from proxy.logging import debug_log
 from ts_diagnostics import normalize_ts_pack_result
+from tools.brain.code_intel import file_describe
+from tools.brain.code_intel import references
 from tools.brain.code_intel import symbol_graph
 
 
@@ -701,7 +703,7 @@ def register(mcp: FastMCP) -> None:
             workspace_id:  Logical workspace name or absolute project path (or list).
             symbol_name:  Exact name of the symbol to find references for.
         """
-        return await find_references_impl(workspace_id, symbol_name)
+        return await references.find_references_impl(workspace_id, symbol_name)
 
     @mcp.tool()
     async def describe_file(project_path: str, file_path: str) -> str:
@@ -722,140 +724,11 @@ def register(mcp: FastMCP) -> None:
             project_path: Absolute path to project root, or "" for abs-path-only mode.
             file_path:    Relative path within project, or absolute path when project_path="".
         """
-        import os as _os
-
-        # Resolve absolute path
-        if not project_path:
-            abs_path = _os.path.abspath(file_path)
-            file_path = abs_path  # use abs for display too
-        else:
-            abs_path = (
-                _os.path.join(project_path, file_path)
-                if not _os.path.isabs(file_path)
-                else file_path
-            )
-
-        basename = _os.path.basename(abs_path)
-        lines = [f"=== {file_path} ==="]
-
-        # ── 1. ts-pack on-disk AST (works even for unindexed files) ──────────
-        ts_symbols: list[str] = []
-        try:
-            import tree_sitter_language_pack as ts_pack
-
-            if _os.path.exists(abs_path):
-                with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
-                    code = fh.read()
-                lang = ts_pack.detect_language(abs_path)
-                if lang:
-                    cfg = ts_pack.ProcessConfig(lang)
-                    cfg.diagnostics = True
-                    result = normalize_ts_pack_result(
-                        code, lang, ts_pack.process(code, config=cfg)
-                    )
-                    error_count = (result.get("metrics") or {}).get("error_count", 0)
-                    lang_label = f"  [{lang}]"
-                    if error_count:
-                        lang_label += f"  ⚠ {error_count} syntax error(s)"
-                    lines.append(lang_label)
-
-                    def _fmt(items: list, depth: int = 0) -> None:
-                        pad = "  " * depth
-                        for item in items:
-                            name = item.get("name") or "?"
-                            kind = item.get("kind") or ""
-                            sig = item.get("signature") or ""
-                            span = item.get("span") or {}
-                            sl = (span.get("start_line") or 0) + 1
-                            el = (span.get("end_line") or 0) + 1
-                            loc = f"  L{sl}–{el}" if sl else ""
-                            label = sig if sig else f"{kind} {name}"
-                            ts_symbols.append(f"{pad}  {label}{loc}")
-                            _fmt(item.get("children") or [], depth + 1)
-
-                    _fmt(result.get("structure") or [])
-        except Exception:
-            pass
-
-        # ── 2. Neo4j symbols (richer — includes signatures) ───────────────────
-        # Skip if no project context
-        use_syms = ts_symbols
-        if project_path:
-            try:
-                from _helpers import get_project_id, normalize_neo4j_path
-                project_id = get_project_id(project_path)
-                rel_path = (
-                    _os.path.relpath(abs_path, project_path)
-                    if project_path
-                    else file_path
-                )
-                rel_path = normalize_neo4j_path(rel_path)
-                file_id = f"{project_id}:file:{rel_path}"
-                import graph_bootstrap
-
-                driver = await graph_bootstrap.require_driver()
-                sym_cypher = """
-                MATCH (f:File {id: $fid})-[:CONTAINS]->(s)
-                WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Module
-                RETURN labels(s)[0] AS kind, s.name AS name,
-                       s.start_line AS start, s.end_line AS end,
-                       s.signature AS sig
-                ORDER BY s.start_line
-                """
-                neo_symbols: list[str] = []
-                async with driver.session(
-                    database=graph_bootstrap._NEO4J_DB
-                ) as session:
-                    records = await _execute_read(
-                        session,
-                        session,
-                        sym_cypher,
-                        fid=file_id,
-                        op="describe_file_symbols",
-                    )
-                    for rec in records:
-                        loc = f":{rec['start']}-{rec['end']}" if rec["start"] else ""
-                        sig = f"  →  {rec['sig']}" if rec["sig"] else ""
-                        neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
-                use_syms = neo_symbols or ts_symbols
-            except Exception:
-                use_syms = ts_symbols
-
-        if use_syms:
-            preview_count = min(10, len(use_syms))
-            lines.append(f"Top symbols ({preview_count} of {len(use_syms)}):")
-            lines.extend(use_syms[:preview_count])
-            if len(use_syms) > preview_count:
-                lines.append(f"More symbols available: {len(use_syms) - preview_count}")
-                lines.append(f"Symbols (up to 40):")
-                lines.extend(use_syms[:40])
-        else:
-            lines.append("No symbols found.")
-
-        # ── 3. Postgres semantic preview (only in full mode) ──────────────────
-        if project_path:
-            try:
-                project_id = get_project_id(project_path)
-                rel_path = _os.path.relpath(abs_path, project_path)
-                memory_store, _, _, _, _ = get_memory_modules()
-                await memory_store.open_pool()
-                async with memory_store._pg_pool.connection() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute(
-                            "SELECT content FROM codebase_embeddings "
-                            "WHERE project_id = %s AND file_path = %s "
-                            "ORDER BY chunk_index LIMIT 1",
-                            (project_id, rel_path),
-                        )
-                        row = await cur.fetchone()
-                    if row:
-                        lines.append(f"\nFirst chunk preview:\n{row[0][:500].rstrip()}")
-            except Exception:
-                pass
-
-        return "\n".join(lines)
-
-        return "\n".join(lines)
+        return await file_describe.describe_file_impl(
+            project_path=project_path,
+            file_path=file_path,
+            execute_read=_execute_read,
+        )
 
     @mcp.tool()
     async def visualize_subgraph(workspace_id: str, symbol_name: str) -> str:
@@ -900,133 +773,3 @@ def register(mcp: FastMCP) -> None:
             return rendered
         except Exception as e:
             return f"Error visualizing subgraph: {str(e)}"
-
-
-async def find_references_impl(workspace_id: str | list[str], symbol_name: str) -> str:
-    """Implementation of find_references shared by tool and test runner."""
-    import os
-    from _helpers import get_project_id
-
-    try:
-        if isinstance(workspace_id, str):
-            works = [workspace_id]
-        else:
-            works = workspace_id
-
-        pids = [get_project_id(w) for w in works]
-
-        import graph_bootstrap
-
-        _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
-        _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
-        _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "code_intel"}
-
-        async def _execute_read(
-            session,
-            cypher: str,
-            timeout: float | None = None,
-            op: str | None = None,
-            **params,
-        ):
-            metadata = dict(_TX_METADATA_BASE)
-            op_value = op or "read"
-            if _TX_OP_PREFIX:
-                op_value = f"{_TX_OP_PREFIX}.{op_value}"
-            metadata["op"] = op_value
-
-            @unit_of_work(timeout=timeout or _TX_TIMEOUT, metadata=metadata)
-            async def _tx(tx):
-                result = await tx.run(cypher, **params)
-                return await result.data()
-
-            if hasattr(session, "execute_read"):
-                return await session.execute_read(_tx)
-            return await _tx(session)
-
-        driver = await graph_bootstrap.require_driver()
-
-        # 1. Graph References (Neo4j)
-        graph_refs = []
-        graph_ref_keys: set[tuple[str, str | None]] = set()
-        async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-            records = await _execute_read(
-                session,
-                """
-                MATCH (target {name: $name})
-                WHERE target.project_id IN $pids
-                MATCH (caller:Node)-[:CALLS|CALLS_INFERRED]->(target)
-                MATCH (f:File)-[:CONTAINS]->(caller)
-                RETURN f.filepath AS fp, caller.start_line AS sl, caller.name AS cn, target.project_id AS tpid
-                UNION
-                MATCH (target {qualified_name: $name})
-                WHERE target.project_id IN $pids
-                MATCH (caller:Node)-[:CALLS|CALLS_INFERRED]->(target)
-                MATCH (f:File)-[:CONTAINS]->(caller)
-                RETURN f.filepath AS fp, caller.start_line AS sl, caller.name AS cn, target.project_id AS tpid
-                UNION
-                MATCH (target {name: $name})
-                WHERE target.project_id IN $pids
-                MATCH (f:File)-[:IMPORTS_SYMBOL]->(target)
-                RETURN f.filepath AS fp, null AS sl, f.name AS cn, target.project_id AS tpid
-                UNION
-                MATCH (f:File {project_id: $pid})-[:CONTAINS]->(imp:Import)
-                WHERE imp.source CONTAINS $name OR imp.source =~ $re
-                RETURN f.filepath AS fp, null AS sl, f.name AS cn, $pid AS tpid
-            """,
-                name=symbol_name,
-                pids=pids,
-                pid=pids[0] if pids else "",
-                re=f".*\\b{symbol_name}\\b.*",
-                op="find_references",
-            )
-            for rec in records:
-                line = rec.get("sl")
-                line_part = f":{line}" if line else ""
-                graph_refs.append(
-                    f"- {rec['fp']}{line_part} ({rec['cn']}) [Project: {rec['tpid']}]"
-                )
-                graph_ref_keys.add((rec["fp"], str(line) if line else None))
-
-        # 2. Semantic/Literal References (Postgres)
-        semantic_refs = []
-        memory_store, _, _, _, _ = get_memory_modules()
-        await memory_store.open_pool()
-        async with memory_store._pg_pool.connection() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    """
-                    SELECT file_path, metadata->>'start_line' as start_line, project_id, content
-                    FROM codebase_embeddings
-                    WHERE project_id = ANY(%s)
-                      AND (content ILIKE %s OR content ~ %s)
-                    LIMIT 30
-                """,
-                    (pids, f"%{symbol_name}%", f"\\b{symbol_name}\\b"),
-                )
-                async for row in cur:
-                    fp, sl, pid, text = row
-                    if (fp, str(sl) if sl else None) in graph_ref_keys:
-                        continue
-                    preview = text.strip().splitlines()[0][:80]
-                    semantic_refs.append(
-                        f"- {fp}:{sl} (semantic) [Project: {pid}]  >> {preview}..."
-                    )
-
-        res = []
-        if graph_refs:
-            res.append(
-                f"### Functional References (Graph)\n"
-                + "\n".join(sorted(list(set(graph_refs))))
-            )
-        if semantic_refs:
-            res.append(
-                f"### Mentions & Type Usages (Semantic)\n"
-                + "\n".join(sorted(list(set(semantic_refs))))
-            )
-
-        if not res:
-            return f"No references found for '{symbol_name}' in the specified projects."
-
-        return "\n\n".join(res)
-    except Exception as e:
-        return f"Error finding references: {str(e)}"
