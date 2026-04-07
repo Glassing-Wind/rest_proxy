@@ -56,7 +56,7 @@ def load_core_module():
 
 
 class GraphCoreInlineTests(unittest.TestCase):
-    def test_run_post_index_graph_build_runs_inline_phases(self):
+    def test_run_post_index_graph_build_runs_inline_asset_phase(self):
         module = load_core_module()
         events = []
 
@@ -69,37 +69,21 @@ class GraphCoreInlineTests(unittest.TestCase):
             events.append((label, "done", project_path))
             return result
 
-        async def fake_import(project_path):
-            return "imports ok"
-
-        async def fake_symbol(project_path):
-            return "symbols ok"
-
         async def fake_asset(project_path):
             return "assets ok"
 
         module._ensure_graph_runtime_configured = fake_ensure
         module._run_graph_build_with_retry = fake_retry
-        module._build_import_graph_impl = fake_import
-        module._build_symbol_import_export_graph_impl = fake_symbol
         module._build_asset_graph_impl = fake_asset
         module._debug_log = lambda *args, **kwargs: None
         module._record_metric = lambda *args, **kwargs: None
 
-        result = asyncio.run(
-            module.run_post_index_graph_build(
-                "/tmp/project", run_imports=True, run_symbols=True
-            )
-        )
+        result = asyncio.run(module.run_post_index_graph_build("/tmp/project"))
 
         self.assertEqual(result, "assets ok")
         self.assertEqual(
             events,
             [
-                ("imports", "start", "/tmp/project"),
-                ("imports", "done", "/tmp/project"),
-                ("symbols", "start", "/tmp/project"),
-                ("symbols", "done", "/tmp/project"),
                 ("assets", "start", "/tmp/project"),
                 ("assets", "done", "/tmp/project"),
             ],

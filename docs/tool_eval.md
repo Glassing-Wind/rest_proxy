@@ -7,7 +7,6 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | Tool | Usefulness | Improvements Needed | Pertinent Details |
 | :--- | :--- | :--- | :--- |
 | `add_memory` | **High** | Add support for tags/categories and importance levels for better organization. | **Tested**: Successfully added a memory and verified with `list_memories`. Persistent and reliable. |
-| `build_import_graph` | **High** | Expand language support (e.g., Swift). Automate triggering after full indexing. | **Tested**: Resolved 195 edges in `rest_proxy`. Essential for PageRank & community detection. |
 | `cancel_index_job` | **Medium** | Fix session ID drift between tool calls or provide a "force" override for admins. | **Tested**: Received "Access Denied" despite starting the job in the same conversation. Reveals strict session-locking. |
 | `delete_documentation` | **Medium** | Implement "delete by age" or "unused" filters. Link with usage metrics. | **Tested**: Safety check intercepted attempt with a hint. Excellent guardrail against accidental wipes. |
 | `describe_file` | **Very High** | Include an LLM-generated natural language summary in the output. | **Tested**: Correctly identified 5 symbols in `mcp_server.py`. Fails if file/path is ambiguous or parser lags. |
@@ -52,7 +51,6 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `list_symbol_matches` | **High** | Include abbreviated signatures in output to help disambiguate similarly named functions. | **Tested**: Found 7 symbols matching 'workspace'. Great for exploratory navigation. |
 | `query_graph` | **Very High (Expert)** | None. | **Tested**: Ran raw Cypher to count files. Indispensable for complex relationship analysis beyond standard tools. |
 | `rebuild_asset_graph` | **Niche/High** | Provide feedback on what patterns were scanned (e.g., "No HTML templates found"). | **Tested**: Returned 0 edges. Critical for UI-to-API mapping but needs explicit UI assets to function. |
-| `rebuild_symbol_graph` | **High** | None. | **Tested**: Successfully built 190 EXPORTS_SYMBOL edges. Necessary for granular import/export analysis. |
 | `research_and_index` | **Very High** | None. | **Tested**: Automates the external knowledge acquisition loop. Best for "learning" a new library. |
 | `research_documentation` | **Critical** | None. | **Tested**: Found relevant URLs and detected `llms.txt` for Neo4j GDS. Outstanding for contextual research. |
 | `search_codebase` | **Critical** | None. | **Tested**: Answered "How is project_id derived?" with high-fidelity chunks. The foundation of codebase understanding. |

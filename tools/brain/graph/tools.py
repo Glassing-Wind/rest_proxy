@@ -88,15 +88,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error reading language pack status: {str(e)}"
 
     @mcp.tool()
-    async def rebuild_symbol_graph(workspace_id: str) -> str:
-        """
-        Rebuild symbol-level IMPORTS/EXPORTS graph for a project.
-        """
-        return await graph_utility.rebuild_subgraph_impl(
-            graph_core._build_symbol_import_export_graph_impl, "symbols", workspace_id
-        )
-
-    @mcp.tool()
     async def rebuild_asset_graph(workspace_id: str) -> str:
         """
         Rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB).

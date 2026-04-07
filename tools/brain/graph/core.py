@@ -1,14 +1,10 @@
-"""tools/graph/core.py — project health, overview, import graph, and usage guide tools."""
+"""tools/graph/core.py — project health, overview, graph runtime, and usage guide tools."""
 
 import os
-import threading
 import asyncio
 from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules, get_project_id
 from graphrag_core import neo4j as neo4j_utils
-
-
-_SYMBOL_GRAPH_LOCK = threading.Lock()
 
 _GRAPH_WRITE_CONCURRENCY = max(
     1, int(os.getenv("LM_PROXY_GRAPH_WRITE_CONCURRENCY", "2"))
@@ -134,27 +130,19 @@ def _ensure_graph_runtime_configured() -> None:
     graph_runtime.configure(
         debug_log=_debug_log,
         run_build_with_retry=_run_graph_build_with_retry,
-        build_import_graph=_build_import_graph_impl,
-        build_symbol_graph=_build_symbol_import_export_graph_impl,
         build_asset_graph=_build_asset_graph_impl,
     )
     _GRAPH_RUNTIME_CONFIGURED = True
 
 
-async def enqueue_graph_build(
-    project_path: str, run_imports: bool = True, run_symbols: bool = True
-) -> None:
+async def enqueue_graph_build(project_path: str) -> None:
     _ensure_graph_runtime_configured()
     from tools.brain.graph import runtime as graph_runtime
 
-    await graph_runtime.enqueue_graph_build(
-        project_path, run_imports=run_imports, run_symbols=run_symbols
-    )
+    await graph_runtime.enqueue_graph_build(project_path)
 
 
-async def run_post_index_graph_build(
-    project_path: str, run_imports: bool = True, run_symbols: bool = True
-) -> str:
+async def run_post_index_graph_build(project_path: str) -> str:
     """Run graph maintenance inline for the normal indexing path.
 
     This avoids the background queue/Redis lock path so `index_workspace`
@@ -165,25 +153,13 @@ async def run_post_index_graph_build(
     _debug_log(
         "graph_build_inline_start",
         project_path=project_path,
-        imports=run_imports,
-        symbols=run_symbols,
     )
     _record_metric(
         "graph_build_start",
         project_path=project_path,
-        imports=run_imports,
-        symbols=run_symbols,
         mode="inline",
     )
     try:
-        if run_imports:
-            await _run_graph_build_with_retry(
-                _build_import_graph_impl, "imports", project_path
-            )
-        if run_symbols:
-            await _run_graph_build_with_retry(
-                _build_symbol_import_export_graph_impl, "symbols", project_path
-            )
         asset_result = await _run_graph_build_with_retry(
             _build_asset_graph_impl, "assets", project_path
         )
@@ -234,22 +210,6 @@ async def _get_cli_flow_summary(
     )
 
 
-async def _build_import_graph_impl(project_path: str) -> str:
-    """Module-level implementation callable from _jobs.py post-index hook."""
-    from tools.brain.graph import import_graph
-
-    return await import_graph.build_import_graph(
-        project_path,
-        execute_read=_execute_read,
-        execute_write=_execute_write,
-        debug_log=_debug_log,
-        record_metric=_record_metric,
-        write_semaphore=_WRITE_SEM,
-        batch_size=_NEO4J_GRAPH_BUILD_BATCH,
-        write_timeout_s=_NEO4J_WRITE_TIMEOUT_S,
-    )
-
-
 async def _build_asset_graph_impl(project_path: str) -> str:
     """Build asset linkage edges (HTML → assets, JS/TS → API spec/routes)."""
     from tools.brain.graph import asset_graph
@@ -262,21 +222,4 @@ async def _build_asset_graph_impl(project_path: str) -> str:
         write_semaphore=_WRITE_SEM,
         batch_size=_NEO4J_GRAPH_BUILD_BATCH,
         write_timeout_s=_NEO4J_WRITE_TIMEOUT_S,
-    )
-
-
-async def _build_symbol_import_export_graph_impl(project_path: str) -> str:
-    """Build symbol-level IMPORTS/EXPORTS edges using Import nodes and chunk metadata."""
-    from tools.brain.graph import symbol_graph
-
-    return await symbol_graph.build_symbol_graph(
-        project_path,
-        execute_read=_execute_read,
-        execute_write=_execute_write,
-        debug_log=_debug_log,
-        record_metric=_record_metric,
-        write_semaphore=_WRITE_SEM,
-        batch_size=_NEO4J_GRAPH_BUILD_BATCH,
-        write_timeout_s=_NEO4J_WRITE_TIMEOUT_S,
-        symbol_graph_lock=_SYMBOL_GRAPH_LOCK,
     )

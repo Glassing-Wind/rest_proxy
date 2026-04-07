@@ -170,9 +170,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                         await session.execute_write(_tx)
                     else:
                         await _tx(session)
-                return await run_post_index_graph_build(
-                    project_path, run_imports=False, run_symbols=True
-                )
+                return await run_post_index_graph_build(project_path)
 
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
                 future = asyncio.run_coroutine_threadsafe(

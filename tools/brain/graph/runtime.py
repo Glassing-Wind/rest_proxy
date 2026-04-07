@@ -38,8 +38,6 @@ _debug_log: Callable[..., None] | None = None
 _run_build_with_retry: (
     Callable[[Callable[[str], Awaitable[str]], str, str], Awaitable[str]] | None
 ) = None
-_build_import_graph: Callable[[str], Awaitable[str]] | None = None
-_build_symbol_graph: Callable[[str], Awaitable[str]] | None = None
 _build_asset_graph: Callable[[str], Awaitable[str]] | None = None
 
 
@@ -48,19 +46,13 @@ def configure(
     run_build_with_retry: Callable[
         [Callable[[str], Awaitable[str]], str, str], Awaitable[str]
     ],
-    build_import_graph: Callable[[str], Awaitable[str]],
-    build_symbol_graph: Callable[[str], Awaitable[str]],
     build_asset_graph: Callable[[str], Awaitable[str]],
 ) -> None:
     global _debug_log
     global _run_build_with_retry
-    global _build_import_graph
-    global _build_symbol_graph
     global _build_asset_graph
     _debug_log = debug_log
     _run_build_with_retry = run_build_with_retry
-    _build_import_graph = build_import_graph
-    _build_symbol_graph = build_symbol_graph
     _build_asset_graph = build_asset_graph
 
 
@@ -187,12 +179,10 @@ async def _ensure_graph_build_worker() -> None:
             _GRAPH_BUILD_WORKER = asyncio.create_task(_graph_build_worker())
 
 
-async def enqueue_graph_build(
-    project_path: str, run_imports: bool = True, run_symbols: bool = True
-) -> None:
+async def enqueue_graph_build(project_path: str) -> None:
     await _ensure_graph_build_worker()
     assert _GRAPH_BUILD_QUEUE is not None
-    await _GRAPH_BUILD_QUEUE.put((project_path, run_imports, run_symbols))
+    await _GRAPH_BUILD_QUEUE.put(project_path)
 
 
 async def _graph_build_worker() -> None:
@@ -202,7 +192,7 @@ async def _graph_build_worker() -> None:
         if item is None:
             _GRAPH_BUILD_QUEUE.task_done()
             return
-        project_path, run_imports, run_symbols = item
+        project_path = item
         lock_token = await _acquire_graph_lock()
         if _GRAPH_LOCK_ENABLED and lock_token is None:
             if _debug_log:
@@ -239,32 +229,15 @@ async def _graph_build_worker() -> None:
             _debug_log(
                 "graph_build_start",
                 project_path=project_path,
-                imports=run_imports,
-                symbols=run_symbols,
             )
         record_metric(
             "graph_build_start",
             project_path=project_path,
-            imports=run_imports,
-            symbols=run_symbols,
         )
         start = time.perf_counter()
         try:
             if _run_build_with_retry is None:
                 raise RuntimeError("Graph runtime is not configured.")
-            if run_imports:
-                if _build_import_graph is None:
-                    raise RuntimeError("Import graph builder not configured.")
-                await _run_build_with_retry(
-                    _build_import_graph, "imports", project_path
-                )
-                await asyncio.sleep(0)
-            if run_symbols:
-                if _build_symbol_graph is None:
-                    raise RuntimeError("Symbol graph builder not configured.")
-                await _run_build_with_retry(
-                    _build_symbol_graph, "symbols", project_path
-                )
             if _build_asset_graph is None:
                 raise RuntimeError("Asset graph builder not configured.")
             await _run_build_with_retry(_build_asset_graph, "assets", project_path)

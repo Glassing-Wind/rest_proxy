@@ -99,8 +99,6 @@ def load_tools_module():
         return []
 
     graph_core_mod._execute_read = _execute_read
-    graph_core_mod._build_import_graph_impl = mock.AsyncMock(return_value="ok")
-    graph_core_mod._build_symbol_import_export_graph_impl = mock.AsyncMock(return_value="ok")
     graph_core_mod._build_asset_graph_impl = mock.AsyncMock(return_value="ok")
     graph_core_mod._get_cli_flow_summary = mock.AsyncMock(return_value="No CLI flows found.")
     graph_core_mod._summarize_batches = lambda *args, **kwargs: (0, 0, 0)
