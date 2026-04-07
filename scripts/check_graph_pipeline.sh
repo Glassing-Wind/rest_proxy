@@ -26,6 +26,9 @@ python3 test_semantic_helpers.py
 echo "[graph-check] Running search summary checks..."
 python3 test_search_summaries.py
 
+echo "[graph-check] Running raw graph query checks..."
+python3 test_graph_query.py
+
 echo "[graph-check] Running graph utility checks..."
 python3 test_graph_utility.py
 
