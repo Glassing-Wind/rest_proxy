@@ -15,7 +15,6 @@ _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
 _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "project"}
 _NEO4J_GRAPH_BUILD_BATCH = max(50, int(os.getenv("LM_PROXY_GRAPH_BUILD_BATCH", "500")))
 
-_WRITE_SEM = asyncio.Semaphore(_GRAPH_WRITE_CONCURRENCY)
 _GRAPH_RUNTIME_CONFIGURED = False
 
 # Standard symbol labels and kinds for architectural queries.
@@ -121,70 +120,10 @@ def get_last_graph_build_metric() -> dict[str, object] | None:
     return graph_runtime.get_last_graph_build_metric()
 
 
-def _ensure_graph_runtime_configured() -> None:
-    global _GRAPH_RUNTIME_CONFIGURED
-    if _GRAPH_RUNTIME_CONFIGURED:
-        return
-    from tools.brain.graph import runtime as graph_runtime
-
-    graph_runtime.configure(
-        debug_log=_debug_log,
-        run_build_with_retry=_run_graph_build_with_retry,
-        build_asset_graph=_build_asset_graph_impl,
-    )
-    _GRAPH_RUNTIME_CONFIGURED = True
-
-
-async def enqueue_graph_build(project_path: str) -> None:
-    _ensure_graph_runtime_configured()
-    from tools.brain.graph import runtime as graph_runtime
-
-    await graph_runtime.enqueue_graph_build(project_path)
-
-
 async def run_post_index_graph_build(project_path: str) -> str:
-    """Run graph maintenance inline for the normal indexing path.
-
-    This avoids the background queue/Redis lock path so `index_workspace`
-    can leave a project graph-ready in one job completion cycle.
-    """
-    _ensure_graph_runtime_configured()
-    start = asyncio.get_running_loop().time()
-    _debug_log(
-        "graph_build_inline_start",
-        project_path=project_path,
-    )
-    _record_metric(
-        "graph_build_start",
-        project_path=project_path,
-        mode="inline",
-    )
-    try:
-        asset_result = await _run_graph_build_with_retry(
-            _build_asset_graph_impl, "assets", project_path
-        )
-    except Exception as exc:
-        _debug_log("graph_build_inline_error", project_path=project_path, error=str(exc))
-        _record_metric(
-            "graph_build_error",
-            project_path=project_path,
-            error=str(exc),
-            mode="inline",
-        )
-        raise
-    elapsed_ms = int((asyncio.get_running_loop().time() - start) * 1000)
-    _debug_log(
-        "graph_build_inline_done",
-        project_path=project_path,
-        elapsed_ms=elapsed_ms,
-    )
-    _record_metric(
-        "graph_build_done",
-        project_path=project_path,
-        elapsed_ms=elapsed_ms,
-        mode="inline",
-    )
-    return asset_result
+    """The structural indexer now owns deterministic graph derivation and writes."""
+    _debug_log("graph_build_inline_skipped", project_path=project_path, reason="rust_owned")
+    return "Graph derivation completed during structural indexing."
 
 
 def register(mcp: FastMCP) -> None:
@@ -209,17 +148,3 @@ async def _get_cli_flow_summary(
         as_table=as_table,
     )
 
-
-async def _build_asset_graph_impl(project_path: str) -> str:
-    """Build asset linkage edges (HTML → assets, JS/TS → API spec/routes)."""
-    from tools.brain.graph import asset_graph
-
-    return await asset_graph.build_asset_graph(
-        project_path,
-        execute_read=_execute_read,
-        execute_write=_execute_write,
-        debug_log=_debug_log,
-        write_semaphore=_WRITE_SEM,
-        batch_size=_NEO4J_GRAPH_BUILD_BATCH,
-        write_timeout_s=_NEO4J_WRITE_TIMEOUT_S,
-    )

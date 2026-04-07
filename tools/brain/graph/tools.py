@@ -88,16 +88,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error reading language pack status: {str(e)}"
 
     @mcp.tool()
-    async def rebuild_asset_graph(workspace_id: str) -> str:
-        """
-        Rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB).
-        Used for App Flow visualization.
-        """
-        return await graph_utility.rebuild_subgraph_impl(
-            graph_core._build_asset_graph_impl, "assets", workspace_id
-        )
-
-    @mcp.tool()
     async def get_app_flow_summary(
         workspace_id: str,
         ui_contains: str | None = None,

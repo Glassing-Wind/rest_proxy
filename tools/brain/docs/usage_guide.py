@@ -19,7 +19,6 @@ def register(mcp: FastMCP) -> None:
 ### Recommended Workflow:
 1. `index_workspace(project_path)` → returns immediately with a `job_id`
    - **Normal path**: wait for `DONE`, then the project should be graph-ready for normal tool use.
-   - `rebuild_*` tools are intended for admin/debug recovery, not the default workflow.
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
 4. `get_project_overview(project_path)` → health, architecture clusters, key files
@@ -84,7 +83,6 @@ Doc indexing tips:
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
 - File-level `IMPORTS` edges are now expected to come from `index_workspace`; there is no separate import rebuild tool in the normal workflow.
 - Symbol-level `IMPORTS_SYMBOL` / `EXPORTS_SYMBOL` edges are expected to come from `index_workspace` in the normal workflow. `IMPLICIT_IMPORTS_SYMBOL` is heuristic and should be treated as optional/experimental rather than part of the default graph contract.
-- `rebuild_asset_graph(project_path)` → admin/debug: rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB, plus Apple resource/target/scheme/workspace links)
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
 - `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)

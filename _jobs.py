@@ -110,10 +110,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
             ok = struct_rc == 0 and sem_rc == 0
             project_path = _JOBS[job_id].get("project_path", "")
             project_id = _JOBS[job_id].get("project_id", "")
-            if ok and project_path and not project_path.startswith("docs://") and not cancel_requested:
-                _JOBS[job_id]["status"] = "post-processing"
-                _JOBS[job_id]["logs"].append("[graph-build] running inline post-index graph refresh")
-            elif cancel_requested:
+            if cancel_requested:
                 _JOBS[job_id]["status"] = "cancelled"
             else:
                 _JOBS[job_id]["status"] = "done" if ok else "failed"
@@ -130,11 +127,9 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
         and not cancel_requested
     ):
         try:
-            import asyncio
             import graph_bootstrap
-            from tools.brain.graph.core import run_post_index_graph_build
 
-            async def _post_index_maintenance() -> str | None:
+            async def _post_index_maintenance() -> None:
                 from neo4j import unit_of_work
 
                 driver = await graph_bootstrap.require_driver()
@@ -170,8 +165,6 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                         await session.execute_write(_tx)
                     else:
                         await _tx(session)
-                return await run_post_index_graph_build(project_path)
-
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
                 future = asyncio.run_coroutine_threadsafe(
                     _post_index_maintenance(),
@@ -181,11 +174,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                     future.result(timeout=180)
                 except Exception as exc:
                     graph_build_error = str(exc)
-                queued = (
-                    "completed + timestamps refreshed"
-                    if graph_build_error is None
-                    else f"failed: {graph_build_error}"
-                )
+                queued = "timestamps refreshed" if graph_build_error is None else f"failed: {graph_build_error}"
             else:
                 graph_build_error = "main loop not available"
                 queued = "skipped: main loop not available"
@@ -199,12 +188,12 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                             for line in _JOBS[job_id]["logs"]
                             if "[clone-enrich]" not in line
                         ]
-                    _JOBS[job_id]["logs"].append(f"[graph-build] {queued}")
+                    _JOBS[job_id]["logs"].append(f"[struct-index] {queued}")
         except Exception as e:
             graph_build_error = str(e)
             with _JOBS_LOCK:
                 if job_id in _JOBS:
-                    _JOBS[job_id]["logs"].append(f"[graph-build] enqueue failed: {e}")
+                    _JOBS[job_id]["logs"].append(f"[struct-index] post-index refresh failed: {e}")
 
     with _JOBS_LOCK:
         if job_id in _JOBS and _JOBS[job_id].get("finished_at") is None:

@@ -56,38 +56,14 @@ def load_core_module():
 
 
 class GraphCoreInlineTests(unittest.TestCase):
-    def test_run_post_index_graph_build_runs_inline_asset_phase(self):
+    def test_run_post_index_graph_build_is_noop_when_rust_owns_graph(self):
         module = load_core_module()
-        events = []
-
-        def fake_ensure():
-            return None
-
-        async def fake_retry(fn, label, project_path):
-            events.append((label, "start", project_path))
-            result = await fn(project_path)
-            events.append((label, "done", project_path))
-            return result
-
-        async def fake_asset(project_path):
-            return "assets ok"
-
-        module._ensure_graph_runtime_configured = fake_ensure
-        module._run_graph_build_with_retry = fake_retry
-        module._build_asset_graph_impl = fake_asset
         module._debug_log = lambda *args, **kwargs: None
         module._record_metric = lambda *args, **kwargs: None
 
         result = asyncio.run(module.run_post_index_graph_build("/tmp/project"))
 
-        self.assertEqual(result, "assets ok")
-        self.assertEqual(
-            events,
-            [
-                ("assets", "start", "/tmp/project"),
-                ("assets", "done", "/tmp/project"),
-            ],
-        )
+        self.assertEqual(result, "Graph derivation completed during structural indexing.")
 
 
 if __name__ == "__main__":
