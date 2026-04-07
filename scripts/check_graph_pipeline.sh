@@ -11,6 +11,9 @@ python3 test_ts_pack_facts.py
 echo "[graph-check] Running semantic indexer helper checks..."
 python3 test_index_workspace.py
 
+echo "[graph-check] Running manifest coverage checks..."
+python3 test_manifest.py
+
 echo "[graph-check] Running asset graph checks..."
 python3 test_asset_graph.py
 

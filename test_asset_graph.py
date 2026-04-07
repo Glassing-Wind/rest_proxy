@@ -189,6 +189,7 @@ class AssetGraphTests(unittest.TestCase):
             asset_dir = project_path / "ios/App/Assets.xcassets/hero.imageset"
             color_dir = project_path / "ios/App/Assets.xcassets/brand.colorset"
             storyboard = project_path / "ios/App/Main.storyboard"
+            xib = project_path / "ios/App/HeroView.xib"
             js_file.parent.mkdir(parents=True, exist_ok=True)
             swift_file.parent.mkdir(parents=True, exist_ok=True)
             asset_dir.mkdir(parents=True, exist_ok=True)
@@ -198,6 +199,7 @@ class AssetGraphTests(unittest.TestCase):
             (asset_dir / "Contents.json").write_text("{}", encoding="utf-8")
             (color_dir / "Contents.json").write_text("{}", encoding="utf-8")
             storyboard.write_text("<storyboard></storyboard>\n", encoding="utf-8")
+            xib.write_text("<xib></xib>\n", encoding="utf-8")
 
             files = [
                 {"fp": "src/public/assets/client.js", "fid": "js-file"},
@@ -225,6 +227,7 @@ class AssetGraphTests(unittest.TestCase):
                                     {"kind": "image", "name": "hero", "callee": "Image"},
                                     {"kind": "color", "name": "brand", "callee": "Color"},
                                     {"kind": "storyboard", "name": "Main", "callee": "UIStoryboard"},
+                                    {"kind": "nib", "name": "HeroView", "callee": "UINib"},
                                 ]
                             },
                         },
@@ -256,7 +259,7 @@ class AssetGraphTests(unittest.TestCase):
             for query, kwargs in writes
             if "MERGE (res:Resource" in query and "UNWIND $batch" in query
         ]
-        self.assertEqual(len(resource_batches), 3)
+        self.assertEqual(len(resource_batches), 4)
         by_rel = {}
         for query, batch in resource_batches:
             if "USES_ASSET" in query:
@@ -265,13 +268,15 @@ class AssetGraphTests(unittest.TestCase):
                 by_rel["USES_COLOR_ASSET"] = batch
             elif "USES_STORYBOARD" in query:
                 by_rel["USES_STORYBOARD"] = batch
+            elif "USES_XIB" in query:
+                by_rel["USES_XIB"] = batch
 
         self.assertEqual(
             by_rel["USES_ASSET"],
             [{
                 "src": "swift-file",
                 "name": "hero",
-                "filepath": "ios/App/Assets.xcassets/hero.imageset",
+                "filepath": "ios/App/Assets.xcassets/hero.imageset/Contents.json",
                 "kind": "image",
                 "project_id": "proj123",
             }],
@@ -281,7 +286,7 @@ class AssetGraphTests(unittest.TestCase):
             [{
                 "src": "swift-file",
                 "name": "brand",
-                "filepath": "ios/App/Assets.xcassets/brand.colorset",
+                "filepath": "ios/App/Assets.xcassets/brand.colorset/Contents.json",
                 "kind": "color",
                 "project_id": "proj123",
             }],
@@ -295,6 +300,72 @@ class AssetGraphTests(unittest.TestCase):
                 "kind": "storyboard",
                 "project_id": "proj123",
             }],
+        )
+
+        self.assertEqual(
+            by_rel["USES_XIB"],
+            [{
+                "src": "swift-file",
+                "name": "HeroView",
+                "filepath": "ios/App/HeroView.xib",
+                "kind": "nib",
+                "project_id": "proj123",
+            }],
+        )
+
+        backing_batches = [
+            kwargs["batch"]
+            for query, kwargs in writes
+            if "BACKED_BY_FILE" in query and "UNWIND $batch" in query
+        ]
+        self.assertEqual(len(backing_batches), 1)
+        self.assertEqual(
+            {
+                tuple(sorted(item.items()))
+                for item in backing_batches[0]
+            },
+            {
+                tuple(
+                    sorted(
+                        {
+                            "name": "hero",
+                            "kind": "image",
+                            "filepath": "ios/App/Assets.xcassets/hero.imageset/Contents.json",
+                            "project_id": "proj123",
+                        }.items()
+                    )
+                ),
+                tuple(
+                    sorted(
+                        {
+                            "name": "brand",
+                            "kind": "color",
+                            "filepath": "ios/App/Assets.xcassets/brand.colorset/Contents.json",
+                            "project_id": "proj123",
+                        }.items()
+                    )
+                ),
+                tuple(
+                    sorted(
+                        {
+                            "name": "Main",
+                            "kind": "storyboard",
+                            "filepath": "ios/App/Main.storyboard",
+                            "project_id": "proj123",
+                        }.items()
+                    )
+                ),
+                tuple(
+                    sorted(
+                        {
+                            "name": "HeroView",
+                            "kind": "nib",
+                            "filepath": "ios/App/HeroView.xib",
+                            "project_id": "proj123",
+                        }.items()
+                    )
+                ),
+            },
         )
 
 

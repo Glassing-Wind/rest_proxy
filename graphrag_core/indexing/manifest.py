@@ -39,7 +39,6 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
         "temp",
         ".xcodeproj",
         ".xcworkspace",
-        ".xcassets",
         "target",
         "build",
         "dist",

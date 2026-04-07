@@ -443,10 +443,20 @@ def _discover_apple_resources(project_path: str) -> dict[tuple[str, str], str]:
         for dirname in list(dirnames):
             if dirname.endswith(".imageset"):
                 name = dirname[:-9]
-                discovered.setdefault(("image", name), str((rel_root / dirname).as_posix()))
+                contents = rel_root / dirname / "Contents.json"
+                abs_contents = os.path.join(project_path, str(contents))
+                discovered.setdefault(
+                    ("image", name),
+                    str(contents.as_posix()) if os.path.exists(abs_contents) else str((rel_root / dirname).as_posix()),
+                )
             elif dirname.endswith(".colorset"):
                 name = dirname[:-9]
-                discovered.setdefault(("color", name), str((rel_root / dirname).as_posix()))
+                contents = rel_root / dirname / "Contents.json"
+                abs_contents = os.path.join(project_path, str(contents))
+                discovered.setdefault(
+                    ("color", name),
+                    str(contents.as_posix()) if os.path.exists(abs_contents) else str((rel_root / dirname).as_posix()),
+                )
         for filename in filenames:
             if filename.endswith(".xib"):
                 discovered.setdefault(("nib", PurePosixPath(filename).stem), str((rel_root / filename).as_posix()))
@@ -517,6 +527,7 @@ async def _clear_existing_edges(session, execute_write: ExecuteWrite, project_id
         "MATCH (a:File {project_id:$p})-[r:CALLS_DB]->() DELETE r",
         "MATCH (a:File {project_id:$p})-[r:CALLS_API_EXTERNAL]->() DELETE r",
         "MATCH (a:File {project_id:$p})-[r:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->() DELETE r",
+        "MATCH (r:Resource {project_id:$p})-[rel:BACKED_BY_FILE]->() DELETE rel",
     ]
     for query in statements:
         await execute_write(session, query, p=project_id, timeout=write_timeout_s)
@@ -643,6 +654,46 @@ async def _write_resource_edges(
                 await execute_write(session, query, batch=batch, timeout=write_timeout_s)
 
 
+async def _write_resource_backing_edges(
+    session,
+    execute_write: ExecuteWrite,
+    write_semaphore: asyncio.Semaphore,
+    batch_size: int,
+    write_timeout_s: float,
+    project_id: str,
+    resource_edges: list[tuple[str, str, str, str | None, str]],
+) -> None:
+    backing_rows = []
+    seen: set[tuple[str, str, str]] = set()
+    for _, _, name, resource_path, resource_kind in resource_edges:
+        if not resource_path:
+            continue
+        key = (name, resource_kind, resource_path)
+        if key in seen:
+            continue
+        seen.add(key)
+        backing_rows.append(
+            {
+                "name": name,
+                "kind": resource_kind,
+                "filepath": resource_path,
+                "project_id": project_id,
+            }
+        )
+    if not backing_rows:
+        return
+    query = """
+    UNWIND $batch AS edge
+    MATCH (res:Resource {project_id: edge.project_id, name: edge.name, kind: edge.kind})
+    MATCH (f:File {project_id: edge.project_id, filepath: edge.filepath})
+    MERGE (res)-[:BACKED_BY_FILE]->(f)
+    """
+    for i in range(0, len(backing_rows), batch_size):
+        batch = backing_rows[i : i + batch_size]
+        async with write_semaphore:
+            await execute_write(session, query, batch=batch, timeout=write_timeout_s)
+
+
 async def build_asset_graph(
     project_path: str,
     execute_read: ExecuteRead,
@@ -706,6 +757,9 @@ async def build_asset_graph(
             await _write_file_edges(session, execute_write, write_semaphore, batch_size, write_timeout_s, "CALLS_SERVICE", service_edges)
             await _write_file_edges(session, execute_write, write_semaphore, batch_size, write_timeout_s, "CALLS_DB", db_edges)
             await _write_resource_edges(
+                session, execute_write, write_semaphore, batch_size, write_timeout_s, project_id, resource_edges
+            )
+            await _write_resource_backing_edges(
                 session, execute_write, write_semaphore, batch_size, write_timeout_s, project_id, resource_edges
             )
 
