@@ -64,6 +64,11 @@ async def _has_apple_resource_graph(session, project_id: str, *, labels: set[str
     return bool(rows and rows[0].get("n"))
 
 
+def _apple_resource_rel_types(rels: set[str]) -> list[str]:
+    ordered = ["USES_ASSET", "USES_COLOR_ASSET", "USES_XIB", "USES_STORYBOARD"]
+    return [rel for rel in ordered if rel in rels]
+
+
 async def _has_apple_workspace_graph(session, project_id: str, *, labels: set[str], rels: set[str]) -> bool:
     if "XcodeWorkspace" not in labels or "REFERENCES_PROJECT" not in rels:
         return False
@@ -79,17 +84,29 @@ async def _has_apple_workspace_graph(session, project_id: str, *, labels: set[st
     return bool(rows and rows[0].get("n"))
 
 
-def _apple_build_query(*, include_resources: bool, include_workspaces: bool) -> str:
+def _apple_build_query(
+    *,
+    include_resources: bool,
+    include_workspaces: bool,
+    resource_rel_types: list[str] | None = None,
+) -> str:
+    resource_rel_types = resource_rel_types or []
     lines = ["MATCH (target:XcodeTarget {project_id:$p})"]
     if include_resources:
         lines.extend(
             [
                 "OPTIONAL MATCH (res:Resource {project_id:$p})-[:BUNDLED_IN_TARGET]->(target)",
-                "OPTIONAL MATCH (src:File {project_id:$p})-[rel:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->(res)",
                 "OPTIONAL MATCH (res)-[:BACKED_BY_FILE]->(res_backing:File {project_id:$p})",
-                "WITH target, src, rel, res, res_backing",
             ]
         )
+        if resource_rel_types:
+            rel_expr = "|".join(resource_rel_types)
+            lines.append(
+                f"OPTIONAL MATCH (src:File {{project_id:$p}})-[rel:{rel_expr}]->(res)"
+            )
+        else:
+            lines.append("WITH target, res, res_backing, null AS src, null AS rel")
+        lines.append("WITH target, src, rel, res, res_backing")
     else:
         lines.append("WITH target, null AS src, null AS rel, null AS res, null AS res_backing")
     if include_resources:
@@ -209,9 +226,11 @@ async def get_apple_build_summary_impl(
         if not await _has_apple_build_files(session, project_id):
             return "No Apple build graph paths found."
         labels, rels = await _get_graph_schema_info(session)
+        resource_rel_types = _apple_resource_rel_types(rels)
         query = _apple_build_query(
             include_resources=await _has_apple_resource_graph(session, project_id, labels=labels, rels=rels),
             include_workspaces=await _has_apple_workspace_graph(session, project_id, labels=labels, rels=rels),
+            resource_rel_types=resource_rel_types,
         )
         result = await graph_core._execute_read(
             session,

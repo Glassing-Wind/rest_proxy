@@ -258,6 +258,18 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("workspace=ios/App.xcworkspace/contents.xcworkspacedata", output)
         self.assertNotIn("WidgetExtension", output)
 
+    def test_apple_build_query_omits_missing_resource_relationships(self):
+        query = self.module.flow_summary_apple._apple_build_query(
+            include_resources=True,
+            include_workspaces=False,
+            resource_rel_types=[],
+        )
+        self.assertNotIn("USES_ASSET", query)
+        self.assertNotIn("USES_COLOR_ASSET", query)
+        self.assertNotIn("USES_XIB", query)
+        self.assertNotIn("USES_STORYBOARD", query)
+        self.assertIn("null AS src, null AS rel", query)
+
     def test_get_apple_build_summary_groups_by_scheme(self):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "apple_build_presence":
