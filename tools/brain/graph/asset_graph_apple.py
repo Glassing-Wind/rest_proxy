@@ -99,6 +99,9 @@ def collect_xcode_target_edges(
         for _, _, name, resource_path, kind in resource_edges
         if resource_path
     }
+    resource_catalog = discover_apple_resources(project_path)
+    for (kind, name), resource_path in resource_catalog.items():
+        resource_by_path.setdefault(resource_path, (name, kind))
     for target_id, raw_path in raw_memberships:
         normalized = raw_path.replace("\\", "/").lstrip("./").strip('"')
         candidates = [normalized]
@@ -132,7 +135,7 @@ def collect_xcode_workspace_scheme_edges(
     workspaces = parse_xcode_workspaces(project_path, files)
     schemes = parse_xcode_schemes(project_path, files, xcode_targets)
     workspace_rows = [
-        {"workspace_path": workspace_path, "name": PurePosixPath(workspace_path).parent.stem or PurePosixPath(workspace_path).stem}
+        {"workspace_path": workspace_path, "name": _workspace_display_name(workspace_path)}
         for workspace_path in sorted(workspaces.keys())
     ]
     workspace_project_edges = [
@@ -159,6 +162,14 @@ def collect_xcode_workspace_scheme_edges(
         if scheme["scheme_path"] in files
     ]
     return workspace_rows, workspace_project_edges, scheme_rows, scheme_target_edges, scheme_file_edges
+
+
+def _workspace_display_name(workspace_path: str) -> str:
+    path = PurePosixPath(workspace_path)
+    parent = path.parent
+    if parent.name.endswith(".xcworkspace") and parent.parent.name.endswith(".xcodeproj"):
+        return PurePosixPath(parent.parent.name).stem
+    return parent.stem or path.stem
 
 
 def parse_xcode_target_membership(project_path: str) -> tuple[dict[str, dict[str, str]], list[tuple[str, str]]]:
@@ -467,6 +478,7 @@ async def write_xcode_target_edges(
     write_semaphore: asyncio.Semaphore,
     batch_size: int,
     write_timeout_s: float,
+    project_path: str,
     project_id: str,
     xcode_targets: dict[str, dict[str, str]],
     xcode_file_edges: list[tuple[str, str]],
@@ -499,11 +511,25 @@ async def write_xcode_target_edges(
     if xcode_resource_edges:
         query = """
         UNWIND $batch AS edge
+        MERGE (r:Resource {project_id: edge.project_id, name: edge.name, kind: edge.kind})
+        ON CREATE SET r.filepath = edge.filepath
+        SET r.filepath = coalesce(edge.filepath, r.filepath)
         MATCH (t:XcodeTarget {project_id: edge.project_id, target_id: edge.target_id})
-        MATCH (r:Resource {project_id: edge.project_id, name: edge.name, kind: edge.kind})
+        OPTIONAL MATCH (f:File {project_id: edge.project_id, filepath: edge.filepath})
+        FOREACH (_ IN CASE WHEN f IS NULL THEN [] ELSE [1] END | MERGE (r)-[:BACKED_BY_FILE]->(f))
         MERGE (r)-[:BUNDLED_IN_TARGET]->(t)
         """
-        rows = [{"project_id": project_id, "target_id": t, "name": n, "kind": k} for t, n, k in xcode_resource_edges]
+        resource_catalog = discover_apple_resources(project_path)
+        rows = [
+            {
+                "project_id": project_id,
+                "target_id": t,
+                "name": n,
+                "kind": k,
+                "filepath": resource_catalog.get((k, n)),
+            }
+            for t, n, k in xcode_resource_edges
+        ]
         for i in range(0, len(rows), batch_size):
             async with write_semaphore:
                 await execute_write(session, query, batch=rows[i : i + batch_size], timeout=write_timeout_s)

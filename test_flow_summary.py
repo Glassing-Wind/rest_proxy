@@ -314,6 +314,64 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("Scheme: App", output)
         self.assertIn("ios/App/View.swift", output)
         self.assertIn("ios/App/Settings.swift", output)
+        self.assertNotIn("ios/App/Assets.xcassets/brand.colorset/Contents.json -> target=App -> scheme=App\nios/App/View.swift", output)
+
+    def test_get_apple_build_summary_does_not_cross_join_resources_and_bundles(self):
+        async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": ["Resource"]}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": ["BUNDLED_IN_TARGET"]}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 0}]
+            if kwargs.get("op") == "get_apple_build_summary":
+                return [
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "AccentColor",
+                        "kind": "color",
+                        "backing": "FrameCreator/Assets.xcassets/AccentColor.colorset/Contents.json",
+                        "target": "FrameCreator",
+                        "project_file": "FrameCreator.xcodeproj/project.pbxproj",
+                        "scheme": "FrameCreator",
+                        "scheme_file": "FrameCreator.xcodeproj/xcshareddata/xcschemes/FrameCreator.xcscheme",
+                        "workspace": None,
+                    },
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "PlaceholderFrame",
+                        "kind": "image",
+                        "backing": "FrameCreator/Assets.xcassets/PlaceholderFrame.imageset/Contents.json",
+                        "target": "FrameCreator",
+                        "project_file": "FrameCreator.xcodeproj/project.pbxproj",
+                        "scheme": "FrameCreator",
+                        "scheme_file": "FrameCreator.xcodeproj/xcshareddata/xcschemes/FrameCreator.xcscheme",
+                        "workspace": None,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/framecreator",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("AccentColor -> FrameCreator/Assets.xcassets/AccentColor.colorset/Contents.json", output)
+        self.assertIn("PlaceholderFrame -> FrameCreator/Assets.xcassets/PlaceholderFrame.imageset/Contents.json", output)
+        self.assertNotIn("AppIcon.appiconset", output)
 
     def test_get_apple_build_summary_falls_back_to_bundled_files(self):
         async def fake_execute_read(session, query, **kwargs):

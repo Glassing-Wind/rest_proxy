@@ -87,13 +87,17 @@ def _apple_build_query(*, include_resources: bool, include_workspaces: bool) -> 
                 "OPTIONAL MATCH (res:Resource {project_id:$p})-[:BUNDLED_IN_TARGET]->(target)",
                 "OPTIONAL MATCH (src:File {project_id:$p})-[rel:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->(res)",
                 "OPTIONAL MATCH (res)-[:BACKED_BY_FILE]->(res_backing:File {project_id:$p})",
+                "WITH target, src, rel, res, res_backing",
             ]
         )
     else:
         lines.append("WITH target, null AS src, null AS rel, null AS res, null AS res_backing")
+    if include_resources:
+        lines.append("WITH target, src, rel, res, res_backing, null AS bundled")
+    else:
+        lines.append("OPTIONAL MATCH (target)-[:BUNDLES_FILE]->(bundled:File {project_id:$p})")
     lines.extend(
         [
-            "OPTIONAL MATCH (target)-[:BUNDLES_FILE]->(bundled:File {project_id:$p})",
             "OPTIONAL MATCH (scheme:XcodeScheme {project_id:$p})-[:BUILDS_TARGET]->(target)",
             "OPTIONAL MATCH (scheme)-[:DEFINED_IN_FILE]->(scheme_file:File {project_id:$p})",
         ]

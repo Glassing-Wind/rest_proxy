@@ -564,6 +564,7 @@ async def build_asset_graph(
                 write_semaphore,
                 batch_size,
                 write_timeout_s,
+                project_path,
                 project_id,
                 xcode_targets,
                 xcode_file_edges,

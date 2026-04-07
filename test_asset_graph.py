@@ -417,11 +417,12 @@ AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcas
             for query, kwargs in writes
             if "BACKED_BY_FILE" in query and "UNWIND $batch" in query
         ]
-        self.assertEqual(len(backing_batches), 1)
+        self.assertEqual(len(backing_batches), 2)
         self.assertEqual(
             {
-                tuple(sorted(item.items()))
-                for item in backing_batches[0]
+                tuple(sorted((key, value) for key, value in item.items() if key != "target_id"))
+                for batch in backing_batches
+                for item in batch
             },
             {
                 tuple(
@@ -460,6 +461,16 @@ AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcas
                             "name": "HeroView",
                             "kind": "nib",
                             "filepath": "ios/App/HeroView.xib",
+                            "project_id": "proj123",
+                        }.items()
+                    )
+                ),
+                tuple(
+                    sorted(
+                        {
+                            "name": "hero",
+                            "kind": "image",
+                            "filepath": "ios/App/Assets.xcassets/hero.imageset/Contents.json",
                             "project_id": "proj123",
                         }.items()
                     )
@@ -512,9 +523,9 @@ AA000203 /* Contents.json */ = { isa = PBXFileReference; path = "App/Assets.xcas
                 for item in bundled_resource_batches[0]
             },
             {
-                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "HeroView", "kind": "nib"}.items())),
-                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "Main", "kind": "storyboard"}.items())),
-                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "hero", "kind": "image"}.items())),
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "HeroView", "kind": "nib", "filepath": "ios/App/HeroView.xib"}.items())),
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "Main", "kind": "storyboard", "filepath": "ios/App/Main.storyboard"}.items())),
+                tuple(sorted({"project_id": "proj123", "target_id": "AA000001", "name": "hero", "kind": "image", "filepath": "ios/App/Assets.xcassets/hero.imageset/Contents.json"}.items())),
             },
         )
 
@@ -664,6 +675,66 @@ AA000020 /* FrameCreator */ = {
                 workspaces,
                 {"FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata": {"pbxproj-file"}},
             )
+            workspace_rows, _, _, _, _ = self.apple_module.collect_xcode_workspace_scheme_edges(
+                str(project_path),
+                {
+                    "FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata": "workspace-file",
+                    "FrameCreator.xcodeproj/project.pbxproj": "pbxproj-file",
+                },
+                {},
+            )
+            self.assertEqual(
+                workspace_rows,
+                [{"workspace_path": "FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata", "name": "FrameCreator"}],
+            )
+
+    def test_xcode_target_edges_can_synthesize_resources_from_catalog(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            contents = project_path / "App/Assets.xcassets/hero.imageset/Contents.json"
+            pbxproj = project_path / "App.xcodeproj/project.pbxproj"
+            contents.parent.mkdir(parents=True, exist_ok=True)
+            pbxproj.parent.mkdir(parents=True, exist_ok=True)
+            contents.write_text("{}", encoding="utf-8")
+            pbxproj.write_text(
+                """
+AA000001 /* App */ = {
+    isa = PBXNativeTarget;
+    buildPhases = (
+        AA000010 /* Resources */,
+    );
+    fileSystemSynchronizedGroups = (
+        AA000020 /* App */,
+    );
+    name = App;
+};
+AA000010 /* Resources */ = {
+    isa = PBXResourcesBuildPhase;
+    files = (
+    );
+};
+AA000020 /* App */ = {
+    isa = PBXFileSystemSynchronizedRootGroup;
+    path = App;
+    sourceTree = "<group>";
+};
+                """.strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            targets, file_edges, resource_edges = self.apple_module.collect_xcode_target_edges(
+                str(project_path),
+                {"App/Assets.xcassets/hero.imageset/Contents.json": "hero-file"},
+                [],
+            )
+
+        self.assertEqual(
+            targets,
+            {"AA000001": {"name": "App", "project_file": "App.xcodeproj"}},
+        )
+        self.assertEqual(file_edges, [("AA000001", "hero-file")])
+        self.assertEqual(resource_edges, [("AA000001", "hero", "image")])
 
 
 if __name__ == "__main__":

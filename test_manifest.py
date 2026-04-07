@@ -49,6 +49,40 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("ios/App.xcworkspace/contents.xcworkspacedata", rel_paths)
         self.assertNotIn("ios/App/Assets.xcassets/hero.imageset/hero.png", rel_paths)
 
+    def test_includes_workspace_inside_xcodeproj_package(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            workspace = project_path / "App.xcodeproj/project.xcworkspace/contents.xcworkspacedata"
+            workspace.parent.mkdir(parents=True, exist_ok=True)
+            workspace.write_text("<Workspace />\n", encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("App.xcodeproj/project.xcworkspace/contents.xcworkspacedata", rel_paths)
+
+    def test_required_apple_graph_files_override_indexignore_patterns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            workspace = project_path / "App.xcodeproj/project.xcworkspace/contents.xcworkspacedata"
+            pbxproj = project_path / "App.xcodeproj/project.pbxproj"
+            asset = project_path / "App/Assets.xcassets/hero.imageset/Contents.json"
+            indexignore = project_path / ".indexignore"
+            workspace.parent.mkdir(parents=True, exist_ok=True)
+            pbxproj.parent.mkdir(parents=True, exist_ok=True)
+            asset.parent.mkdir(parents=True, exist_ok=True)
+            workspace.write_text("<Workspace />\n", encoding="utf-8")
+            pbxproj.write_text("// !$*UTF8*$!\n", encoding="utf-8")
+            asset.write_text("{}", encoding="utf-8")
+            indexignore.write_text("**/*.xcodeproj/**\n**/*.xcworkspace/**\n**/*.xcassets/**\n", encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("App.xcodeproj/project.pbxproj", rel_paths)
+        self.assertIn("App.xcodeproj/project.xcworkspace/contents.xcworkspacedata", rel_paths)
+        self.assertIn("App/Assets.xcassets/hero.imageset/Contents.json", rel_paths)
+
 
 if __name__ == "__main__":
     unittest.main()

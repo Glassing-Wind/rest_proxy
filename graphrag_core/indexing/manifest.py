@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
@@ -204,39 +205,64 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
                 return True
         return False
 
-    for path in root.rglob("*"):
-        if any(part in skip_dirs for part in path.parts):
-            continue
-        if any(part.endswith(suffix) for suffix in skip_dir_suffixes for part in path.parts):
-            continue
-        if not path.is_file():
-            continue
-        if path.suffix.lower() in skip_exts:
-            continue
-        if path.name in skip_filenames:
-            continue
-        if path.name.startswith(".") and path.name not in {
-            ".gitignore",
-            ".indexignore",
-            ".env.example",
-            ".editorconfig",
-        }:
-            continue
-        try:
-            rel = str(path.relative_to(root))
-            if _is_ignored(rel):
-                continue
-            stats = path.stat()
-            if stats.st_size > max_file_size:
-                continue
-            manifest.append(
-                {
-                    "abs_path": str(path.absolute()),
-                    "rel_path": rel,
-                    "ext": path.suffix.lower().lstrip("."),
-                    "size": stats.st_size,
-                }
+    def _is_required_graph_file(rel: str) -> bool:
+        rel_lower = rel.lower()
+        return (
+            rel_lower.endswith(".xcodeproj/project.pbxproj")
+            or rel_lower.endswith(".xcworkspace/contents.xcworkspacedata")
+            or rel_lower.endswith(".xcscheme")
+            or rel_lower.endswith(".storyboard")
+            or rel_lower.endswith(".xib")
+            or rel_lower.endswith(".plist")
+            or rel_lower.endswith(".xcassets/contents.json")
+            or ".xcassets/" in rel_lower and rel_lower.endswith("/contents.json")
+        )
+
+    def _is_required_graph_dir(rel: str) -> bool:
+        rel_lower = rel.lower()
+        return rel_lower.endswith(".xcodeproj") or rel_lower.endswith(".xcworkspace") or ".xcassets" in rel_lower
+
+    for current_root, dirnames, filenames in os.walk(root):
+        current_path = Path(current_root)
+        rel_dir_parts = current_path.relative_to(root).parts if current_path != root else ()
+        dirnames[:] = [
+            dirname
+            for dirname in dirnames
+            if dirname not in skip_dirs
+            and not any(dirname.endswith(suffix) for suffix in skip_dir_suffixes)
+            and (
+                _is_required_graph_dir(str(Path(*rel_dir_parts, dirname)).replace("\\", "/"))
+                or not _is_ignored(str(Path(*rel_dir_parts, dirname)).replace("\\", "/"))
             )
-        except Exception:
-            continue
+        ]
+        for filename in filenames:
+            path = current_path / filename
+            rel = str(path.relative_to(root)).replace("\\", "/")
+            if _is_ignored(rel) and not _is_required_graph_file(rel):
+                continue
+            if path.suffix.lower() in skip_exts:
+                continue
+            if path.name in skip_filenames:
+                continue
+            if path.name.startswith(".") and path.name not in {
+                ".gitignore",
+                ".indexignore",
+                ".env.example",
+                ".editorconfig",
+            }:
+                continue
+            try:
+                stats = path.stat()
+                if stats.st_size > max_file_size:
+                    continue
+                manifest.append(
+                    {
+                        "abs_path": str(path.absolute()),
+                        "rel_path": rel,
+                        "ext": path.suffix.lower().lstrip("."),
+                        "size": stats.st_size,
+                    }
+                )
+            except Exception:
+                continue
     return manifest
