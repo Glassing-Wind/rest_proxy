@@ -12,6 +12,7 @@ from graphrag_core.ts_pack_facts import extract_file_facts
 
 INDEX_WORKSPACE_PATH = "/Users/michaelmarler/Projects/rest_proxy/scripts/index_workspace.py"
 ASSET_GRAPH_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph.py"
+ASSET_GRAPH_APPLE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_apple.py"
 FLOW_SUMMARY_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/flow_summary.py"
 
 
@@ -143,7 +144,11 @@ class FakeMemoryStore:
 
 
 def load_asset_graph_module(fake_memory_store):
-    spec = importlib.util.spec_from_file_location("asset_graph_fixture", ASSET_GRAPH_PATH)
+    apple_spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph_apple", ASSET_GRAPH_APPLE_PATH)
+    apple_module = importlib.util.module_from_spec(apple_spec)
+    assert apple_spec.loader is not None
+
+    spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph", ASSET_GRAPH_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
 
@@ -158,14 +163,25 @@ def load_asset_graph_module(fake_memory_store):
     helpers_mod = types.ModuleType("_helpers")
     helpers_mod.get_project_id = lambda path: "proj123"
     helpers_mod.get_memory_modules = lambda: (fake_memory_store, None, None, None, None)
+    tools_pkg = types.ModuleType("tools")
+    tools_pkg.__path__ = []
+    brain_pkg = types.ModuleType("tools.brain")
+    brain_pkg.__path__ = []
+    graph_pkg = types.ModuleType("tools.brain.graph")
+    graph_pkg.__path__ = []
 
     with mock.patch.dict(
         sys.modules,
         {
             "graph_bootstrap": graph_bootstrap_mod,
             "_helpers": helpers_mod,
+            "tools": tools_pkg,
+            "tools.brain": brain_pkg,
+            "tools.brain.graph": graph_pkg,
         },
     ):
+        apple_spec.loader.exec_module(apple_module)
+        sys.modules["tools.brain.graph.asset_graph_apple"] = apple_module
         spec.loader.exec_module(module)
     return module
 

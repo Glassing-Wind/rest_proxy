@@ -8,10 +8,15 @@ from pathlib import Path
 from unittest import mock
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph.py"
+APPLE_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_apple.py"
 
 
 def load_asset_graph_module():
-    spec = importlib.util.spec_from_file_location("asset_graph_under_test", MODULE_PATH)
+    apple_spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph_apple", APPLE_MODULE_PATH)
+    apple_module = importlib.util.module_from_spec(apple_spec)
+    assert apple_spec.loader is not None
+
+    spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
 
@@ -26,14 +31,25 @@ def load_asset_graph_module():
     helpers_mod = types.ModuleType("_helpers")
     helpers_mod.get_memory_modules = lambda: (FakeMemoryStore, None, None, None, None)
     helpers_mod.get_project_id = lambda path: "proj123"
+    tools_pkg = types.ModuleType("tools")
+    tools_pkg.__path__ = []
+    brain_pkg = types.ModuleType("tools.brain")
+    brain_pkg.__path__ = []
+    graph_pkg = types.ModuleType("tools.brain.graph")
+    graph_pkg.__path__ = []
 
     with mock.patch.dict(
         sys.modules,
         {
             "graph_bootstrap": graph_bootstrap_mod,
             "_helpers": helpers_mod,
+            "tools": tools_pkg,
+            "tools.brain": brain_pkg,
+            "tools.brain.graph": graph_pkg,
         },
     ):
+        apple_spec.loader.exec_module(apple_module)
+        sys.modules["tools.brain.graph.asset_graph_apple"] = apple_module
         spec.loader.exec_module(module)
     return module
 
