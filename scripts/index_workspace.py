@@ -285,6 +285,12 @@ def _build_line_window_chunks(
     raise RuntimeError("ts_pack.build_line_window_chunks is required")
 
 
+def _build_semantic_sync_plan(ts_pack, all_chunks: List[List[Dict]], existing_ids: set[str]) -> dict:
+    if hasattr(ts_pack, "build_semantic_sync_plan"):
+        return ts_pack.build_semantic_sync_plan(all_chunks, existing_ids)
+    raise RuntimeError("ts_pack.build_semantic_sync_plan is required")
+
+
 def _read_and_chunk(
     abs_path: str, rel_path: str, project_id: str
 ) -> Tuple[List[Dict], str | None]:
@@ -577,21 +583,21 @@ async def _fetch_existing_chunk_ids(project_id: str) -> set:
     return existing_ids
 
 
-async def _prune_ghost_chunks(project_id: str, all_chunks: List[List[Dict]]) -> None:
-    if not (memory_store._pg_pool_available() and all_chunks):
+async def _prune_ghost_chunks(project_id: str, prune_targets: List[Dict]) -> None:
+    if not (memory_store._pg_pool_available() and prune_targets):
         return
     try:
         t_prune = time.time()
         pruned_total = 0
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
             async with conn.cursor() as cur:
-                for file_chunks in all_chunks:
-                    if not file_chunks:
-                        continue
-                    rel_path = file_chunks[0]["metadata"].get("file")
+                for target in prune_targets:
+                    rel_path = target.get("file_path")
                     if not rel_path:
                         continue
-                    valid_ids = [c["ref_id"] for c in file_chunks]
+                    valid_ids = target.get("chunk_ids") or []
+                    if not valid_ids:
+                        continue
                     await cur.execute(
                         """
                         DELETE FROM codebase_embeddings
@@ -701,19 +707,18 @@ async def index_project(
     # ── Fetch already-indexed chunk_ids (one Postgres round-trip) ────────────
     existing_ids = await _fetch_existing_chunk_ids(project_id)
 
+    import tree_sitter_language_pack as ts_pack
+
+    sync_plan = _build_semantic_sync_plan(ts_pack, all_chunks, existing_ids)
+
     # ── Surgical Pruning: Remove ghost chunks for modified files ────────────────
     # For every file in the manifest, we must ensure Postgres only contains the
     # chunks we just generated. This removes "orphaned" chunks from old versions.
-    await _prune_ghost_chunks(project_id, all_chunks)
+    await _prune_ghost_chunks(project_id, sync_plan.get("prune_targets") or [])
 
     # ── Filter to only new chunks (already have stable content-hash ref_ids) ──
-    all_new_chunks: List[Dict] = [
-        chunk
-        for file_chunks in all_chunks
-        for chunk in file_chunks
-        if chunk["ref_id"] not in existing_ids
-    ]
-    skipped = sum(len(cs) for cs in all_chunks) - len(all_new_chunks)
+    all_new_chunks: List[Dict] = sync_plan.get("new_chunks") or []
+    skipped = int(sync_plan.get("skipped_chunks") or 0)
     total_new = len(all_new_chunks)
     batch_num = 0
 

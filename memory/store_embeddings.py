@@ -7,6 +7,11 @@ from typing import Any, Dict, List, Optional
 import graph_bootstrap
 from memory import store_core
 
+try:
+    import tree_sitter_language_pack as ts_pack
+except Exception:
+    ts_pack = None
+
 
 async def insert_codebase_embedding(
     chunk_id: str,
@@ -96,34 +101,42 @@ async def insert_embeddings_batch(
         if store_core._pg_pool_available():
             _now = time.time()
             rows = []
-            for item in batch:
-                chunk_id = item["ref_id"]
-                meta = item.get("metadata", {})
-                file_path = meta.get("file", "") if isinstance(meta, dict) else ""
-                chunk_idx = int(chunk_id.split("::")[-1]) if "::" in chunk_id else 0
-                vec = item.get("vector", [])
-
-                if (
-                    not isinstance(vec, list)
-                    or len(vec) != store_core._EXPECTED_EMBEDDING_DIM
-                ):
-                    continue  # skip malformed vectors
-
-                vec_str = "[" + ",".join(str(v) for v in vec) + "]"
-                meta_json = json.dumps(meta if isinstance(meta, dict) else {})
-                rows.append(
-                    (
-                        chunk_id,
-                        project_id,
-                        file_path,
-                        item.get("ref_type", "code_chunk"),
-                        chunk_idx,
-                        item["text"],
-                        vec_str,
-                        meta_json,
-                        _now,
-                    )
+            if ts_pack and hasattr(ts_pack, "build_codebase_embedding_rows"):
+                rows = ts_pack.build_codebase_embedding_rows(
+                    batch,
+                    project_id,
+                    expected_dim=store_core._EXPECTED_EMBEDDING_DIM,
+                    created_at=_now,
                 )
+            else:
+                for item in batch:
+                    chunk_id = item["ref_id"]
+                    meta = item.get("metadata", {})
+                    file_path = meta.get("file", "") if isinstance(meta, dict) else ""
+                    chunk_idx = int(meta.get("chunk_index") or meta.get("start_line") or 0) if isinstance(meta, dict) else 0
+                    vec = item.get("vector", [])
+
+                    if (
+                        not isinstance(vec, list)
+                        or len(vec) != store_core._EXPECTED_EMBEDDING_DIM
+                    ):
+                        continue
+
+                    vec_str = "[" + ",".join(str(v) for v in vec) + "]"
+                    meta_json = json.dumps(meta if isinstance(meta, dict) else {})
+                    rows.append(
+                        (
+                            chunk_id,
+                            project_id,
+                            file_path,
+                            item.get("ref_type", "code_chunk"),
+                            chunk_idx,
+                            item["text"],
+                            vec_str,
+                            meta_json,
+                            _now,
+                        )
+                    )
 
             if rows:
                 async with store_core._pg_pool.connection() as conn:  # type: ignore[union-attr]

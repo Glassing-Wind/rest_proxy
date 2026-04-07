@@ -73,12 +73,14 @@ class FakeTsPack:
         payload=None,
         swift_chunks=None,
         line_window_chunks=None,
+        sync_plan=None,
     ):
         self._result = result or {}
         self._detected_language = detected_language
         self._payload = payload
         self._swift_chunks = swift_chunks
         self._line_window_chunks = line_window_chunks
+        self._sync_plan = sync_plan
 
     def has_language(self, language):
         return True
@@ -172,6 +174,35 @@ class FakeTsPack:
             i += chunk_lines - overlap_lines
         return chunks
 
+    def build_semantic_sync_plan(self, all_chunks, existing_ids=None):
+        if self._sync_plan is not None:
+            return self._sync_plan
+        existing_ids = existing_ids or set()
+        new_chunks = [
+            chunk
+            for file_chunks in all_chunks
+            for chunk in file_chunks
+            if chunk.get("ref_id") not in existing_ids
+        ]
+        prune_targets = []
+        for file_chunks in all_chunks:
+            if not file_chunks:
+                continue
+            file_path = file_chunks[0].get("metadata", {}).get("file")
+            if file_path:
+                prune_targets.append(
+                    {
+                        "file_path": file_path,
+                        "chunk_ids": [chunk.get("ref_id") for chunk in file_chunks if chunk.get("ref_id")],
+                    }
+                )
+        return {
+            "new_chunks": new_chunks,
+            "skipped_chunks": sum(len(cs) for cs in all_chunks) - len(new_chunks),
+            "prune_targets": prune_targets,
+            "total_chunks": sum(len(cs) for cs in all_chunks),
+        }
+
 
 class FakeCursor:
     def __init__(self):
@@ -259,6 +290,19 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(captured["chunk_id_version"], self.module.CHUNK_ID_VERSION)
         self.assertEqual(captured["chunk_max_size"], self.module.CHUNK_MAX_BYTES)
         self.assertEqual(captured["chunk_overlap"], self.module.CHUNK_OVERLAP_BYTES)
+
+    def test_build_semantic_sync_plan_delegates_to_package(self):
+        all_chunks = [[{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}}]]
+        payload = {
+            "new_chunks": [],
+            "skipped_chunks": 1,
+            "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1"]}],
+            "total_chunks": 1,
+        }
+        fake_ts_pack = FakeTsPack(sync_plan=payload)
+
+        plan = self.module._build_semantic_sync_plan(fake_ts_pack, all_chunks, {"chunk-1"})
+        self.assertEqual(plan, payload)
 
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
@@ -463,22 +507,16 @@ class IndexWorkspaceTests(unittest.TestCase):
     def test_prune_ghost_chunks_uses_current_chunk_ids(self):
         cursor = FakeCursor()
         fake_pool = FakePool(cursor)
-        all_chunks = [
-            [
-                {
-                    "ref_id": "chunk-1",
-                    "metadata": {"file": "src/a.ts"},
-                },
-                {
-                    "ref_id": "chunk-2",
-                    "metadata": {"file": "src/a.ts"},
-                },
-            ]
+        prune_targets = [
+            {
+                "file_path": "src/a.ts",
+                "chunk_ids": ["chunk-1", "chunk-2"],
+            }
         ]
 
         with mock.patch.object(self.module.memory_store, "_pg_pool_available", return_value=True):
             with mock.patch.object(self.module.memory_store, "_pg_pool", fake_pool):
-                asyncio.run(self.module._prune_ghost_chunks("proj123", all_chunks))
+                asyncio.run(self.module._prune_ghost_chunks("proj123", prune_targets))
 
         self.assertEqual(len(cursor.calls), 1)
         query, params = cursor.calls[0]

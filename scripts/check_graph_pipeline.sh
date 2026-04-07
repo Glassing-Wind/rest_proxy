@@ -11,6 +11,9 @@ python3 test_ts_pack_facts.py
 echo "[graph-check] Running semantic indexer helper checks..."
 python3 test_index_workspace.py
 
+echo "[graph-check] Running semantic Postgres row checks..."
+python3 test_store_embeddings.py
+
 echo "[graph-check] Running duplication helper checks..."
 python3 test_duplication_helpers.py
 
