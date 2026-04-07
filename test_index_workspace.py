@@ -203,6 +203,11 @@ class FakeTsPack:
             "total_chunks": sum(len(cs) for cs in all_chunks),
         }
 
+    async def execute_semantic_sync(self, conn, project_id, all_chunks):
+        if self._sync_plan is not None:
+            return self._sync_plan
+        return self.build_semantic_sync_plan(all_chunks, set())
+
 
 class FakeCursor:
     def __init__(self):
@@ -291,17 +296,20 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(captured["chunk_max_size"], self.module.CHUNK_MAX_BYTES)
         self.assertEqual(captured["chunk_overlap"], self.module.CHUNK_OVERLAP_BYTES)
 
-    def test_build_semantic_sync_plan_delegates_to_package(self):
+    def test_execute_semantic_sync_delegates_to_package(self):
         all_chunks = [[{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}}]]
         payload = {
             "new_chunks": [],
             "skipped_chunks": 1,
             "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1"]}],
             "total_chunks": 1,
+            "existing_ids": {"chunk-1"},
+            "pruned_total": 0,
         }
         fake_ts_pack = FakeTsPack(sync_plan=payload)
+        conn = object()
 
-        plan = self.module._build_semantic_sync_plan(fake_ts_pack, all_chunks, {"chunk-1"})
+        plan = asyncio.run(self.module._execute_semantic_sync(conn, fake_ts_pack, "proj123", all_chunks))
         self.assertEqual(plan, payload)
 
     def test_should_skip_diagnostic_file_honors_env(self):
@@ -503,28 +511,6 @@ class IndexWorkspaceTests(unittest.TestCase):
 
         self.assertEqual(chunks, [])
         self.assertEqual(reason, "diagnostics")
-
-    def test_prune_ghost_chunks_uses_current_chunk_ids(self):
-        cursor = FakeCursor()
-        fake_pool = FakePool(cursor)
-        prune_targets = [
-            {
-                "file_path": "src/a.ts",
-                "chunk_ids": ["chunk-1", "chunk-2"],
-            }
-        ]
-
-        with mock.patch.object(self.module.memory_store, "_pg_pool_available", return_value=True):
-            with mock.patch.object(self.module.memory_store, "_pg_pool", fake_pool):
-                asyncio.run(self.module._prune_ghost_chunks("proj123", prune_targets))
-
-        self.assertEqual(len(cursor.calls), 1)
-        query, params = cursor.calls[0]
-        self.assertIn("DELETE FROM codebase_embeddings", query)
-        self.assertEqual(params[0], "proj123")
-        self.assertEqual(params[1], "src/a.ts")
-        self.assertEqual(params[2], ["chunk-1", "chunk-2"])
-
 
 if __name__ == "__main__":
     unittest.main()

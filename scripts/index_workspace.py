@@ -285,10 +285,10 @@ def _build_line_window_chunks(
     raise RuntimeError("ts_pack.build_line_window_chunks is required")
 
 
-def _build_semantic_sync_plan(ts_pack, all_chunks: List[List[Dict]], existing_ids: set[str]) -> dict:
-    if hasattr(ts_pack, "build_semantic_sync_plan"):
-        return ts_pack.build_semantic_sync_plan(all_chunks, existing_ids)
-    raise RuntimeError("ts_pack.build_semantic_sync_plan is required")
+async def _execute_semantic_sync(conn, ts_pack, project_id: str, all_chunks: List[List[Dict]]) -> dict:
+    if hasattr(ts_pack, "execute_semantic_sync"):
+        return await ts_pack.execute_semantic_sync(conn, project_id, all_chunks)
+    raise RuntimeError("ts_pack.execute_semantic_sync is required")
 
 
 def _read_and_chunk(
@@ -558,71 +558,6 @@ def _report_chunking_results(
     return all_chunks, parsed_files, skipped_files
 
 
-async def _fetch_existing_chunk_ids(project_id: str) -> set:
-    existing_ids: set = set()
-    if not memory_store._pg_pool_available():
-        return existing_ids
-    try:
-        async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
-            cur = await conn.execute(
-                "SELECT chunk_id FROM codebase_embeddings WHERE project_id = %s",
-                [project_id],
-            )
-            existing_ids = {row[0] for row in await cur.fetchall()}
-    except Exception as exc:
-        print(
-            f"[lm-proxy:indexer] WARN: could not fetch existing ids: {exc}",
-            file=sys.stderr,
-            flush=True,
-        )
-    print(
-        f"[lm-proxy:indexer] {len(existing_ids)} chunks already indexed — skipping unchanged",
-        file=sys.stderr,
-        flush=True,
-    )
-    return existing_ids
-
-
-async def _prune_ghost_chunks(project_id: str, prune_targets: List[Dict]) -> None:
-    if not (memory_store._pg_pool_available() and prune_targets):
-        return
-    try:
-        t_prune = time.time()
-        pruned_total = 0
-        async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
-            async with conn.cursor() as cur:
-                for target in prune_targets:
-                    rel_path = target.get("file_path")
-                    if not rel_path:
-                        continue
-                    valid_ids = target.get("chunk_ids") or []
-                    if not valid_ids:
-                        continue
-                    await cur.execute(
-                        """
-                        DELETE FROM codebase_embeddings
-                        WHERE project_id = %s
-                          AND file_path = %s
-                          AND NOT (chunk_id = ANY(%s))
-                        """,
-                        (project_id, rel_path, valid_ids),
-                    )
-                    pruned_total += cur.rowcount
-        if pruned_total > 0:
-            print(
-                f"[lm-proxy:indexer] Surgically pruned {pruned_total} ghost chunks in "
-                f"{(time.time() - t_prune) * 1000:.0f}ms",
-                file=sys.stderr,
-                flush=True,
-            )
-    except Exception as exc:
-        print(
-            f"[lm-proxy:indexer] WARN: surgical pruning failed: {exc}",
-            file=sys.stderr,
-            flush=True,
-        )
-
-
 async def index_project(
     target_dir: str,
     project_id: str,
@@ -704,17 +639,31 @@ async def index_project(
         manifest, all_results, time.time() - t_chunk
     )
 
-    # ── Fetch already-indexed chunk_ids (one Postgres round-trip) ────────────
-    existing_ids = await _fetch_existing_chunk_ids(project_id)
-
     import tree_sitter_language_pack as ts_pack
+    try:
+        async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+            sync_plan = await _execute_semantic_sync(conn, ts_pack, project_id, all_chunks)
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] WARN: semantic sync failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        sync_plan = {"new_chunks": [], "skipped_chunks": 0, "pruned_total": 0, "existing_ids": set()}
 
-    sync_plan = _build_semantic_sync_plan(ts_pack, all_chunks, existing_ids)
-
-    # ── Surgical Pruning: Remove ghost chunks for modified files ────────────────
-    # For every file in the manifest, we must ensure Postgres only contains the
-    # chunks we just generated. This removes "orphaned" chunks from old versions.
-    await _prune_ghost_chunks(project_id, sync_plan.get("prune_targets") or [])
+    existing_count = len(sync_plan.get("existing_ids") or set())
+    print(
+        f"[lm-proxy:indexer] {existing_count} chunks already indexed — skipping unchanged",
+        file=sys.stderr,
+        flush=True,
+    )
+    pruned_total = int(sync_plan.get("pruned_total") or 0)
+    if pruned_total > 0:
+        print(
+            f"[lm-proxy:indexer] Surgically pruned {pruned_total} ghost chunks",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # ── Filter to only new chunks (already have stable content-hash ref_ids) ──
     all_new_chunks: List[Dict] = sync_plan.get("new_chunks") or []
