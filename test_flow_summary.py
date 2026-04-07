@@ -143,6 +143,8 @@ class FlowSummaryTests(unittest.TestCase):
 
     def test_get_apple_build_summary_formats_target_aware_paths(self):
         async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
             if kwargs.get("op") == "get_apple_build_summary":
                 return [
                     {
@@ -195,6 +197,8 @@ class FlowSummaryTests(unittest.TestCase):
 
     def test_get_apple_build_summary_groups_by_scheme(self):
         async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
             if kwargs.get("op") == "get_apple_build_summary":
                 return [
                     {
@@ -239,6 +243,33 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("Scheme: App", output)
         self.assertIn("ios/App/View.swift", output)
         self.assertIn("ios/App/Settings.swift", output)
+
+    def test_get_apple_build_summary_skips_non_apple_repo(self):
+        seen_ops = []
+
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            seen_ops.append(op)
+            if op == "apple_build_presence":
+                return [{"n": 0}]
+            if op == "get_apple_build_summary":
+                raise AssertionError("unexpected Apple build query on non-Apple repo")
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertEqual("No Apple build graph paths found.", output)
+        self.assertEqual(["apple_build_presence"], seen_ops)
 
 
 if __name__ == "__main__":

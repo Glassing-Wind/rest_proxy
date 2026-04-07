@@ -171,6 +171,8 @@ class GraphToolsTests(unittest.TestCase):
     def test_directory_snapshot_includes_apple_build_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 1}]
             if op == "get_directory_snapshot_files":
                 return [{"fp": "ios/App/View.swift", "sym_count": 3, "samples": ["body", "preview"]}]
             if op == "get_directory_snapshot_inbound":
@@ -206,6 +208,8 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"top_dir": "ios", "files": 8, "syms": 14}]
             if op == "get_project_overview_key_files":
                 return [{"fp": "ios/App/View.swift", "n": 4, "ex": ["body", "preview"]}]
+            if op == "apple_context_presence":
+                return [{"n": 1}]
             if op == "apple_context_targets":
                 return [{"target": "App", "project_file": "ios/App.xcodeproj/project.pbxproj", "bundled_files": 4}]
             if op == "apple_context_schemes":
@@ -222,6 +226,33 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("target `App` bundles 4 file(s)", output)
         self.assertIn("scheme `App` builds App", output)
         self.assertIn("workspace `ios/App.xcworkspace/contents.xcworkspacedata` references ios/App.xcodeproj/project.pbxproj", output)
+
+    def test_project_overview_skips_apple_queries_for_non_apple_repo(self):
+        seen_ops = []
+
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            seen_ops.append(op)
+            if op == "get_project_overview_file_count":
+                return [{"files": 12}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 20}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "src", "files": 8, "syms": 14}]
+            if op == "get_project_overview_key_files":
+                return [{"fp": "src/app.js", "n": 4, "ex": ["start", "stop"]}]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op in {"apple_context_targets", "apple_context_schemes", "apple_context_workspaces"}:
+                raise AssertionError(f"unexpected Apple query: {op}")
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/framecreator"))
+
+        self.assertNotIn("## Apple Build Context", output)
+        self.assertIn("apple_context_presence", seen_ops)
 
 
 if __name__ == "__main__":

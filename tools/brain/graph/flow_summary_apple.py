@@ -8,6 +8,25 @@ from _helpers import get_project_id
 from tools.brain.graph import core as graph_core
 
 
+async def _has_apple_build_files(session, project_id: str) -> bool:
+    rows = await graph_core._execute_read(
+        session,
+        """
+        MATCH (f:File {project_id:$p})
+        WHERE f.filepath ENDS WITH '.xcodeproj/project.pbxproj'
+           OR f.filepath ENDS WITH '.xcworkspace/contents.xcworkspacedata'
+           OR f.filepath ENDS WITH '.xcscheme'
+           OR f.filepath ENDS WITH '.storyboard'
+           OR f.filepath ENDS WITH '.xib'
+           OR f.filepath CONTAINS '.xcassets/'
+        RETURN count(f) AS n
+        """,
+        p=project_id,
+        op="apple_build_presence",
+    )
+    return bool(rows and rows[0].get("n"))
+
+
 _APPLE_BUILD_QUERY = """
 MATCH (res:Resource {project_id:$p})-[:BUNDLED_IN_TARGET]->(target:XcodeTarget {project_id:$p})
 OPTIONAL MATCH (src:File {project_id:$p})-[rel:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->(res)
@@ -105,6 +124,8 @@ async def get_apple_build_summary_impl(
         query_limit = max(limit * 10, 300)
 
     async with driver.session(database=neo4j_db) as session:
+        if not await _has_apple_build_files(session, project_id):
+            return "No Apple build graph paths found."
         result = await graph_core._execute_read(
             session,
             _APPLE_BUILD_QUERY,

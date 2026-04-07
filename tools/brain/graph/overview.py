@@ -7,6 +7,25 @@ from tools.brain.graph import core as graph_core
 from .core import _SYMBOL_FILTER_CYPHER
 
 
+async def has_apple_build_context(session, project_id: str) -> bool:
+    rows = await graph_core._execute_read(
+        session,
+        """
+        MATCH (f:File {project_id:$p})
+        WHERE f.filepath ENDS WITH '.xcodeproj/project.pbxproj'
+           OR f.filepath ENDS WITH '.xcworkspace/contents.xcworkspacedata'
+           OR f.filepath ENDS WITH '.xcscheme'
+           OR f.filepath ENDS WITH '.storyboard'
+           OR f.filepath ENDS WITH '.xib'
+           OR f.filepath CONTAINS '.xcassets/'
+        RETURN count(f) AS n
+        """,
+        p=project_id,
+        op="apple_context_presence",
+    )
+    return bool(rows and rows[0].get("n"))
+
+
 async def load_apple_build_context(session, project_id: str, dir_prefix: str = "", limit: int = 5):
     targets = await graph_core._execute_read(
         session,
@@ -119,9 +138,12 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             limit=limit * 3,
             op="get_directory_snapshot_assets",
         )
-        r_apple_targets, r_apple_schemes, _ = await load_apple_build_context(
-            session, project_id, dir_prefix=dir_prefix, limit=limit
-        )
+        if await has_apple_build_context(session, project_id):
+            r_apple_targets, r_apple_schemes, _ = await load_apple_build_context(
+                session, project_id, dir_prefix=dir_prefix, limit=limit
+            )
+        else:
+            r_apple_targets, r_apple_schemes = [], []
 
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:
@@ -228,7 +250,12 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
             ex = ", ".join(e for e in rec["ex"] if e)
             key_files.append(f"  - {rec['fp']}  ({rec['n']} symbols: {ex})")
 
-        apple_targets, apple_schemes, apple_workspaces = await load_apple_build_context(session, project_id, limit=5)
+        if await has_apple_build_context(session, project_id):
+            apple_targets, apple_schemes, apple_workspaces = await load_apple_build_context(
+                session, project_id, limit=5
+            )
+        else:
+            apple_targets, apple_schemes, apple_workspaces = [], [], []
 
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
