@@ -13,6 +13,7 @@ from graphrag_core.ts_pack_facts import extract_file_facts
 INDEX_WORKSPACE_PATH = "/Users/michaelmarler/Projects/rest_proxy/scripts/index_workspace.py"
 ASSET_GRAPH_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph.py"
 ASSET_GRAPH_APPLE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_apple.py"
+ASSET_GRAPH_WRITE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_write.py"
 FLOW_SUMMARY_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/flow_summary.py"
 
 
@@ -147,6 +148,9 @@ def load_asset_graph_module(fake_memory_store):
     apple_spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph_apple", ASSET_GRAPH_APPLE_PATH)
     apple_module = importlib.util.module_from_spec(apple_spec)
     assert apple_spec.loader is not None
+    write_spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph_write", ASSET_GRAPH_WRITE_PATH)
+    write_module = importlib.util.module_from_spec(write_spec)
+    assert write_spec.loader is not None
 
     spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph", ASSET_GRAPH_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -182,6 +186,8 @@ def load_asset_graph_module(fake_memory_store):
     ):
         apple_spec.loader.exec_module(apple_module)
         sys.modules["tools.brain.graph.asset_graph_apple"] = apple_module
+        write_spec.loader.exec_module(write_module)
+        sys.modules["tools.brain.graph.asset_graph_write"] = write_module
         spec.loader.exec_module(module)
     return module
 

@@ -9,12 +9,16 @@ from unittest import mock
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph.py"
 APPLE_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_apple.py"
+WRITE_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_write.py"
 
 
 def load_asset_graph_module():
     apple_spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph_apple", APPLE_MODULE_PATH)
     apple_module = importlib.util.module_from_spec(apple_spec)
     assert apple_spec.loader is not None
+    write_spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph_write", WRITE_MODULE_PATH)
+    write_module = importlib.util.module_from_spec(write_spec)
+    assert write_spec.loader is not None
 
     spec = importlib.util.spec_from_file_location("tools.brain.graph.asset_graph", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -50,6 +54,8 @@ def load_asset_graph_module():
     ):
         apple_spec.loader.exec_module(apple_module)
         sys.modules["tools.brain.graph.asset_graph_apple"] = apple_module
+        write_spec.loader.exec_module(write_module)
+        sys.modules["tools.brain.graph.asset_graph_write"] = write_module
         spec.loader.exec_module(module)
     return module
 
