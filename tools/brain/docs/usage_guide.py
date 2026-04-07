@@ -86,9 +86,9 @@ Doc indexing tips:
 - Symbol-level `IMPORTS_SYMBOL` / `EXPORTS_SYMBOL` edges are expected to come from `index_workspace` in the normal workflow. `IMPLICIT_IMPORTS_SYMBOL` is heuristic and should be treated as optional/experimental rather than part of the default graph contract.
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
-- `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)
+- `get_backend_flow_summary(project_path, api_contains?, crate_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls and Cargo crate context for Rust workspaces)
 - `get_apple_build_summary(project_path, source_contains?, resource_contains?, target_contains?, scheme_contains?, limit=20, as_table=false)` → Apple source → resource → target → scheme → workspace paths
-- `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI, backend, Apple build, or CLI flow (auto tries UI → backend → Apple → CLI)
+- `get_flow_summary(project_path, mode='auto', ui_contains?, api_contains?, crate_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI, backend, Apple build, or CLI flow (auto tries UI → backend → Apple → CLI)
   - Tip: set `include_tests=true` when you want coverage paths from test files too
 - Launch edges: enable `TS_PACK_LAUNCH_EDGES=1` to emit `LAUNCHES` file edges; set `TS_PACK_DEBUG_LAUNCH=1` to log launch resolution counts per file during indexing
 - `get_language_pack_status()` → available vs manifest languages (auto-download status)

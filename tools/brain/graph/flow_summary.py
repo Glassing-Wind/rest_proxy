@@ -144,6 +144,62 @@ LIMIT $limit
 """
 
 
+async def _load_cargo_crate_roots(session, project_id: str):
+    schema_labels = await graph_core._execute_read(
+        session,
+        """
+        CALL db.labels() YIELD label
+        RETURN collect(label) AS labels
+        """,
+        op="backend_flow_cargo_schema_labels",
+    )
+    labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
+    if "CargoCrate" not in labels:
+        return []
+    return await graph_core._execute_read(
+        session,
+        """
+        MATCH (c:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        RETURN c.name AS crate,
+               c.crate_name AS crate_name,
+               mf.filepath AS manifest_path
+        ORDER BY size(mf.filepath) DESC, c.name
+        """,
+        p=project_id,
+        op="backend_flow_cargo_crates",
+    )
+
+
+def _cargo_manifest_dir(manifest_path: str | None) -> str:
+    if not manifest_path:
+        return ""
+    return manifest_path[:-len("Cargo.toml")] if manifest_path.endswith("Cargo.toml") else manifest_path
+
+
+def _match_cargo_crate(filepath: str | None, crate_rows) -> tuple[str | None, str | None]:
+    if not filepath:
+        return None, None
+    for row in crate_rows:
+        manifest_path = row.get("manifest_path")
+        crate_root = _cargo_manifest_dir(manifest_path)
+        if crate_root and filepath.startswith(crate_root):
+            return row.get("crate"), row.get("crate_name")
+    return None, None
+
+
+def _format_backend_flow_row(api, svc, model, schema, external, api_crate=None, svc_crate=None) -> str:
+    parts = [value for value in [api, svc, model, schema, external] if value]
+    flow = " -> ".join(parts)
+    crate_bits = []
+    if api_crate:
+        crate_bits.append(f"api_crate={api_crate}")
+    if svc_crate and svc_crate != api_crate:
+        crate_bits.append(f"service_crate={svc_crate}")
+    if not crate_bits:
+        return flow
+    return f"[{', '.join(crate_bits)}] {flow}"
+
+
 async def _resolve_entry_files(session, project_id: str, entry_files, entry_glob):
     if entry_files or not entry_glob:
         return entry_files
@@ -387,6 +443,7 @@ async def get_backend_flow_summary_impl(
     neo4j_db: str,
     workspace_id: str,
     api_contains: str | None = None,
+    crate_contains: str | None = None,
     model_contains: str | None = None,
     service_contains: str | None = None,
     include_tests: bool = False,
@@ -407,41 +464,62 @@ async def get_backend_flow_summary_impl(
             limit=query_limit,
             op="get_backend_flow_summary",
         )
+        cargo_crate_rows = await _load_cargo_crate_roots(session, project_id)
     rows = [
-        (
-            row.get("api"),
-            row.get("svc"),
-            row.get("model"),
-            row.get("schema"),
-            row.get("external"),
-        )
+        {
+            "api": row.get("api"),
+            "svc": row.get("svc"),
+            "model": row.get("model"),
+            "schema": row.get("schema"),
+            "external": row.get("external"),
+        }
         for row in result
     ]
+    for row in rows:
+        row["api_crate"], row["api_crate_name"] = _match_cargo_crate(row["api"], cargo_crate_rows)
+        row["svc_crate"], row["svc_crate_name"] = _match_cargo_crate(row["svc"], cargo_crate_rows)
 
     if api_contains:
-        rows = [r for r in rows if r[0] and api_contains in r[0]]
+        rows = [r for r in rows if r["api"] and api_contains in r["api"]]
     if service_contains:
-        rows = [r for r in rows if r[1] and service_contains in r[1]]
+        rows = [r for r in rows if r["svc"] and service_contains in r["svc"]]
     if model_contains:
-        rows = [r for r in rows if r[2] and model_contains in r[2]]
+        rows = [r for r in rows if r["model"] and model_contains in r["model"]]
+    if crate_contains:
+        needle = crate_contains.lower()
+        rows = [
+            r for r in rows
+            if (r["api_crate"] and needle in r["api_crate"].lower())
+            or (r["api_crate_name"] and needle in r["api_crate_name"].lower())
+            or (r["svc_crate"] and needle in r["svc_crate"].lower())
+            or (r["svc_crate_name"] and needle in r["svc_crate_name"].lower())
+        ]
 
-    rows = [r for r in rows if r[1] or r[2] or r[3] or r[4]]
+    rows = [r for r in rows if r["svc"] or r["model"] or r["schema"] or r["external"]]
     if not rows:
         return "No API → Service → DB paths found."
 
     if as_table:
         output = [
-            "| API | Service | Model | Schema | External |",
-            "| --- | --- | --- | --- | --- |",
+            "| API Crate | Service Crate | API | Service | Model | Schema | External |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
         ]
-        for api, svc, model, schema, external in rows[:limit]:
+        for row in rows[:limit]:
             output.append(
-                f"| {api or ''} | {svc or ''} | {model or ''} | {schema or ''} | {external or ''} |"
+                f"| {row['api_crate'] or ''} | {row['svc_crate'] or ''} | {row['api'] or ''} | {row['svc'] or ''} | {row['model'] or ''} | {row['schema'] or ''} | {row['external'] or ''} |"
             )
     else:
         output = [
-            " -> ".join([value for value in [api, svc, model, schema, external] if value])
-            for api, svc, model, schema, external in rows
+            _format_backend_flow_row(
+                row["api"],
+                row["svc"],
+                row["model"],
+                row["schema"],
+                row["external"],
+                api_crate=row["api_crate"],
+                svc_crate=row["svc_crate"],
+            )
+            for row in rows
         ]
 
     output = list(dict.fromkeys(output))

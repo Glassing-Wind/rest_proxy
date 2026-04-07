@@ -134,6 +134,7 @@ def register(mcp: FastMCP) -> None:
     async def get_backend_flow_summary(
         workspace_id: str,
         api_contains: str | None = None,
+        crate_contains: str | None = None,
         model_contains: str | None = None,
         service_contains: str | None = None,
         include_tests: bool = False,
@@ -152,6 +153,7 @@ def register(mcp: FastMCP) -> None:
                 neo4j_db=graph_bootstrap._NEO4J_DB,
                 workspace_id=workspace_id,
                 api_contains=api_contains,
+                crate_contains=crate_contains,
                 model_contains=model_contains,
                 service_contains=service_contains,
                 include_tests=include_tests,
@@ -202,6 +204,7 @@ def register(mcp: FastMCP) -> None:
         mode: str = "auto",
         ui_contains: str | None = None,
         api_contains: str | None = None,
+        crate_contains: str | None = None,
         model_contains: str | None = None,
         service_contains: str | None = None,
         include_tests: bool = False,
@@ -216,6 +219,7 @@ def register(mcp: FastMCP) -> None:
         mode: 'auto', 'ui', 'backend', 'apple', or 'cli'.
             ui_contains: Filter UI files (ui mode only).
             api_contains: Filter API files (backend mode only).
+            crate_contains: Filter backend rows by Cargo crate name (Rust workspaces).
             model_contains: Filter model names.
             service_contains: Filter service files.
             include_tests: Include test files.
@@ -255,6 +259,7 @@ def register(mcp: FastMCP) -> None:
         backend_result = await get_backend_flow_summary(
             workspace_id,
             api_contains=api_contains,
+            crate_contains=crate_contains,
             model_contains=model_contains,
             service_contains=service_contains,
             include_tests=include_tests,
