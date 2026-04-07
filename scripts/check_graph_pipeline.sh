@@ -11,6 +11,9 @@ python3 test_ts_pack_facts.py
 echo "[graph-check] Running semantic indexer helper checks..."
 python3 test_index_workspace.py
 
+echo "[graph-check] Running SourceKitten Swift helper checks..."
+python3 test_sourcekitten_swift.py
+
 echo "[graph-check] Running duplication helper checks..."
 python3 test_duplication_helpers.py
 

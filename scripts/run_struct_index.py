@@ -25,6 +25,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 import tree_sitter_language_pack as ts_pack
+from graphrag_core.indexing import sourcekitten_swift
 
 _NEO4J_WRITE_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_WRITE_TIMEOUT", "15.0"))
 _NEO4J_GDS_TIMEOUT_S = float(os.getenv("LM_PROXY_NEO4J_GDS_TIMEOUT", "120.0"))
@@ -930,6 +931,38 @@ def main() -> int:
     except Exception as exc:
         print(
             f"[ts-pack:struct] WARNING: file_path alias sync failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    try:
+        enrichment = sourcekitten_swift.enrich_swift_graph(
+            project_path=args.project_path,
+            project_id=args.project_id,
+            indexed_files=[str(fp) for fp in files],
+            neo4j_uri=args.neo4j_uri,
+            neo4j_user=args.neo4j_user,
+            neo4j_pass=args.neo4j_pass,
+            neo4j_db=args.neo4j_db,
+        )
+        if enrichment.get("enabled") and enrichment.get("available", True):
+            print(
+                "[ts-pack:struct] SourceKitten Swift enrichment "
+                f"matched {enrichment.get('symbols', 0)} symbol(s) "
+                f"across {enrichment.get('files', 0)} file(s).",
+                file=sys.stderr,
+                flush=True,
+            )
+        elif enrichment.get("enabled") and not enrichment.get("available", True):
+            print(
+                "[ts-pack:struct] SourceKitten Swift enrichment skipped — "
+                "binary not available.",
+                file=sys.stderr,
+                flush=True,
+            )
+    except Exception as exc:
+        print(
+            f"[ts-pack:struct] WARNING: SourceKitten Swift enrichment failed: {exc}",
             file=sys.stderr,
             flush=True,
         )

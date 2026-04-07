@@ -126,6 +126,16 @@ LM_PROXY_MEMORY_ENABLED=1
 LM_PROXY_NEO4J_OP_PREFIX=lmproxy
 ```
 
+Optional Swift enrichment:
+
+```bash
+LM_PROXY_SWIFT_SOURCEKITTEN=1
+```
+
+When enabled, structural indexing performs a best-effort SourceKitten pass for
+Swift files to enrich symbol nodes with Swift-specific metadata. If
+`sourcekitten` is unavailable or fails, indexing continues without enrichment.
+
 ## Graph Regression Checks
 
 Run the focused GraphRAG regression suite with:
