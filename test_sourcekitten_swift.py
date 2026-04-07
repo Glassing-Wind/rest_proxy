@@ -1,6 +1,7 @@
 import importlib.util
 import sys
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/graphrag_core/indexing/sourcekitten_swift.py"
@@ -19,48 +20,22 @@ class SourceKittenSwiftTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
 
-    def test_extract_symbol_records_from_structure_data(self):
-        raw = b"/// Foo docs\nstruct Foo: View {\n    /// Body docs\n    var body: some View { Text(\"x\") }\n}\n"
-        structure = {
-            "key.substructure": [
-                {
-                    "key.kind": "source.lang.swift.decl.struct",
-                    "key.name": "Foo",
-                    "key.offset": len(b"/// Foo docs\n"),
-                    "key.length": len(raw) - len(b"/// Foo docs\n"),
-                    "key.inheritedtypes": [{"key.name": "SwiftUI.View"}],
-                    "key.substructure": [
-                        {
-                            "key.kind": "source.lang.swift.decl.var.instance",
-                            "key.name": "body",
-                            "key.offset": raw.index(b"var body"),
-                            "key.length": len(b"var body: some View { Text(\"x\") }"),
-                            "key.doc.comment": "Body docs",
-                        }
-                    ],
-                }
-            ]
-        }
-        records = self.module._extract_symbol_records_from_structure_data(
-            structure, "Views/Foo.swift", raw
-        )
-        self.assertEqual([r.name for r in records], ["Foo", "body"])
-        self.assertEqual(records[0].inherited_types, ["View"])
-        self.assertEqual(records[0].doc_comment, "Foo docs")
-        self.assertEqual(records[1].doc_comment, "Body docs")
+    def test_base_name_strips_signature(self):
+        self.assertEqual(self.module._base_name("moveSelectedReferenceUp()"), "moveSelectedReferenceUp")
+        self.assertEqual(self.module._base_name("SidebarView"), "SidebarView")
 
     def test_match_symbol_record_prefers_line_overlap(self):
-        record = self.module.SwiftSymbolRecord(
-            filepath="Views/Foo.swift",
-            name="body",
-            base_name="body",
-            kind="source.lang.swift.decl.var.instance",
-            start_line=10,
-            end_line=12,
-            usr=None,
-            doc_comment=None,
-            inherited_types=[],
-        )
+        record = {
+            "filepath": "Views/Foo.swift",
+            "name": "body",
+            "base_name": "body",
+            "kind": "source.lang.swift.decl.var.instance",
+            "start_line": 10,
+            "end_line": 12,
+            "usr": None,
+            "doc_comment": None,
+            "inherited_types": [],
+        }
         match = self.module._match_symbol_record(
             record,
             [
@@ -70,22 +45,21 @@ class SourceKittenSwiftTests(unittest.TestCase):
         )
         self.assertEqual(match["sid"], "b")
 
-    def test_clean_inherited_type_name(self):
-        self.assertEqual(self.module._clean_inherited_type_name("SwiftUI.View"), "View")
-        self.assertEqual(self.module._clean_inherited_type_name("Foo<Bar>"), "Foo")
-        self.assertEqual(self.module._clean_inherited_type_name("ProtocolA & ProtocolB"), "ProtocolA")
-
-    def test_extract_preceding_block_doc_comment(self):
-        lines = [
-            "/**",
-            " * Block docs",
-            " */",
-            "struct Foo {}",
-        ]
-        self.assertEqual(
-            self.module._extract_preceding_doc_comment(lines, 4),
-            "Block docs",
-        )
+    def test_enrich_swift_graph_fail_opens_when_parser_extractor_returns_empty(self):
+        fake_ts_pack = mock.Mock()
+        fake_ts_pack.extract_swift_semantic_facts.return_value = {}
+        with mock.patch.object(self.module, "_load_ts_pack", return_value=fake_ts_pack):
+            result = self.module.enrich_swift_graph(
+                project_path="/tmp/project",
+                project_id="pid",
+                indexed_files=[],
+                neo4j_uri="bolt://localhost:7687",
+                neo4j_user="neo4j",
+                neo4j_pass="password",
+            )
+        self.assertEqual(result["enabled"], self.module._enabled())
+        if self.module._enabled():
+            self.assertFalse(result["available"])
 
 
 if __name__ == "__main__":
