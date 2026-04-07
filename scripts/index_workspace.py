@@ -35,7 +35,7 @@ import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
 # AST-chunk size: target upper bound for native ts_pack chunks.
-CHUNK_MAX_BYTES = 4_000  # bytes — passed as chunk_max_size to ProcessConfig
+CHUNK_MAX_BYTES = 4_000  # bytes — passed through to ts_pack helpers
 # Overlap between adjacent AST chunks (bytes). Keep small to avoid duplication.
 CHUNK_OVERLAP_BYTES = 200
 # Chunk id version for forward-compatible re-indexing.
@@ -228,304 +228,10 @@ def _preflight_ts_pack(manifest: List[Dict]) -> None:
 # ── Chunk-ID helper ───────────────────────────────────────────────────────────
 
 
-def _chunk_id(project_id: str, rel_path: str, start_byte: int, text: str) -> str:
-    """Content-addressable chunk ID — stable across re-indexes.
-
-    Encodes the file path + start byte (for uniqueness) + chunk text (for
-    change detection). Unchanged chunks keep the same ID on re-index →
-    skip-unchanged optimization remains effective even after file edits that
-    shift chunk boundaries.
-    """
-    import hashlib
-
-    digest = hashlib.sha256(f"{rel_path}:{start_byte}:{text}".encode()).hexdigest()[:14]
-    return f"{project_id}:{CHUNK_ID_VERSION}:{rel_path}:{digest}"
-
-
-def _compact_list(items: list, limit: int) -> list:
-    if not items:
-        return []
-    if len(items) <= limit:
-        return items
-    return items[:limit]
-
-
-def _compact_imports(imports: list) -> list:
-    out: list = []
-    for item in imports or []:
-        source = item.get("source") or item.get("module")
-        names = item.get("names") or []
-        if source:
-            out.append({"source": source, "names": _compact_list(names, 10)})
-    return _compact_list(out, 80)
-
-
-def _compact_exports(exports: list) -> list:
-    out: list = []
-    for item in exports or []:
-        name = None
-        kind = None
-        if isinstance(item, dict):
-            name = item.get("name")
-            kind = item.get("kind")
-        if name:
-            out.append({"name": name, "kind": kind})
-    return _compact_list(out, 80)
-
-
-def _compact_symbols(symbols: list) -> list:
-    if not symbols:
-        return []
-    unique: list[str] = []
-    seen: set[str] = set()
-    for s in symbols:
-        name = None
-        if isinstance(s, dict):
-            name = s.get("name") or s.get("symbol") or s.get("text")
-        elif isinstance(s, str):
-            name = s
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        unique.append(name)
-        if len(unique) >= 200:
-            break
-    return unique
-
-
-def _compact_diagnostics(diagnostics: list) -> dict:
-    if not diagnostics:
-        return {"count": 0, "items": []}
-    items = []
-    for d in diagnostics[:10]:
-        items.append(
-            {
-                "message": d.get("message"),
-                "start_line": d.get("start_line") or d.get("span", {}).get("start_row"),
-                "start_col": d.get("start_col") or d.get("span", {}).get("start_col"),
-            }
-        )
-    return {"count": len(diagnostics), "items": items}
-
-
-def _extract_metrics(metrics: dict) -> dict:
-    if not metrics:
-        return {}
-    return {
-        "total_lines": metrics.get("total_lines") or metrics.get("totalLines"),
-        "code_lines": metrics.get("code_lines") or metrics.get("codeLines"),
-        "comment_lines": metrics.get("comment_lines") or metrics.get("commentLines"),
-        "blank_lines": metrics.get("blank_lines") or metrics.get("blankLines"),
-        "error_count": metrics.get("error_count") or metrics.get("errorCount"),
-        "complexity": metrics.get("complexity"),
-    }
-
-
-def _compact_extractions(extractions: dict) -> dict:
-    if not extractions:
-        return {}
-    out: dict = {}
-    for name, payload in (extractions or {}).items():
-        matches = payload.get("matches") or []
-        values: list = []
-        for m in matches:
-            for cap in m.get("captures", []):
-                text = cap.get("text") or cap.get("name")
-                if text:
-                    values.append(text)
-                if len(values) >= 200:
-                    break
-            if len(values) >= 200:
-                break
-        if values:
-            out[name] = _compact_symbols(values)
-    return out
-
-
-def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
-    """Chunk Swift source at declaration boundaries using a direct AST walk.
-
-    ts_pack's process(chunk_max_size=N) recurses into child AST nodes when a
-    declaration body exceeds N.  For SwiftUI trailing-closure DSL this produces
-    hundreds of brace/expression micro-fragments (6-80 bytes each).
-
-    Instead, we walk the tree-sitter AST directly:
-    - Collect computed_property / function_declaration / variable_declaration
-      nodes that are direct members of type containers.
-    - Emit one chunk per member.  Members that exceed CHUNK_MAX_BYTES are
-      split with a line-window (never by recursing into sub-expressions).
-    - Type containers (struct/class/extension/enum/protocol) are NOT emitted
-      as a single chunk; we recurse into their members so each gets its own
-      semantic context.
-
-    Returns [] on any error so _read_and_chunk falls through to line-window.
-    """
-    import tree_sitter_language_pack as ts_pack
-
-    # Member nodes: one chunk each.
-    # Note: Swift var/let are wrapped in property_declaration (which contains
-    # computed_property as a child).  We chunk at property_declaration level
-    # to capture the name from the sibling `pattern` node.
-    _MEMBER_TYPES = {
-        "property_declaration",  # var x: T { ... } and var x: T = value
-        "function_declaration",
-        "subscript_declaration",
-        "typealias_declaration",
-        "init_declaration",
-        "deinit_declaration",
-        "protocol_function_declaration",
-        "protocol_property_declaration",
-        "enum_entry",  # case first, case second(Int)
-    }
-    # Type containers: recurse into children, don't emit as a single block.
-    _CONTAINER_TYPES = {
-        "class_declaration",
-        "struct_declaration",
-        "enum_declaration",
-        "protocol_declaration",
-        "extension_declaration",
-    }
-
-    try:
-        parser = ts_pack.get_parser("swift")
-        src_b = source.encode("utf-8")
-        tree = parser.parse(src_b)
-    except Exception:
-        return []
-
-    file_header = f"// File: {rel_path}\n"
-    chunks: List[Dict] = []
-
-    def _name_of(node) -> str:
-        for child in node.children:
-            # Swift property names live in a `pattern` child node;
-            # function names live in a bare `simple_identifier` child.
-            if child.type == "pattern":
-                return src_b[child.start_byte : child.end_byte].decode(
-                    "utf-8", errors="replace"
-                )
-            if child.type in ("simple_identifier", "type_identifier"):
-                return src_b[child.start_byte : child.end_byte].decode(
-                    "utf-8", errors="replace"
-                )
-        return ""
-
-    def _emit_text(
-        text: str, sb: int, name: str, sl: int, el: int, ctx_path: List[str]
-    ) -> None:
-        text = text.strip()
-        if not text:
-            return
-        if len(text.encode("utf-8")) <= CHUNK_MAX_BYTES:
-            cid = _chunk_id(project_id, rel_path, sb, text)
-            chunks.append(
-                {
-                    "ref_id": cid,
-                    "text": file_header + text,
-                    "metadata": {
-                        "file": rel_path,
-                        "project_id": project_id,
-                        "language": "swift",
-                        "symbols": [name] if name else [],
-                        "start_line": sl,
-                        "end_line": el,
-                        "context_path": ctx_path,
-                    },
-                }
-            )
-        else:
-            # Too large — line-window, keeping symbol context.
-            lines = text.splitlines()
-            i = 0
-            while i < len(lines):
-                block = "\n".join(lines[i : i + CHUNK_LINES])
-                if block.strip():
-                    cid = _chunk_id(project_id, rel_path, sb + i, block)
-                    chunks.append(
-                        {
-                            "ref_id": cid,
-                            "text": file_header + block,
-                            "metadata": {
-                                "file": rel_path,
-                                "project_id": project_id,
-                                "language": "swift",
-                                "symbols": [name] if name else [],
-                                "start_line": sl + i,
-                                "end_line": sl + min(i + CHUNK_LINES, len(lines)) - 1,
-                                "context_path": ctx_path,
-                            },
-                        }
-                    )
-                i += CHUNK_LINES - OVERLAP_LINES
-
-    def _walk(node, ctx_path: List[str]) -> None:
-        if node.type in _MEMBER_TYPES:
-            name = _name_of(node)
-            text = src_b[node.start_byte : node.end_byte].decode(
-                "utf-8", errors="replace"
-            )
-            _emit_text(
-                text,
-                node.start_byte,
-                name,
-                node.start_point[0] + 1,
-                node.end_point[0] + 1,
-                ctx_path + ([name] if name else []),
-            )
-            # Don't recurse into member bodies — avoids sub-expression chunks.
-
-        elif node.type in _CONTAINER_TYPES:
-            name = _name_of(node)
-            new_ctx = ctx_path + ([name] if name else [])
-            for child in node.children:
-                _walk(child, new_ctx)
-
-        else:
-            # Transparent node — pass through (source_file, statements, etc.)
-            for child in node.children:
-                _walk(child, ctx_path)
-
-    _walk(tree.root_node, [])
-    return chunks
-
-
 def _should_skip_diagnostic_file(file_meta: dict) -> bool:
     if not _skip_diagnostic_files_enabled():
         return False
     return file_meta.get("file_diagnostics", {}).get("count", 0) > 0
-
-
-def _line_window_chunks(
-    source: str,
-    rel_path: str,
-    project_id: str,
-    language: str | None,
-    file_meta: dict,
-) -> List[Dict]:
-    file_header = f"// File: {rel_path}\n"
-    chunks: List[Dict] = []
-    lines = source.splitlines()
-    i = 0
-    while i < len(lines):
-        block = lines[i : i + CHUNK_LINES]
-        if not block:
-            break
-        text = file_header + "\n".join(block)
-        cid = _chunk_id(project_id, rel_path, i, text)
-        chunks.append(
-            {
-                "ref_id": cid,
-                "text": text,
-                "metadata": {
-                    "file": rel_path,
-                    "project_id": project_id,
-                    "language": language,
-                    **file_meta,
-                },
-            }
-        )
-        i += CHUNK_LINES - OVERLAP_LINES
-    return chunks
 
 
 def _build_semantic_payload(ts_pack, source: str, lang: str, rel_path: str, project_id: str) -> dict:
@@ -540,6 +246,43 @@ def _build_semantic_payload(ts_pack, source: str, lang: str, rel_path: str, proj
             chunk_overlap=CHUNK_OVERLAP_BYTES,
         )
     raise RuntimeError("ts_pack.build_semantic_payload is required")
+
+
+def _build_swift_chunks(ts_pack, source: str, rel_path: str, project_id: str, file_meta: dict) -> List[Dict]:
+    if hasattr(ts_pack, "build_swift_chunks"):
+        return ts_pack.build_swift_chunks(
+            source,
+            rel_path,
+            project_id,
+            file_meta=file_meta,
+            chunk_id_version=CHUNK_ID_VERSION,
+            chunk_max_size=CHUNK_MAX_BYTES,
+            chunk_lines=CHUNK_LINES,
+            overlap_lines=OVERLAP_LINES,
+        )
+    raise RuntimeError("ts_pack.build_swift_chunks is required")
+
+
+def _build_line_window_chunks(
+    ts_pack,
+    source: str,
+    rel_path: str,
+    project_id: str,
+    language: str | None,
+    file_meta: dict,
+) -> List[Dict]:
+    if hasattr(ts_pack, "build_line_window_chunks"):
+        return ts_pack.build_line_window_chunks(
+            source,
+            rel_path,
+            project_id,
+            language=language,
+            file_meta=file_meta,
+            chunk_id_version=CHUNK_ID_VERSION,
+            chunk_lines=CHUNK_LINES,
+            overlap_lines=OVERLAP_LINES,
+        )
+    raise RuntimeError("ts_pack.build_line_window_chunks is required")
 
 
 def _read_and_chunk(
@@ -635,11 +378,8 @@ def _read_and_chunk(
         except Exception:
             file_meta = {}
 
-        swift_chunks = _chunk_swift(source, rel_path, project_id)
+        swift_chunks = _build_swift_chunks(ts_pack, source, rel_path, project_id, file_meta)
         if swift_chunks:
-            for ch in swift_chunks:
-                if isinstance(ch.get("metadata"), dict):
-                    ch["metadata"].update(file_meta)
             return swift_chunks, None
         # fall through to ts_pack / line-window if structure[] was empty
 
@@ -656,7 +396,7 @@ def _read_and_chunk(
 
     # ── Line-window fallback (unsupported lang or empty result) ──────────────
     if not chunks:
-        chunks = _line_window_chunks(source, rel_path, project_id, lang, file_meta)
+        chunks = _build_line_window_chunks(ts_pack, source, rel_path, project_id, lang, file_meta)
 
     return chunks, None
 

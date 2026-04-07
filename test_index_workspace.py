@@ -66,10 +66,19 @@ def load_index_workspace_module():
 
 
 class FakeTsPack:
-    def __init__(self, result=None, detected_language="typescript", payload=None):
+    def __init__(
+        self,
+        result=None,
+        detected_language="typescript",
+        payload=None,
+        swift_chunks=None,
+        line_window_chunks=None,
+    ):
         self._result = result or {}
         self._detected_language = detected_language
         self._payload = payload
+        self._swift_chunks = swift_chunks
+        self._line_window_chunks = line_window_chunks
 
     def has_language(self, language):
         return True
@@ -109,6 +118,59 @@ class FakeTsPack:
             "file_meta": {},
             "chunks": [],
         }
+
+    def build_swift_chunks(
+        self,
+        source,
+        file_path,
+        project_id,
+        *,
+        file_meta=None,
+        chunk_id_version="v6",
+        chunk_max_size=4000,
+        chunk_lines=60,
+        overlap_lines=10,
+    ):
+        if self._swift_chunks is not None:
+            return self._swift_chunks
+        return []
+
+    def build_line_window_chunks(
+        self,
+        source,
+        file_path,
+        project_id,
+        *,
+        language=None,
+        file_meta=None,
+        chunk_id_version="v6",
+        chunk_lines=60,
+        overlap_lines=10,
+    ):
+        if self._line_window_chunks is not None:
+            return self._line_window_chunks
+        lines = source.splitlines()
+        chunks = []
+        i = 0
+        while i < len(lines):
+            block = lines[i : i + chunk_lines]
+            if not block:
+                break
+            text = f"// File: {file_path}\n" + "\n".join(block)
+            chunks.append(
+                {
+                    "ref_id": f"{project_id}:{chunk_id_version}:{file_path}:line-window-{i}",
+                    "text": text,
+                    "metadata": {
+                        "file": file_path,
+                        "project_id": project_id,
+                        "language": language,
+                        **(file_meta or {}),
+                    },
+                }
+            )
+            i += chunk_lines - overlap_lines
+        return chunks
 
 
 class FakeCursor:
@@ -206,7 +268,7 @@ class IndexWorkspaceTests(unittest.TestCase):
             self.assertFalse(self.module._should_skip_diagnostic_file(file_meta))
 
     def test_read_and_chunk_line_window_fallback(self):
-        fake_ts_pack = types.SimpleNamespace()
+        fake_ts_pack = FakeTsPack(detected_language=None)
         with tempfile.TemporaryDirectory() as tmpdir:
             abs_path = Path(tmpdir) / "settings.toml"
             rel_path = "config/settings.toml"
@@ -221,7 +283,7 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertIsNone(chunks[0]["metadata"]["language"])
 
     def test_read_and_chunk_xcode_metadata_uses_line_window_fallback(self):
-        fake_ts_pack = types.SimpleNamespace()
+        fake_ts_pack = FakeTsPack(detected_language=None)
         with tempfile.TemporaryDirectory() as tmpdir:
             abs_path = Path(tmpdir) / "project.pbxproj"
             rel_path = "App.xcodeproj/project.pbxproj"
@@ -317,6 +379,49 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(metadata["file_facts"], file_facts)
         self.assertEqual(metadata["symbols"], ["GET"])
         self.assertEqual(metadata["file_symbols"], ["GET"])
+
+    def test_read_and_chunk_swift_uses_package_chunker(self):
+        fake_ts_pack = FakeTsPack(
+            detected_language="swift",
+            payload={
+                "file_meta": {
+                    "file_symbols": ["SidebarView"],
+                    "file_diagnostics": {"count": 0, "items": []},
+                },
+                "chunks": [],
+            },
+            swift_chunks=[
+                {
+                    "ref_id": "proj123:v6:SidebarView.swift:swift1",
+                    "text": "// File: FrameCreator/SidebarView.swift\nstruct SidebarView: View {}",
+                    "metadata": {
+                        "file": "FrameCreator/SidebarView.swift",
+                        "project_id": "proj123",
+                        "language": "swift",
+                        "symbols": ["SidebarView"],
+                        "start_line": 1,
+                        "end_line": 1,
+                        "context_path": ["SidebarView"],
+                        "file_symbols": ["SidebarView"],
+                        "file_diagnostics": {"count": 0, "items": []},
+                    },
+                }
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "SidebarView.swift"
+            abs_path.write_text("struct SidebarView: View {}", encoding="utf-8")
+
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                chunks, reason = self.module._read_and_chunk(
+                    str(abs_path), "FrameCreator/SidebarView.swift", "proj123"
+                )
+
+        self.assertIsNone(reason)
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0]["metadata"]["language"], "swift")
+        self.assertEqual(chunks[0]["metadata"]["file_symbols"], ["SidebarView"])
 
     def test_read_and_chunk_skips_diagnostic_files(self):
         fake_result = {
