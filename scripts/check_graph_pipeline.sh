@@ -20,6 +20,9 @@ python3 test_asset_graph.py
 echo "[graph-check] Running flow summary checks..."
 python3 test_flow_summary.py
 
+echo "[graph-check] Running graph tool overview checks..."
+python3 test_graph_tools.py
+
 echo "[graph-check] Running integrated graph pipeline fixture..."
 python3 test_graph_pipeline_fixture.py
 

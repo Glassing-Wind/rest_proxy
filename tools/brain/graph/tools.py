@@ -14,6 +14,48 @@ from .core import _SYMBOL_FILTER_CYPHER
 
 def register(mcp: FastMCP) -> None:
 
+    async def _load_apple_build_context(session, project_id: str, dir_prefix: str = "", limit: int = 5):
+        targets = await graph_core._execute_read(
+            session,
+            """
+            MATCH (t:XcodeTarget {project_id:$p})
+            OPTIONAL MATCH (t)-[:BUNDLES_FILE]->(f:File {project_id:$p})
+            WHERE $dir = '' OR f.filepath STARTS WITH $dir
+            RETURN t.name AS target, t.project_file AS project_file, count(DISTINCT f) AS bundled_files
+            ORDER BY bundled_files DESC, target
+            LIMIT $limit
+            """,
+            p=project_id,
+            dir=dir_prefix,
+            limit=limit,
+            op="apple_context_targets",
+        )
+        schemes = await graph_core._execute_read(
+            session,
+            """
+            MATCH (s:XcodeScheme {project_id:$p})-[:BUILDS_TARGET]->(t:XcodeTarget {project_id:$p})
+            RETURN s.name AS scheme, collect(DISTINCT t.name)[..10] AS targets
+            ORDER BY scheme
+            LIMIT $limit
+            """,
+            p=project_id,
+            limit=limit,
+            op="apple_context_schemes",
+        )
+        workspaces = await graph_core._execute_read(
+            session,
+            """
+            MATCH (w:XcodeWorkspace {project_id:$p})-[:REFERENCES_PROJECT]->(f:File {project_id:$p})
+            RETURN w.filepath AS workspace, collect(DISTINCT f.filepath)[..10] AS projects
+            ORDER BY workspace
+            LIMIT $limit
+            """,
+            p=project_id,
+            limit=limit,
+            op="apple_context_workspaces",
+        )
+        return targets, schemes, workspaces
+
     @mcp.tool()
     async def get_directory_snapshot(
         workspace_id: str, directory_path: str, limit: int = 5
@@ -107,6 +149,9 @@ def register(mcp: FastMCP) -> None:
                     limit=limit * 3,
                     op="get_directory_snapshot_assets",
                 )
+                r_apple_targets, r_apple_schemes, _ = await _load_apple_build_context(
+                    session, project_id, dir_prefix=dir_prefix, limit=limit
+                )
 
             # Format Report
             lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
@@ -130,6 +175,17 @@ def register(mcp: FastMCP) -> None:
                         lines.append(f"- `{source}` -> 📦 `{target}` (Asset/Style)")
                     elif rel == "CALLS_API":
                         lines.append(f"- `{source}` -> 🔌 `{target}` (API Endpoint)")
+
+            if r_apple_targets or r_apple_schemes:
+                lines.append(f"\n### 🍎 Apple Build Context")
+                for rec in r_apple_targets:
+                    lines.append(
+                        f"- target `{rec['target']}` bundles {rec['bundled_files']} file(s)"
+                        + (f" via `{rec['project_file']}`" if rec.get("project_file") else "")
+                    )
+                for rec in r_apple_schemes:
+                    targets = ", ".join(rec.get("targets") or [])
+                    lines.append(f"- scheme `{rec['scheme']}` builds {targets}")
 
             if r_inbound:
                 lines.append(f"\n### 📥 Consumers (External files importing from here)")
@@ -226,6 +282,10 @@ def register(mcp: FastMCP) -> None:
                     ex = ", ".join(e for e in rec["ex"] if e)
                     key_files.append(f"  - {rec['fp']}  ({rec['n']} symbols: {ex})")
 
+                apple_targets, apple_schemes, apple_workspaces = await _load_apple_build_context(
+                    session, project_id, limit=5
+                )
+
                 memory_store, _, _, _, _ = get_memory_modules()
                 await memory_store.open_pool()
                 async with memory_store._pg_pool.connection() as conn:
@@ -263,6 +323,24 @@ def register(mcp: FastMCP) -> None:
                     f"  - get_code_importance('{project_path}') — full ranked file list",
                 ]
             )
+            if apple_targets or apple_schemes or apple_workspaces:
+                lines.extend(
+                    [
+                        "",
+                        "## Apple Build Context",
+                    ]
+                )
+                for rec in apple_targets:
+                    lines.append(
+                        f"  - target `{rec['target']}` bundles {rec['bundled_files']} file(s)"
+                        + (f" via `{rec['project_file']}`" if rec.get("project_file") else "")
+                    )
+                for rec in apple_schemes:
+                    targets = ", ".join(rec.get("targets") or [])
+                    lines.append(f"  - scheme `{rec['scheme']}` builds {targets}")
+                for rec in apple_workspaces:
+                    projects = ", ".join(rec.get("projects") or [])
+                    lines.append(f"  - workspace `{rec['workspace']}` references {projects}")
             return "\n".join(lines)
         except Exception as e:
             return f"Error generating project overview: {str(e)}"
