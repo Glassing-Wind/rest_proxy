@@ -23,6 +23,9 @@ python3 test_flow_summary.py
 echo "[graph-check] Running graph tool overview checks..."
 python3 test_graph_tools.py
 
+echo "[graph-check] Running code intel graph tool checks..."
+python3 test_code_intel_tools.py
+
 echo "[graph-check] Running integrated graph pipeline fixture..."
 python3 test_graph_pipeline_fixture.py
 

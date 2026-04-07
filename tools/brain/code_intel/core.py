@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules, get_project_id
 from proxy.logging import debug_log
 from ts_diagnostics import normalize_ts_pack_result
+from tools.brain.code_intel import symbol_graph
 
 
 def register(mcp: FastMCP) -> None:
@@ -63,24 +64,7 @@ def register(mcp: FastMCP) -> None:
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await _execute_read(
                     session,
-                    """
-                    MATCH (s {name: $name, project_id: $pid})
-                    WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:EnumCase OR s:Method
-                    OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
-                    OPTIONAL MATCH (caller)-[:CALLS|CALLS_INFERRED]->(s)
-                    OPTIONAL MATCH (s)-[:CALLS|CALLS_INFERRED]->(callee)
-                    RETURN
-                      labels(s)[0]  AS kind,
-                      s.filepath    AS filepath,
-                      s.start_line  AS start_line,
-                      s.end_line    AS end_line,
-                      s.signature   AS signature,
-                      parent.filepath AS parent_file,
-                      collect(DISTINCT {name: caller.name, file: caller.filepath,
-                                        line: caller.start_line})[..10] AS callers,
-                      collect(DISTINCT {name: callee.name, file: callee.filepath})[..10] AS callees
-                    LIMIT 1
-                """,
+                    symbol_graph.SYMBOL_CONTEXT_CYPHER,
                     name=symbol_name,
                     pid=project_id,
                     op="get_symbol_context",
@@ -90,25 +74,7 @@ def register(mcp: FastMCP) -> None:
             if not rec:
                 return f"Symbol '{symbol_name}' not found. Run index_workspace() first."
 
-            out = [
-                f"## `{symbol_name}` ({rec['kind']})",
-                f"**File:** `{rec['filepath']}`  Lines {rec['start_line']}–{rec['end_line']}",
-            ]
-            if rec["signature"]:
-                out.append(f"**Signature:** `{rec['signature']}`\n")
-
-            callers = [c for c in (rec["callers"] or []) if c.get("name")]
-            callees = [c for c in (rec["callees"] or []) if c.get("name")]
-
-            if callers:
-                out.append(f"**Called by** ({len(callers)}):")
-                for c in callers:
-                    line = f":{c['line']}" if c.get("line") else ""
-                    out.append(f"  - `{c['name']}`{line}  in {c.get('file', '?')}")
-            if callees:
-                out.append(f"\n**Calls** ({len(callees)}):")
-                for c in callees:
-                    out.append(f"  - `{c['name']}`  in {c.get('file', '?')}")
+            out = symbol_graph.format_symbol_context(rec, symbol_name)
 
             if include_source_preview:
                 # 1. Try Postgres (Brain/Central fallback) - This works remotely!
@@ -182,31 +148,9 @@ def register(mcp: FastMCP) -> None:
 
             driver = await graph_bootstrap.require_driver()
 
-            normalized_file_path = None
-            if file_path:
-                raw_path = file_path.strip()
-                if os.path.isabs(raw_path):
-                    # If it's an absolute path, we try to make it relative to the project root
-                    # ONLY if the workspace_id itself is a valid local path.
-                    if os.path.exists(workspace_id):
-                        project_root = os.path.realpath(workspace_id)
-                        abs_path = os.path.realpath(raw_path)
-                        try:
-                            normalized_file_path = os.path.relpath(abs_path, project_root)
-                        except ValueError:
-                            normalized_file_path = raw_path
-                    else:
-                        # Otherwise, we just take the basename or keep it as is
-                        # (The Brain expects relative paths from the index)
-                        normalized_file_path = raw_path
-                else:
-                    normalized_file_path = raw_path
-
-                normalized_file_path = normalized_file_path.replace(os.sep, "/")
-                if normalized_file_path.startswith("./"):
-                    normalized_file_path = normalized_file_path[2:]
-                if not normalized_file_path:
-                    normalized_file_path = None
+            normalized_file_path = symbol_graph.normalize_query_file_path(
+                workspace_id, file_path
+            )
 
             normalized_signature = (
                 signature.strip() if isinstance(signature, str) else None
@@ -214,74 +158,14 @@ def register(mcp: FastMCP) -> None:
             if not normalized_signature:
                 normalized_signature = None
 
-            resolve_cypher = """
-                MATCH (s)
-                WHERE s.project_id = $pid
-                  AND (s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum)
-                  AND ($file_path IS NULL OR s.filepath = $file_path)
-                  AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
-                OPTIONAL MATCH (s)<-[:CALLS|CALLS_INFERRED]-(caller)
-                WITH s,
-                     CASE
-                       WHEN s.name = $name THEN 0
-                       WHEN s.qualified_name = $name THEN 0
-                       WHEN s.name ENDS WITH ('.' + $name) THEN 1
-                       WHEN s.qualified_name ENDS WITH ('.' + $name) THEN 1
-                       WHEN s.name STARTS WITH ($name + '(') THEN 2
-                       WHEN s.qualified_name STARTS WITH ($name + '(') THEN 2
-                       WHEN s.name CONTAINS ('.' + $name + '(') THEN 3
-                       WHEN s.qualified_name CONTAINS ('.' + $name + '(') THEN 3
-                       WHEN s.signature IS NOT NULL AND s.signature CONTAINS $name THEN 4
-                       WHEN s.qualified_name IS NOT NULL AND s.qualified_name CONTAINS $name THEN 5
-                       ELSE 99
-                     END AS rank,
-                     count(DISTINCT caller) AS callers_in
-                WHERE rank < 99
-                RETURN elementId(s) AS eid, s.name AS name, s.qualified_name AS qualified_name,
-                       s.signature AS signature, s.filepath AS filepath, rank,
-                       CASE
-                         WHEN s.filepath IS NULL THEN 2
-                         WHEN s.filepath CONTAINS '/api/' OR s.filepath CONTAINS '/routes/' OR s.filepath CONTAINS '/services/' OR s.filepath CONTAINS '/db/'
-                           OR s.filepath STARTS WITH 'api/' OR s.filepath STARTS WITH 'routes/' OR s.filepath STARTS WITH 'services/' OR s.filepath STARTS WITH 'db/'
-                           THEN 0
-                         WHEN s.filepath CONTAINS '/public/' OR s.filepath STARTS WITH 'public/' OR s.filepath ENDS WITH '.html' OR s.filepath ENDS WITH '.css'
-                           THEN 3
-                         ELSE 1
-                       END AS path_rank
-                ORDER BY rank ASC, path_rank ASC, callers_in DESC, size(coalesce(s.qualified_name, s.name)) ASC
-                LIMIT 5
-            """
-
             resolved_name = symbol_name
             resolved_eid = None
-
-            if direction == "up":
-                hop_label = "caller"
-                cypher = (
-                    f"MATCH (start) WHERE elementId(start) = $eid "
-                    f"MATCH path = (start)"
-                    f"<-[:CALLS|CALLS_INFERRED*1..{depth}]-(hop)"
-                    " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
-                    + " RETURN [n IN nodes(path) | n.name] AS chain,"
-                    "        [n IN nodes(path) | n.filepath] AS files"
-                    " LIMIT 40"
-                )
-            else:
-                hop_label = "callee"
-                cypher = (
-                    f"MATCH (start) WHERE elementId(start) = $eid "
-                    f"MATCH path = (start)"
-                    f"-[:CALLS|CALLS_INFERRED*1..{depth}]->(hop)"
-                    " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
-                    + " RETURN [n IN nodes(path) | n.name] AS chain,"
-                    "        [n IN nodes(path) | n.filepath] AS files"
-                    " LIMIT 40"
-                )
+            hop_label = "caller" if direction == "up" else "callee"
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 candidates = await _execute_read(
                     session,
-                    resolve_cypher,
+                    symbol_graph.CALL_CHAIN_RESOLVE_CYPHER,
                     name=symbol_name,
                     pid=project_id,
                     file_path=normalized_file_path,
@@ -294,83 +178,22 @@ def register(mcp: FastMCP) -> None:
                         "Try a fully qualified name like `Type.method` or include argument labels."
                     )
 
-                matches_by_file = []
-                matches_by_signature = []
-                if normalized_file_path:
-                    matches_by_file = [
-                        c
-                        for c in candidates
-                        if c.get("filepath") == normalized_file_path
-                    ]
-                if normalized_signature:
-                    matches_by_signature = [
-                        c
-                        for c in candidates
-                        if c.get("signature")
-                        and normalized_signature in c.get("signature")
-                    ]
-
-                if matches_by_file:
-                    picked = matches_by_file[0]
-                elif matches_by_signature:
-                    picked = matches_by_signature[0]
-                else:
-                    picked = candidates[0]
+                picked = symbol_graph.pick_call_chain_candidate(
+                    candidates,
+                    normalized_file_path=normalized_file_path,
+                    normalized_signature=normalized_signature,
+                )
 
                 resolved_eid = picked["eid"]
                 resolved_name = (
                     picked.get("qualified_name") or picked.get("name") or symbol_name
                 )
                 resolved_filepath = picked.get("filepath") or ""
-
-                is_backend_root = (
-                    "/api/" in resolved_filepath
-                    or "/routes/" in resolved_filepath
-                    or "/services/" in resolved_filepath
-                    or "/db/" in resolved_filepath
-                    or resolved_filepath.startswith(("api/", "routes/", "services/", "db/"))
+                hop_label, cypher = symbol_graph.build_call_chain_path_cypher(
+                    direction,
+                    depth,
+                    is_backend_root=symbol_graph.is_backend_filepath(resolved_filepath),
                 )
-
-                if direction == "up":
-                    hop_label = "caller"
-                    path_filter = ""
-                    if is_backend_root:
-                        path_filter = (
-                            " AND NOT (coalesce(hop.filepath, '') CONTAINS '/public/'"
-                            " OR coalesce(hop.filepath, '') STARTS WITH 'public/'"
-                            " OR coalesce(hop.filepath, '') ENDS WITH '.html'"
-                            " OR coalesce(hop.filepath, '') ENDS WITH '.css')"
-                        )
-                    cypher = (
-                        f"MATCH (start) WHERE elementId(start) = $eid "
-                        f"MATCH path = (start)"
-                        f"<-[:CALLS|CALLS_INFERRED*1..{depth}]-(hop)"
-                        " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
-                        + path_filter
-                        + " RETURN [n IN nodes(path) | n.name] AS chain,"
-                        "        [n IN nodes(path) | n.filepath] AS files"
-                        " LIMIT 40"
-                    )
-                else:
-                    hop_label = "callee"
-                    path_filter = ""
-                    if is_backend_root:
-                        path_filter = (
-                            " AND NOT (coalesce(hop.filepath, '') CONTAINS '/public/'"
-                            " OR coalesce(hop.filepath, '') STARTS WITH 'public/'"
-                            " OR coalesce(hop.filepath, '') ENDS WITH '.html'"
-                            " OR coalesce(hop.filepath, '') ENDS WITH '.css')"
-                        )
-                    cypher = (
-                        f"MATCH (start) WHERE elementId(start) = $eid "
-                        f"MATCH path = (start)"
-                        f"-[:CALLS|CALLS_INFERRED*1..{depth}]->(hop)"
-                        " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
-                        + path_filter
-                        + " RETURN [n IN nodes(path) | n.name] AS chain,"
-                        "        [n IN nodes(path) | n.filepath] AS files"
-                        " LIMIT 40"
-                    )
                 rows = await _execute_read(
                     session, cypher, eid=resolved_eid, op="get_call_chain"
                 )
@@ -381,26 +204,13 @@ def register(mcp: FastMCP) -> None:
                     "Make sure the project is indexed and Swift CALLS edges are available."
                 )
 
-            # Build tree from chain paths — deduplicate and indent by depth
-            seen: set[str] = set()
-            header_name = resolved_name or symbol_name
-            out = [f"## Call chain: `{header_name}` ({direction}, depth={depth})\n"]
-            if resolved_name and resolved_name != symbol_name:
-                out.append(f"Resolved `{symbol_name}` → `{resolved_name}`\n")
-            for rec in rows:
-                chain = rec["chain"]
-                files = rec["files"]
-                for i in range(1, len(chain)):
-                    key = "→".join(chain[: i + 1])
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    pad = "  " * i
-                    name = chain[i]
-                    fp = files[i] or "?"
-                    out.append(f"{pad}{'└─' if i > 1 else '  '} `{name}`  ({fp})")
-
-            return "\n".join(out)
+            return symbol_graph.format_call_chain_rows(
+                rows,
+                resolved_name=resolved_name,
+                symbol_name=symbol_name,
+                direction=direction,
+                depth=depth,
+            )
         except Exception as e:
             return f"Error tracing call chain: {str(e)}"
 
@@ -1059,8 +869,6 @@ def register(mcp: FastMCP) -> None:
             symbol_name: Name of the symbol to visualize.
         """
         try:
-            import re
-
             project_id = get_project_id(workspace_id)
             import graph_bootstrap
 
@@ -1069,13 +877,7 @@ def register(mcp: FastMCP) -> None:
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 focus_nodes = await _execute_read(
                     session,
-                    """
-                    MATCH (n {name: $name, project_id: $pid})
-                    WHERE n:Function OR n:Class OR n:Struct OR n:Enum OR n:Trait OR n:File
-                    RETURN n.id AS id, labels(n)[0] AS kind, n.name AS name,
-                           n.filepath AS fp, n.start_line AS sl
-                    LIMIT 3
-                    """,
+                    symbol_graph.VISUALIZE_SUBGRAPH_FOCUS_CYPHER,
                     name=symbol_name,
                     pid=project_id,
                     op="visualize_subgraph_focus",
@@ -1087,108 +889,15 @@ def register(mcp: FastMCP) -> None:
 
                 nbr_rows = await _execute_read(
                     session,
-                    """
-                    MATCH (n {id: $fid})
-                     OPTIONAL MATCH (parent:File)-[:CONTAINS]->(n)
-                     OPTIONAL MATCH (n)<-[:CALLS|CALLS_INFERRED]-(caller)
-                         WHERE caller:File OR caller:Function OR caller:Class OR caller:Method
-                     OPTIONAL MATCH (n)<-[:IMPORTS]-(importer:File)
-                    OPTIONAL MATCH (n)-[:CALLS|CALLS_INFERRED]->(callee)
-                        WHERE callee:Function OR callee:Class OR callee:Struct
-                    RETURN
-                      parent.id AS parent_id, parent.name AS parent_name, parent.filepath AS parent_fp,
-                      collect(DISTINCT {id: caller.id, name: caller.name, fp: caller.filepath})[..6]  AS callers,
-                      collect(DISTINCT {id: importer.id, name: importer.name, fp: importer.filepath})[..6] AS importers,
-                      collect(DISTINCT {id: callee.id, name: callee.name, kind: labels(callee)[0],
-                                        fp: callee.filepath})[..8] AS callees
-                    LIMIT 1
-                    """,
+                    symbol_graph.VISUALIZE_SUBGRAPH_NEIGHBORS_CYPHER,
                     fid=focus_id,
                     op="visualize_subgraph_neighbors",
                 )
                 nbr = dict(nbr_rows[0]) if nbr_rows else {}
-
-            node_counter = [0]
-            node_map: dict = {}
-
-            def mermaid_id(neo_id: str) -> str:
-                if neo_id not in node_map:
-                    node_counter[0] += 1
-                    node_map[neo_id] = f"n{node_counter[0]}"
-                return node_map[neo_id]
-
-            def safe_label(text: str) -> str:
-                return text.replace('"', "'")
-
-            def short_fp(fp) -> str:
-                if not fp:
-                    return "?"
-                parts = fp.split("/")
-                return "/".join(parts[-2:]) if len(parts) > 1 else fp
-
-            def node_shape(kind: str, mid: str, label: str) -> str:
-                shapes = {
-                    "Function": f'{mid}("{safe_label(label)}")',
-                    "File": f'{mid}["{safe_label(label)}"]',
-                    "Class": f'{mid}(("{safe_label(label)}"))',
-                    "Struct": f'{mid}(("{safe_label(label)}"))',
-                    "Enum": f'{mid}{{"{safe_label(label)}"}}',
-                    "Trait": f'{mid}[/"{safe_label(label)}"/]',
-                }
-                return shapes.get(kind, f'{mid}["{safe_label(label)}"]')
-
-            lines = ["graph LR"]
-            lines += [
-                "  classDef focus fill:#f4a261,stroke:#e76f51,color:#000",
-                "  classDef file  fill:#264653,stroke:#2a9d8f,color:#fff",
-                "  classDef func  fill:#2a9d8f,stroke:#264653,color:#fff",
-                "  classDef cls   fill:#457b9d,stroke:#1d3557,color:#fff",
-            ]
-            fmid = mermaid_id(focus_id)
-            focus_label = f"{focus['name']}\n({short_fp(focus.get('fp'))}:{focus.get('sl') or '?'})"
-            lines.append(f"  {node_shape(focus['kind'], fmid, focus_label)}")
-            lines.append(f"  class {fmid} focus")
-
-            if nbr.get("parent_id"):
-                pmid = mermaid_id(nbr["parent_id"])
-                plabel = short_fp(nbr.get("parent_fp")) or nbr.get("parent_name", "?")
-                lines.append(f"  {node_shape('File', pmid, plabel)}")
-                lines.append(f"  class {pmid} file")
-                lines.append(f"  {pmid} -->|contains| {fmid}")
-
-            for callee in nbr.get("callees") or []:
-                if not callee.get("id"):
-                    continue
-                cmid = mermaid_id(callee["id"])
-                clabel = f"{callee['name']}\n({short_fp(callee.get('fp'))})"
-                ckind = callee.get("kind", "Function")
-                lines.append(f"  {node_shape(ckind, cmid, clabel)}")
-                lines.append(
-                    f"  class {cmid} {'func' if ckind == 'Function' else 'cls'}"
-                )
-                lines.append(f"  {fmid} -->|calls| {cmid}")
-
-            for imp in nbr.get("importers") or []:
-                if not imp.get("id"):
-                    continue
-                imid = mermaid_id(imp["id"])
-                ilabel = short_fp(imp.get("fp")) or imp.get("name", "?")
-                lines.append(f"  {node_shape('File', imid, ilabel)}")
-                lines.append(f"  class {imid} file")
-                lines.append(f"  {imid} -->|imports| {fmid}")
-
-            for caller in nbr.get("callers") or []:
-                if not caller.get("id") or caller.get("id") == nbr.get("parent_id"):
-                    continue
-                amid = mermaid_id(caller["id"])
-                alabel = short_fp(caller.get("fp")) or caller.get("name", "?")
-                lines.append(f"  {node_shape('File', amid, alabel)}")
-                lines.append(f"  class {amid} file")
-                lines.append(f"  {amid} -->|calls| {fmid}")
-
-            if len(lines) <= 5:
+            rendered = symbol_graph.render_subgraph_mermaid(focus, nbr)
+            if not rendered:
                 return f"No relationships found for '{symbol_name}'."
-            return "```mermaid\n" + "\n".join(lines) + "\n```"
+            return rendered
         except Exception as e:
             return f"Error visualizing subgraph: {str(e)}"
 
