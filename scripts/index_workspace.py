@@ -34,9 +34,6 @@ if REPO_ROOT not in sys.path:
 import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
-from graphrag_core.ts_pack_facts import extract_file_facts
-from ts_diagnostics import normalize_ts_pack_result
-
 # AST-chunk size: target upper bound for native ts_pack chunks.
 CHUNK_MAX_BYTES = 4_000  # bytes — passed as chunk_max_size to ProcessConfig
 # Overlap between adjacent AST chunks (bytes). Keep small to avoid duplication.
@@ -492,44 +489,6 @@ def _chunk_swift(source: str, rel_path: str, project_id: str) -> List[Dict]:
     return chunks
 
 
-def _build_ts_pack_process_config(ts_pack, lang: str):
-    kwargs = {
-        "structure": True,
-        "imports": True,
-        "exports": True,
-        "comments": True,
-        "docstrings": True,
-        "symbols": True,
-        "diagnostics": True,
-    }
-    if lang != "swift":
-        kwargs["chunk_max_size"] = CHUNK_MAX_BYTES
-        kwargs["chunk_overlap"] = CHUNK_OVERLAP_BYTES
-        if lang in _EXTRACTIONS_BY_LANG:
-            kwargs["extractions"] = _EXTRACTIONS_BY_LANG.get(lang)
-    try:
-        return ts_pack.ProcessConfig(lang, **kwargs)
-    except TypeError:
-        fallback_kwargs = dict(kwargs)
-        fallback_kwargs.pop("chunk_overlap", None)
-        fallback_kwargs.pop("extractions", None)
-        return ts_pack.ProcessConfig(lang, **fallback_kwargs)
-
-
-def _build_file_meta(result: dict, file_facts: dict | None) -> dict:
-    file_meta = {
-        "file_imports": _compact_imports(result.get("imports", [])),
-        "file_exports": _compact_exports(result.get("exports", [])),
-        "file_symbols": _compact_symbols(result.get("symbols", [])),
-        "file_diagnostics": _compact_diagnostics(result.get("diagnostics", [])),
-        "file_metrics": _extract_metrics(result.get("metrics", {})),
-        "file_extractions": _compact_extractions(result.get("extractions", {})),
-    }
-    if file_facts:
-        file_meta["file_facts"] = file_facts
-    return file_meta
-
-
 def _should_skip_diagnostic_file(file_meta: dict) -> bool:
     if not _skip_diagnostic_files_enabled():
         return False
@@ -569,52 +528,18 @@ def _line_window_chunks(
     return chunks
 
 
-def _chunks_from_ts_pack_result(
-    result: dict,
-    rel_path: str,
-    project_id: str,
-    language: str,
-    file_meta: dict,
-) -> List[Dict]:
-    file_header = f"// File: {rel_path}\n"
-    chunks: List[Dict] = []
-    for chunk in result.get("chunks", []):
-        cmeta = chunk.get("metadata", {})
-        if cmeta.get("has_error_nodes"):
-            continue
-        content = chunk.get("content", "")
-        if not content.strip():
-            continue
-        text = file_header + content
-        cid = _chunk_id(project_id, rel_path, chunk.get("start_byte", 0), content)
-        chunks.append(
-            {
-                "ref_id": cid,
-                "text": text,
-                "metadata": {
-                    "file": rel_path,
-                    "project_id": project_id,
-                    "language": language,
-                    "symbols": cmeta.get("symbols_defined", []),
-                    "start_line": chunk.get("start_line", 0) + 1,
-                    "end_line": chunk.get("end_line", 0) + 1,
-                    "docstrings": cmeta.get("docstrings", []),
-                    "context_path": cmeta.get("context_path", []),
-                    "node_types": cmeta.get("node_types", []),
-                    "comments": cmeta.get("comments", []),
-                    "has_error_nodes": bool(cmeta.get("has_error_nodes")),
-                    **file_meta,
-                },
-            }
+def _build_semantic_payload(ts_pack, source: str, lang: str, rel_path: str, project_id: str) -> dict:
+    if hasattr(ts_pack, "build_semantic_payload"):
+        return ts_pack.build_semantic_payload(
+            source,
+            lang,
+            rel_path,
+            project_id,
+            chunk_id_version=CHUNK_ID_VERSION,
+            chunk_max_size=CHUNK_MAX_BYTES,
+            chunk_overlap=CHUNK_OVERLAP_BYTES,
         )
-    return chunks
-
-
-def _collect_ts_pack_file_meta(ts_pack, source: str, lang: str, rel_path: str) -> tuple[dict, dict]:
-    config = _build_ts_pack_process_config(ts_pack, lang)
-    result = normalize_ts_pack_result(source, lang, ts_pack.process(source, config))
-    file_facts = extract_file_facts(ts_pack, source, lang, rel_path)
-    return result, _build_file_meta(result, file_facts)
+    raise RuntimeError("ts_pack.build_semantic_payload is required")
 
 
 def _read_and_chunk(
@@ -703,7 +628,8 @@ def _read_and_chunk(
     # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
     if lang == "swift":
         try:
-            _, file_meta = _collect_ts_pack_file_meta(ts_pack, source, "swift", rel_path)
+            payload = _build_semantic_payload(ts_pack, source, "swift", rel_path, project_id)
+            file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"
         except Exception:
@@ -720,12 +646,11 @@ def _read_and_chunk(
     # ── Native ts_pack chunking ───────────────────────────────────────────────
     if lang and lang != "swift":
         try:
-            result, file_meta = _collect_ts_pack_file_meta(ts_pack, source, lang, rel_path)
+            payload = _build_semantic_payload(ts_pack, source, lang, rel_path, project_id)
+            file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"
-            chunks = _chunks_from_ts_pack_result(
-                result, rel_path, project_id, lang, file_meta
-            )
+            chunks = payload.get("chunks") or []
         except Exception:
             pass  # Fall through to line-window below
 

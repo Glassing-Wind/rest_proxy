@@ -52,22 +52,12 @@ def load_index_workspace_module():
     embedding_mod.get_embedding_service = lambda: _EmbeddingService()
     embedding_mod._CONCURRENCY = 2
 
-    diagnostics_mod = types.ModuleType("ts_diagnostics")
-    diagnostics_mod.normalize_ts_pack_result = lambda source, lang, raw: raw
-
-    graphrag_pkg = types.ModuleType("graphrag_core")
-    ts_pack_facts_mod = types.ModuleType("graphrag_core.ts_pack_facts")
-    ts_pack_facts_mod.extract_file_facts = lambda ts_pack, source, language, file_path: {}
-
     stub_modules = {
         "dotenv": dotenv_mod,
         "memory": memory_pkg,
         "memory.store": memory_store_mod,
         "memory.bootstrap": memory_bootstrap_mod,
         "embedding_service": embedding_mod,
-        "ts_diagnostics": diagnostics_mod,
-        "graphrag_core": graphrag_pkg,
-        "graphrag_core.ts_pack_facts": ts_pack_facts_mod,
     }
 
     with mock.patch.dict(sys.modules, stub_modules):
@@ -76,9 +66,10 @@ def load_index_workspace_module():
 
 
 class FakeTsPack:
-    def __init__(self, result=None, detected_language="typescript"):
+    def __init__(self, result=None, detected_language="typescript", payload=None):
         self._result = result or {}
         self._detected_language = detected_language
+        self._payload = payload
 
     def has_language(self, language):
         return True
@@ -99,6 +90,25 @@ class FakeTsPack:
 
     def process(self, source, config):
         return self._result
+
+    def build_semantic_payload(
+        self,
+        source,
+        language,
+        file_path,
+        project_id,
+        *,
+        chunk_id_version="v6",
+        chunk_max_size=4000,
+        chunk_overlap=200,
+    ):
+        if self._payload is not None:
+            return self._payload
+        return {
+            "result": self._result,
+            "file_meta": {},
+            "chunks": [],
+        }
 
 
 class FakeCursor:
@@ -143,31 +153,50 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.module = load_index_workspace_module()
         self.module._TS_PACK_INIT_DONE = True
 
-    def test_collect_ts_pack_file_meta_includes_file_facts(self):
-        result = {
-            "imports": [{"source": "foo", "names": ["bar"]}],
-            "exports": [{"name": "Baz", "kind": "named"}],
-            "symbols": [{"name": "Widget"}],
-            "diagnostics": [],
-            "metrics": {"total_lines": 5, "code_lines": 4},
-            "extractions": {"calls": {"matches": [{"captures": [{"text": "fetch"}]}]}},
-        }
-        fake_ts_pack = FakeTsPack(result=result)
-        file_facts = {"http_calls": [{"client": "fetch", "method": "GET", "path": "/api/items"}]}
+    def test_build_semantic_payload_forwards_chunking_config(self):
+        captured = {}
 
-        with mock.patch.object(self.module, "normalize_ts_pack_result", side_effect=lambda source, lang, raw: raw):
-            with mock.patch.object(self.module, "extract_file_facts", return_value=file_facts):
-                _, meta = self.module._collect_ts_pack_file_meta(
-                    fake_ts_pack,
-                    "const x = 1;",
-                    "typescript",
-                    "src/index.ts",
+        class _BuildTsPack:
+            def build_semantic_payload(
+                self,
+                source,
+                language,
+                file_path,
+                project_id,
+                *,
+                chunk_id_version="v6",
+                chunk_max_size=4000,
+                chunk_overlap=200,
+            ):
+                captured.update(
+                    {
+                        "source": source,
+                        "language": language,
+                        "file_path": file_path,
+                        "project_id": project_id,
+                        "chunk_id_version": chunk_id_version,
+                        "chunk_max_size": chunk_max_size,
+                        "chunk_overlap": chunk_overlap,
+                    }
                 )
+                return {"file_meta": {"file_symbols": ["Widget"]}, "chunks": []}
 
-        self.assertEqual(meta["file_facts"], file_facts)
-        self.assertEqual(meta["file_imports"], [{"source": "foo", "names": ["bar"]}])
-        self.assertIn("Widget", meta["file_symbols"])
-        self.assertEqual(meta["file_metrics"]["total_lines"], 5)
+        payload = self.module._build_semantic_payload(
+            _BuildTsPack(),
+            "const x = 1;",
+            "typescript",
+            "src/index.ts",
+            "proj123",
+        )
+
+        self.assertEqual(payload["file_meta"]["file_symbols"], ["Widget"])
+        self.assertEqual(captured["source"], "const x = 1;")
+        self.assertEqual(captured["language"], "typescript")
+        self.assertEqual(captured["file_path"], "src/index.ts")
+        self.assertEqual(captured["project_id"], "proj123")
+        self.assertEqual(captured["chunk_id_version"], self.module.CHUNK_ID_VERSION)
+        self.assertEqual(captured["chunk_max_size"], self.module.CHUNK_MAX_BYTES)
+        self.assertEqual(captured["chunk_overlap"], self.module.CHUNK_OVERLAP_BYTES)
 
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
@@ -231,19 +260,55 @@ class IndexWorkspaceTests(unittest.TestCase):
                 }
             ],
         }
-        fake_ts_pack = FakeTsPack(result=fake_result)
         file_facts = {"route_defs": [{"framework": "file_route", "method": "GET", "path": "/api/items"}]}
+        payload = {
+            "result": fake_result,
+            "file_meta": {
+                "file_imports": [{"source": "./api", "names": ["client"]}],
+                "file_exports": [{"name": "GET", "kind": "named"}],
+                "file_symbols": ["GET"],
+                "file_diagnostics": {"count": 0, "items": []},
+                "file_metrics": {"total_lines": 4, "code_lines": 4},
+                "file_extractions": {"calls": ["fetch"]},
+                "file_facts": file_facts,
+            },
+            "chunks": [
+                {
+                    "ref_id": "proj123:v6:src/api/items/route.ts:abc123",
+                    "text": "// File: src/api/items/route.ts\nawait fetch('/api/items')",
+                    "metadata": {
+                        "file": "src/api/items/route.ts",
+                        "project_id": "proj123",
+                        "language": "typescript",
+                        "symbols": ["GET"],
+                        "start_line": 1,
+                        "end_line": 1,
+                        "docstrings": [],
+                        "context_path": ["GET"],
+                        "node_types": ["call_expression"],
+                        "comments": [],
+                        "has_error_nodes": False,
+                        "file_imports": [{"source": "./api", "names": ["client"]}],
+                        "file_exports": [{"name": "GET", "kind": "named"}],
+                        "file_symbols": ["GET"],
+                        "file_diagnostics": {"count": 0, "items": []},
+                        "file_metrics": {"total_lines": 4, "code_lines": 4},
+                        "file_extractions": {"calls": ["fetch"]},
+                        "file_facts": file_facts,
+                    },
+                }
+            ],
+        }
+        fake_ts_pack = FakeTsPack(result=fake_result, payload=payload)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             abs_path = Path(tmpdir) / "route.ts"
             abs_path.write_text("export async function GET() {}", encoding="utf-8")
 
             with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
-                with mock.patch.object(self.module, "normalize_ts_pack_result", side_effect=lambda source, lang, raw: raw):
-                    with mock.patch.object(self.module, "extract_file_facts", return_value=file_facts):
-                        chunks, reason = self.module._read_and_chunk(
-                            str(abs_path), "src/api/items/route.ts", "proj123"
-                        )
+                chunks, reason = self.module._read_and_chunk(
+                    str(abs_path), "src/api/items/route.ts", "proj123"
+                )
 
         self.assertIsNone(reason)
         self.assertEqual(len(chunks), 1)
@@ -263,7 +328,19 @@ class IndexWorkspaceTests(unittest.TestCase):
             "extractions": {},
             "chunks": [],
         }
-        fake_ts_pack = FakeTsPack(result=fake_result)
+        fake_ts_pack = FakeTsPack(
+            result=fake_result,
+            payload={
+                "result": fake_result,
+                "file_meta": {
+                    "file_diagnostics": {
+                        "count": 1,
+                        "items": [{"message": "bad parse", "start_line": 1, "start_col": 0}],
+                    }
+                },
+                "chunks": [],
+            },
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             abs_path = Path(tmpdir) / "file.ts"
@@ -271,11 +348,9 @@ class IndexWorkspaceTests(unittest.TestCase):
 
             with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
                 with mock.patch.dict(os.environ, {"LM_PROXY_SKIP_DIAGNOSTIC_FILES": "1"}, clear=False):
-                    with mock.patch.object(self.module, "normalize_ts_pack_result", side_effect=lambda source, lang, raw: raw):
-                        with mock.patch.object(self.module, "extract_file_facts", return_value={}):
-                            chunks, reason = self.module._read_and_chunk(
-                                str(abs_path), "src/file.ts", "proj123"
-                            )
+                    chunks, reason = self.module._read_and_chunk(
+                        str(abs_path), "src/file.ts", "proj123"
+                    )
 
         self.assertEqual(chunks, [])
         self.assertEqual(reason, "diagnostics")
