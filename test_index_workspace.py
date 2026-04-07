@@ -208,6 +208,24 @@ class FakeTsPack:
             return self._sync_plan
         return self.build_semantic_sync_plan(all_chunks, set())
 
+    async def execute_semantic_index_prepare(
+        self,
+        conn,
+        project_id,
+        manifest_paths,
+        all_chunks,
+        *,
+        rebuild=False,
+    ):
+        if self._sync_plan is not None:
+            return self._sync_plan
+        return {
+            **self.build_semantic_sync_plan(all_chunks, set()),
+            "wiped": rebuild,
+            "orphan_pruned": 0,
+            "existing_ids": set(),
+        }
+
 
 class FakeCursor:
     def __init__(self):
@@ -296,7 +314,7 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(captured["chunk_max_size"], self.module.CHUNK_MAX_BYTES)
         self.assertEqual(captured["chunk_overlap"], self.module.CHUNK_OVERLAP_BYTES)
 
-    def test_execute_semantic_sync_delegates_to_package(self):
+    def test_execute_semantic_index_prepare_delegates_to_package(self):
         all_chunks = [[{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}}]]
         payload = {
             "new_chunks": [],
@@ -305,11 +323,22 @@ class IndexWorkspaceTests(unittest.TestCase):
             "total_chunks": 1,
             "existing_ids": {"chunk-1"},
             "pruned_total": 0,
+            "wiped": True,
+            "orphan_pruned": 2,
         }
         fake_ts_pack = FakeTsPack(sync_plan=payload)
         conn = object()
 
-        plan = asyncio.run(self.module._execute_semantic_sync(conn, fake_ts_pack, "proj123", all_chunks))
+        plan = asyncio.run(
+            self.module._execute_semantic_index_prepare(
+                conn,
+                fake_ts_pack,
+                "proj123",
+                ["src/a.ts"],
+                all_chunks,
+                rebuild=True,
+            )
+        )
         self.assertEqual(plan, payload)
 
     def test_should_skip_diagnostic_file_honors_env(self):

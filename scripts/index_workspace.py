@@ -291,6 +291,26 @@ async def _execute_semantic_sync(conn, ts_pack, project_id: str, all_chunks: Lis
     raise RuntimeError("ts_pack.execute_semantic_sync is required")
 
 
+async def _execute_semantic_index_prepare(
+    conn,
+    ts_pack,
+    project_id: str,
+    manifest_paths: List[str],
+    all_chunks: List[List[Dict]],
+    *,
+    rebuild: bool,
+) -> dict:
+    if hasattr(ts_pack, "execute_semantic_index_prepare"):
+        return await ts_pack.execute_semantic_index_prepare(
+            conn,
+            project_id,
+            manifest_paths,
+            all_chunks,
+            rebuild=rebuild,
+        )
+    raise RuntimeError("ts_pack.execute_semantic_index_prepare is required")
+
+
 def _read_and_chunk(
     abs_path: str, rel_path: str, project_id: str
 ) -> Tuple[List[Dict], str | None]:
@@ -444,66 +464,6 @@ async def _write_buffer(
     )
 
 
-async def _wipe_project_embeddings(project_id: str) -> bool:
-    try:
-        print(
-            f"[lm-proxy:indexer] Total rebuild requested — wiping project '{project_id}'...",
-            file=sys.stderr,
-            flush=True,
-        )
-        async with memory_store._pg_pool.connection() as conn:
-            await conn.execute(
-                "DELETE FROM codebase_embeddings WHERE project_id = %s",
-                (project_id,),
-            )
-        print("[lm-proxy:indexer]   Project wiped.", file=sys.stderr, flush=True)
-        return True
-    except Exception as exc:
-        print(
-            f"[lm-proxy:indexer] ERROR: rebuild wipe failed: {exc}", file=sys.stderr
-        )
-        return False
-
-
-async def _prune_orphaned_files(project_id: str, manifest: List[Dict]) -> bool:
-    try:
-        t_prune = time.time()
-        async with memory_store._pg_pool.connection() as conn:
-            rows_cursor = await conn.execute(
-                "SELECT DISTINCT file_path FROM codebase_embeddings WHERE project_id = %s",
-                (project_id,),
-            )
-            db_paths = {r[0] async for r in rows_cursor}
-
-            if db_paths:
-                manifest_paths = {entry.get("rel_path") for entry in manifest}
-                orphans = db_paths - manifest_paths
-                if orphans:
-                    print(
-                        f"[lm-proxy:indexer] Pruning {len(orphans)} orphaned files (ghosts)...",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                    for path in orphans:
-                        await conn.execute(
-                            "DELETE FROM codebase_embeddings WHERE project_id = %s AND file_path = %s",
-                            (project_id, path),
-                        )
-                    print(
-                        f"[lm-proxy:indexer]   Pruned in {(time.time() - t_prune) * 1000:.0f}ms",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-        return True
-    except Exception as exc:
-        print(
-            f"[lm-proxy:indexer] WARN: orphan pruning failed: {exc}",
-            file=sys.stderr,
-            flush=True,
-        )
-        return False
-
-
 def _report_chunking_results(
     manifest: List[Dict], all_results: List[Tuple[List[Dict], str | None]], elapsed: float
 ) -> tuple[list[list[dict]], int, int]:
@@ -593,16 +553,6 @@ async def index_project(
         )
         return 0
 
-    # 1. Total Rebuild (Wipe project clean)
-    if rebuild:
-        if not await _wipe_project_embeddings(project_id):
-            return 0
-
-    # 2. Prune Orphans (Files that existed in past index but are gone from manifest)
-    await _prune_orphaned_files(project_id, manifest)
-    if cleanup_only:
-        print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
-        return 0
     embedding_svc = get_embedding_service()
 
     bs = embedding_svc.effective_batch_size
@@ -640,16 +590,48 @@ async def index_project(
     )
 
     import tree_sitter_language_pack as ts_pack
+    manifest_paths = [entry.get("rel_path") or "" for entry in manifest]
     try:
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
-            sync_plan = await _execute_semantic_sync(conn, ts_pack, project_id, all_chunks)
+            sync_plan = await _execute_semantic_index_prepare(
+                conn,
+                ts_pack,
+                project_id,
+                manifest_paths,
+                all_chunks,
+                rebuild=rebuild,
+            )
     except Exception as exc:
         print(
-            f"[lm-proxy:indexer] WARN: semantic sync failed: {exc}",
+            f"[lm-proxy:indexer] WARN: semantic index prepare failed: {exc}",
             file=sys.stderr,
             flush=True,
         )
-        sync_plan = {"new_chunks": [], "skipped_chunks": 0, "pruned_total": 0, "existing_ids": set()}
+        sync_plan = {
+            "new_chunks": [],
+            "skipped_chunks": 0,
+            "pruned_total": 0,
+            "existing_ids": set(),
+            "wiped": False,
+            "orphan_pruned": 0,
+        }
+
+    if rebuild and sync_plan.get("wiped"):
+        print(
+            f"[lm-proxy:indexer] Total rebuild requested — wiped project '{project_id}'",
+            file=sys.stderr,
+            flush=True,
+        )
+    orphan_pruned = int(sync_plan.get("orphan_pruned") or 0)
+    if orphan_pruned > 0:
+        print(
+            f"[lm-proxy:indexer] Pruned {orphan_pruned} orphaned files (ghosts)",
+            file=sys.stderr,
+            flush=True,
+        )
+    if cleanup_only:
+        print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
+        return 0
 
     existing_count = len(sync_plan.get("existing_ids") or set())
     print(
