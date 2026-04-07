@@ -7,6 +7,7 @@ from typing import Any
 
 
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+NON_HTTP_CLIENTS = {"router", "app", "server"}
 
 
 def route_path_from_file(file_path: str) -> str | None:
@@ -35,7 +36,7 @@ def route_path_from_file(file_path: str) -> str | None:
         if not rel:
             return "/api"
         stem = PurePosixPath(*rel).stem
-        rel = rel[:-1] if stem == "index" else rel[:-1] + [stem]
+        rel = rel[:-1] if stem in {"index", "route"} else rel[:-1] + [stem]
         return "/api" if not rel else "/api/" + "/".join(rel)
 
     if relevant[0] == "api":
@@ -43,7 +44,7 @@ def route_path_from_file(file_path: str) -> str | None:
         if not rel:
             return "/api"
         stem = PurePosixPath(*rel).stem
-        rel = rel[:-1] if stem == "index" else rel[:-1] + [stem]
+        rel = rel[:-1] if stem in {"index", "route"} else rel[:-1] + [stem]
         return "/api" if not rel else "/api/" + "/".join(rel)
 
     return None
@@ -162,6 +163,20 @@ def _config_for_language(language: str) -> dict[str, Any] | None:
 
 def extract_file_facts(ts_pack: Any, source: str, language: str, file_path: str) -> dict[str, Any]:
     """Extract compact, typed file facts from ts-pack extraction results."""
+    if hasattr(ts_pack, "extract_file_facts"):
+        try:
+            raw = ts_pack.extract_file_facts(source, language, file_path)
+        except Exception:
+            raw = None
+        if isinstance(raw, dict):
+            facts: dict[str, Any] = {}
+            for key in ("route_defs", "http_calls", "resource_refs"):
+                value = raw.get(key)
+                if isinstance(value, list) and value:
+                    facts[key] = value
+            if facts:
+                return facts
+
     if not hasattr(ts_pack, "extract"):
         return {}
     config = _config_for_language(language)
@@ -205,7 +220,7 @@ def extract_file_facts(ts_pack: Any, source: str, language: str, file_path: str)
         client = (caps.get("client") or [None])[0]
         method = _normalize_method((caps.get("method") or [None])[0])
         path = (caps.get("path") or [None])[0]
-        if client and path and str(path).startswith("/"):
+        if client and path and str(path).startswith("/") and str(client) not in NON_HTTP_CLIENTS:
             http_calls.append(
                 {
                     "client": str(client),
