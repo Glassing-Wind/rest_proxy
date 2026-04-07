@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -131,6 +132,174 @@ def _extract_swift_symbol_records(file_path: str) -> list[SwiftSymbolRecord]:
         return _extract_symbol_records_from_structure_data(data, file_path, raw)
     except Exception:
         return []
+
+
+def _clean_path_list(value: Any) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [part for part in shlex.split(value) if part]
+    if isinstance(value, list):
+        return [str(part) for part in value if str(part).strip()]
+    return []
+
+
+def _clean_define_list(value: Any) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [part for part in value.split() if part]
+    if isinstance(value, list):
+        return [str(part).strip() for part in value if str(part).strip()]
+    return []
+
+
+def _xcode_build_settings(project_file: str, scheme_name: str) -> list[dict[str, Any]]:
+    xcodebuild = _which("xcodebuild")
+    if not xcodebuild:
+        return []
+    project_bundle = project_file
+    if project_bundle.endswith("/project.pbxproj"):
+        project_bundle = str(Path(project_bundle).parent)
+    try:
+        proc = subprocess.run(
+            [
+                xcodebuild,
+                "-project",
+                project_bundle,
+                "-scheme",
+                scheme_name,
+                "-destination",
+                "platform=macOS",
+                "-showBuildSettings",
+                "-json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=True,
+        )
+        return json.loads(proc.stdout)
+    except Exception:
+        return []
+
+
+def _compiler_args_from_build_settings(build_settings: dict[str, Any]) -> list[str]:
+    args: list[str] = []
+    sdkroot = build_settings.get("SDKROOT")
+    if sdkroot:
+        args.extend(["-sdk", str(sdkroot)])
+    module_name = build_settings.get("PRODUCT_MODULE_NAME") or build_settings.get("TARGET_NAME")
+    if module_name:
+        args.extend(["-module-name", str(module_name)])
+    for define in _clean_define_list(build_settings.get("SWIFT_ACTIVE_COMPILATION_CONDITIONS")):
+        args.extend(["-D", define])
+    for path in _clean_path_list(build_settings.get("FRAMEWORK_SEARCH_PATHS")):
+        args.extend(["-F", path])
+    for path in _clean_path_list(build_settings.get("HEADER_SEARCH_PATHS")):
+        args.extend(["-I", path])
+    for path in _clean_path_list(build_settings.get("SWIFT_INCLUDE_PATHS")):
+        args.extend(["-I", path])
+    other_swift_flags = _clean_path_list(build_settings.get("OTHER_SWIFT_FLAGS"))
+    args.extend(other_swift_flags)
+    return args
+
+
+def _candidate_xcode_projects(project_path: str, indexed_files: list[str]) -> list[str]:
+    discovered = {
+        str(path)
+        for path in indexed_files
+        if str(path).endswith(".xcodeproj/project.pbxproj") and os.path.isfile(str(path))
+    }
+    root = Path(project_path)
+    if root.is_dir():
+        for path in root.rglob("*.xcodeproj"):
+            pbxproj = path / "project.pbxproj"
+            if pbxproj.is_file():
+                discovered.add(str(pbxproj))
+    return sorted(discovered)
+
+
+def _target_swift_files(project_root: str, target_name: str) -> list[str]:
+    target_dir = os.path.join(project_root, target_name)
+    if os.path.isdir(target_dir):
+        return sorted(str(path) for path in Path(target_dir).rglob("*.swift"))
+    return []
+
+
+def _semantic_index_records(file_path: str, compiler_args: list[str], target_files: list[str]) -> list[SwiftSymbolRecord]:
+    sourcekitten = _which("sourcekitten")
+    if not sourcekitten or not target_files:
+        return []
+    try:
+        proc = subprocess.run(
+            ["sourcekitten", "index", "--file", file_path, "--", *compiler_args, *target_files],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=True,
+        )
+        data = json.loads(proc.stdout)
+    except Exception:
+        return []
+
+    records: list[SwiftSymbolRecord] = []
+    seen: set[tuple[str, str]] = set()
+    stack: list[Any] = [data]
+    while stack:
+        item = stack.pop(0)
+        if isinstance(item, dict):
+            name = _clean_name(item.get("key.name", ""))
+            usr = _clean_name(item.get("key.usr", ""))
+            if name and usr:
+                key = (name, usr)
+                if key not in seen:
+                    seen.add(key)
+                    records.append(
+                        SwiftSymbolRecord(
+                            filepath=file_path,
+                            name=name,
+                            base_name=_base_name(name),
+                            kind=_clean_name(item.get("key.kind", "")),
+                            start_line=0,
+                            end_line=0,
+                            usr=usr,
+                            doc_comment=None,
+                            inherited_types=[],
+                        )
+                    )
+            for value in item.values():
+                if isinstance(value, (dict, list)):
+                    stack.append(value)
+        elif isinstance(item, list):
+            stack[:0] = item
+    return records
+
+
+def _semantic_symbol_records_for_files(
+    *, project_path: str, indexed_files: list[str]
+) -> dict[str, list[SwiftSymbolRecord]]:
+    project_root = os.path.abspath(project_path)
+    results: dict[str, list[SwiftSymbolRecord]] = {}
+    for project_file in _candidate_xcode_projects(project_path, indexed_files):
+        scheme_name = Path(project_file).parent.stem
+        for entry in _xcode_build_settings(project_file, scheme_name):
+            build_settings = entry.get("buildSettings") or {}
+            target_name = entry.get("target") or build_settings.get("TARGET_NAME")
+            if not target_name:
+                continue
+            target_files = _target_swift_files(project_root, str(target_name))
+            if not target_files:
+                continue
+            compiler_args = _compiler_args_from_build_settings(build_settings)
+            if not compiler_args:
+                continue
+            for abs_path in target_files:
+                rel_path = os.path.relpath(abs_path, project_root).replace(os.sep, "/")
+                records = _semantic_index_records(abs_path, compiler_args, target_files)
+                if records:
+                    results[rel_path] = records
+    return results
 
 
 def _match_symbol_record(
@@ -283,6 +452,10 @@ def enrich_swift_graph(
     try:
         with driver.session(database=neo4j_db) as session:
             graph_symbols = _load_swift_symbols(session, project_id, filepaths)
+            semantic_records = _semantic_symbol_records_for_files(
+                project_path=project_path,
+                indexed_files=indexed_files,
+            )
             updates: list[dict[str, Any]] = []
             files_with_matches = 0
             for abs_path, rel_path in zip(swift_abs_paths, filepaths):
@@ -291,6 +464,11 @@ def enrich_swift_graph(
                     continue
                 matched_here = 0
                 symbols = graph_symbols.get(rel_path, [])
+                semantic_by_name = semantic_records.get(rel_path, [])
+                semantic_usr_by_base_name: dict[str, str] = {}
+                for semantic in semantic_by_name:
+                    if semantic.base_name and semantic.usr and semantic.base_name not in semantic_usr_by_base_name:
+                        semantic_usr_by_base_name[semantic.base_name] = semantic.usr
                 for record in records:
                     match = _match_symbol_record(record, symbols)
                     if not match:
@@ -300,7 +478,7 @@ def enrich_swift_graph(
                         {
                             "sid": match["sid"],
                             "kind": record.kind,
-                            "usr": record.usr,
+                            "usr": semantic_usr_by_base_name.get(record.base_name) or record.usr,
                             "doc_comment": record.doc_comment,
                             "inherited_types": record.inherited_types,
                         }
