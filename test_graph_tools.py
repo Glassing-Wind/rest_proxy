@@ -7,6 +7,7 @@ from unittest import mock
 
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/tools.py"
+OVERVIEW_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/overview.py"
 
 
 class FakeMCP:
@@ -73,6 +74,10 @@ class FakeDriver:
 
 
 def load_tools_module():
+    overview_spec = importlib.util.spec_from_file_location("tools.brain.graph.overview", OVERVIEW_PATH)
+    overview_module = importlib.util.module_from_spec(overview_spec)
+    assert overview_spec.loader is not None
+
     spec = importlib.util.spec_from_file_location("tools.brain.graph.tools", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -136,6 +141,8 @@ def load_tools_module():
             "tools.brain.graph.runtime": runtime_mod,
         },
     ):
+        overview_spec.loader.exec_module(overview_module)
+        sys.modules["tools.brain.graph.overview"] = overview_module
         spec.loader.exec_module(module)
     return module
 
