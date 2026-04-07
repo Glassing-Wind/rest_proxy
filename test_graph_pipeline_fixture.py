@@ -15,6 +15,7 @@ ASSET_GRAPH_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/a
 ASSET_GRAPH_APPLE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_apple.py"
 ASSET_GRAPH_WRITE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/asset_graph_write.py"
 FLOW_SUMMARY_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/flow_summary.py"
+FLOW_SUMMARY_APPLE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/flow_summary_apple.py"
 
 
 class FakeTsPackFileFacts:
@@ -193,6 +194,12 @@ def load_asset_graph_module(fake_memory_store):
 
 
 def load_flow_summary_module():
+    apple_spec = importlib.util.spec_from_file_location(
+        "tools.brain.graph.flow_summary_apple", FLOW_SUMMARY_APPLE_PATH
+    )
+    apple_module = importlib.util.module_from_spec(apple_spec)
+    assert apple_spec.loader is not None
+
     spec = importlib.util.spec_from_file_location("flow_summary_fixture", FLOW_SUMMARY_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -214,8 +221,10 @@ def load_flow_summary_module():
             "tools.brain": brain_pkg,
             "tools.brain.graph": graph_subpkg,
             "tools.brain.graph.core": core_mod,
+            "tools.brain.graph.flow_summary_apple": apple_module,
         },
     ):
+        apple_spec.loader.exec_module(apple_module)
         spec.loader.exec_module(module)
     return module
 
