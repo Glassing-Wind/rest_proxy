@@ -87,8 +87,15 @@ def collect_xcode_target_edges(
     project_path: str,
     files: dict[str, str],
     resource_edges: list[tuple[str, str, str, str | None, str]],
+    file_facts: dict[str, dict[str, object]] | None = None,
 ) -> tuple[dict[str, dict[str, str]], list[tuple[str, str]], list[tuple[str, str, str]]]:
     targets, raw_memberships = parse_xcode_target_membership(project_path)
+    if file_facts:
+        facts_targets, facts_memberships = parse_xcode_target_membership_facts(file_facts)
+        if facts_targets:
+            targets = facts_targets
+        if facts_memberships:
+            raw_memberships = facts_memberships
     if not targets or not raw_memberships:
         return targets, [], []
 
@@ -102,8 +109,22 @@ def collect_xcode_target_edges(
     resource_catalog = discover_apple_resources(project_path)
     for (kind, name), resource_path in resource_catalog.items():
         resource_by_path.setdefault(resource_path, (name, kind))
+    expanded_memberships: list[tuple[str, str]] = []
     for target_id, raw_path in raw_memberships:
         normalized = raw_path.replace("\\", "/").lstrip("./").strip('"')
+        abs_normalized = os.path.join(project_path, normalized)
+        if os.path.isdir(abs_normalized):
+            for current_root, dirnames, filenames in os.walk(abs_normalized):
+                dirnames[:] = [dirname for dirname in dirnames if dirname not in {".git", ".build", "DerivedData", "node_modules"}]
+                rel_current = os.path.relpath(current_root, project_path).replace("\\", "/").lstrip("./")
+                for filename in filenames:
+                    rel_path = f"{rel_current}/{filename}" if rel_current else filename
+                    if _is_indexable_apple_resource_path(rel_path):
+                        expanded_memberships.append((target_id, rel_path))
+            continue
+        expanded_memberships.append((target_id, normalized))
+
+    for target_id, normalized in expanded_memberships:
         candidates = [normalized]
         project_file = targets.get(target_id, {}).get("project_file")
         if project_file:
@@ -125,6 +146,7 @@ def collect_xcode_workspace_scheme_edges(
     project_path: str,
     files: dict[str, str],
     xcode_targets: dict[str, dict[str, str]],
+    file_facts: dict[str, dict[str, object]] | None = None,
 ) -> tuple[
     list[dict[str, str]],
     list[tuple[str, str]],
@@ -134,6 +156,13 @@ def collect_xcode_workspace_scheme_edges(
 ]:
     workspaces = parse_xcode_workspaces(project_path, files)
     schemes = parse_xcode_schemes(project_path, files, xcode_targets)
+    if file_facts:
+        fact_workspaces = parse_xcode_workspace_facts(file_facts, files)
+        fact_schemes = parse_xcode_scheme_facts(file_facts, files, xcode_targets)
+        if fact_workspaces:
+            workspaces = fact_workspaces
+        if fact_schemes:
+            schemes = fact_schemes
     workspace_rows = [
         {"workspace_path": workspace_path, "name": _workspace_display_name(workspace_path)}
         for workspace_path in sorted(workspaces.keys())
@@ -162,6 +191,85 @@ def collect_xcode_workspace_scheme_edges(
         if scheme["scheme_path"] in files
     ]
     return workspace_rows, workspace_project_edges, scheme_rows, scheme_target_edges, scheme_file_edges
+
+
+def parse_xcode_target_membership_facts(
+    file_facts: dict[str, dict[str, object]]
+) -> tuple[dict[str, dict[str, str]], list[tuple[str, str]]]:
+    targets: dict[str, dict[str, str]] = {}
+    memberships: list[tuple[str, str]] = []
+    for facts in file_facts.values():
+        for target in facts.get("apple_targets") or []:
+            if not isinstance(target, dict):
+                continue
+            target_id = target.get("target_id")
+            name = target.get("name")
+            project_file = target.get("project_file")
+            if all(isinstance(value, str) and value for value in (target_id, name, project_file)):
+                targets[str(target_id)] = {"name": str(name), "project_file": str(project_file)}
+        for bundled in facts.get("apple_bundled_files") or []:
+            if not isinstance(bundled, dict):
+                continue
+            target_id = bundled.get("target_id")
+            filepath = bundled.get("filepath")
+            if isinstance(target_id, str) and target_id and isinstance(filepath, str) and filepath:
+                memberships.append((target_id, filepath))
+        for synced in facts.get("apple_synced_groups") or []:
+            if not isinstance(synced, dict):
+                continue
+            target_id = synced.get("target_id")
+            group_path = synced.get("group_path")
+            if isinstance(target_id, str) and target_id and isinstance(group_path, str) and group_path:
+                memberships.append((target_id, group_path))
+    return targets, list(dict.fromkeys(memberships))
+
+
+def parse_xcode_workspace_facts(
+    file_facts: dict[str, dict[str, object]],
+    files: dict[str, str],
+) -> dict[str, set[str]]:
+    workspaces: dict[str, set[str]] = {}
+    for workspace_path, facts in file_facts.items():
+        for item in facts.get("apple_workspace_projects") or []:
+            if not isinstance(item, dict):
+                continue
+            project_file = item.get("project_file")
+            if not isinstance(project_file, str) or not project_file:
+                continue
+            file_id = files.get(project_file)
+            if file_id:
+                workspaces.setdefault(workspace_path, set()).add(file_id)
+    return workspaces
+
+
+def parse_xcode_scheme_facts(
+    file_facts: dict[str, dict[str, object]],
+    files: dict[str, str],
+    xcode_targets: dict[str, dict[str, str]],
+) -> list[dict[str, object]]:
+    grouped: dict[str, dict[str, object]] = {}
+    for scheme_path, facts in file_facts.items():
+        for item in facts.get("apple_scheme_targets") or []:
+            if not isinstance(item, dict):
+                continue
+            target_id = item.get("target_id")
+            if not isinstance(target_id, str) or target_id not in xcode_targets:
+                continue
+            row = grouped.setdefault(
+                scheme_path,
+                {
+                    "scheme_path": scheme_path,
+                    "name": item.get("scheme_name") or PurePosixPath(scheme_path).stem,
+                    "container_path": item.get("container_path") or "",
+                    "target_ids": [],
+                },
+            )
+            row["target_ids"].append(target_id)
+    schemes = []
+    for row in grouped.values():
+        row["target_ids"] = sorted(set(row["target_ids"]))
+        schemes.append(row)
+    return schemes
 
 
 def _workspace_display_name(workspace_path: str) -> str:

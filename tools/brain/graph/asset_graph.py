@@ -508,10 +508,10 @@ async def build_asset_graph(
         db_edges = _collect_db_edges(project_path, files)
         resource_edges = apple_graph.collect_swift_resource_edges(project_path, file_facts, files)
         xcode_targets, xcode_file_edges, xcode_resource_edges = apple_graph.collect_xcode_target_edges(
-            project_path, files, resource_edges
+            project_path, files, resource_edges, file_facts
         )
         workspace_rows, workspace_project_edges, scheme_rows, scheme_target_edges, scheme_file_edges = (
-            apple_graph.collect_xcode_workspace_scheme_edges(project_path, files, xcode_targets)
+            apple_graph.collect_xcode_workspace_scheme_edges(project_path, files, xcode_targets, file_facts)
         )
 
         if not any(

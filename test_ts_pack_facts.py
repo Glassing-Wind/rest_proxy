@@ -32,6 +32,7 @@ class TsPackFactsTests(unittest.TestCase):
         facts = {
             "route_defs": [{"framework": "file_route", "method": "GET", "path": "/api/leases"}],
             "http_calls": [{"client": "fetch", "method": "POST", "path": "/api/units"}],
+            "apple_targets": [{"target_id": "AA1", "name": "App", "project_file": "ios/App.xcodeproj"}],
         }
         ts_pack = FakeTsPackFileFacts(facts)
         result = extract_file_facts(

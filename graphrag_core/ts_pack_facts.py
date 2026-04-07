@@ -170,7 +170,16 @@ def extract_file_facts(ts_pack: Any, source: str, language: str, file_path: str)
         except Exception:
             raw = None
         if isinstance(raw, dict):
-            for key in ("route_defs", "http_calls", "resource_refs"):
+            for key in (
+                "route_defs",
+                "http_calls",
+                "resource_refs",
+                "apple_targets",
+                "apple_bundled_files",
+                "apple_synced_groups",
+                "apple_workspace_projects",
+                "apple_scheme_targets",
+            ):
                 value = raw.get(key)
                 if isinstance(value, list) and value:
                     parser_facts[key] = value
