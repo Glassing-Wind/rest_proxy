@@ -221,23 +221,37 @@ def format_call_chain_rows(
     direction: str,
     depth: int,
 ) -> str:
+    def is_low_value_name(name: str | None) -> bool:
+        normalized = (name or "").strip().lower()
+        return normalized in {"", "unnamed", "<anonymous>", "anonymous"}
+
     seen: set[str] = set()
     header_name = resolved_name or symbol_name
     out = [f"## Call chain: `{header_name}` ({direction}, depth={depth})\n"]
     if resolved_name and resolved_name != symbol_name:
         out.append(f"Resolved `{symbol_name}` → `{resolved_name}`\n")
+    emitted = 0
     for rec in rows:
         chain = rec["chain"]
         files = rec["files"]
         for index in range(1, len(chain)):
+            name = chain[index]
+            if is_low_value_name(name):
+                continue
             key = "→".join(chain[: index + 1])
             if key in seen:
                 continue
             seen.add(key)
             pad = "  " * index
-            name = chain[index]
             filepath = files[index] or "?"
             out.append(f"{pad}{'└─' if index > 1 else '  '} `{name}`  ({filepath})")
+            emitted += 1
+    if emitted == 0:
+        hop_label = "callers" if direction == "up" else "callees"
+        return (
+            f"`{header_name}` resolved but no named {hop_label} within {depth} hops.\n"
+            "The graph may only contain anonymous wrapper nodes on this path."
+        )
     return "\n".join(out)
 
 

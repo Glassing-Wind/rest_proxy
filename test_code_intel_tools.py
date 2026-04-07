@@ -237,6 +237,51 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("|calls|", output)
         self.assertIn("leaseRouter", output)
 
+    def test_get_call_chain_up_filters_unnamed_callers(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "loadSummary",
+                        "qualified_name": "loadSummary",
+                        "signature": None,
+                        "filepath": "src/public/assets/financial-summary.js",
+                        "rank": 0,
+                        "path_rank": 3,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return [
+                    {
+                        "chain": ["loadSummary", "unnamed"],
+                        "files": [
+                            "src/public/assets/financial-summary.js",
+                            "src/public/assets/financial-summary.js",
+                        ],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/rental",
+                        "loadSummary",
+                        depth=2,
+                        direction="up",
+                        file_path="src/public/assets/financial-summary.js",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("no named callers", output)
+        self.assertNotIn("`unnamed`", output)
+
 
 if __name__ == "__main__":
     unittest.main()
