@@ -9,7 +9,7 @@ from tools.brain.graph import core as graph_core
 from tools.brain.graph import flow_summary_apple
 
 _APP_FLOW_QUERY = """
-CALL {
+CALL () {
     MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
     MATCH (js)-[:CALLS_API_ROUTE]->(route:ApiRoute {project_id:$p})
     OPTIONAL MATCH (route)-[:HANDLED_BY]->(api:File {project_id:$p})
@@ -314,6 +314,19 @@ def _filtered_app_rows(raw_rows, entry_files, ui_contains, model_contains, servi
     return rows
 
 
+def _is_test_like_path(filepath: str | None) -> bool:
+    if not filepath:
+        return False
+    return (
+        filepath.startswith("tests/")
+        or "/tests/" in filepath
+        or "__tests__" in filepath
+        or ".test." in filepath
+        or filepath.endswith("_test.py")
+        or filepath.endswith("_spec.rb")
+    )
+
+
 def _prefer_concrete_app_rows(raw_rows):
     concrete_keys = {
         (ui, js, api, svc, model, schema, external)
@@ -457,6 +470,12 @@ async def get_app_flow_summary_impl(
             model_contains=model_contains,
             service_contains=service_contains,
         )
+        if not include_tests:
+            raw_rows = [
+                row
+                for row in raw_rows
+                if not any(_is_test_like_path(path) for path in [row[0], row[1], row[3], row[4]])
+            ]
         raw_rows = _prefer_concrete_app_rows(raw_rows)
 
         if expand_api_calls:

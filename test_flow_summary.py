@@ -196,6 +196,49 @@ class FlowSummaryTests(unittest.TestCase):
             output,
         )
 
+    def test_get_app_flow_summary_filters_test_like_rows_even_if_query_leaks_them(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary":
+                return [
+                    {
+                        "ui": "tests/routes.test.ts",
+                        "js": "tests/routes.test.ts",
+                        "route": "GET /api/applications",
+                        "api": "src/api/routes/applicationOpsRoutes.ts",
+                        "svc": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    },
+                    {
+                        "ui": "src/public/financial-summary.html",
+                        "js": "src/public/assets/financial-summary.js",
+                        "route": "GET /api/financials/tax-package",
+                        "api": "src/api/routes/financeAdminRoutes.ts",
+                        "svc": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    include_coverage=False,
+                    limit=20,
+                    group_by_ui=True,
+                )
+            )
+
+        self.assertIn("src/public/financial-summary.html", output)
+        self.assertNotIn("tests/routes.test.ts", output)
+
     def test_get_apple_build_summary_formats_target_aware_paths(self):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "apple_build_presence":

@@ -65,29 +65,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error generating project overview: {str(e)}"
 
     @mcp.tool()
-    async def get_graph_build_metrics(limit: int = 50) -> str:
-        """
-        Summarize recent graph-build batch timings and last build duration.
-
-        Args:
-            limit: Number of recent batches to summarize (default 50).
-        """
-        try:
-            return await graph_utility.get_graph_build_metrics_impl(limit)
-        except Exception as exc:
-            return f"Error reading metrics: {str(exc)}"
-
-    @mcp.tool()
-    async def get_language_pack_status() -> str:
-        """
-        Show available vs manifest languages for tree-sitter-language-pack.
-        """
-        try:
-            return await graph_utility.get_language_pack_status_impl()
-        except Exception as e:
-            return f"Error reading language pack status: {str(e)}"
-
-    @mcp.tool()
     async def get_app_flow_summary(
         workspace_id: str,
         ui_contains: str | None = None,

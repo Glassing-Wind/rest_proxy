@@ -65,12 +65,6 @@ class GraphUtilityTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
 
-    def test_graph_build_metrics_formats_recent_events(self):
-        output = asyncio.run(self.module.get_graph_build_metrics_impl(50))
-        self.assertIn("Graph build metrics", output)
-        self.assertIn("import_graph_batch", output)
-        self.assertIn("Recent events:", output)
-
     def test_topology_summary_formats_rows(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")

@@ -8,28 +8,6 @@ from tools.brain.search import summaries as search_summaries
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def get_symbol_imports_summary(project_path: str, limit: int = 20) -> str:
-        """
-        Summarize symbol-level import edges (IMPORTS_SYMBOL) for a project.
-
-        Args:
-            project_path: Absolute path to the project root.
-            limit: Max rows to return per section (default 20).
-        """
-        try:
-            import graph_bootstrap
-
-            driver = await graph_bootstrap.require_driver()
-            return await search_summaries.get_symbol_imports_summary_impl(
-                driver=driver,
-                neo4j_db=graph_bootstrap._NEO4J_DB,
-                project_path=project_path,
-                limit=limit,
-            )
-        except Exception as e:
-            return f"Error summarizing symbol imports: {str(e)}"
-
-    @mcp.tool()
     async def get_symbol_imports_overview(
         project_path: str, limit: int = 20, include_implicit: bool = False
     ) -> str:

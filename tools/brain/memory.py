@@ -58,25 +58,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error adding memory: {str(e)}"
 
     @mcp.tool()
-    async def get_session_summary(session_id: str) -> str:
-        """
-        Backward-compatible summary lookup for a session/project identifier.
-
-        Args:
-            session_id: The unique identifier for the session or workspace.
-        """
-        try:
-            memory_store, _, _, _, _ = get_memory_modules()
-            if memory_store._ENABLE_PERSISTENCE:
-                await memory_store.open_pool()
-            summary = await memory_store.get_rolling_summary(session_id)
-            if summary:
-                return summary
-            return "No summary available for this session."
-        except Exception as e:
-            return f"Error retrieving summary: {str(e)}"
-
-    @mcp.tool()
     async def list_memories(workspace_id: str, include_global: bool = False) -> str:
         """
         List all durable memories stored for a workspace/project.

@@ -2,75 +2,8 @@
 
 from __future__ import annotations
 
-import os
-
 from _helpers import get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
-
-
-async def get_graph_build_metrics_impl(limit: int = 50) -> str:
-    limit = max(1, min(int(limit), 200))
-    ib_count, ib_avg, ib_max = graph_core._summarize_batches("import_graph_batch", limit)
-    si_count, si_avg, si_max = graph_core._summarize_batches("symbol_import_batch", limit)
-    se_count, se_avg, se_max = graph_core._summarize_batches("symbol_export_batch", limit)
-    last_build = graph_core.get_last_graph_build_metric()
-    recent: list[dict[str, object]] = []
-
-    lines = ["# Graph build metrics"]
-    if last_build:
-        lines.append(
-            "Last build: "
-            f"project={last_build.get('project_path')} "
-            f"elapsed_ms={last_build.get('elapsed_ms')}"
-        )
-    else:
-        lines.append("Last build: none")
-
-    lines.append(f"import_graph_batch: count={ib_count} avg_ms={ib_avg} max_ms={ib_max}")
-    lines.append(f"symbol_import_batch: count={si_count} avg_ms={si_avg} max_ms={si_max}")
-    lines.append(f"symbol_export_batch: count={se_count} avg_ms={se_avg} max_ms={se_max}")
-
-    lines.append("Recent events:")
-    for entry in recent:
-        evt = entry.get("event")
-        elapsed = entry.get("elapsed_ms")
-        proj = entry.get("project_path") or entry.get("project_id")
-        if elapsed is not None:
-            lines.append(f"- {evt} {proj} elapsed_ms={elapsed}")
-        else:
-            lines.append(f"- {evt} {proj}")
-    return "\n".join(lines)
-
-
-async def get_language_pack_status_impl() -> str:
-    import tree_sitter_language_pack as ts_pack
-
-    auto_dl = os.getenv("LM_PROXY_TS_PACK_AUTO_DOWNLOAD", "1")
-    cache_dir = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
-    if cache_dir:
-        try:
-            ts_pack.init({"cache_dir": cache_dir})
-        except Exception:
-            pass
-    available = sorted(ts_pack.available_languages())
-    try:
-        manifest = sorted(ts_pack.manifest_languages())
-    except Exception:
-        manifest = []
-
-    missing = [lang for lang in manifest if lang not in available]
-    lines = ["# Language pack status"]
-    lines.append(f"Auto-download: {auto_dl}")
-    if cache_dir:
-        lines.append(f"Cache dir: {cache_dir}")
-    lines.append(f"Available languages: {len(available)}")
-    lines.append(f"Manifest languages: {len(manifest)}")
-    if missing:
-        lines.append(f"Missing languages: {len(missing)}")
-        lines.append("Missing sample: " + ", ".join(missing[:20]))
-    else:
-        lines.append("Missing languages: none")
-    return "\n".join(lines)
 
 
 async def _load_cargo_crate_rows(session, project_id: str):

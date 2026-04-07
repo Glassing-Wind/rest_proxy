@@ -81,7 +81,6 @@ Doc indexing tips:
 - `trace_symbol_cross_project(symbol, source_project, target_project)` → cross-project trace
 - `get_test_coverage_for(project_path, file_path)` → tests that cover a file
 - `scripts/check_live_graph_matrix.sh [--reindex --mode incremental]` → standard live smoke matrix for rental, FrameCreator, and draw-things-community using the `lmproxy` runtime
-- `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges (deprecated; use get_symbol_imports_overview)
 - `get_symbol_imports_overview(project_path, limit=20, include_implicit=false)` → summarize explicit symbol import edges; set `include_implicit=true` only when you intentionally want heuristic Swift implicit-import edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
 - File-level `IMPORTS` edges are now expected to come from `index_workspace`; there is no separate import rebuild tool in the normal workflow.
@@ -94,7 +93,6 @@ Doc indexing tips:
   - Tip: set `include_tests=true` when you want coverage paths from test files too
 - `get_topology_summary(project_path)` and `get_heuristic_flow_summary(project_path)` also group Rust workspace results by Cargo crate when available
 - Launch edges: enable `TS_PACK_LAUNCH_EDGES=1` to emit `LAUNCHES` file edges; set `TS_PACK_DEBUG_LAUNCH=1` to log launch resolution counts per file during indexing
-- `get_language_pack_status()` → available vs manifest languages (auto-download status)
 - `get_indexed_projects(query?)` → list indexed repo paths (filters by id prefix or path substring)
 
 ### Memory Tools:

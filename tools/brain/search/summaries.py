@@ -8,63 +8,6 @@ from _helpers import get_project_id
 from tools.brain.graph import core as graph_tools
 
 
-async def get_symbol_imports_summary_impl(
-    *,
-    driver,
-    neo4j_db: str,
-    project_path: str,
-    limit: int = 20,
-) -> str:
-    project_id = get_project_id(project_path)
-    limit = max(1, min(int(limit), 100))
-
-    async with driver.session(database=neo4j_db) as session:
-        r1 = await graph_tools._execute_read(
-            session,
-            """
-            MATCH (f:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
-            RETURN s.name AS symbol, count(*) AS n
-            ORDER BY n DESC
-            LIMIT $limit
-            """,
-            p=project_id,
-            limit=limit,
-            op="get_symbol_imports_summary_symbols",
-        )
-        top_symbols = [(rec["symbol"], rec["n"]) for rec in r1]
-
-        r2 = await graph_tools._execute_read(
-            session,
-            """
-            MATCH (f:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
-            WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
-            ORDER BY n DESC
-            LIMIT $limit
-            RETURN file, n, symbols
-            """,
-            p=project_id,
-            limit=limit,
-            op="get_symbol_imports_summary_files",
-        )
-        top_files = [(rec["file"], rec["n"], rec["symbols"]) for rec in r2]
-
-    if not top_symbols and not top_files:
-        return "No IMPORTS_SYMBOL edges found."
-
-    lines = [f"# Symbol import summary: {project_path.split('/')[-1]}", ""]
-    if top_symbols:
-        lines.append("## Top imported symbols")
-        for name, count in top_symbols:
-            lines.append(f"- {name}  ({count})")
-        lines.append("")
-    if top_files:
-        lines.append("## Files with most symbol imports")
-        for file, count, symbols in top_files[:limit]:
-            sample = ", ".join(symbols[:6])
-            lines.append(f"- {file}  ({count})  [{sample}]")
-    return "\n".join(lines)
-
-
 async def get_symbol_imports_overview_impl(
     *,
     driver,

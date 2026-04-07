@@ -61,26 +61,6 @@ class SearchSummaryTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
 
-    def test_symbol_imports_summary_formats_rows(self):
-        async def fake_execute_read(session, query, **kwargs):
-            if kwargs.get("op") == "get_symbol_imports_summary_symbols":
-                return [{"symbol": "Foo", "n": 3}]
-            if kwargs.get("op") == "get_symbol_imports_summary_files":
-                return [{"file": "src/a.py", "n": 2, "symbols": ["Foo", "Bar"]}]
-            return []
-
-        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
-            output = asyncio.run(
-                self.module.get_symbol_imports_summary_impl(
-                    driver=FakeDriver(),
-                    neo4j_db="neo4j",
-                    project_path="/tmp/repo",
-                    limit=20,
-                )
-            )
-        self.assertIn("Top imported symbols", output)
-        self.assertIn("src/a.py", output)
-
     def test_symbol_exports_summary_applies_filters(self):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "get_symbol_exports_summary_symbols":
