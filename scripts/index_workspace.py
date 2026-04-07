@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """Semantic indexing worker for GraphRAG pipeline.
 
-Consumes a JSON manifest of source files, chunks them with a pure-Python
-strategy, calls LM Studio for embeddings, and writes chunk rows to Postgres.
-
-Design:
-- Chunks files in parallel (asyncio.gather over I/O-bound reads).
-- Skips chunks already present in Postgres (skip-unchanged optimisation).
-- Embeds CONCURRENCY batches concurrently via async HTTP to LM Studio.
-- Pipelines Postgres writes concurrently with next embed group.
-- Single process — no native-lib conflicts.
+Consumes a JSON manifest of source files, chunks them with ts-pack-owned
+helpers, calls LM Studio for embeddings, and drives semantic Postgres sync
+through the native ts-pack semantic index driver.
 
 Usage:
     python scripts/index_workspace.py <target_dir> <project_id> --manifest-file <path>
@@ -283,12 +277,6 @@ def _build_line_window_chunks(
             overlap_lines=OVERLAP_LINES,
         )
     raise RuntimeError("ts_pack.build_line_window_chunks is required")
-
-
-async def _execute_semantic_sync(conn, ts_pack, project_id: str, all_chunks: List[List[Dict]]) -> dict:
-    if hasattr(ts_pack, "execute_semantic_sync"):
-        return await ts_pack.execute_semantic_sync(conn, project_id, all_chunks)
-    raise RuntimeError("ts_pack.execute_semantic_sync is required")
 
 
 def _read_and_chunk(
@@ -590,10 +578,6 @@ async def index_project(
 
     bs = embedding_svc.effective_batch_size
     total_files = len(manifest)
-    total_indexed = 0
-    skipped = 0
-    buffer: list = []
-
     print(
         f"[lm-proxy:indexer] Semantic phase — {total_files} files "
         f"(device={embedding_svc._device}, embed_batch={bs}, chunk_concurrency={CHUNK_CONCURRENCY})",
