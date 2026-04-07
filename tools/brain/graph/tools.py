@@ -283,6 +283,17 @@ def register(mcp: FastMCP) -> None:
             if not ui_result.startswith("No UI → API → Service → DB paths found"):
                 return ui_result
 
+        if mode_norm == "apple":
+            return await get_apple_build_summary(
+                workspace_id,
+                source_contains=ui_contains,
+                resource_contains=model_contains,
+                target_contains=service_contains,
+                group_by="target",
+                limit=limit,
+                as_table=as_table,
+            )
+
         backend_result = await get_backend_flow_summary(
             workspace_id,
             api_contains=api_contains,

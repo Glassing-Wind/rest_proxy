@@ -254,6 +254,30 @@ class GraphToolsTests(unittest.TestCase):
         self.assertNotIn("## Apple Build Context", output)
         self.assertIn("apple_context_presence", seen_ops)
 
+    def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module.graph_flow_summary,
+                "get_apple_build_summary_impl",
+                new=mock.AsyncMock(return_value="No Apple build graph paths found."),
+            ) as apple_mock:
+                with mock.patch.object(
+                    self.module.graph_flow_summary,
+                    "get_backend_flow_summary_impl",
+                    new=mock.AsyncMock(return_value="backend result"),
+                ) as backend_mock:
+                    output = asyncio.run(
+                        self.mcp.tools["get_flow_summary"](
+                            "/tmp/framecreator",
+                            mode="apple",
+                            limit=5,
+                        )
+                    )
+
+        self.assertEqual("No Apple build graph paths found.", output)
+        apple_mock.assert_awaited_once()
+        backend_mock.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()
