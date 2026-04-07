@@ -189,6 +189,17 @@ def _prefer_concrete_app_rows(raw_rows):
     return filtered
 
 
+def _format_app_flow_row(ui, js, route, api, svc, model, schema, external) -> str:
+    parts = []
+    for value in [ui, js, route, api, svc, model, schema, external]:
+        if not value:
+            continue
+        if parts and parts[-1] == value:
+            continue
+        parts.append(value)
+    return " -> ".join(parts)
+
+
 async def _coverage_lines(session, project_id: str) -> list[str]:
     coverage_result = await graph_core._execute_read(
         session,
@@ -340,9 +351,7 @@ async def get_app_flow_summary_impl(
         for ui, js, route, api, svc, model, schema, external in raw_rows:
             if not ui:
                 continue
-            flow = " -> ".join(
-                [value for value in [ui, js, route, api, svc, model, schema, external] if value]
-            )
+            flow = _format_app_flow_row(ui, js, route, api, svc, model, schema, external)
             grouped.setdefault(ui, []).append(flow)
         ordered_uis = entry_files or sorted(grouped.keys())
         for ui in ordered_uis:
@@ -357,7 +366,7 @@ async def get_app_flow_summary_impl(
             rows.extend(list(dict.fromkeys(flows))[:max_per_ui])
     else:
         rows = [
-            " -> ".join([value for value in [ui, js, route, api, svc, model, schema, external] if value])
+            _format_app_flow_row(ui, js, route, api, svc, model, schema, external)
             for ui, js, route, api, svc, model, schema, external in raw_rows
         ]
 

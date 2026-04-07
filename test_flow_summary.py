@@ -67,6 +67,22 @@ class FlowSummaryTests(unittest.TestCase):
     def setUp(self):
         self.module = load_flow_summary_module()
 
+    def test_format_app_flow_row_dedupes_direct_js_entry(self):
+        formatted = self.module._format_app_flow_row(
+            "src/public/assets/financial-summary.js",
+            "src/public/assets/financial-summary.js",
+            "GET /api/financials/tax-package",
+            "src/api/routes/financeAdminRoutes.ts",
+            None,
+            None,
+            None,
+            None,
+        )
+        self.assertEqual(
+            "src/public/assets/financial-summary.js -> GET /api/financials/tax-package -> src/api/routes/financeAdminRoutes.ts",
+            formatted,
+        )
+
     def test_prefer_concrete_app_rows_drops_broad_duplicates(self):
         rows = [
             (
@@ -138,6 +154,45 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertEqual(output.count("src/api/leaseRoutes.ts"), 1)
         self.assertNotIn(
             "src/public/properties.html -> src/public/assets/properties.js -> src/api/leaseRoutes.ts -> src/services/leaseService.ts",
+            output,
+        )
+
+    def test_get_app_flow_summary_dedupes_same_ui_and_js_path(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary":
+                return [
+                    {
+                        "ui": "src/public/assets/financial-summary.js",
+                        "js": "src/public/assets/financial-summary.js",
+                        "route": "GET /api/financials/tax-package",
+                        "api": "src/api/routes/financeAdminRoutes.ts",
+                        "svc": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    include_coverage=False,
+                    limit=20,
+                    group_by_ui=True,
+                )
+            )
+
+        self.assertIn(
+            "src/public/assets/financial-summary.js -> GET /api/financials/tax-package -> src/api/routes/financeAdminRoutes.ts",
+            output,
+        )
+        self.assertNotIn(
+            "src/public/assets/financial-summary.js -> src/public/assets/financial-summary.js -> GET /api/financials/tax-package",
             output,
         )
 
