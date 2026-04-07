@@ -153,6 +153,12 @@ class TsPackFactsTests(unittest.TestCase):
                                     {"name": "name", "text": "brand"},
                                 ]
                             },
+                            {
+                                "captures": [
+                                    {"name": "callee", "text": "UIStoryboard"},
+                                    {"name": "name", "text": "Main"},
+                                ]
+                            },
                         ]
                     }
                 }
@@ -165,6 +171,7 @@ class TsPackFactsTests(unittest.TestCase):
             [
                 {"callee": "Color", "kind": "color", "name": "brand"},
                 {"callee": "Image", "kind": "image", "name": "hero"},
+                {"callee": "UIStoryboard", "kind": "storyboard", "name": "Main"},
             ],
         )
 

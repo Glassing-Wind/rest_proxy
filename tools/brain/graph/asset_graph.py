@@ -21,6 +21,7 @@ RESOURCE_REL_BY_KIND = {
     "image": "USES_ASSET",
     "color": "USES_COLOR_ASSET",
     "nib": "USES_XIB",
+    "storyboard": "USES_STORYBOARD",
 }
 ROUTE_LITERAL_RE = re.compile(r"[\"'](/[^\"']+)[\"']")
 TEMPLATE_LITERAL_RE = re.compile(r"`([^`]+)`")
@@ -411,10 +412,12 @@ def _collect_api_edges(
 
 
 def _collect_swift_resource_edges(
+    project_path: str,
     file_facts: dict[str, dict[str, object]],
     files: dict[str, str],
-) -> list[tuple[str, str, str]]:
-    resource_edges: list[tuple[str, str, str]] = []
+) -> list[tuple[str, str, str, str | None, str]]:
+    resource_catalog = _discover_apple_resources(project_path)
+    resource_edges: list[tuple[str, str, str, str | None, str]] = []
     for fp, fid in files.items():
         facts = file_facts.get(fp) or {}
         for ref in facts.get("resource_refs") or []:
@@ -427,8 +430,29 @@ def _collect_swift_resource_edges(
             rel = RESOURCE_REL_BY_KIND.get(kind)
             if not rel:
                 continue
-            resource_edges.append((fid, rel, name))
+            resource_edges.append((fid, rel, name, resource_catalog.get((kind, name)), kind))
     return list(set(resource_edges))
+
+
+def _discover_apple_resources(project_path: str) -> dict[tuple[str, str], str]:
+    discovered: dict[tuple[str, str], str] = {}
+    for current_root, dirnames, filenames in os.walk(project_path):
+        rel_root = PurePosixPath(os.path.relpath(current_root, project_path))
+        if rel_root == PurePosixPath("."):
+            rel_root = PurePosixPath("")
+        for dirname in list(dirnames):
+            if dirname.endswith(".imageset"):
+                name = dirname[:-9]
+                discovered.setdefault(("image", name), str((rel_root / dirname).as_posix()))
+            elif dirname.endswith(".colorset"):
+                name = dirname[:-9]
+                discovered.setdefault(("color", name), str((rel_root / dirname).as_posix()))
+        for filename in filenames:
+            if filename.endswith(".xib"):
+                discovered.setdefault(("nib", PurePosixPath(filename).stem), str((rel_root / filename).as_posix()))
+            elif filename.endswith(".storyboard"):
+                discovered.setdefault(("storyboard", PurePosixPath(filename).stem), str((rel_root / filename).as_posix()))
+    return discovered
 
 
 def _collect_service_edges(project_path: str, files: dict[str, str]) -> list[tuple[str, str]]:
@@ -492,7 +516,7 @@ async def _clear_existing_edges(session, execute_write: ExecuteWrite, project_id
         "MATCH (a:File {project_id:$p})-[r:CALLS_SERVICE]->() DELETE r",
         "MATCH (a:File {project_id:$p})-[r:CALLS_DB]->() DELETE r",
         "MATCH (a:File {project_id:$p})-[r:CALLS_API_EXTERNAL]->() DELETE r",
-        "MATCH (a:File {project_id:$p})-[r:USES_ASSET|USES_COLOR_ASSET|USES_XIB]->() DELETE r",
+        "MATCH (a:File {project_id:$p})-[r:USES_ASSET|USES_COLOR_ASSET|USES_XIB|USES_STORYBOARD]->() DELETE r",
     ]
     for query in statements:
         await execute_write(session, query, p=project_id, timeout=write_timeout_s)
@@ -588,23 +612,33 @@ async def _write_resource_edges(
     batch_size: int,
     write_timeout_s: float,
     project_id: str,
-    resource_edges: list[tuple[str, str, str]],
+    resource_edges: list[tuple[str, str, str, str | None, str]],
 ) -> None:
     if not resource_edges:
         return
-    grouped: dict[str, list[tuple[str, str, str]]] = {}
-    for src, rel, name in resource_edges:
-        grouped.setdefault(rel, []).append((src, name, rel))
+    grouped: dict[str, list[tuple[str, str, str | None, str]]] = {}
+    for src, rel, name, resource_path, resource_kind in resource_edges:
+        grouped.setdefault(rel, []).append((src, name, resource_path, resource_kind))
     for rel_name, edges in grouped.items():
         query = f"""
         UNWIND $batch AS edge
         MATCH (a:File {{id: edge.src}})
         MERGE (res:Resource {{project_id: edge.project_id, name: edge.name, kind: edge.kind}})
         ON CREATE SET res.filepath = edge.name
+        SET res.filepath = coalesce(edge.filepath, res.filepath)
         MERGE (a)-[:{rel_name}]->(res)
         """
         for i in range(0, len(edges), batch_size):
-            batch = [{"src": s, "name": n, "kind": k, "project_id": project_id} for s, n, k in edges[i : i + batch_size]]
+            batch = [
+                {
+                    "src": s,
+                    "name": n,
+                    "filepath": p,
+                    "kind": k,
+                    "project_id": project_id,
+                }
+                for s, n, p, k in edges[i : i + batch_size]
+            ]
             async with write_semaphore:
                 await execute_write(session, query, batch=batch, timeout=write_timeout_s)
 
@@ -654,7 +688,7 @@ async def build_asset_graph(
         )
         service_edges = _collect_service_edges(project_path, files)
         db_edges = _collect_db_edges(project_path, files)
-        resource_edges = _collect_swift_resource_edges(file_facts, files)
+        resource_edges = _collect_swift_resource_edges(project_path, file_facts, files)
 
         if not any([html_edges, api_edges, api_route_edges, external_edges, service_edges, db_edges, resource_edges]):
             return "No asset edges resolved."

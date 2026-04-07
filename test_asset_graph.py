@@ -186,10 +186,18 @@ class AssetGraphTests(unittest.TestCase):
             project_path = Path(tmpdir)
             js_file = project_path / "src/public/assets/client.js"
             swift_file = project_path / "ios/App/View.swift"
+            asset_dir = project_path / "ios/App/Assets.xcassets/hero.imageset"
+            color_dir = project_path / "ios/App/Assets.xcassets/brand.colorset"
+            storyboard = project_path / "ios/App/Main.storyboard"
             js_file.parent.mkdir(parents=True, exist_ok=True)
             swift_file.parent.mkdir(parents=True, exist_ok=True)
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            color_dir.mkdir(parents=True, exist_ok=True)
             js_file.write_text('await fetch("https://api.example.com/v1/users")\n', encoding="utf-8")
             swift_file.write_text('let image = Image("hero")\n', encoding="utf-8")
+            (asset_dir / "Contents.json").write_text("{}", encoding="utf-8")
+            (color_dir / "Contents.json").write_text("{}", encoding="utf-8")
+            storyboard.write_text("<storyboard></storyboard>\n", encoding="utf-8")
 
             files = [
                 {"fp": "src/public/assets/client.js", "fid": "js-file"},
@@ -213,7 +221,11 @@ class AssetGraphTests(unittest.TestCase):
                         return_value={
                             "src/public/assets/client.js": {},
                             "ios/App/View.swift": {
-                                "resource_refs": [{"kind": "image", "name": "hero", "callee": "Image"}]
+                                "resource_refs": [
+                                    {"kind": "image", "name": "hero", "callee": "Image"},
+                                    {"kind": "color", "name": "brand", "callee": "Color"},
+                                    {"kind": "storyboard", "name": "Main", "callee": "UIStoryboard"},
+                                ]
                             },
                         },
                     ):
@@ -240,11 +252,50 @@ class AssetGraphTests(unittest.TestCase):
         self.assertEqual(external_batches, [[{"src": "js-file", "url": "https://api.example.com/v1/users", "project_id": "proj123"}]])
 
         resource_batches = [
-            kwargs["batch"]
+            (query, kwargs["batch"])
             for query, kwargs in writes
-            if "USES_ASSET" in query and "UNWIND $batch" in query
+            if "MERGE (res:Resource" in query and "UNWIND $batch" in query
         ]
-        self.assertEqual(resource_batches, [[{"src": "swift-file", "name": "hero", "kind": "USES_ASSET", "project_id": "proj123"}]])
+        self.assertEqual(len(resource_batches), 3)
+        by_rel = {}
+        for query, batch in resource_batches:
+            if "USES_ASSET" in query:
+                by_rel["USES_ASSET"] = batch
+            elif "USES_COLOR_ASSET" in query:
+                by_rel["USES_COLOR_ASSET"] = batch
+            elif "USES_STORYBOARD" in query:
+                by_rel["USES_STORYBOARD"] = batch
+
+        self.assertEqual(
+            by_rel["USES_ASSET"],
+            [{
+                "src": "swift-file",
+                "name": "hero",
+                "filepath": "ios/App/Assets.xcassets/hero.imageset",
+                "kind": "image",
+                "project_id": "proj123",
+            }],
+        )
+        self.assertEqual(
+            by_rel["USES_COLOR_ASSET"],
+            [{
+                "src": "swift-file",
+                "name": "brand",
+                "filepath": "ios/App/Assets.xcassets/brand.colorset",
+                "kind": "color",
+                "project_id": "proj123",
+            }],
+        )
+        self.assertEqual(
+            by_rel["USES_STORYBOARD"],
+            [{
+                "src": "swift-file",
+                "name": "Main",
+                "filepath": "ios/App/Main.storyboard",
+                "kind": "storyboard",
+                "project_id": "proj123",
+            }],
+        )
 
 
 if __name__ == "__main__":

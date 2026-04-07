@@ -163,32 +163,30 @@ def _config_for_language(language: str) -> dict[str, Any] | None:
 
 def extract_file_facts(ts_pack: Any, source: str, language: str, file_path: str) -> dict[str, Any]:
     """Extract compact, typed file facts from ts-pack extraction results."""
+    parser_facts: dict[str, Any] = {}
     if hasattr(ts_pack, "extract_file_facts"):
         try:
             raw = ts_pack.extract_file_facts(source, language, file_path)
         except Exception:
             raw = None
         if isinstance(raw, dict):
-            facts: dict[str, Any] = {}
             for key in ("route_defs", "http_calls", "resource_refs"):
                 value = raw.get(key)
                 if isinstance(value, list) and value:
-                    facts[key] = value
-            if facts:
-                return facts
+                    parser_facts[key] = value
 
     if not hasattr(ts_pack, "extract"):
-        return {}
+        return parser_facts
     config = _config_for_language(language)
     if not config:
-        return {}
+        return parser_facts
 
     try:
         raw = ts_pack.extract(source, config)
     except Exception:
-        return {}
+        return parser_facts
 
-    facts: dict[str, Any] = {}
+    facts: dict[str, Any] = dict(parser_facts)
 
     route_defs: list[dict[str, str]] = []
     for match in _pattern_matches(raw, "express_routes"):
@@ -256,6 +254,8 @@ def extract_file_facts(ts_pack: Any, source: str, language: str, file_path: str)
             kind = "color"
         elif callee in {"UINib", "NSNib"}:
             kind = "nib"
+        elif callee in {"UIStoryboard", "NSStoryboard"}:
+            kind = "storyboard"
         if kind:
             resource_refs.append({"kind": kind, "name": str(name), "callee": str(callee)})
 
@@ -270,6 +270,7 @@ def extract_file_facts(ts_pack: Any, source: str, language: str, file_path: str)
         )
         facts["http_calls"] = [dict(items) for items in facts["http_calls"]]
     if resource_refs:
+        resource_refs = list(facts.get("resource_refs") or []) + resource_refs
         facts["resource_refs"] = sorted(
             {tuple(sorted(item.items())) for item in resource_refs}
         )
