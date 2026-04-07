@@ -78,6 +78,7 @@ Doc indexing tips:
   - Fallback grep uses `rg`; set `LM_PROXY_RG_PATH` if MCP does not inherit your shell PATH
 - `trace_symbol_cross_project(symbol, source_project, target_project)` → cross-project trace
 - `get_test_coverage_for(project_path, file_path)` → tests that cover a file
+- `scripts/check_live_graph_matrix.sh [--reindex --mode incremental]` → standard live smoke matrix for rental, FrameCreator, and draw-things-community using the `lmproxy` runtime
 - `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges (deprecated; use get_symbol_imports_overview)
 - `get_symbol_imports_overview(project_path, limit=20, include_implicit=false)` → summarize explicit symbol import edges; set `include_implicit=true` only when you intentionally want heuristic Swift implicit-import edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
