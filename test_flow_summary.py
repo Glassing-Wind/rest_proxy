@@ -690,6 +690,45 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("crates/ts-pack-index/src/write_phase.rs", output)
         self.assertIn("neo4j://local", output)
 
+    def test_get_backend_flow_summary_explains_empty_cargo_library_workspace(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_backend_flow_summary":
+                return []
+            if op == "get_backend_flow_summary_fallback":
+                return []
+            if op == "backend_flow_cargo_schema_labels":
+                return [{"labels": ["CargoCrate"]}]
+            if op == "backend_flow_cargo_crates":
+                return [
+                    {
+                        "crate": "ts-pack-index",
+                        "crate_name": "ts-pack-index",
+                        "manifest_path": "crates/ts-pack-index/Cargo.toml",
+                    },
+                    {
+                        "crate": "ts-pack-core",
+                        "crate_name": "tree-sitter-language-pack",
+                        "manifest_path": "crates/ts-pack-core/Cargo.toml",
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_backend_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/tree-sitter-language-pack",
+                    limit=20,
+                    as_table=False,
+                )
+            )
+
+        self.assertIn("crate/library-oriented", output)
+        self.assertIn("ts-pack-index", output)
+        self.assertIn("project overview", output)
+
 
 if __name__ == "__main__":
     unittest.main()

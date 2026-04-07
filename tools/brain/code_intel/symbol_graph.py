@@ -184,7 +184,8 @@ def build_call_chain_path_cypher(direction: str, depth: int, *, is_backend_root:
         " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
         + path_filter
         + " RETURN [n IN nodes(path) | n.name] AS chain,"
-        "        [n IN nodes(path) | n.filepath] AS files"
+        "        [n IN nodes(path) | n.filepath] AS files,"
+        "        [n IN nodes(path) | n.start_line] AS lines"
         " LIMIT 40"
     )
     return hop_label, cypher
@@ -231,12 +232,19 @@ def format_call_chain_rows(
     if resolved_name and resolved_name != symbol_name:
         out.append(f"Resolved `{symbol_name}` → `{resolved_name}`\n")
     emitted = 0
+    anonymous_hints: list[str] = []
     for rec in rows:
         chain = rec["chain"]
         files = rec["files"]
+        lines = rec.get("lines") or []
         for index in range(1, len(chain)):
             name = chain[index]
             if is_low_value_name(name):
+                filepath = files[index] or "?"
+                line = lines[index] if index < len(lines) else None
+                hint = f"{filepath}:{line}" if line else filepath
+                if hint not in anonymous_hints:
+                    anonymous_hints.append(hint)
                 continue
             key = "→".join(chain[: index + 1])
             if key in seen:
@@ -248,9 +256,15 @@ def format_call_chain_rows(
             emitted += 1
     if emitted == 0:
         hop_label = "callers" if direction == "up" else "callees"
+        hint_text = ""
+        if anonymous_hints:
+            shown = ", ".join(anonymous_hints[:3])
+            extra = f" (+{len(anonymous_hints) - 3} more)" if len(anonymous_hints) > 3 else ""
+            hint_text = f"\nAnonymous wrapper hops exist at: {shown}{extra}"
         return (
             f"`{header_name}` resolved but no named {hop_label} within {depth} hops.\n"
             "The graph may only contain anonymous wrapper nodes on this path."
+            + hint_text
         )
     return "\n".join(out)
 

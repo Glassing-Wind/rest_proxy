@@ -259,6 +259,7 @@ class CodeIntelToolTests(unittest.TestCase):
                             "src/public/assets/financial-summary.js",
                             "src/public/assets/financial-summary.js",
                         ],
+                        "lines": [127, 183],
                     }
                 ]
             return []
@@ -281,6 +282,7 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("no named callers", output)
         self.assertNotIn("`unnamed`", output)
+        self.assertIn("src/public/assets/financial-summary.js:183", output)
 
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):

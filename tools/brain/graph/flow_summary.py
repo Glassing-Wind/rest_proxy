@@ -286,6 +286,23 @@ def _group_backend_flow_rows(rows: list[dict], limit: int) -> list[str]:
     return output
 
 
+def _format_backend_flow_empty_message(crate_rows) -> str:
+    if not crate_rows:
+        return "No API → Service → DB paths found."
+    crate_names = [row.get("crate") or row.get("crate_name") for row in crate_rows]
+    crate_names = [name for name in crate_names if name]
+    preview = ", ".join(crate_names[:4])
+    if len(crate_names) > 4:
+        preview += f", +{len(crate_names) - 4} more"
+    detail = f" Cargo crates detected: {preview}." if preview else ""
+    return (
+        "No API → Service → DB paths found. "
+        "This workspace looks crate/library-oriented rather than app-backend shaped."
+        + detail
+        + " Prefer project overview, code importance, related files, communities, and directory snapshots here."
+    )
+
+
 async def _resolve_entry_files(session, project_id: str, entry_files, entry_glob):
     if entry_files or not entry_glob:
         return entry_files
@@ -735,7 +752,7 @@ async def get_backend_flow_summary_impl(
 
     rows = [r for r in rows if r["svc"] or r["model"] or r["schema"] or r["external"]]
     if not rows:
-        return "No API → Service → DB paths found."
+        return _format_backend_flow_empty_message(cargo_crate_rows)
 
     if as_table:
         output = [
