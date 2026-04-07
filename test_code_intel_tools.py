@@ -362,6 +362,45 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crate `core`", output)
         self.assertIn("crates/api/src/lib.rs", output)
 
+    def test_get_related_files_prefers_cargo_crate_context(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": ["CargoCrate"]}]
+            if "MATCH (c:CargoCrate" in cypher and "manifest_path" in cypher:
+                return [
+                    {"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml"},
+                    {"crate": "core", "crate_name": "core", "manifest_path": "crates/core/Cargo.toml"},
+                    {"crate": "cli", "crate_name": "cli", "manifest_path": "crates/cli/Cargo.toml"},
+                ]
+            if "same crate" not in cypher and "MATCH (c:CargoCrate {project_id:$pid, name:$crate})-[:DEFINED_IN_FILE]" in cypher:
+                return [
+                    {"related_file": "crates/api/src/routes.rs", "sym_count": 8},
+                    {"related_file": "crates/api/src/http.rs", "sym_count": 4},
+                ]
+            if "MATCH (src:CargoCrate {project_id:$pid, name:$crate})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate" in cypher:
+                return [{"crate": "core", "files": ["crates/core/src/service.rs"]}]
+            if "MATCH (src:CargoCrate {project_id:$pid})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$pid, name:$crate})" in cypher:
+                return [{"crate": "cli", "files": ["crates/cli/src/main.rs"]}]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [{"related_file": "crates/shared/src/types.rs", "shared_imports": 2}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"]("/tmp/rustws", "crates/api/src/lib.rs")
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Crate: api", output)
+        self.assertIn("crates/api/src/routes.rs", output)
+        self.assertIn("depends on crate `core`", output)
+        self.assertIn("used by crate `cli`", output)
+        self.assertIn("Import graph:", output)
+
 
 if __name__ == "__main__":
     unittest.main()

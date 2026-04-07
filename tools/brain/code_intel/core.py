@@ -704,6 +704,85 @@ def register(mcp: FastMCP) -> None:
         try:
             project_id = get_project_id(project_path)
             file_id = f"{project_id}:file:{file_path}"
+            import graph_bootstrap
+
+            driver = await graph_bootstrap.require_driver()
+            cargo_related: list[str] = []
+            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                cargo_rows = await _load_cargo_crate_rows(session, project_id)
+                target_crate = _match_cargo_crate(file_path, cargo_rows)
+                if target_crate:
+                    same_crate = await _execute_read(
+                        session,
+                        """
+                        MATCH (c:CargoCrate {project_id:$pid, name:$crate})-[:DEFINED_IN_FILE]->(mf:File {project_id:$pid})
+                        WITH c, replace(mf.filepath, 'Cargo.toml', '') AS crate_root
+                        MATCH (f:File {project_id:$pid})
+                        WHERE f.filepath STARTS WITH crate_root
+                          AND f.filepath <> $file_path
+                        OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+                        WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
+                        WITH f, count(s) AS sym_count
+                        RETURN f.filepath AS related_file, sym_count
+                        ORDER BY sym_count DESC, related_file
+                        LIMIT 5
+                        """,
+                        pid=project_id,
+                        crate=target_crate,
+                        file_path=file_path,
+                        op="get_related_files_same_crate",
+                    )
+                    downstream = await _execute_read(
+                        session,
+                        """
+                        MATCH (src:CargoCrate {project_id:$pid, name:$crate})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$pid})
+                        MATCH (tgt)-[:DEFINED_IN_FILE]->(mf:File {project_id:$pid})
+                        WITH tgt, replace(mf.filepath, 'Cargo.toml', '') AS crate_root
+                        MATCH (f:File {project_id:$pid})
+                        WHERE f.filepath STARTS WITH crate_root
+                        OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+                        WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
+                        WITH tgt, f, count(s) AS sym_count
+                        RETURN tgt.name AS crate, collect(f.filepath)[..3] AS files
+                        ORDER BY crate
+                        LIMIT 5
+                        """,
+                        pid=project_id,
+                        crate=target_crate,
+                        op="get_related_files_dependent_crates",
+                    )
+                    upstream = await _execute_read(
+                        session,
+                        """
+                        MATCH (src:CargoCrate {project_id:$pid})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$pid, name:$crate})
+                        MATCH (src)-[:DEFINED_IN_FILE]->(mf:File {project_id:$pid})
+                        WITH src, replace(mf.filepath, 'Cargo.toml', '') AS crate_root
+                        MATCH (f:File {project_id:$pid})
+                        WHERE f.filepath STARTS WITH crate_root
+                        OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+                        WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
+                        WITH src, f, count(s) AS sym_count
+                        RETURN src.name AS crate, collect(f.filepath)[..3] AS files
+                        ORDER BY crate
+                        LIMIT 5
+                        """,
+                        pid=project_id,
+                        crate=target_crate,
+                        op="get_related_files_dependent_on_target",
+                    )
+                    if same_crate:
+                        cargo_related.append(f"Crate: {target_crate}")
+                        for record in same_crate:
+                            cargo_related.append(
+                                f"- {record['related_file']} (same crate, symbols: {record.get('sym_count') or 0})"
+                            )
+                    for record in downstream:
+                        files = ", ".join(record.get("files") or [])
+                        cargo_related.append(f"- depends on crate `{record['crate']}` via {files}")
+                    for record in upstream:
+                        files = ", ".join(record.get("files") or [])
+                        cargo_related.append(f"- used by crate `{record['crate']}` via {files}")
+
             cypher = """
             MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)
             WITH f1, collect(imp1.source) AS my_imports
@@ -713,9 +792,6 @@ def register(mcp: FastMCP) -> None:
             ORDER BY shared_imports DESC LIMIT 10
             RETURN related_file, shared_imports
             """
-            import graph_bootstrap
-
-            driver = await graph_bootstrap.require_driver()
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 related = []
                 records = await _execute_read(
@@ -729,8 +805,14 @@ def register(mcp: FastMCP) -> None:
                     related.append(
                         f"- {record['related_file']} (Strength: {record['shared_imports']})"
                     )
-            if related:
-                return "Related Files:\n" + "\n".join(related)
+            if cargo_related or related:
+                output = ["Related Files:"]
+                output.extend(cargo_related)
+                if related:
+                    if cargo_related:
+                        output.append("Import graph:")
+                    output.extend(related)
+                return "\n".join(output)
 
             # Fallback: semantic co-mentions based on top symbols in the file
             symbol_query = """

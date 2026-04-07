@@ -42,6 +42,7 @@ def register(mcp: FastMCP) -> None:
 - `describe_file("", "/abs/path/file.swift")` → fast outline
 - `describe_file(project_path, "rel/path")` → symbols + semantic preview
 - `get_directory_snapshot(project_path, directory_path, limit=5)` → architectural onboarding + **UI/Asset wiring** (HTML -> JS -> API) + Apple/Cargo ownership context
+- `get_related_files(project_path, file_path)` → structurally related files; for Rust workspaces this now prefers same-crate and directly connected crate files before generic import similarity
 - `list_symbol_matches(project_path, query, limit=30)` → name/signature substring matches (supports EnumCase)
 - `extract_function_body(file_path, symbol_name)` → exact source by AST
 - `extract_class_interface(file_path, class_name)` → public method signatures
