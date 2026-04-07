@@ -741,3 +741,74 @@ def register(mcp: FastMCP) -> None:
             return "No models found."
         except Exception as e:
             return f"Error listing models: {str(e)}"
+
+    @mcp.tool()
+    async def brain_server_status() -> str:
+        """
+        Show whether the shared HTTP brain server daemon is currently running.
+        """
+        import subprocess
+
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        script_path = os.path.join(repo_root, "scripts", "brain_server_status.sh")
+        if not os.path.exists(script_path):
+            return f"Status script not found: {script_path}"
+
+        try:
+            result = subprocess.run(
+                [script_path],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            output = (result.stdout or result.stderr).strip()
+            if output:
+                return output
+            if result.returncode == 0:
+                return "brain_server running"
+            return "brain_server stopped"
+        except Exception as e:
+            return f"Error checking brain server status: {str(e)}"
+
+    @mcp.tool()
+    async def restart_brain_server(delay_seconds: float = 1.0) -> str:
+        """
+        Schedule a restart of the shared HTTP brain server daemon.
+
+        The restart is launched in a detached background process after a short
+        delay so the current MCP call can return before the daemon stops.
+
+        Args:
+            delay_seconds: Delay before restart begins. Defaults to 1.0 seconds.
+        """
+        import shlex
+        import subprocess
+        import tempfile
+
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        script_path = os.path.join(repo_root, "scripts", "restart_brain_server.sh")
+        if not os.path.exists(script_path):
+            return f"Restart script not found: {script_path}"
+
+        delay = max(0.5, min(float(delay_seconds), 10.0))
+        log_path = os.path.join(tempfile.gettempdir(), "graphrag-brain-restart.log")
+        command = (
+            f"sleep {delay}; "
+            f"{shlex.quote(script_path)} > {shlex.quote(log_path)} 2>&1"
+        )
+
+        try:
+            subprocess.Popen(
+                ["/bin/bash", "-lc", command],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return (
+                f"Scheduled brain_server restart in {delay:.1f}s.\n"
+                f"Log: `{log_path}`\n"
+                "Refresh the MCP client after the daemon comes back."
+            )
+        except Exception as e:
+            return f"Error scheduling brain server restart: {str(e)}"

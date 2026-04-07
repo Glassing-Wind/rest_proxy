@@ -26,6 +26,10 @@ _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
 _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "indexing"}
 
 
+def _is_strict_job_session() -> bool:
+    return os.getenv("LM_PROXY_STRICT_JOB_SESSION", "").strip().lower() in {"1", "true", "yes"}
+
+
 async def _execute_read(session, cypher: str, op: str | None = None, **params):
     return await neo4j_utils.execute_read(
         session,
@@ -338,8 +342,8 @@ async def get_index_status(job_id: str) -> str:
                     job_id = jid
                     break
         
-        # Security: Only allow sessions to see their own jobs (if session is active)
-        if job and current_session and job.get("session_id") != current_session:
+        # Security: Only allow sessions to see their own jobs when strict mode is enabled
+        if job and current_session and job.get("session_id") != current_session and _is_strict_job_session():
             return f"Access Denied: Job {job_id} belongs to another session."
 
     if job is None:
@@ -415,9 +419,9 @@ async def cancel_index_job(job_id: str) -> str:
                 f"Active jobs: {list(_JOBS.keys()) or 'none'}"
             )
 
-        # Security check: Match session ID
-        if current_session and job.get("session_id") != current_session:
-             return f"Access Denied: Cannot cancel a job belonging to another session."
+        # Security check: Match session ID when strict mode is enabled
+        if current_session and job.get("session_id") != current_session and _is_strict_job_session():
+            return f"Access Denied: Cannot cancel a job belonging to another session."
 
         if job.get("status") != "running":
             return f"Job {job_id} is not running (status={job.get('status')})."

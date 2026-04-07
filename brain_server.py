@@ -14,8 +14,29 @@ Architecture:
 import asyncio
 import hashlib
 import json
+import os
+import resource
 import sys
 from contextlib import asynccontextmanager
+
+# ---------------------------------------------------------------------------
+# Resource Limits (v2025-04-07)
+#
+# Programmatically increase the file handle limit (RLIMIT_NOFILE) to 65k+.
+# This prevents "[Errno 24] Too many open files" during parallel indexing.
+# ---------------------------------------------------------------------------
+
+def _apply_resource_limits():
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = min(65536, hard)
+        if soft < target:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+            print(f"[brain-server] RLIMIT_NOFILE increased: {soft} -> {target}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[brain-server] Failed to set RLIMIT_NOFILE: {exc}", file=sys.stderr)
+
+_apply_resource_limits()
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware

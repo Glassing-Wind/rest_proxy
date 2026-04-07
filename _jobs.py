@@ -125,7 +125,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
         try:
             import asyncio
             import graph_bootstrap
-            from tools.hands.project import enqueue_graph_build
+            from tools.brain.graph.core import enqueue_graph_build
 
             async def _post_index_maintenance() -> str | None:
                 from neo4j import unit_of_work

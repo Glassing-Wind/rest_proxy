@@ -18,6 +18,7 @@ def register(mcp: FastMCP) -> None:
 
 ### Recommended Workflow:
 1. `index_workspace(project_path)` → returns immediately with a `job_id`
+   - **Note**: This automatically enqueues `rebuild_imports`, `rebuild_symbols`, and `rebuild_assets` in the background.
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
 4. `get_project_overview(project_path)` → health, architecture clusters, key files
@@ -26,9 +27,11 @@ def register(mcp: FastMCP) -> None:
 7. `search_codebase([project_path], query, ...)` → semantic search + metadata filters
 8. `get_symbol_context(project_path, symbol_name)` → definition + callers + callees + source
 
-### Workspace Context:
+### Workspace Context & Troubleshooting:
 - The MCP resolves workspace context from the active project path or the IDE session registry.
 - Session-scoped workspace resolution is used internally so multi-workspace IDE sessions can target the correct project without mutating global environment state.
+- **Troubleshooting**: If the server crashes or dependencies like `starlette` are missing, ensure you are running in the `lmproxy` conda environment:
+  `conda activate lmproxy` (Python 3.11.15)
 
 ### Call Graph Traversal:
 - `get_call_chain(project_path, symbol_name, depth=3, direction='down', file_path=None, signature=None)` → trace CALLS N hops

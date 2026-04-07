@@ -47,6 +47,7 @@ CHUNK_LINES = 60  # lines per window
 OVERLAP_LINES = 10  # overlap between windows
 MANIFEST_BATCH = 50  # files per interleaved cycle
 MAX_FILE_BYTES = 1_000_000  # skip source files > 1 MB
+CHUNK_CONCURRENCY = max(1, int(os.getenv("LM_PROXY_CHUNK_CONCURRENCY", "64")))
 TS_PACK_AUTO_DOWNLOAD = os.getenv("LM_PROXY_TS_PACK_AUTO_DOWNLOAD", "1") == "1"
 TS_PACK_CACHE_DIR = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
 
@@ -861,7 +862,7 @@ async def index_project(
 
     print(
         f"[lm-proxy:indexer] Semantic phase — {total_files} files "
-        f"(device={embedding_svc._device}, embed_batch={bs})",
+        f"(device={embedding_svc._device}, embed_batch={bs}, chunk_concurrency={CHUNK_CONCURRENCY})",
         file=sys.stderr,
         flush=True,
     )
@@ -869,9 +870,19 @@ async def index_project(
     _preflight_ts_pack(manifest)
 
     # ── Parallel chunking (I/O-bound reads) ─────────────────────────────────
+    # Bound concurrent file reads/parses so large manifests do not exhaust the
+    # file descriptor limit on hosts with lower per-process limits.
+    chunk_sem = asyncio.Semaphore(CHUNK_CONCURRENCY)
+
+    async def _chunk_manifest_entry(entry: Dict) -> Tuple[List[Dict], str | None]:
+        async with chunk_sem:
+            return await chunk_file(
+                entry["abs_path"], entry["rel_path"], project_id
+            )
+
     t_chunk = time.time()
     all_results: List[Tuple[List[Dict], str | None]] = await asyncio.gather(
-        *[chunk_file(e["abs_path"], e["rel_path"], project_id) for e in manifest]
+        *[_chunk_manifest_entry(e) for e in manifest]
     )
     all_chunks: List[List[Dict]] = [result[0] for result in all_results]
     skipped_reasons: Counter[str] = Counter(

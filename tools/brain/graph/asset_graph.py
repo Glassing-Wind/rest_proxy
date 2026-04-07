@@ -85,6 +85,37 @@ async def build_asset_graph(
         api_targets = [files[p] for p in api_target_paths if p in files]
         api_targets = list(dict.fromkeys(api_targets))
 
+        def _read_text(abs_path: str) -> str:
+            try:
+                if os.path.getsize(abs_path) > 1_000_000:
+                    return ""
+                with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
+                    return fh.read()
+            except OSError:
+                return ""
+
+        def _detect_api_prefixes() -> list[str]:
+            prefixes: list[str] = []
+            candidates = [
+                fp
+                for fp in files
+                if fp.endswith(("app.ts", "app.js", "server.ts", "server.js"))
+            ]
+            for fp in candidates:
+                abs_path = os.path.join(project_path, fp)
+                content = _read_text(abs_path)
+                if not content:
+                    continue
+                for m in re.finditer(r"app\.use\(\s*[\"']([^\"']+)[\"']\s*,", content):
+                    prefix = m.group(1)
+                    if "/api" in prefix:
+                        prefixes.append(prefix.rstrip("/"))
+            if not prefixes:
+                prefixes.append("/api")
+            return list(dict.fromkeys(prefixes))
+
+        api_prefixes = _detect_api_prefixes()
+
         def _route_path_from_file(fp: str) -> str | None:
             path = PurePosixPath(fp)
             parts = path.parts
@@ -145,14 +176,49 @@ async def build_asset_graph(
             if route_path:
                 route_targets.setdefault(route_path, fid)
 
-        def _read_text(abs_path: str) -> str:
-            try:
-                if os.path.getsize(abs_path) > 1_000_000:
-                    return ""
-                with open(abs_path, "r", encoding="utf-8", errors="ignore") as fh:
-                    return fh.read()
-            except OSError:
-                return ""
+        def _collect_express_routes() -> dict[str, str]:
+            routes: dict[str, str] = {}
+            route_re = re.compile(
+                r"\brouter\.(?:get|post|put|patch|delete|all)\s*\(\s*([\"'`])([^\"'`]+)\1",
+                re.IGNORECASE,
+            )
+            for fp, fid in files.items():
+                if not ("/api/" in fp or fp.startswith("api/")):
+                    continue
+                if not fp.endswith((".ts", ".js", ".tsx")):
+                    continue
+                abs_path = os.path.join(project_path, fp)
+                content = _read_text(abs_path)
+                if not content:
+                    continue
+                for match in route_re.findall(content):
+                    raw = match[1].strip()
+                    if not raw.startswith("/"):
+                        continue
+                    for prefix in api_prefixes:
+                        full_path = f"{prefix}{raw}".replace("//", "/")
+                        routes.setdefault(full_path, fid)
+                    routes.setdefault(raw, fid)
+            return routes
+
+        express_routes = _collect_express_routes()
+
+        def _route_regex_from_path(path: str) -> re.Pattern[str]:
+            parts = [part for part in path.split("/") if part]
+            pattern_parts: list[str] = []
+            for part in parts:
+                if part.startswith(":"):
+                    pattern_parts.append(r"[^/]+")
+                elif part == "*":
+                    pattern_parts.append(r".+")
+                else:
+                    pattern_parts.append(re.escape(part))
+            pattern = "^/" + "/".join(pattern_parts) + "/?$"
+            return re.compile(pattern)
+
+        express_route_patterns: list[tuple[re.Pattern[str], str]] = [
+            (_route_regex_from_path(path), fid) for path, fid in express_routes.items()
+        ]
 
         def _resolve_href(src_fp: str, raw: str) -> str | None:
             raw = raw.split("#", 1)[0].split("?", 1)[0].strip()
@@ -194,9 +260,10 @@ async def build_asset_graph(
                     html_edges.append((fid, files[target]))
 
         api_edges: list[tuple[str, str]] = []
+        api_route_edges: list[tuple[str, str]] = []
+        api_route_handler_edges: list[tuple[str, str]] = []
         if api_targets or route_targets:
             api_re = re.compile(r"[\"'](/api/[^\"']+)[\"']")
-            route_re = re.compile(r"[\"'](/[^\"']+)[\"']")
             client_re = re.compile(r"\b(fetch|axios|ky|ofetch)\b")
             for fp, fid in script_files:
                 abs_path = os.path.join(project_path, fp)
@@ -206,10 +273,26 @@ async def build_asset_graph(
                 if not api_re.search(content) and not client_re.search(content):
                     continue
                 matched_targets: set[str] = set()
-                for literal in route_re.findall(content):
+                matched_routes: set[str] = set()
+                literal_paths: list[str] = []
+                for m in re.finditer(r"[\"'](/[^\"']+)[\"']", content):
+                    literal_paths.append(m.group(1))
+                for m in re.finditer(r"`([^`]+)`", content):
+                    literal = m.group(1)
+                    if "${" in literal:
+                        literal = literal.split("${", 1)[0]
+                    if literal.startswith("/"):
+                        literal_paths.append(literal)
+
+                for literal in literal_paths:
                     cleaned = literal.split("?", 1)[0].split("#", 1)[0]
+                    for pattern, target in express_route_patterns:
+                        if pattern.match(cleaned):
+                            matched_targets.add(target)
+                            matched_routes.add(cleaned)
                     if cleaned in route_targets:
                         matched_targets.add(route_targets[cleaned])
+                        matched_routes.add(cleaned)
                     elif cleaned.startswith("/api/") and api_targets:
                         matched_targets.update(api_targets)
                 if not matched_targets and api_re.search(content):
@@ -217,6 +300,11 @@ async def build_asset_graph(
                 for tgt in matched_targets:
                     if tgt != fid:
                         api_edges.append((fid, tgt))
+                for route in matched_routes:
+                    api_route_edges.append((fid, route))
+                    handler_fid = express_routes.get(route)
+                    if handler_fid and handler_fid != fid:
+                        api_route_handler_edges.append((route, handler_fid))
 
         service_edges: list[tuple[str, str]] = []
         service_files = {
@@ -281,9 +369,11 @@ async def build_asset_graph(
 
         html_edges = list(set(html_edges))
         api_edges = list(set(api_edges))
+        api_route_edges = list(set(api_route_edges))
+        api_route_handler_edges = list(set(api_route_handler_edges))
         service_edges = list(set(service_edges))
         db_edges = list(set(db_edges))
-        if not html_edges and not api_edges and not service_edges and not db_edges:
+        if not html_edges and not api_edges and not api_route_edges and not service_edges and not db_edges:
             return "No asset edges resolved."
 
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
@@ -296,6 +386,18 @@ async def build_asset_graph(
             await execute_write(
                 session,
                 "MATCH (a:File {project_id:$p})-[r:CALLS_API]->() DELETE r",
+                p=project_id,
+                timeout=write_timeout_s,
+            )
+            await execute_write(
+                session,
+                "MATCH (a:File {project_id:$p})-[r:CALLS_API_ROUTE]->() DELETE r",
+                p=project_id,
+                timeout=write_timeout_s,
+            )
+            await execute_write(
+                session,
+                "MATCH (r:ApiRoute {project_id:$p})-[rel:HANDLED_BY]->() DELETE rel",
                 p=project_id,
                 timeout=write_timeout_s,
             )
@@ -346,6 +448,44 @@ async def build_asset_graph(
                             timeout=write_timeout_s,
                         )
 
+            if api_route_edges:
+                for i in range(0, len(api_route_edges), batch_size):
+                    batch = [
+                        {"src": s, "path": p, "project_id": project_id}
+                        for s, p in api_route_edges[i : i + batch_size]
+                    ]
+                    async with write_semaphore:
+                        await execute_write(
+                            session,
+                            """
+                            UNWIND $batch AS edge
+                            MATCH (a:File {id: edge.src})
+                            MERGE (r:ApiRoute {project_id: edge.project_id, path: edge.path})
+                            MERGE (a)-[:CALLS_API_ROUTE]->(r)
+                            """,
+                            batch=batch,
+                            timeout=write_timeout_s,
+                        )
+
+            if api_route_handler_edges:
+                for i in range(0, len(api_route_handler_edges), batch_size):
+                    batch = [
+                        {"path": p, "tgt": t, "project_id": project_id}
+                        for p, t in api_route_handler_edges[i : i + batch_size]
+                    ]
+                    async with write_semaphore:
+                        await execute_write(
+                            session,
+                            """
+                            UNWIND $batch AS edge
+                            MATCH (r:ApiRoute {project_id: edge.project_id, path: edge.path})
+                            MATCH (b:File {id: edge.tgt})
+                            MERGE (r)-[:HANDLED_BY]->(b)
+                            """,
+                            batch=batch,
+                            timeout=write_timeout_s,
+                        )
+
             if service_edges:
                 for i in range(0, len(service_edges), batch_size):
                     batch = [
@@ -390,6 +530,7 @@ async def build_asset_graph(
             elapsed_ms=elapsed_ms,
             asset_links=len(html_edges),
             api_links=len(api_edges),
+            api_route_links=len(api_route_edges),
             service_links=len(service_edges),
             db_links=len(db_edges),
         )
@@ -397,6 +538,7 @@ async def build_asset_graph(
             f"ASSET graph built for {project_path.split('/')[-1]}:\n"
             f"  {len(html_edges)} ASSET_LINKS edges\n"
             f"  {len(api_edges)} CALLS_API edges\n"
+            f"  {len(api_route_edges)} CALLS_API_ROUTE edges\n"
             f"  {len(service_edges)} CALLS_SERVICE edges\n"
             f"  {len(db_edges)} CALLS_DB edges\n"
             f"  elapsed={elapsed_ms}ms"
