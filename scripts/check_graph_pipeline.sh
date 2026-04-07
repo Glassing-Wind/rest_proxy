@@ -14,6 +14,9 @@ python3 test_index_workspace.py
 echo "[graph-check] Running duplication helper checks..."
 python3 test_duplication_helpers.py
 
+echo "[graph-check] Running duplication report checks..."
+python3 test_duplication_report.py
+
 echo "[graph-check] Running manifest coverage checks..."
 python3 test_manifest.py
 
