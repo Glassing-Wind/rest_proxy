@@ -17,6 +17,9 @@ python3 test_duplication_helpers.py
 echo "[graph-check] Running duplication report checks..."
 python3 test_duplication_report.py
 
+echo "[graph-check] Running semantic helper checks..."
+python3 test_semantic_helpers.py
+
 echo "[graph-check] Running manifest coverage checks..."
 python3 test_manifest.py
 

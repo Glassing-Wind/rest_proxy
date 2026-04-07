@@ -1,11 +1,11 @@
 """tools/search/semantic.py — semantic + keyword search tool."""
 
 import os
-import json
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules, get_project_id
 from tools.brain.search import core as search_core
+from tools.brain.search import semantic_helpers as sem_helpers
 
 
 def register(mcp: FastMCP) -> None:
@@ -70,7 +70,6 @@ def register(mcp: FastMCP) -> None:
         try:
             import asyncio
             import sys
-            import fnmatch
             from embedding_service import get_embedding_service
             from tools.brain.search import fallbacks as search_fallbacks
             from _helpers import WorkspaceRegistry, get_workspace_path
@@ -102,43 +101,6 @@ def register(mcp: FastMCP) -> None:
                 pids.append(pid)
                 pid_to_name[pid] = (path or w_id).rstrip("/").split("/")[-1]
                 pid_to_path[pid] = path
-
-            def _format_meta(meta: dict) -> list[str]:
-                if not isinstance(meta, dict):
-                    return []
-                parts: list[str] = []
-                language = meta.get("language")
-                if language:
-                    parts.append(f"lang={language}")
-                imports = meta.get("file_imports")
-                if isinstance(imports, list) and imports:
-                    parts.append(f"imports={len(imports)}")
-                symbols = meta.get("file_symbols")
-                if isinstance(symbols, list) and symbols:
-                    parts.append(f"symbols={len(symbols)}")
-                node_types = meta.get("node_types")
-                if isinstance(node_types, list) and node_types:
-                    parts.append(f"node_types={len(node_types)}")
-                diagnostics = meta.get("file_diagnostics") or {}
-                if isinstance(diagnostics, dict):
-                    diag_count = diagnostics.get("count")
-                    if isinstance(diag_count, int) and diag_count > 0:
-                        parts.append(f"diagnostics={diag_count}")
-                metrics = meta.get("file_metrics") or {}
-                if isinstance(metrics, dict):
-                    lines = metrics.get("total_lines")
-                    if isinstance(lines, int):
-                        parts.append(f"lines={lines}")
-                ctx = meta.get("context_path")
-                ctx_line = ""
-                if isinstance(ctx, list) and ctx:
-                    ctx_line = "context=" + " > ".join(str(c) for c in ctx[:6])
-                out = []
-                if parts:
-                    out.append("meta: " + ", ".join(parts))
-                if ctx_line:
-                    out.append(ctx_line)
-                return out
 
             async def _search_project(pid: str) -> list[dict]:
                 async with memory_store._pg_pool.connection() as conn:
@@ -196,71 +158,6 @@ def register(mcp: FastMCP) -> None:
                             }
                             for r in rows
                         ]
-
-            def _meta_score(meta: dict) -> int:
-                if not isinstance(meta, dict):
-                    return 0
-                score = 0
-                for key in (
-                    "file_imports",
-                    "file_symbols",
-                    "node_types",
-                    "file_metrics",
-                    "file_diagnostics",
-                    "context_path",
-                ):
-                    val = meta.get(key)
-                    if isinstance(val, list) and val:
-                        score += 1
-                    elif isinstance(val, dict) and val:
-                        score += 1
-                return score
-
-            def _passes_filters(meta: dict) -> bool:
-                if not isinstance(meta, dict):
-                    return False
-                if languages:
-                    lang = meta.get("language")
-                    if not lang or lang not in languages:
-                        return False
-                if min_imports > 0:
-                    imports = meta.get("file_imports")
-                    if not isinstance(imports, list) or len(imports) < min_imports:
-                        return False
-                if min_symbols > 0:
-                    symbols = meta.get("file_symbols")
-                    if not isinstance(symbols, list) or len(symbols) < min_symbols:
-                        return False
-                if require_diagnostics:
-                    diagnostics = meta.get("file_diagnostics") or {}
-                    if (
-                        not isinstance(diagnostics, dict)
-                        or diagnostics.get("count", 0) <= 0
-                    ):
-                        return False
-                if require_context:
-                    ctx = meta.get("context_path")
-                    if not isinstance(ctx, list) or not ctx:
-                        return False
-                return True
-
-            def _path_allowed(file_path: str) -> bool:
-                if not file_path:
-                    return True
-                if include_paths:
-                    if not any(
-                        fnmatch.fnmatch(file_path, pat) for pat in include_paths
-                    ):
-                        return False
-                if exclude_paths:
-                    file_lower = file_path.lower()
-                    if any(
-                        fnmatch.fnmatch(file_path, pat)
-                        or fnmatch.fnmatch(file_lower, pat.lower())
-                        for pat in exclude_paths
-                    ):
-                        return False
-                return True
 
             all_results: list[dict] = []
             batch = await asyncio.gather(*[_search_project(pid) for pid in pid_to_name])
@@ -323,21 +220,26 @@ def register(mcp: FastMCP) -> None:
 
             if include_metadata:
                 for r in all_results:
-                    meta = r.get("metadata")
-                    if isinstance(meta, str):
-                        try:
-                            meta = json.loads(meta)
-                        except Exception:
-                            meta = {}
-                    r_meta = meta if isinstance(meta, dict) else {}
+                    r_meta = sem_helpers.coerce_meta(r)
                     r["_meta"] = r_meta
-                    r["meta_score"] = _meta_score(r_meta)
+                    r["meta_score"] = sem_helpers.meta_score(r_meta)
                 if filters_active:
                     all_results = [
                         r
                         for r in all_results
-                        if _passes_filters(r.get("_meta", {}))
-                        and _path_allowed(r.get("file_path", ""))
+                        if sem_helpers.passes_filters(
+                            r.get("_meta", {}),
+                            languages=languages,
+                            min_imports=min_imports,
+                            min_symbols=min_symbols,
+                            require_diagnostics=require_diagnostics,
+                            require_context=require_context,
+                        )
+                        and sem_helpers.path_allowed(
+                            r.get("file_path", ""),
+                            include_paths=include_paths,
+                            exclude_paths=exclude_paths,
+                        )
                     ]
                 for r in all_results:
                     base_score = r.get("rrf", 0.0)
@@ -370,17 +272,7 @@ def register(mcp: FastMCP) -> None:
                         for r in all_results:
                             meta = r.get("_meta")
                             if not isinstance(meta, dict):
-                                raw = r.get("metadata")
-                                if isinstance(raw, str):
-                                    try:
-                                        meta = json.loads(raw)
-                                    except Exception:
-                                        meta = {}
-                                elif isinstance(raw, dict):
-                                    meta = raw
-                                else:
-                                    meta = {}
-                                r["_meta"] = meta
+                                meta = sem_helpers.coerce_meta(r)
 
                         by_project: dict[str, list[dict]] = {}
                         for idx, r in enumerate(all_results):
@@ -543,74 +435,20 @@ def register(mcp: FastMCP) -> None:
                     pass
 
             if dedupe_files:
-                seen_files: set[str] = set()
-                deduped_files: list[dict] = []
-                for r in all_results:
-                    fp = r.get("file_path")
-                    if not fp or fp in seen_files:
-                        continue
-                    seen_files.add(fp)
-                    deduped_files.append(r)
-                all_results = deduped_files
+                all_results = sem_helpers.dedupe_files(all_results)
 
-            if max_per_file and max_per_file > 0:
-                per_file_counts: dict[str, int] = {}
-                capped: list[dict] = []
-                for r in all_results:
-                    fp = r.get("file_path") or ""
-                    if not fp:
-                        continue
-                    count = per_file_counts.get(fp, 0)
-                    if count >= max_per_file:
-                        continue
-                    per_file_counts[fp] = count + 1
-                    capped.append(r)
-                all_results = capped
-
-            if max_per_dir and max_per_dir > 0:
-                dir_counts: dict[str, int] = {}
-                diversified: list[dict] = []
-                for r in all_results:
-                    fp = r.get("file_path") or ""
-                    norm = fp.replace("\\", "/")
-                    top = (
-                        norm.split("/")[0]
-                        if "/" in norm
-                        else os.path.dirname(norm) or "."
-                    )
-                    if dir_counts.get(top, 0) >= max_per_dir:
-                        continue
-                    dir_counts[top] = dir_counts.get(top, 0) + 1
-                    diversified.append(r)
-                all_results = diversified
+            all_results = sem_helpers.cap_per_file(all_results, max_per_file)
+            all_results = sem_helpers.cap_per_dir(all_results, max_per_dir)
             top = all_results[:k]
 
-            lines = []
-            if multi:
-                lines.append(
-                    f"Cross-project search: '{query}'  ({len(pid_to_name)} projects)\n"
-                )
-
-            for i, r in enumerate(top, 1):
-                proj = pid_to_name.get(r["project_id"], r["project_id"])
-                if multi:
-                    lines.append(
-                        f"[{i}] [{proj}] {r['file_path']}  (score: {r['rrf']:.4f})"
-                    )
-                else:
-                    lines.append(f"--- {r['file_path']} (Score: {r['rrf']:.4f}) ---")
-                if include_metadata:
-                    meta = r.get("_meta")
-                    if not isinstance(meta, dict):
-                        meta = r.get("metadata")
-                        if isinstance(meta, str):
-                            try:
-                                meta = json.loads(meta)
-                            except Exception:
-                                meta = {}
-                    lines.extend(_format_meta(meta if isinstance(meta, dict) else {}))
-                lines.append(r["content"].strip())
-                lines.append("")
+            lines = sem_helpers.render_results(
+                all_results,
+                query=query,
+                k=k,
+                multi=multi,
+                pid_to_name=pid_to_name,
+                include_metadata=include_metadata,
+            )
 
             if fallback == "grep" and top:
                 unique_files = len(
