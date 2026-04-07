@@ -152,6 +152,65 @@ async def enqueue_graph_build(
     )
 
 
+async def run_post_index_graph_build(
+    project_path: str, run_imports: bool = True, run_symbols: bool = True
+) -> str:
+    """Run graph maintenance inline for the normal indexing path.
+
+    This avoids the background queue/Redis lock path so `index_workspace`
+    can leave a project graph-ready in one job completion cycle.
+    """
+    _ensure_graph_runtime_configured()
+    start = asyncio.get_running_loop().time()
+    _debug_log(
+        "graph_build_inline_start",
+        project_path=project_path,
+        imports=run_imports,
+        symbols=run_symbols,
+    )
+    _record_metric(
+        "graph_build_start",
+        project_path=project_path,
+        imports=run_imports,
+        symbols=run_symbols,
+        mode="inline",
+    )
+    try:
+        if run_imports:
+            await _run_graph_build_with_retry(
+                _build_import_graph_impl, "imports", project_path
+            )
+        if run_symbols:
+            await _run_graph_build_with_retry(
+                _build_symbol_import_export_graph_impl, "symbols", project_path
+            )
+        asset_result = await _run_graph_build_with_retry(
+            _build_asset_graph_impl, "assets", project_path
+        )
+    except Exception as exc:
+        _debug_log("graph_build_inline_error", project_path=project_path, error=str(exc))
+        _record_metric(
+            "graph_build_error",
+            project_path=project_path,
+            error=str(exc),
+            mode="inline",
+        )
+        raise
+    elapsed_ms = int((asyncio.get_running_loop().time() - start) * 1000)
+    _debug_log(
+        "graph_build_inline_done",
+        project_path=project_path,
+        elapsed_ms=elapsed_ms,
+    )
+    _record_metric(
+        "graph_build_done",
+        project_path=project_path,
+        elapsed_ms=elapsed_ms,
+        mode="inline",
+    )
+    return asset_result
+
+
 def register(mcp: FastMCP) -> None:
     from tools.brain.graph import tools as graph_tools
 

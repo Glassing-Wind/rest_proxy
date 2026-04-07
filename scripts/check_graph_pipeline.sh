@@ -35,6 +35,9 @@ python3 test_graph_query.py
 echo "[graph-check] Running graph utility checks..."
 python3 test_graph_utility.py
 
+echo "[graph-check] Running graph core inline checks..."
+python3 test_graph_core_inline.py
+
 echo "[graph-check] Running manifest coverage checks..."
 python3 test_manifest.py
 

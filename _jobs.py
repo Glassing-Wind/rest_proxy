@@ -101,20 +101,27 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
         pass
     import time as _t
 
+    project_path = ""
+    project_id = ""
+    cancel_requested = False
     with _JOBS_LOCK:
         if job_id in _JOBS:
             cancel_requested = bool(_JOBS[job_id].get("cancel_requested"))
             ok = struct_rc == 0 and sem_rc == 0
-            if cancel_requested:
+            project_path = _JOBS[job_id].get("project_path", "")
+            project_id = _JOBS[job_id].get("project_id", "")
+            if ok and project_path and not project_path.startswith("docs://") and not cancel_requested:
+                _JOBS[job_id]["status"] = "post-processing"
+                _JOBS[job_id]["logs"].append("[graph-build] running inline post-index graph refresh")
+            elif cancel_requested:
                 _JOBS[job_id]["status"] = "cancelled"
             else:
                 _JOBS[job_id]["status"] = "done" if ok else "failed"
-            _JOBS[job_id]["finished_at"] = _t.time()
-            project_path = _JOBS[job_id].get("project_path", "")
-            project_id = _JOBS[job_id].get("project_id", "")
+                _JOBS[job_id]["finished_at"] = _t.time()
 
     # Refresh structural metadata whenever the structural phase succeeded,
     # even if semantic indexing failed. Graph-backed tools remain useful.
+    graph_build_error = None
     if (
         struct_rc == 0
         and project_path
@@ -125,7 +132,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
         try:
             import asyncio
             import graph_bootstrap
-            from tools.brain.graph.core import enqueue_graph_build
+            from tools.brain.graph.core import run_post_index_graph_build
 
             async def _post_index_maintenance() -> str | None:
                 from neo4j import unit_of_work
@@ -163,7 +170,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                         await session.execute_write(_tx)
                     else:
                         await _tx(session)
-                await enqueue_graph_build(
+                return await run_post_index_graph_build(
                     project_path, run_imports=True, run_symbols=True
                 )
 
@@ -173,11 +180,16 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                     _MAIN_LOOP,
                 )
                 try:
-                    future.result(timeout=10)
-                except Exception:
-                    pass
-                queued = "enqueued + timestamps refreshed"
+                    future.result(timeout=180)
+                except Exception as exc:
+                    graph_build_error = str(exc)
+                queued = (
+                    "completed + timestamps refreshed"
+                    if graph_build_error is None
+                    else f"failed: {graph_build_error}"
+                )
             else:
+                graph_build_error = "main loop not available"
                 queued = "skipped: main loop not available"
             with _JOBS_LOCK:
                 if job_id in _JOBS:
@@ -191,6 +203,17 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                         ]
                     _JOBS[job_id]["logs"].append(f"[graph-build] {queued}")
         except Exception as e:
+            graph_build_error = str(e)
             with _JOBS_LOCK:
                 if job_id in _JOBS:
                     _JOBS[job_id]["logs"].append(f"[graph-build] enqueue failed: {e}")
+
+    with _JOBS_LOCK:
+        if job_id in _JOBS and _JOBS[job_id].get("finished_at") is None:
+            if cancel_requested:
+                _JOBS[job_id]["status"] = "cancelled"
+            elif graph_build_error:
+                _JOBS[job_id]["status"] = "failed"
+            else:
+                _JOBS[job_id]["status"] = "done" if (struct_rc == 0 and sem_rc == 0) else "failed"
+            _JOBS[job_id]["finished_at"] = _t.time()

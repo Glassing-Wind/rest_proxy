@@ -18,7 +18,8 @@ def register(mcp: FastMCP) -> None:
 
 ### Recommended Workflow:
 1. `index_workspace(project_path)` → returns immediately with a `job_id`
-   - **Note**: This automatically enqueues `rebuild_imports`, `rebuild_symbols`, and `rebuild_assets` in the background.
+   - **Normal path**: wait for `DONE`, then the project should be graph-ready for normal tool use.
+   - `rebuild_*` tools are intended for admin/debug recovery, not the default workflow.
 2. `get_index_status(job_id)` → poll `RUNNING` / `DONE` / `FAILED` + recent logs
 3. `get_indexing_health(project_path, audit=true)` → Level 2 Parsing Fidelity (resolution rate, symbol density)
 4. `get_project_overview(project_path)` → health, architecture clusters, key files
@@ -45,7 +46,7 @@ def register(mcp: FastMCP) -> None:
 - `extract_function_body(file_path, symbol_name)` → exact source by AST
 - `extract_class_interface(file_path, class_name)` → public method signatures
 - `find_symbol_usages(file_path, symbol_name)` → intra-file usages by AST
-- `swift_doc_lookup(file_path, symbol_name)` → SourceKitten docs + location
+- `swift_doc_lookup(file_path, symbol_name)` → indexed Swift docs/USR when available, then SourceKitten fallback
 
 ### Documentation Tools:
 - `research_and_index(topic, query, max_urls=5)` → search + crawl + index in one call
@@ -81,8 +82,8 @@ Doc indexing tips:
 - `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges (deprecated; use get_symbol_imports_overview)
 - `get_symbol_imports_overview(project_path, limit=20, include_implicit=true)` → summarize explicit + implicit symbol import edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
-- `rebuild_symbol_graph(project_path)` → rebuild symbol-level IMPORTS/EXPORTS graph
-- `rebuild_asset_graph(project_path)` → rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB, plus Apple resource/target/scheme/workspace links)
+- `rebuild_symbol_graph(project_path)` → admin/debug: rebuild symbol-level IMPORTS/EXPORTS graph
+- `rebuild_asset_graph(project_path)` → admin/debug: rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB, plus Apple resource/target/scheme/workspace links)
 - `cancel_index_job(job_id)` → cancel a running indexing job
 - `get_app_flow_summary(project_path, ui_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → UI → API → Service → DB paths (includes external API calls)
 - `get_backend_flow_summary(project_path, api_contains?, model_contains?, service_contains?, include_tests=false, limit=20, as_table=false)` → API → Service → DB paths (includes external API calls)
