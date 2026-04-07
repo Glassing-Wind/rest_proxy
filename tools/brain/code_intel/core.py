@@ -511,8 +511,8 @@ def register(mcp: FastMCP) -> None:
         top-level directory. Shows the structure of the project at a glance.
         For each cluster, lists its most symbol-rich files.
 
-        Run build_import_graph() first to enable real PageRank and
-        Louvain community detection via get_code_importance and
+        Run index_workspace() first to enable real PageRank and
+        community detection via get_code_importance and
         get_code_communities.
 
         Args:

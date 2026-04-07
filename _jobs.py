@@ -171,7 +171,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                     else:
                         await _tx(session)
                 return await run_post_index_graph_build(
-                    project_path, run_imports=True, run_symbols=True
+                    project_path, run_imports=False, run_symbols=True
                 )
 
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():

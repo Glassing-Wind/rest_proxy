@@ -82,6 +82,7 @@ Doc indexing tips:
 - `get_symbol_imports_summary(project_path, limit=20)` → summarize IMPORTS_SYMBOL edges (deprecated; use get_symbol_imports_overview)
 - `get_symbol_imports_overview(project_path, limit=20, include_implicit=true)` → summarize explicit + implicit symbol import edges
 - `get_symbol_exports_summary(project_path, limit=20, include_paths?, exclude_paths?, symbol_prefix?)` → summarize EXPORTS_SYMBOL edges
+- File-level `IMPORTS` edges are now expected to come from `index_workspace`; there is no separate import rebuild tool in the normal workflow.
 - `rebuild_symbol_graph(project_path)` → admin/debug: rebuild symbol-level IMPORTS/EXPORTS graph
 - `rebuild_asset_graph(project_path)` → admin/debug: rebuild asset linkage edges (UI -> JS, JS -> API, API -> Service, Service -> DB, plus Apple resource/target/scheme/workspace links)
 - `cancel_index_job(job_id)` → cancel a running indexing job

@@ -88,29 +88,6 @@ def register(mcp: FastMCP) -> None:
             return f"Error reading language pack status: {str(e)}"
 
     @mcp.tool()
-    async def build_import_graph(workspace_id: str) -> str:
-        """
-        Build file-level IMPORTS edges in Neo4j by resolving Import nodes.
-
-        Reads every Import node already in the graph, attempts to match the
-        import source to a File node in the same project, and writes
-        (source_file)-[:IMPORTS]->(target_file) relationships.
-
-        Supports: Python (from X import Y / import X),
-                  JavaScript/TypeScript (import from './X'),
-                  Rust (use crate::X / mod X).
-
-        Run this once after index_workspace to enable real PageRank and
-        Louvain community detection via get_code_importance and
-        get_code_communities.
-
-        Args:
-            workspace_id: Logical workspace name or absolute project path.
-        """
-        return await graph_core._build_import_graph_impl(workspace_id)
-
-
-    @mcp.tool()
     async def rebuild_symbol_graph(workspace_id: str) -> str:
         """
         Rebuild symbol-level IMPORTS/EXPORTS graph for a project.
