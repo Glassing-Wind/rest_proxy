@@ -496,7 +496,22 @@ def register(mcp: FastMCP) -> None:
                 except Exception:
                     pass
 
+            rust_duplicate_collapse = os.getenv(
+                "LM_PROXY_RUST_DUPLICATE_COLLAPSE", "0"
+            ).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+
             if dedupe_files:
+                if rust_duplicate_collapse:
+                    all_results = sem_helpers.collapse_near_duplicate_results(
+                        all_results,
+                        query=query,
+                        mode="code",
+                    )
                 all_results = sem_helpers.dedupe_files(all_results)
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)

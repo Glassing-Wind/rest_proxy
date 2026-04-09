@@ -7,6 +7,153 @@ import json
 import os
 
 
+def _context_payload(results: list[dict]) -> str:
+    payload: list[dict] = []
+    for result in results:
+        payload.append(
+            {
+                "file_path": result.get("file_path") or "",
+                "metadata": coerce_meta(result),
+            }
+        )
+    return json.dumps(payload)
+
+
+def collapse_near_duplicate_results(results: list[dict], *, query: str = "", mode: str = "code") -> list[dict]:
+    if len(results) < 2:
+        return results
+    selection = rerank_diverse_results(results, query=query, mode=mode)
+    keep_indices = selection.get("keep_indices")
+    if not isinstance(keep_indices, list):
+        return results
+    keep_set = {
+        idx
+        for idx in keep_indices
+        if isinstance(idx, int) and 0 <= idx < len(results)
+    }
+    if not keep_set:
+        return results
+    return [results[idx] for idx in keep_indices if idx in keep_set]
+
+
+def analyze_near_duplicate_results(results: list[dict], *, query: str = "", mode: str = "code") -> dict:
+    if len(results) < 2:
+        return {
+            "mode": "code_retrieval",
+            "keep_indices": list(range(len(results))),
+            "suppressed_indices": [],
+            "pairs": [],
+            "groups": [],
+        }
+    try:
+        import tree_sitter_language_pack as ts_pack
+    except Exception:
+        return {
+            "mode": "code_retrieval",
+            "keep_indices": list(range(len(results))),
+            "suppressed_indices": [],
+            "pairs": [],
+            "groups": [],
+        }
+
+    analyze = getattr(ts_pack, "analyze_duplicate_texts", None)
+    if not callable(analyze):
+        return {
+            "mode": "code_retrieval",
+            "keep_indices": list(range(len(results))),
+            "suppressed_indices": [],
+            "pairs": [],
+            "groups": [],
+        }
+
+    texts: list[str] = []
+    for result in results:
+        content = result.get("content")
+        texts.append(content if isinstance(content, str) else "")
+
+    try:
+        analysis = analyze(texts, query or None, mode, _context_payload(results))
+    except Exception:
+        return {
+            "mode": "code_retrieval",
+            "keep_indices": list(range(len(results))),
+            "suppressed_indices": [],
+            "pairs": [],
+            "groups": [],
+        }
+
+    return analysis if isinstance(analysis, dict) else {
+        "mode": "code_retrieval",
+        "keep_indices": list(range(len(results))),
+        "suppressed_indices": [],
+        "pairs": [],
+    }
+
+
+def rerank_diverse_results(results: list[dict], *, query: str = "", mode: str = "code") -> dict:
+    if len(results) < 2:
+        return {
+            "mode": "code_retrieval",
+            "keep_indices": list(range(len(results))),
+            "suppressed_indices": [],
+            "exact_suppressed_indices": [],
+            "group_order": list(range(len(results))),
+            "representative_indices": list(range(len(results))),
+        }
+    try:
+        import tree_sitter_language_pack as ts_pack
+    except Exception:
+        return {
+            "mode": "code_retrieval",
+            "keep_indices": list(range(len(results))),
+            "suppressed_indices": [],
+        }
+
+    rerank = getattr(ts_pack, "rerank_diverse_texts", None)
+    if not callable(rerank):
+        analysis = analyze_near_duplicate_results(results, query=query, mode=mode)
+        return {
+            "mode": analysis.get("mode", "code_retrieval"),
+            "keep_indices": analysis.get("keep_indices", list(range(len(results)))),
+            "suppressed_indices": analysis.get("suppressed_indices", []),
+            "exact_suppressed_indices": analysis.get("suppressed_indices", []),
+            "group_order": [],
+            "representative_indices": analysis.get("keep_indices", list(range(len(results)))),
+        }
+
+    texts: list[str] = []
+    relevance_scores: list[float] = []
+    for result in results:
+        content = result.get("content")
+        texts.append(content if isinstance(content, str) else "")
+        try:
+            relevance_scores.append(float(result.get("rrf", 0.0)))
+        except (TypeError, ValueError):
+            relevance_scores.append(0.0)
+
+    try:
+        selection = rerank(texts, relevance_scores, query or None, mode, _context_payload(results))
+    except Exception:
+        analysis = analyze_near_duplicate_results(results, query=query, mode=mode)
+        return {
+            "mode": analysis.get("mode", "code_retrieval"),
+            "keep_indices": analysis.get("keep_indices", list(range(len(results)))),
+            "suppressed_indices": analysis.get("suppressed_indices", []),
+            "exact_suppressed_indices": analysis.get("suppressed_indices", []),
+            "group_order": [],
+            "representative_indices": analysis.get("keep_indices", list(range(len(results)))),
+        }
+
+    return selection if isinstance(selection, dict) else {
+        "mode": "code_retrieval",
+        "keep_indices": list(range(len(results))),
+        "suppressed_indices": [],
+        "exact_suppressed_indices": [],
+        "group_order": list(range(len(results))),
+        "representative_indices": list(range(len(results))),
+    }
+
+
 def format_meta(meta: dict) -> list[str]:
     if not isinstance(meta, dict):
         return []
