@@ -1,6 +1,7 @@
 """tools/docs/admin.py — documentation cleanup and reporting tools."""
 
 from mcp.server.fastmcp import FastMCP
+from tools.brain.docs.config import topic_family_patterns
 
 
 def register(mcp: FastMCP) -> None:
@@ -112,31 +113,62 @@ def register(mcp: FastMCP) -> None:
             async with ms._pg_pool.connection() as conn:
                 async with conn.cursor() as cur:
                     if topic:
+                        patterns = topic_family_patterns(topic)
+                        params = {"limit": limit}
+                        if len(patterns) == 1 and "%" not in patterns[0]:
+                            where_sql = "source = %(topic)s"
+                            params["topic"] = patterns[0]
+                        else:
+                            clauses = []
+                            for idx, pattern in enumerate(patterns):
+                                key = f"topic_{idx}"
+                                params[key] = pattern
+                                if "%" in pattern:
+                                    clauses.append(f"source ILIKE %({key})s")
+                                else:
+                                    clauses.append(f"source = %({key})s")
+                            where_sql = "(" + " OR ".join(clauses) + ")"
+
                         await cur.execute(
-                            """
+                            f"""
                             SELECT count(*) AS chunks, count(DISTINCT url) AS urls
-                            FROM doc_embeddings WHERE source = %(topic)s
+                            FROM doc_embeddings WHERE {where_sql}
                             """,
-                            {"topic": topic},
+                            params,
                         )
                         row = await cur.fetchone()
                         total_chunks = row[0] if row else 0
                         total_urls = row[1] if row else 0
 
                         await cur.execute(
-                            """
+                            f"""
                             SELECT split_part(url, '/', 3) AS domain, count(*) AS chunks
                             FROM doc_embeddings
-                            WHERE source = %(topic)s
+                            WHERE {where_sql}
                             GROUP BY domain
                             ORDER BY chunks DESC
                             LIMIT %(limit)s
                             """,
-                            {"topic": topic, "limit": limit},
+                            params,
                         )
                         rows = []
                         async for r in cur:
                             rows.append((r[0], r[1]))
+
+                        await cur.execute(
+                            f"""
+                            SELECT source, count(*) AS chunks, count(DISTINCT url) AS urls
+                            FROM doc_embeddings
+                            WHERE {where_sql}
+                            GROUP BY source
+                            ORDER BY chunks DESC
+                            LIMIT %(limit)s
+                            """,
+                            params,
+                        )
+                        topic_rows = []
+                        async for r in cur:
+                            topic_rows.append((r[0], r[1], r[2]))
 
                         if not rows:
                             return f"No documentation found for topic='{topic}'."
@@ -147,6 +179,12 @@ def register(mcp: FastMCP) -> None:
                             f"  URLs:   {total_urls}",
                             "",
                         ]
+                        if len(topic_rows) > 1:
+                            lines.append("Topic members:")
+                            for source_name, chunks, urls in topic_rows:
+                                lines.append(f"- {source_name}  ({chunks} chunks, {urls} urls)")
+                            lines.append("")
+                            lines.append("Domains:")
                         for domain, chunks in rows:
                             lines.append(f"- {domain}  ({chunks} chunks)")
                         return "\n".join(lines)

@@ -3,8 +3,27 @@
 import re
 import sys
 from typing import Dict, List
+from urllib.parse import urlparse
 
 from tools.brain.docs.config import CHUNK_LINES, CHUNK_MAX_BYTES, OVERLAP_LINES
+
+
+def _infer_doc_type(url: str, title: str) -> str:
+    url_lower = (url or "").lower()
+    title_lower = (title or "").lower()
+    if "/developer/kb/" in url_lower or "knowledge base" in title_lower:
+        return "knowledge-base"
+    if "/operations-manual/" in url_lower:
+        return "operations-manual"
+    if "/python-manual/" in url_lower:
+        return "python-driver-manual"
+    if "/java-reference/" in url_lower:
+        return "java-reference"
+    if "/cypher-manual/" in url_lower:
+        return "cypher-manual"
+    if "/api/" in url_lower:
+        return "api-reference"
+    return "documentation"
 
 
 def chunk_content(
@@ -22,7 +41,8 @@ def chunk_content(
     if not content.strip():
         return []
 
-    header = f"// Source: {url}\n// Title: {title}\n\n"
+    domain = urlparse(url).netloc
+    doc_type = _infer_doc_type(url, title)
 
     try:
         import tree_sitter_language_pack as ts_pack
@@ -38,15 +58,32 @@ def chunk_content(
                 return re.sub(r" {2,}", " ", text).strip()
 
             strip = _strip_xml if fmt == "xml" else (lambda t: t)
-            return [
-                {
-                    "text": header + strip(c["content"]),
-                    "context_path": c.get("metadata", {}).get("context_path") or [],
-                }
-                for c in chunks
-                if c.get("content", "").strip()
-                and not c.get("metadata", {}).get("has_error_nodes", False)
-            ]
+            out = []
+            for c in chunks:
+                chunk_text = c.get("content", "")
+                meta = c.get("metadata", {}) or {}
+                if not chunk_text.strip() or meta.get("has_error_nodes", False):
+                    continue
+                context_path = meta.get("context_path") or []
+                section = " > ".join(str(item) for item in context_path if str(item).strip())
+                header = (
+                    f"// Source: {url}\n"
+                    f"// Domain: {domain}\n"
+                    f"// Doc Type: {doc_type}\n"
+                    f"// Title: {title}\n"
+                    + (f"// Section: {section}\n" if section else "")
+                    + "\n"
+                )
+                out.append(
+                    {
+                        "text": header + strip(chunk_text),
+                        "context_path": context_path,
+                        "domain": domain,
+                        "doc_type": doc_type,
+                        "section_title": context_path[-1] if context_path else "",
+                    }
+                )
+            return out
     except Exception as e:
         print(
             f"[doc-indexer] ts_pack chunk error ({fmt}): {e}",
@@ -59,8 +96,22 @@ def chunk_content(
     out = []
     i = 0
     while i < len(lines):
-        chunk = header + "\n".join(lines[i : i + CHUNK_LINES])
+        chunk = (
+            f"// Source: {url}\n"
+            f"// Domain: {domain}\n"
+            f"// Doc Type: {doc_type}\n"
+            f"// Title: {title}\n\n"
+            + "\n".join(lines[i : i + CHUNK_LINES])
+        )
         if chunk.strip():
-            out.append({"text": chunk, "context_path": []})
+            out.append(
+                {
+                    "text": chunk,
+                    "context_path": [],
+                    "domain": domain,
+                    "doc_type": doc_type,
+                    "section_title": "",
+                }
+            )
         i += CHUNK_LINES - OVERLAP_LINES
     return out

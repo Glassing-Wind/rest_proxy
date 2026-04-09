@@ -96,6 +96,9 @@ async def index_docs(
                     "chunk_index": idx,
                     "text": chunk["text"],
                     "context_path": chunk["context_path"],
+                    "domain": chunk.get("domain", ""),
+                    "doc_type": chunk.get("doc_type", ""),
+                    "section_title": chunk.get("section_title", ""),
                 }
             )
             if len(buffer) >= bs:
@@ -154,6 +157,9 @@ async def index_authored_document(
                 "chunk_index": idx,
                 "text": chunk["text"],
                 "context_path": chunk.get("context_path") or [],
+                "domain": chunk.get("domain", ""),
+                "doc_type": chunk.get("doc_type", ""),
+                "section_title": chunk.get("section_title", ""),
                 "extra_metadata": extra_metadata or {},
             }
         )
@@ -203,6 +209,9 @@ async def _upsert_doc_chunks_batch(
             "title": item.get("title", ""),
             "topic": topic,
             "context_path": item.get("context_path", []),
+            "domain": item.get("domain", ""),
+            "doc_type": item.get("doc_type", ""),
+            "section_title": item.get("section_title", ""),
         }
         extra_metadata = item.get("extra_metadata")
         if isinstance(extra_metadata, dict) and extra_metadata:

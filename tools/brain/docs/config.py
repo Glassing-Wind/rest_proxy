@@ -33,12 +33,31 @@ DEFAULT_TOPIC_SEED_URLS = {
     ]
 }
 
+TOPIC_FAMILIES = {
+    "neo4j": ["neo4j", "neo4j-%"],
+}
+
 # Host-specific crawling profiles. These exist to capture the selector-driven
 # extraction patterns recommended by the Crawlee docs for JS-heavy sites.
 DOC_HOST_PROFILES: Dict[str, Dict[str, Any]] = {
     "neo4j.com": {
-        "force_playwright": True,
-        "skip_sitemap": True,
+        "ready_selectors": [
+            "main",
+            "article",
+        ],
+        "content_selectors": [
+            "main",
+            "article",
+            "#content",
+            ".content",
+        ],
+        "link_selectors": [
+            "main a",
+            "article a",
+            "nav a",
+            "a",
+        ],
+        "settle_delay_ms": 1200,
     },
     "developer.intuit.com": {
         "force_playwright": True,
@@ -129,3 +148,10 @@ def score_documentation_url(topic: str, url: str) -> int:
             score += 3
 
     return score
+
+
+def topic_family_patterns(topic: str) -> list[str]:
+    topic = (topic or "").strip()
+    if not topic:
+        return []
+    return list(TOPIC_FAMILIES.get(topic, [topic]))

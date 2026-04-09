@@ -6,9 +6,12 @@ import sys
 import threading
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 from mcp.server.fastmcp import FastMCP
 
 from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job
+from _runtime import resolve_python_runtime
+from tools.brain.docs.config import DEFAULT_TOPIC_SEED_URLS, score_documentation_url
 
 
 async def _tavily_search(query: str, max_results: int = 10) -> list:
@@ -52,7 +55,6 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             import httpx
-            from urllib.parse import urlparse
 
             search_query = f"{topic} {query}"
             hits = await _tavily_search(search_query, max_results=10)
@@ -124,7 +126,6 @@ def register(mcp: FastMCP) -> None:
             max_urls: Maximum number of URLs to index (default 5, max 10).
         """
         try:
-            from urllib.parse import urlparse
             import time, uuid
 
             max_urls = min(int(max_urls), 10)
@@ -143,14 +144,6 @@ def register(mcp: FastMCP) -> None:
                 )
 
             # ── 2. Filter + rank URLs ─────────────────────────────────────────
-            # Prefer official docs, readthedocs, GitHub, swift.org, etc.
-            PREFERRED = (
-                "swift.org",
-                "docs.",
-                "readthedocs",
-                "github.com",
-                "developer.apple.com",
-            )
             BLACKLIST = (
                 "youtube.com",
                 "reddit.com",
@@ -162,16 +155,12 @@ def register(mcp: FastMCP) -> None:
                 url = url.lower()
                 if any(b in url for b in BLACKLIST):
                     return -1
-                score = 0
-                for p in PREFERRED:
-                    if p in url:
-                        score += 1
-                return score
+                return score_documentation_url(topic, url)
 
             seen_domains: set[str] = set()
             selected: list[str] = []
             for hit in sorted(
-                hits, key=lambda h: _score(h.get("href", "")), reverse=True
+                hits, key=lambda h: _score(h.get("url", "")), reverse=True
             ):
                 url = hit.get("url", "")
                 domain = urlparse(url).netloc
@@ -185,6 +174,11 @@ def register(mcp: FastMCP) -> None:
 
             if not selected:
                 return "No suitable documentation URLs found."
+            for extra in DEFAULT_TOPIC_SEED_URLS.get(topic, []):
+                if extra not in selected:
+                    selected.append(extra)
+                if len(selected) >= max_urls:
+                    break
 
             # ── 3. Kick off indexing job ──────────────────────────────────────
             repo_root = Path(__file__).resolve().parents[3]
@@ -207,19 +201,36 @@ def register(mcp: FastMCP) -> None:
                     "logs": [],
                     "started_at": time.time(),
                     "finished_at": None,
+                    "runtime_python": None,
+                    "runtime_source": None,
+                    "runtime_conda_env": None,
                 }
 
-            doc_cmd = [
-                sys.executable,
+            runtime = resolve_python_runtime()
+            python_cmd = list(runtime["cmd"])
+            doc_cmd = python_cmd + [
                 str(repo_root / "tools" / "brain" / "docs" / "indexer.py"),
                 "--urls-file",
                 str(urls_file),
                 "--topic",
                 topic,
             ]
+            if topic in DEFAULT_TOPIC_SEED_URLS:
+                doc_cmd.append("--discover")
             proc = subprocess.Popen(
                 doc_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
+            with _JOBS_LOCK:
+                if job_id in _JOBS:
+                    _JOBS[job_id]["runtime_python"] = runtime.get("python")
+                    _JOBS[job_id]["runtime_source"] = runtime.get("source")
+                    _JOBS[job_id]["runtime_conda_env"] = runtime.get("conda_env")
+                    _JOBS[job_id]["logs"].append(
+                        "[runtime] "
+                        f"python={runtime.get('python')} "
+                        f"source={runtime.get('source')} "
+                        f"conda_env={runtime.get('conda_env') or '-'}"
+                    )
             threading.Thread(
                 target=_drain_proc_output,
                 args=(proc, job_id, "[doc]", "sem_rc"),
