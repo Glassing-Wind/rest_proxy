@@ -7,8 +7,9 @@ from fastapi.responses import JSONResponse
 
 from proxy.config import (
     _MEMORY_ENABLED,
-    _ENABLE_PERSISTENCE,
-    _MEMORY_ENABLE_INJECT,
+    _MEMORY_MODE,
+    _MEMORY_INJECT_ENABLED,
+    _MEMORY_PERSIST_ENABLED,
     _memory_store,
     _memory_retrieval,
     LM_BASE,
@@ -42,7 +43,7 @@ async def _startup_event() -> None:
     except OSError:
         pass
 
-    if _MEMORY_ENABLED and _memory_store is not None and _ENABLE_PERSISTENCE:
+    if _MEMORY_ENABLED and _memory_store is not None and _MEMORY_PERSIST_ENABLED:
         # Open Neo4j connection / bootstrap schema
         try:
             await _memory_store.open_pool()
@@ -135,6 +136,7 @@ async def health() -> Any:
             "openai_base": OPENAI_BASE,
             "filtering_enabled": ENABLE_PROXY_FILTERING,
             "debug_logging_enabled": ENABLE_DEBUG_LOGGING,
+            "memory_mode": _MEMORY_MODE,
             "v1_models_local_enabled": USE_LOCAL_MODELS_FOR_V1,
             "state_entries": len(STATE),
             "state_file": str(STATE_FILE),
@@ -261,7 +263,7 @@ async def chat_completions(request: Request) -> Any:
 
         if (
             _MEMORY_ENABLED
-            and _MEMORY_ENABLE_INJECT
+            and _MEMORY_INJECT_ENABLED
             and _memory_retrieval is not None
             and not body.get("previous_response_id")
         ):

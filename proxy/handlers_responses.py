@@ -1,5 +1,6 @@
 """proxy/handlers_responses.py — responses API forwarding."""
 
+import asyncio
 import json
 import time
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from proxy.config import OPENAI_BASE, ENABLE_DEBUG_LOGGING
 from proxy.logging import debug_log
+from proxy.handlers_memory import _derive_session_id, _persist_memory_best_effort
 from proxy.state import STATE, save_state
 from proxy.handlers_utils import history_key
 
@@ -292,6 +294,20 @@ async def forward_responses_api_completion(
         new_response_id=new_response_id,
         finish_reason=finish_reason,
     )
+
+    try:
+        session_id = _derive_session_id(body, tracking_messages)
+        asyncio.create_task(
+            _persist_memory_best_effort(
+                session_id=session_id,
+                model=model,
+                messages=tracking_messages,
+                assistant_text=asst_msg.get("content") or "",
+                tool_calls=asst_msg.get("tool_calls"),
+            )
+        )
+    except Exception as exc:
+        debug_log("memory_persist_schedule_failed", error=str(exc))
 
     # Always return standard OpenAI format even if backend is stateful Responses API
     if (output or new_response_id) and not choices:

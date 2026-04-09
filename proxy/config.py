@@ -9,51 +9,49 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _env_flag(name: str, default: str) -> bool:
+    return os.getenv(name, default).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _normalize_memory_mode(raw_mode: str) -> str:
+    value = (raw_mode or "").strip().lower()
+    if value in {"", "off", "disabled", "none", "stateless"}:
+        return "off"
+    if value in {"assist", "assistant", "summary", "local", "small"}:
+        return "assist"
+    if value in {"full", "stateful", "enabled"}:
+        return "full"
+    return "off"
+
 # ---------------------------------------------------------------------------
 # Memory layer feature flags (loaded once; all optional)
 # ---------------------------------------------------------------------------
-_MEMORY_ENABLED = os.getenv("LM_PROXY_MEMORY_ENABLED", "1").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
-_ENABLE_PERSISTENCE = os.getenv(
-    "LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1"
-).strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
-_ENABLE_REDIS = os.getenv("LM_PROXY_MEMORY_ENABLE_REDIS", "1").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
-_ENABLE_EMBEDDINGS = os.getenv(
-    "LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "0"
-).strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+_MEMORY_ENABLED = _env_flag("LM_PROXY_MEMORY_ENABLED", "1")
+_ENABLE_PERSISTENCE = _env_flag("LM_PROXY_MEMORY_ENABLE_PERSISTENCE", "1")
+_ENABLE_REDIS = _env_flag("LM_PROXY_MEMORY_ENABLE_REDIS", "1")
+_ENABLE_EMBEDDINGS = _env_flag("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "0")
 _MEMORY_SESSION_NAMESPACE = os.getenv("LM_PROXY_MEMORY_SESSION_NAMESPACE", "lmproxy")
 # Memory injection into prompts: prepend rolling summary + trim old turns before forwarding.
-_MEMORY_ENABLE_INJECT = os.getenv(
-    "LM_PROXY_MEMORY_ENABLE_INJECT", "1"
-).strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+_MEMORY_ENABLE_INJECT = _env_flag("LM_PROXY_MEMORY_ENABLE_INJECT", "1")
 _MEMORY_MAX_INJECT_TURNS = int(os.getenv("LM_PROXY_MEMORY_MAX_INJECT_TURNS", "10"))
 
-# Backward-compat flag; injection is now controlled by _MEMORY_ENABLED + _MEMORY_ENABLE_INJECT.
-_MEMORY_MODE = os.getenv("LM_PROXY_MEMORY_MODE", "stateless").strip().lower()
+# Proxy memory should be explicitly opt-in for constrained assistive use.
+# Modes:
+# - off:     no automatic rolling-memory persistence or prompt injection
+# - assist:  bounded recent-turn + summary persistence/injection, embeddings off
+# - full:    broader behavior including embeddings and retrieval
+_MEMORY_MODE = _normalize_memory_mode(os.getenv("LM_PROXY_MEMORY_MODE", "stateless"))
+_MEMORY_MODE_ENABLED = _MEMORY_ENABLED and _MEMORY_MODE in {"assist", "full"}
+_MEMORY_PERSIST_ENABLED = _MEMORY_MODE_ENABLED and _ENABLE_PERSISTENCE
+_MEMORY_REDIS_ENABLED = _MEMORY_MODE_ENABLED and _ENABLE_REDIS
+_MEMORY_INJECT_ENABLED = _MEMORY_MODE_ENABLED and _MEMORY_ENABLE_INJECT
+_MEMORY_EMBEDDINGS_ENABLED = _MEMORY_ENABLED and _MEMORY_MODE == "full" and _ENABLE_EMBEDDINGS
 
 # Conditionally import memory modules; keep failures non-fatal so the proxy
 # still works even if optional dependencies are missing.

@@ -20,6 +20,7 @@ async def _neo4j_link_embedding_refs_batch(
     project_id: str,
     ref_ids: list[str],
 ) -> None:
+    started_at = time.perf_counter()
     cypher = """\
 MERGE (s:Session {id: $session_id})
 MERGE (p:Project {id: $project_id})
@@ -37,6 +38,13 @@ MERGE (p)-[:HAS_EMBEDDING]->(m)
         session_id=session_id,
         project_id=project_id,
         items=[{"id": rid, "project_id": project_id} for rid in ref_ids],
+    )
+    store_core._debug(
+        "graph_link_embedding_refs_batch",
+        session_id=session_id,
+        project_id=project_id,
+        count=len(ref_ids),
+        elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
     )
 
 
@@ -249,6 +257,7 @@ async def insert_memory_embeddings_batch(
     if not store_core._ENABLE_EMBEDDINGS or not store_core._pool_available() or not rows:
         return []
 
+    started_at = time.perf_counter()
     prepared_rows: list[dict[str, Any]] = []
     for row in rows:
         vector = row.get("vector")
@@ -331,6 +340,11 @@ async def insert_memory_embeddings_batch(
                 "insert_memory_embeddings_batch",
                 rows=prepared_rows,
             )
+        store_core._debug(
+            "graph_insert_memory_embeddings_batch",
+            count=len(prepared_rows),
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
         return [row["ref_id"] for row in prepared_rows]
     except Exception as exc:
         store_core._debug("graph_insert_memory_embeddings_batch_error", error=str(exc))

@@ -1,5 +1,6 @@
 """proxy/handlers_chat.py — chat completion forwarding."""
 
+import asyncio
 import json
 import os
 from typing import Any, Dict, List
@@ -17,7 +18,7 @@ from proxy.config import (
 )
 from proxy.logging import debug_log, stable_json
 from proxy.state import STATE, save_state
-from proxy.handlers_memory import _derive_session_id
+from proxy.handlers_memory import _derive_session_id, _persist_memory_best_effort
 from proxy.handlers_utils import history_key
 
 
@@ -72,6 +73,19 @@ async def forward_openai_chat_completion(body: Dict[str, Any]) -> Any:
         m = choices[0].get("message", {})
         STATE[history_key(body.get("messages", []) + [m])] = sid
         save_state()
+        try:
+            session_id = _derive_session_id(body, body.get("messages", []))
+            asyncio.create_task(
+                _persist_memory_best_effort(
+                    session_id=session_id,
+                    model=body.get("model", ""),
+                    messages=body.get("messages", []),
+                    assistant_text=m.get("content") or "",
+                    tool_calls=m.get("tool_calls"),
+                )
+            )
+        except Exception as exc:
+            debug_log("memory_persist_schedule_failed", error=str(exc))
 
     # --- Always-on: log usage stats for monitoring ---
     usage = response_json.get("usage", {})

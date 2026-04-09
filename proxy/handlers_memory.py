@@ -5,11 +5,13 @@ import json
 from typing import Any, Dict, List, Optional
 
 from proxy.config import (
-    _ENABLE_EMBEDDINGS,
-    _ENABLE_PERSISTENCE,
-    _ENABLE_REDIS,
     _MEMORY_ENABLED,
+    _MEMORY_EMBEDDINGS_ENABLED,
     _MEMORY_MAX_INJECT_TURNS,
+    _MEMORY_INJECT_ENABLED,
+    _MEMORY_MODE,
+    _MEMORY_PERSIST_ENABLED,
+    _MEMORY_REDIS_ENABLED,
     _MEMORY_SESSION_NAMESPACE,
     _memory_retrieval,
     _memory_store,
@@ -112,6 +114,8 @@ async def _persist_memory_best_effort(
     """
     if not _MEMORY_ENABLED:
         return
+    if _MEMORY_MODE == "off":
+        return
     if _memory_store is None or _memory_summary is None:
         return
 
@@ -137,7 +141,7 @@ async def _persist_memory_best_effort(
             assistant_turn["tool_calls"] = tool_calls
 
         # --- Redis: append recent turns ---
-        if _ENABLE_REDIS:
+        if _MEMORY_REDIS_ENABLED:
             new_turns = [user_turn, assistant_turn]
             for t in new_turns:
                 await _memory_store.append_recent_turn(session_id, t)
@@ -153,7 +157,7 @@ async def _persist_memory_best_effort(
                 debug_log("memory_summary_update_error", error=str(_sum_exc))
 
         # --- Postgres: persist turns durably ---
-        if _ENABLE_PERSISTENCE:
+        if _MEMORY_PERSIST_ENABLED:
             # Determine turn index (approximate; use timestamp-based ordering)
             turn_count = len(
                 [
@@ -195,7 +199,7 @@ async def _persist_memory_best_effort(
             asst_turn_id = turn_ids[1] if len(turn_ids) > 1 else None
 
             # Persist summary snapshot periodically (every call; lightweight since text is small)
-            if _ENABLE_REDIS:
+            if _MEMORY_REDIS_ENABLED:
                 try:
                     current_summary = await _memory_store.get_rolling_summary(
                         session_id
@@ -210,7 +214,7 @@ async def _persist_memory_best_effort(
                     pass
 
             # --- Embed compact turn text and store vectors for hybrid retrieval ---
-            if _ENABLE_EMBEDDINGS and _memory_retrieval is not None:
+            if _MEMORY_EMBEDDINGS_ENABLED and _memory_retrieval is not None:
                 embedding_rows = []
                 for ref_id, ref_role, compact_text in [
                     (user_turn_id, "user", user_compact),
@@ -269,6 +273,8 @@ async def _inject_memory_into_messages(
     - Keeps only the last _MEMORY_MAX_INJECT_TURNS non-system messages.
     - Returns messages unchanged (with best-effort error handling) if anything fails.
     """
+    if not _MEMORY_INJECT_ENABLED:
+        return messages
     if _memory_retrieval is None:
         return messages
     try:
@@ -332,7 +338,7 @@ async def _inject_memory_into_messages(
         # Inject memory block into system prompt (or create one)
         tag_block_parts = []
 
-        # Always inject: summary + recent-turns context (no mode gate).
+        # Assist/full modes inject only bounded summary + recent turns by default.
         if formatted_summary:
             tag_block_parts.append(
                 f"<planner_context>\n{formatted_summary}\n</planner_context>"
@@ -361,7 +367,7 @@ async def _inject_memory_into_messages(
         except Exception as _rf_exc:
             debug_log("memory_recent_files_error", error=str(_rf_exc))
 
-        if recent_files_hint:
+        if _MEMORY_MODE == "full" and recent_files_hint:
             tag_block += f"\n\n<recent_files>\n{recent_files_hint}\n</recent_files>"
 
         # --- NEW: Structural Skeletons ---
@@ -383,17 +389,22 @@ async def _inject_memory_into_messages(
         except Exception as _sk_exc:
             debug_log("memory_recent_skeletons_error", error=str(_sk_exc))
 
-        if skeletons_text:
+        if _MEMORY_MODE == "full" and skeletons_text:
             tag_block += f"\n\n<api_skeletons>\n{skeletons_text}\n</api_skeletons>"
 
         # Anti-loop instructions always accompany the memory block.
         if tag_block:
-            inject_instructions = (
-                "Instructions:\n"
-                "- Use <recent_files> as a soft reminder of files already explored.\n"
-                "- Exploration is allowed, but avoid rereading the same files or same sections without new purpose.\n"
-                "- Prefer making progress over repeated exploration loops.\n\n"
-            )
+            instruction_lines = [
+                "Instructions:",
+                "- Exploration is allowed, but avoid rereading the same files or same sections without new purpose.",
+                "- Prefer making progress over repeated exploration loops.",
+            ]
+            if _MEMORY_MODE == "full":
+                instruction_lines.insert(
+                    1,
+                    "- Use <recent_files> as a soft reminder of files already explored.",
+                )
+            inject_instructions = "\n".join(instruction_lines) + "\n\n"
             tag_block = f"{tag_block}\n\n{inject_instructions}"
         if tag_block:
             if system_msgs:

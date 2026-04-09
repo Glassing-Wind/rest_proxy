@@ -39,7 +39,8 @@ POST /v1/chat/completions
 
 | Variable | Default | Description |
 |---|---|---|
-| `LM_PROXY_MEMORY_ENABLED` | `0` | Master switch – set to `1` to enable |
+| `LM_PROXY_MEMORY_ENABLED` | `0` | Master switch – set to `1` to allow proxy memory features |
+| `LM_PROXY_MEMORY_MODE` | `stateless` | `stateless/off` disables automatic rolling memory, `assist` enables bounded recent-turn + summary help for smaller/local models, `full` also enables broader retrieval features |
 | `LM_PROXY_NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt connection URI |
 | `LM_PROXY_NEO4J_USER` | `neo4j` | Neo4j username |
 | `LM_PROXY_NEO4J_PASSWORD` | - | Neo4j password |
@@ -154,7 +155,12 @@ Clients can write this state via `memory_store.set_session_state()`. The assembl
 - `retrieved_snippets` – top-K pgvector hits (if embeddings enabled)
 - `assembled_text` – pre-formatted block for prompt injection
 
-**v1**: Assembly runs but is not injected into live prompts by default. The hook point for injection is at the top of `chat_completions()` in `proxy.py`, where `assemble_memory()` can be awaited and the result prepended to the system prompt.
+The proxy now treats automatic prompt memory as mode-driven:
+- `stateless` / `off`: no automatic rolling-memory persistence or injection
+- `assist`: bounded recent-turn + summary persistence/injection for small local models
+- `full`: broader retrieval behavior, including embedding-backed memory when enabled
+
+For capable stateful clients, `stateless` is the safe default. `assist` is the intended opt-in mode when the model benefits from compact rolling memory.
 
 ---
 
