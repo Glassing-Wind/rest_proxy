@@ -237,6 +237,51 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("|calls|", output)
         self.assertIn("leaseRouter", output)
 
+    def test_get_call_chain_summarizes_broad_fanout(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "2",
+                        "name": "registerFinanceAdminRoutes",
+                        "qualified_name": None,
+                        "signature": None,
+                        "filepath": "src/api/routes/financeAdminRoutes.ts",
+                        "rank": 0,
+                        "path_rank": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                rows = []
+                for idx in range(15):
+                    rows.append(
+                        {
+                            "chain": ["registerFinanceAdminRoutes", f"serviceCall{idx}", f"leaf{idx}"],
+                            "files": [
+                                "src/api/routes/financeAdminRoutes.ts",
+                                f"src/services/Service{idx}.ts",
+                                f"src/services/Leaf{idx}.ts",
+                            ],
+                        }
+                    )
+                return rows
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/rental", "registerFinanceAdminRoutes", depth=2, direction="down"
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("serviceCall0", output)
+        self.assertIn("… 3 more first-hop call(s) hidden", output)
+
     def test_get_call_chain_up_filters_unnamed_callers(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:

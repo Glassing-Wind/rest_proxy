@@ -234,34 +234,78 @@ def format_call_chain_rows(
         normalized = (name or "").strip().lower()
         return normalized in {"", "unnamed", "<anonymous>", "anonymous"}
 
-    seen: set[str] = set()
+    from collections import OrderedDict
+
     header_name = resolved_name or symbol_name
     out = [f"## Call chain: `{header_name}` ({direction}, depth={depth})\n"]
     if resolved_name and resolved_name != symbol_name:
         out.append(f"Resolved `{symbol_name}` → `{resolved_name}`\n")
-    emitted = 0
     anonymous_hints: list[str] = []
+    first_hop_groups: "OrderedDict[tuple[str, str], OrderedDict[tuple[str, str], None]]" = OrderedDict()
+    first_hop_counts: dict[tuple[str, str], int] = {}
+    terminal_paths = 0
+
     for rec in rows:
         chain = rec["chain"]
         files = rec["files"]
         lines = rec.get("lines") or []
-        for index in range(1, len(chain)):
-            name = chain[index]
-            if is_low_value_name(name):
-                filepath = files[index] or "?"
-                line = lines[index] if index < len(lines) else None
+        if len(chain) < 2:
+            continue
+        first_name = chain[1]
+        if is_low_value_name(first_name):
+            filepath = files[1] or "?"
+            line = lines[1] if len(lines) > 1 else None
+            hint = f"{filepath}:{line}" if line else filepath
+            if hint not in anonymous_hints:
+                anonymous_hints.append(hint)
+            continue
+        first_file = files[1] or "?"
+        first_key = (first_name, first_file)
+        first_hop_groups.setdefault(first_key, OrderedDict())
+        first_hop_counts[first_key] = first_hop_counts.get(first_key, 0) + 1
+
+        if len(chain) >= 3:
+            child_name = chain[2]
+            if is_low_value_name(child_name):
+                filepath = files[2] or "?"
+                line = lines[2] if len(lines) > 2 else None
                 hint = f"{filepath}:{line}" if line else filepath
                 if hint not in anonymous_hints:
                     anonymous_hints.append(hint)
                 continue
-            key = "→".join(chain[: index + 1])
-            if key in seen:
-                continue
-            seen.add(key)
-            pad = "  " * index
-            filepath = files[index] or "?"
-            out.append(f"{pad}{'└─' if index > 1 else '  '} `{name}`  ({filepath})")
+            child_file = files[2] or "?"
+            first_hop_groups[first_key][(child_name, child_file)] = None
+        else:
+            terminal_paths += 1
+
+    emitted = 0
+    max_first_hops = 12
+    max_children_per_hop = 3
+    hidden_first_hops = max(0, len(first_hop_groups) - max_first_hops)
+
+    for idx, ((first_name, first_file), children) in enumerate(first_hop_groups.items()):
+        if idx >= max_first_hops:
+            break
+        out.append(f"   `{first_name}`  ({first_file})")
+        emitted += 1
+        child_items = list(children.keys())
+        for child_idx, (child_name, child_file) in enumerate(child_items[:max_children_per_hop]):
+            out.append(f"    └─ `{child_name}`  ({child_file})")
             emitted += 1
+        hidden_children = max(0, len(child_items) - max_children_per_hop)
+        extra_paths = max(0, first_hop_counts.get((first_name, first_file), 0) - max(len(child_items), 1))
+        if hidden_children or extra_paths:
+            summary_bits = []
+            if hidden_children:
+                summary_bits.append(f"{hidden_children} more child call(s)")
+            if extra_paths:
+                summary_bits.append(f"{extra_paths} additional path(s)")
+            out.append(f"    └─ … {', '.join(summary_bits)}")
+            emitted += 1
+
+    if hidden_first_hops:
+        out.append(f"\n… {hidden_first_hops} more first-hop call(s) hidden")
+
     if emitted == 0:
         hop_label = "callers" if direction == "up" else "callees"
         hint_text = ""
