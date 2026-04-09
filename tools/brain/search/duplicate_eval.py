@@ -153,6 +153,10 @@ def _promotion_alerts(config: dict, baseline: dict) -> list[str]:
         alerts.append("hit_at_k_regressed")
     if config["best_answer_retained"] is False and baseline["best_answer_retained"] is True:
         alerts.append("best_answer_retention_regressed")
+    if config["mrr"] + 1e-9 < baseline["mrr"]:
+        alerts.append("mrr_regressed")
+    if config["ndcg"] + 1e-9 < baseline["ndcg"]:
+        alerts.append("ndcg_regressed")
     if config["topk_redundancy_rate"] > baseline["topk_redundancy_rate"]:
         alerts.append("no_redundancy_gain")
     if config["false_collapse_rate"] > baseline["false_collapse_rate"]:

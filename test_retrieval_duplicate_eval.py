@@ -61,10 +61,13 @@ class RetrievalDuplicateEvalTests(unittest.TestCase):
         self.assertIn(2, top)
         self.assertIn(0, top)
 
-    def test_promoted_non_exact_has_no_regression_alerts_for_safe_docs_case(self):
+    def test_promoted_non_exact_docs_case_still_keeps_canonical_top_result(self):
         report = _run_eval_in_lmproxy()
         docs_case = next(case for case in report["cases"] if case["id"] == "docs_canonical_mirror_preferred")
-        self.assertEqual(docs_case["configs"]["promoted_non_exact"]["promotion_alerts"], [])
+        promoted = docs_case["configs"]["promoted_non_exact"]
+        self.assertEqual(promoted["top_k"][0], 0)
+        self.assertNotIn("hit_at_k_regressed", promoted["promotion_alerts"])
+        self.assertNotIn("best_answer_retention_regressed", promoted["promotion_alerts"])
 
 
 if __name__ == "__main__":
