@@ -364,6 +364,38 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crate `core`", output)
         self.assertIn("crates/api/src/lib.rs", output)
 
+    def test_get_code_communities_hides_singleton_zero_symbol_noise(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.louvainCommunity IS NOT NULL" in cypher:
+                return [
+                    {
+                        "comm": 20,
+                        "file_count": 5,
+                        "total_syms": 18,
+                        "top_files": ["src/api/routes.ts", "src/services/ReportService.ts"],
+                    },
+                    {
+                        "comm": 22,
+                        "file_count": 1,
+                        "total_syms": 0,
+                        "top_files": ["README.md"],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/repo"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("cluster #20", output)
+        self.assertNotIn("README.md", output)
+
     def test_get_related_files_prefers_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):
             if "CALL db.labels()" in cypher:

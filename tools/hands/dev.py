@@ -181,6 +181,18 @@ def register(mcp: FastMCP) -> None:
                 for token in re.split(r"[^A-Za-z0-9_]+", basename)
                 if token and len(token) >= 3
             ]
+            camel_tokens = [
+                part.lower()
+                for part in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)", basename)
+                if len(part) >= 4
+            ]
+            route_tokens = [
+                token
+                for token in re.split(r"[^A-Za-z0-9_]+", normalized_file_path)
+                if token
+                and len(token) >= 4
+                and token.lower() not in {"src", "api", "routes", basename.lower()}
+            ]
 
             candidates = [
                 f"test_{basename}.py",
@@ -267,6 +279,58 @@ def register(mcp: FastMCP) -> None:
                     results.setdefault(rel, "mentions basename")
             except Exception:
                 pass
+
+            if not results and "/api/routes/" in normalized_file_path:
+                try:
+                    suite_r = subprocess.run(
+                        [
+                            "find",
+                            project_path,
+                            "-type",
+                            "f",
+                            "(",
+                            "-name",
+                            "routes.test.ts",
+                            "-o",
+                            "-name",
+                            "routes.test.js",
+                            "-o",
+                            "-name",
+                            "routes.spec.ts",
+                            "-o",
+                            "-name",
+                            "routes.spec.js",
+                            ")",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    for p in suite_r.stdout.strip().splitlines():
+                        rel = os.path.relpath(p, project_path)
+                        results.setdefault(rel, "generic route suite")
+                except Exception:
+                    pass
+
+            if not results and "/routes/" in normalized_file_path:
+                try:
+                    route_patterns = list(dict.fromkeys(route_tokens[:6] + camel_tokens[:4]))
+                    if route_patterns:
+                        rg_cmd = ["rg", "--files-with-matches", "--glob", "*test*", "."]
+                        for token in route_patterns:
+                            rg_cmd.extend(["-e", token])
+                        route_r = subprocess.run(
+                            rg_cmd,
+                            cwd=project_path,
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
+                        for p in route_r.stdout.strip().splitlines():
+                            rel = os.path.relpath(os.path.join(project_path, p), project_path)
+                            results.setdefault(rel, "route test match")
+                except Exception:
+                    pass
 
             if not results:
                 try:

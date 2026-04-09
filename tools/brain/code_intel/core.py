@@ -18,6 +18,36 @@ def register(mcp: FastMCP) -> None:
     _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
     _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "code_intel"}
 
+    def _frontend_asset_penalty(file_path: str | None) -> float:
+        norm = (file_path or "").replace("\\", "/").lower()
+        if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
+            return 0.08
+        return 1.0
+
+    def _backend_bridge_boost(file_path: str | None) -> float:
+        norm = (file_path or "").replace("\\", "/").lower()
+        if any(
+            token in norm
+            for token in (
+                "src/api/routes/",
+                "src/api/",
+                "src/services/",
+                "src/db/",
+                "prisma/schema.prisma",
+            )
+        ):
+            return 1.9
+        if any(token in norm for token in ("src/config/", "src/lib/", "src/models/")):
+            return 1.12
+        return 1.0
+
+    def _architecture_rank(record: dict) -> float:
+        file_path = record.get("file")
+        score = float(record.get("score") or 0.0)
+        bridge = float(record.get("betweenness") or 0.0)
+        adjusted = ((score ** 0.7) + (bridge * 0.6)) * _frontend_asset_penalty(file_path) * _backend_bridge_boost(file_path)
+        return adjusted
+
     async def _execute_read(
         session,
         cypher: str,
@@ -417,7 +447,7 @@ def register(mcp: FastMCP) -> None:
                    f.pagerank_sum  AS score,
                    f.betweenness   AS betweenness,
                    coalesce(f.isolated, false) AS isolated
-            ORDER BY score DESC LIMIT 15
+            ORDER BY score DESC LIMIT 50
             """
 
             # Fallback query: heuristic for un-ranked projects
@@ -436,7 +466,7 @@ def register(mcp: FastMCP) -> None:
             WITH f.filepath AS file, sym_count, sym_examples,
                  callers_in * 3 + sym_count AS score, NULL AS top_pagerank
             WHERE score > 0
-            ORDER BY score DESC LIMIT 15
+            ORDER BY score DESC LIMIT 50
             RETURN file, sym_count, sym_examples, top_pagerank, score
             """
 
@@ -464,6 +494,16 @@ def register(mcp: FastMCP) -> None:
                 if using_pagerank
                 else "heuristic (callers×3 + symbols)"
             )
+
+            records = sorted(
+                records,
+                key=lambda record: (
+                    _architecture_rank(record),
+                    float(record.get("score") or 0.0),
+                    float(record.get("betweenness") or 0.0),
+                ),
+                reverse=True,
+            )[:15]
 
             output = [f"Most important files [{scoring_method}, test/vendor excluded]:"]
             rendered_rows = []
@@ -587,6 +627,20 @@ def register(mcp: FastMCP) -> None:
                 "GDS Louvain (topology)" if using_louvain else "top-level directory"
             )
             output = [f"Architectural clusters [{method}]:"]
+            filtered_records = []
+            for record in records:
+                file_count = int(record.get("file_count") or 0)
+                total_syms = int(record.get("total_syms") or 0)
+                top_files = record.get("top_files") or []
+                if file_count <= 1 and total_syms == 0:
+                    continue
+                if total_syms == 0 and all(
+                    str(fp).endswith((".md", ".toml", ".yaml", ".yml", ".sql", ".example", ".json"))
+                    for fp in top_files
+                ):
+                    continue
+                filtered_records.append(record)
+            records = filtered_records
             if cargo_rows and not using_louvain:
                 crate_groups: dict[str, list[dict]] = {}
                 for record in records:

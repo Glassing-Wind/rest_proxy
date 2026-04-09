@@ -118,6 +118,29 @@ class DevToolsTests(unittest.TestCase):
         self.assertIn("tests/test_workspace_registry.py", output)
         self.assertIn("semantic test-chunk match (3)", output)
 
+    def test_get_test_coverage_for_routes_falls_back_to_route_test_match(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        def fake_subprocess_run(cmd, **kwargs):
+            if cmd[:2] == ["find", "/tmp/repo"]:
+                return types.SimpleNamespace(stdout="")
+            if cmd and cmd[0] == "rg":
+                if "financeAdminRoutes" in cmd:
+                    return types.SimpleNamespace(stdout="")
+                return types.SimpleNamespace(stdout="tests/routes.test.ts\n")
+            return types.SimpleNamespace(stdout="")
+
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+            output = asyncio.run(
+                mcp.tools["get_test_coverage_for"]("/tmp/repo", "src/api/routes/financeAdminRoutes.ts")
+            )
+
+        self.assertIn("tests/routes.test.ts", output)
+        self.assertIn("route test match", output)
+
 
 if __name__ == "__main__":
     unittest.main()

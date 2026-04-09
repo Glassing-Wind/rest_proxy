@@ -1,6 +1,7 @@
 """tools/search/graph_query.py — raw Neo4j queries and definitions lookup."""
 
 import json
+import os
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_project_id, get_workspace_path
@@ -8,6 +9,25 @@ from tools.brain.search import core as search_core
 
 
 def register(mcp: FastMCP) -> None:
+
+    def _project_display_allowed(project_id: str | None, project_path: str | None) -> bool:
+        pid = (project_id or "").strip()
+        path = (project_path or "").strip()
+        if path:
+            return True
+        if not pid:
+            return False
+        noisy_prefixes = (
+            "profilequery",
+            "exportcheck",
+            "routecontext",
+            "rental-benchmark",
+        )
+        if pid.startswith(noisy_prefixes):
+            return False
+        if pid.isdigit():
+            return False
+        return True
 
     @mcp.tool()
     async def query_graph(
@@ -103,6 +123,11 @@ def register(mcp: FastMCP) -> None:
                     session, cypher, name=symbol_name, op="find_definitions"
                 )
                 for record in records:
+                    if not _project_display_allowed(
+                        record.get("project_id"),
+                        record.get("project_path"),
+                    ):
+                        continue
                     loc = record["file"] or "unknown"
                     line = record["line"]
                     loc_str = f"{loc}:{line}" if line is not None else loc
