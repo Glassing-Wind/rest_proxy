@@ -207,6 +207,225 @@ These tests should be treated as product contracts.
 - MCP status exposes the actual runtime used
 
 
+## Duplicate And Diversity Design
+
+Duplicate collapse and diversity are not the same problem.
+
+They should be handled in two layers:
+
+1. candidate generation
+2. retrieval-time selection
+
+Candidate generation should answer:
+
+- which results are likely near-duplicates?
+- which results are exact duplicates?
+- which results are likely mirrors or translated copies?
+
+Retrieval-time selection should answer:
+
+- which of those candidates should be suppressed?
+- which representative should be kept?
+- how much diversity should be enforced without dropping the best answer?
+
+This split matters because:
+
+- winnowing and similar fingerprint methods are good at generating candidates
+- they are not, by themselves, a complete ranked retrieval policy
+- docs and code need different retrieval-time policies even if they share lower-level primitives
+
+
+## Lower-Level API
+
+The lower-level retrieval stack should expose separate contracts for:
+
+- duplicate candidate generation
+- result reranking/diversification
+
+### Duplicate Candidate API
+
+This should live below `rest_proxy`.
+
+Suggested contract:
+
+```python
+find_near_duplicates(
+    items: list[DuplicateInput],
+    corpus: str,
+    mode: str = "retrieval",
+) -> DuplicateAnalysis
+```
+
+Where `DuplicateInput` includes:
+
+- `id`
+- `text`
+- `language` or `doc_type`
+- `source_path` or `url`
+- optional `metadata`
+
+And `DuplicateAnalysis` includes:
+
+- duplicate groups
+- canonical candidate per group
+- pairwise similarity details
+- method used
+- explanation fields
+
+Example explanation fields:
+
+- `exact_match`
+- `fingerprint_overlap`
+- `token_jaccard`
+- `literal_token_jaccard`
+- `literal_kgram_jaccard`
+- `length_ratio`
+- `source_equivalent`
+
+This API should support corpus-specific modes:
+
+- `code_retrieval`
+- `docs_retrieval`
+- `index_clone_detection`
+
+Those modes should share primitives where possible, but not force one threshold set to fit every use case.
+
+
+### Retrieval Reranker API
+
+This should also live below `rest_proxy`.
+
+Suggested contract:
+
+```python
+rerank_results(
+    items: list[RankedResult],
+    corpus: str,
+    mode: str = "default",
+    duplicate_analysis: DuplicateAnalysis | None = None,
+) -> RerankedResult
+```
+
+Where `RerankedResult` includes:
+
+- final ordered results
+- suppressed result ids
+- representative selection per duplicate group
+- diversification decisions
+- score breakdown
+- fallback/diversification explanation
+
+This layer should own:
+
+- representative selection inside duplicate groups
+- exact duplicate suppression
+- diversity-aware reranking
+- conservative retention of the best answer
+
+
+## Algorithm Direction
+
+### Code Retrieval
+
+Use a two-stage approach:
+
+1. Rust candidate generation using winnowing and token/k-gram signals
+2. retrieval-time reranking with conservative duplicate suppression
+
+The current Rust primitive is the right place to start, but retrieval mode should stay separate from index-time clone grouping.
+
+Recommended signals for code retrieval candidate generation:
+
+- normalized-token winnowing for renamed-clone recall
+- literal-token overlap as a guardrail
+- literal k-gram overlap as a stronger sequence guardrail
+- length-ratio checks
+
+Recommended reranking rules for code retrieval:
+
+- always preserve the highest-ranked result in a duplicate group
+- suppress only when the second result is redundant enough to reduce user value
+- prefer file diversity after exact redundancy is handled
+- never let diversification demote the clearly best single answer below weaker alternatives
+
+
+### Docs Retrieval
+
+Docs should not reuse code-style identifier normalization as the primary signal.
+
+Recommended candidate generation for docs:
+
+- shingle-based MinHash or equivalent approximate Jaccard candidate generation
+- canonical URL and canonical-source equivalence
+- mirror/translation detection
+- heading/title/url similarity
+
+Recommended reranking rules for docs:
+
+- prefer canonical sources over mirrors
+- collapse translated or mirrored copies under the canonical page
+- prefer the most exact title/heading match inside a duplicate family
+- apply incident/reference/how-to intent before diversity
+
+
+### Diversity Reranking
+
+For both corpora, retrieval should include an explicit diversity-aware reranker.
+
+MMR is an acceptable baseline.
+
+But the contract should not be phrased as “run MMR.”
+
+The contract should be:
+
+- preserve the best answer
+- reduce redundant near-duplicates
+- improve useful breadth when the top results collapse to one file or one concept
+
+Implementation can start with MMR and later improve without changing the product contract.
+
+
+## Golden Tests For Duplicate Collapse And Diversity
+
+These tests should be treated as release gates for retrieval changes.
+
+### Code Golden Tests
+
+- exact duplicate chunks collapse to one representative
+- renamed clones with the same structure collapse only when they do not remove useful distinct coverage
+- similar but behaviorally different snippets are both kept
+- top-ranked best answer is preserved after diversification
+- when top results all come from one file, diversification can add breadth without ejecting the best hit
+- same result set from two frontends yields the same kept/suppressed decisions
+
+### Docs Golden Tests
+
+- exact mirror pages collapse to the canonical URL
+- translated or mirrored pages do not outrank the canonical page
+- exact title/heading match beats generic manual pages
+- incident queries prefer KB/ops pages over broad reference pages
+- family-topic queries still diversify across relevant doc subtypes when appropriate
+
+### Negative Tests
+
+- diversification must not hide the single best answer
+- duplicate collapse must not merge results solely because identifiers were normalized away
+- docs collapse must not merge distinct conceptual pages from the same domain
+
+
+## Immediate Next Steps
+
+1. Keep the Rust duplicate primitive and Python binding in place.
+2. Leave Rust-backed retrieval collapse disabled by default until golden retrieval tests pass.
+3. Add corpus-specific duplicate-analysis fixtures for:
+   - exact duplicates
+   - renamed clones
+   - similar-but-different code
+   - canonical docs vs mirrors
+4. Build the reranker contract below `rest_proxy` before enabling default collapse/diversification.
+5. Delete Python-side duplicate heuristics only after the lower-level path has proven parity or better.
+
+
 ## Recommended Implementation Order
 
 ### Phase 1. Freeze Current Good Behavior
