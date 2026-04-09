@@ -12,6 +12,21 @@ TOKEN_PATTERN = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]"
 )
 
+DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS = [
+    "**/docs/node_types/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.next/**",
+    "**/coverage/**",
+    "**/site-packages/**",
+    "**/__pycache__/**",
+    "**/*.min.js",
+    "**/*.bundle.js",
+    "**/*.generated.*",
+    "**/generated/**",
+]
+
 
 def glob_to_like(pattern: str) -> str:
     pattern = pattern.replace("%", r"\%")
@@ -38,6 +53,12 @@ def path_allowed(
     ):
         return False
     return True
+
+
+def default_duplication_exclude_patterns(include_patterns: list[str]) -> list[str]:
+    if include_patterns:
+        return []
+    return list(DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS)
 
 
 def tokenize(text: str) -> list[str]:

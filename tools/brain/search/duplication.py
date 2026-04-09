@@ -148,8 +148,11 @@ def register(mcp: FastMCP) -> None:
             winnow_kgram_sim_threshold = max(0.0, float(winnow_kgram_sim_threshold))
             winnow_sample_size = int(winnow_sample_size)
 
-            exclude_patterns = exclude_paths or []
             include_patterns = include_paths or []
+            exclude_patterns = list(exclude_paths or [])
+            exclude_patterns.extend(
+                dup_helpers.default_duplication_exclude_patterns(include_patterns)
+            )
 
             include_like_patterns = [
                 dup_helpers.glob_to_like(p) for p in include_patterns if isinstance(p, str)
@@ -196,6 +199,10 @@ def register(mcp: FastMCP) -> None:
                     )
 
             lines: list[str] = []
+            if exclude_patterns and not include_patterns:
+                lines.append(
+                    "Default low-signal paths excluded: generated/docs/build artifacts"
+                )
 
             def _same_file_allowed(
                 file_path: str, content: str, counts: dict[str, int]

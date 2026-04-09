@@ -64,6 +64,16 @@ class DuplicationHelperTests(unittest.TestCase):
         self.assertIn("<num>", tokens)
         self.assertTrue(module.winnow_fingerprints(tokens * 3, k=3, window=2))
 
+    def test_default_duplication_exclude_patterns_only_apply_without_include_paths(self):
+        self.assertIn(
+            "**/docs/node_types/**",
+            module.default_duplication_exclude_patterns([]),
+        )
+        self.assertEqual(
+            module.default_duplication_exclude_patterns(["src/**/*.ts"]),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

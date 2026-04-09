@@ -350,6 +350,42 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("apple_context_presence", seen_ops)
         self.assertIn("cargo_context_presence", seen_ops)
 
+    def test_project_overview_downweights_frontend_asset_heaviness(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 30}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 100}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "src", "files": 24, "syms": 90}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {
+                        "fp": "src/public/assets/financials.js",
+                        "n": 82,
+                        "ex": ["getToken", "money", "percent"],
+                    },
+                    {
+                        "fp": "src/services/QuickBooksService.ts",
+                        "n": 18,
+                        "ex": ["syncAccounts", "exportBatch"],
+                    },
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/rental"))
+
+        quickbooks_index = output.index("src/services/QuickBooksService.ts")
+        financials_index = output.index("src/public/assets/financials.js")
+        self.assertLess(quickbooks_index, financials_index)
+
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
             with mock.patch.object(
@@ -370,7 +406,7 @@ class GraphToolsTests(unittest.TestCase):
                         )
                     )
 
-        self.assertEqual("No Apple build graph paths found.", output)
+        self.assertEqual("### Flow Type: Apple Build Graph\nNo Apple build graph paths found.", output)
         apple_mock.assert_awaited_once()
         backend_mock.assert_not_awaited()
 
