@@ -58,8 +58,9 @@ def register(mcp: FastMCP) -> None:
                     MATCH (s {name: $name, project_id: $pid})
                     WHERE s:Function OR s:Class OR s:Struct OR s:Trait
                        OR s:Enum OR s:Method OR s:Protocol
+                       OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType
                     OPTIONAL MATCH (s)<-[:CONTAINS]-(f:File)
-                    RETURN labels(s)[0]  AS kind,
+                    RETURN head([label IN labels(s) WHERE label <> 'Node']) AS kind,
                            s.filepath    AS filepath,
                            s.start_line  AS start_line,
                            s.end_line    AS end_line,
@@ -82,12 +83,13 @@ def register(mcp: FastMCP) -> None:
                     MATCH (target {name: $name})
                     WHERE target:Function OR target:Class OR target:Struct
                        OR target:Method   OR target:Trait OR target:Protocol
+                       OR target:Interface OR target:Extension OR target:TypeAlias OR target:AssociatedType
                     MATCH (caller {project_id: $tpid})-[:CALLS|CALLS_INFERRED]->(target)
                     RETURN DISTINCT
                            caller.name      AS caller_name,
                            caller.filepath  AS caller_file,
                            caller.start_line AS caller_line,
-                           labels(caller)[0] AS caller_kind
+                           head([label IN labels(caller) WHERE label <> 'Node']) AS caller_kind
                     ORDER BY caller.filepath, caller.start_line
                     LIMIT 20
                 """,
