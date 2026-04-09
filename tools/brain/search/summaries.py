@@ -205,74 +205,142 @@ async def get_symbol_exports_summary_impl(
         )
         export_edges = count_rows[0]["n"] if count_rows else 0
 
-        r1 = await graph_tools._execute_read(
-            session,
-            """
-            MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
-            OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
-            OPTIONAL MATCH (importer:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
-            RETURN coalesce(alias.name, s.name) AS symbol,
-                   s.name AS target_symbol,
-                   count(DISTINCT alias) AS alias_edges,
-                   count(DISTINCT f) AS exporters,
-                   count(DISTINCT importer) AS importers
-            ORDER BY importers DESC, exporters DESC, symbol
-            LIMIT $limit
-            """,
-            p=project_id,
-            limit=limit,
-            op="get_symbol_exports_summary_symbols",
-        )
-        top_symbols = []
-        for rec in r1:
-            name = rec["symbol"]
-            if not _symbol_allowed(name):
-                continue
-            top_symbols.append(
-                (
-                    name,
-                    rec.get("target_symbol") or name,
-                    rec.get("alias_edges") or 0,
-                    rec.get("exporters") or 0,
-                    rec.get("importers") or 0,
-                )
+        if include_paths or exclude_paths or symbol_prefix:
+            filtered_rows = await graph_tools._execute_read(
+                session,
+                """
+                MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
+                OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
+                OPTIONAL MATCH (importer:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
+                RETURN f.filepath AS file,
+                       coalesce(alias.name, s.name) AS symbol,
+                       s.name AS target_symbol,
+                       count(DISTINCT alias) AS alias_edges,
+                       count(DISTINCT importer) AS importers
+                ORDER BY file, symbol
+                """,
+                p=project_id,
+                op="get_symbol_exports_summary_filtered_rows",
             )
-        top_symbols = sorted(
-            top_symbols,
-            key=lambda item: (-item[4], -item[3], item[0], item[1]),
-        )[:limit]
 
-        fetch_limit = min(limit * 10, 200) if (include_paths or exclude_paths or symbol_prefix) else limit
-        r2 = await graph_tools._execute_read(
-            session,
-            """
-            MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
-            OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
-            WITH f.filepath AS file,
-                 count(*) AS n,
-                 collect(DISTINCT CASE
-                   WHEN alias.name IS NOT NULL AND alias.name <> s.name THEN alias.name + ' -> ' + s.name
-                   ELSE coalesce(alias.name, s.name)
-                 END) AS symbols
-            ORDER BY n DESC
-            LIMIT $limit
-            RETURN file, n, symbols
-            """,
-            p=project_id,
-            limit=fetch_limit,
-            op="get_symbol_exports_summary_files",
-        )
-        top_files = []
-        for rec in r2:
-            file = rec["file"]
-            if not _path_allowed(file):
-                continue
-            symbols = rec["symbols"]
-            if symbol_prefix:
-                symbols = [s for s in symbols if isinstance(s, str) and s.startswith(symbol_prefix)]
-                if not symbols:
+            symbol_totals: dict[tuple[str, str], dict[str, object]] = {}
+            file_symbols: dict[str, list[str]] = {}
+
+            for rec in filtered_rows:
+                file = rec.get("file")
+                name = rec.get("symbol")
+                target_name = rec.get("target_symbol") or name
+                if not isinstance(file, str) or not _path_allowed(file) or not _symbol_allowed(name):
                     continue
-            top_files.append((file, rec["n"], symbols))
+
+                rendered = (
+                    f"{name} -> {target_name}"
+                    if (rec.get("alias_edges") or 0) and name != target_name
+                    else name
+                )
+                file_symbols.setdefault(file, [])
+                if rendered not in file_symbols[file]:
+                    file_symbols[file].append(rendered)
+
+                key = (name, target_name)
+                entry = symbol_totals.setdefault(
+                    key,
+                    {
+                        "alias_edges": 0,
+                        "exporter_files": set(),
+                        "importers": 0,
+                    },
+                )
+                entry["alias_edges"] = max(int(entry["alias_edges"]), int(rec.get("alias_edges") or 0))
+                entry["importers"] = max(int(entry["importers"]), int(rec.get("importers") or 0))
+                cast_files = entry["exporter_files"]
+                assert isinstance(cast_files, set)
+                cast_files.add(file)
+
+            top_symbols = sorted(
+                (
+                    (
+                        name,
+                        target_name,
+                        int(data["alias_edges"]),
+                        len(data["exporter_files"]),
+                        int(data["importers"]),
+                    )
+                    for (name, target_name), data in symbol_totals.items()
+                ),
+                key=lambda item: (-item[4], -item[3], item[0], item[1]),
+            )[:limit]
+            top_files = sorted(
+                (
+                    (file, len(symbols), symbols)
+                    for file, symbols in file_symbols.items()
+                    if symbols
+                ),
+                key=lambda item: (-item[1], item[0]),
+            )[:limit]
+        else:
+            r1 = await graph_tools._execute_read(
+                session,
+                """
+                MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
+                OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
+                OPTIONAL MATCH (importer:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
+                RETURN coalesce(alias.name, s.name) AS symbol,
+                       s.name AS target_symbol,
+                       count(DISTINCT alias) AS alias_edges,
+                       count(DISTINCT f) AS exporters,
+                       count(DISTINCT importer) AS importers
+                ORDER BY importers DESC, exporters DESC, symbol
+                LIMIT $limit
+                """,
+                p=project_id,
+                limit=limit,
+                op="get_symbol_exports_summary_symbols",
+            )
+            top_symbols = []
+            for rec in r1:
+                name = rec["symbol"]
+                if not _symbol_allowed(name):
+                    continue
+                top_symbols.append(
+                    (
+                        name,
+                        rec.get("target_symbol") or name,
+                        rec.get("alias_edges") or 0,
+                        rec.get("exporters") or 0,
+                        rec.get("importers") or 0,
+                    )
+                )
+            top_symbols = sorted(
+                top_symbols,
+                key=lambda item: (-item[4], -item[3], item[0], item[1]),
+            )[:limit]
+
+            r2 = await graph_tools._execute_read(
+                session,
+                """
+                MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
+                OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
+                WITH f.filepath AS file,
+                     count(*) AS n,
+                     collect(DISTINCT CASE
+                       WHEN alias.name IS NOT NULL AND alias.name <> s.name THEN alias.name + ' -> ' + s.name
+                       ELSE coalesce(alias.name, s.name)
+                     END) AS symbols
+                ORDER BY n DESC
+                LIMIT $limit
+                RETURN file, n, symbols
+                """,
+                p=project_id,
+                limit=limit,
+                op="get_symbol_exports_summary_files",
+            )
+            top_files = []
+            for rec in r2:
+                file = rec["file"]
+                if not _path_allowed(file):
+                    continue
+                top_files.append((file, rec["n"], rec["symbols"]))
 
         if not top_symbols and not top_files:
             export_mode = "heuristic"

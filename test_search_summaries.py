@@ -63,15 +63,29 @@ class SearchSummaryTests(unittest.TestCase):
 
     def test_symbol_exports_summary_applies_filters(self):
         async def fake_execute_read(session, query, **kwargs):
-            if kwargs.get("op") == "get_symbol_exports_summary_symbols":
+            if kwargs.get("op") == "get_symbol_exports_summary_filtered_rows":
                 return [
-                    {"symbol": "AppFoo", "exporters": 1, "importers": 3},
-                    {"symbol": "Other", "exporters": 1, "importers": 2},
-                ]
-            if kwargs.get("op") == "get_symbol_exports_summary_files":
-                return [
-                    {"file": "src/app.py", "n": 2, "symbols": ["AppFoo", "Other"]},
-                    {"file": "tests/test_app.py", "n": 1, "symbols": ["AppFoo"]},
+                    {
+                        "file": "src/app.py",
+                        "symbol": "AppFoo",
+                        "target_symbol": "AppFoo",
+                        "alias_edges": 0,
+                        "importers": 3,
+                    },
+                    {
+                        "file": "src/app.py",
+                        "symbol": "Other",
+                        "target_symbol": "Other",
+                        "alias_edges": 0,
+                        "importers": 2,
+                    },
+                    {
+                        "file": "tests/test_app.py",
+                        "symbol": "AppFoo",
+                        "target_symbol": "AppFoo",
+                        "alias_edges": 0,
+                        "importers": 1,
+                    },
                 ]
             return []
 
@@ -271,6 +285,52 @@ class SearchSummaryTests(unittest.TestCase):
 
         self.assertIn("PublicFoo -> Foo", output)
         self.assertIn("src/index.ts", output)
+
+    def test_symbol_exports_summary_filtered_alias_exports(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 2}]
+            if op == "get_symbol_exports_summary_filtered_rows":
+                return [
+                    {
+                        "file": "packages/sdk/js/src/client.ts",
+                        "symbol": "OpencodeClientConfig",
+                        "target_symbol": "Config",
+                        "alias_edges": 1,
+                        "importers": 6,
+                    },
+                    {
+                        "file": "packages/sdk/js/src/v2/client.ts",
+                        "symbol": "OpencodeClientConfig",
+                        "target_symbol": "Config",
+                        "alias_edges": 1,
+                        "importers": 6,
+                    },
+                    {
+                        "file": "packages/sdk/js/src/client.ts",
+                        "symbol": "OpencodeClient",
+                        "target_symbol": "OpencodeClient",
+                        "alias_edges": 0,
+                        "importers": 2,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                    include_paths=["packages/sdk/js/src/client.ts", "packages/sdk/js/src/v2/client.ts"],
+                    symbol_prefix="Opencode",
+                )
+            )
+
+        self.assertIn("OpencodeClientConfig -> Config", output)
+        self.assertIn("packages/sdk/js/src/client.ts", output)
 
 
 if __name__ == "__main__":
