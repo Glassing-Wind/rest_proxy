@@ -269,6 +269,62 @@ class FlowSummaryTests(unittest.TestCase):
             )
 
         self.assertIn("src/public/financial-summary.html", output)
+        self.assertNotIn("tests/routes.test.ts", output)
+
+    def test_get_app_flow_summary_filters_e2e_and_spec_rows_even_if_query_leaks_them(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary":
+                return [
+                    {
+                        "ui": "packages/console/app/src/routes/enterprise/index.tsx",
+                        "js": "packages/app/e2e/actions.ts",
+                        "route": None,
+                        "api": None,
+                        "svc": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    },
+                    {
+                        "ui": "packages/console/app/src/routes/enterprise/index.tsx",
+                        "js": "packages/app/e2e/app/home.spec.ts",
+                        "route": None,
+                        "api": None,
+                        "svc": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    },
+                    {
+                        "ui": "packages/opencode/src/index.ts",
+                        "js": "packages/opencode/src/client.ts",
+                        "route": "GET /config",
+                        "api": "packages/opencode/src/server/config.ts",
+                        "svc": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/opencode",
+                    include_coverage=False,
+                    limit=20,
+                    group_by_ui=True,
+                )
+            )
+
+        self.assertIn("packages/opencode/src/index.ts", output)
+        self.assertIn("GET /config", output)
+        self.assertNotIn("packages/app/e2e/actions.ts", output)
+        self.assertNotIn("home.spec.ts", output)
 
     def test_collapse_ambiguous_app_rows_summarizes_cross_product_joins(self):
         rows = [

@@ -386,8 +386,13 @@ def _is_test_like_path(filepath: str | None) -> bool:
     return (
         filepath.startswith("tests/")
         or "/tests/" in filepath
+        or filepath.startswith("test/")
+        or "/test/" in filepath
+        or filepath.startswith("e2e/")
+        or "/e2e/" in filepath
         or "__tests__" in filepath
         or ".test." in filepath
+        or ".spec." in filepath
         or filepath.endswith("_test.py")
         or filepath.endswith("_spec.rb")
     )

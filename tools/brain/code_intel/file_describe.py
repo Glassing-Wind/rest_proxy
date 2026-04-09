@@ -83,7 +83,9 @@ async def describe_file_impl(
             sym_cypher = """
             MATCH (f:File {id: $fid})-[:CONTAINS]->(s)
             WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Module
-            RETURN labels(s)[0] AS kind, s.name AS name,
+               OR s:Method OR s:Protocol OR s:Interface OR s:Extension
+               OR s:TypeAlias OR s:AssociatedType OR s:EnumCase
+            RETURN head([label IN labels(s) WHERE label <> 'Node']) AS kind, s.name AS name,
                    s.start_line AS start, s.end_line AS end,
                    s.signature AS sig
             ORDER BY s.start_line

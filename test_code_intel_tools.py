@@ -281,6 +281,61 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("DrawThingsCLI.swift", output)
         self.assertNotIn("config_data_model_generated.swift", output)
 
+    def test_describe_file_includes_type_alias_symbols_from_graph(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN labels(s) AS kinds" in cypher or "RETURN head([label IN labels(s)" in cypher:
+                return [
+                    {
+                        "kind": "TypeAlias",
+                        "name": "Project",
+                        "start": 4,
+                        "end": 14,
+                        "sig": None,
+                    },
+                    {
+                        "kind": "TypeAlias",
+                        "name": "ClientOptions",
+                        "start": 1,
+                        "end": 3,
+                        "sig": None,
+                    },
+                ]
+            return []
+
+        fake_pool = types.SimpleNamespace(
+            connection=lambda: types.SimpleNamespace(
+                __aenter__=lambda self: self,
+                __aexit__=lambda self, exc_type, exc, tb: False,
+                cursor=lambda: types.SimpleNamespace(
+                    __aenter__=lambda self: self,
+                    __aexit__=lambda self, exc_type, exc, tb: False,
+                    execute=mock.AsyncMock(),
+                    fetchone=mock.AsyncMock(return_value=None),
+                ),
+            )
+        )
+        fake_memory_store = types.SimpleNamespace(
+            open_pool=mock.AsyncMock(),
+            _pg_pool=fake_pool,
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_memory_modules", return_value=(fake_memory_store, None, None, None, None)):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["describe_file"](
+                            "/tmp/opencode",
+                            "packages/sdk/js/src/v2/gen/types.gen.ts",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("[TypeAlias] Project", output)
+        self.assertIn("[TypeAlias] ClientOptions", output)
+
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:
