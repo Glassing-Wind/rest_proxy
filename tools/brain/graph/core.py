@@ -18,7 +18,19 @@ _NEO4J_GRAPH_BUILD_BATCH = max(50, int(os.getenv("LM_PROXY_GRAPH_BUILD_BATCH", "
 # Standard symbol labels and kinds for architectural queries.
 # Keep `Macro` as a kind match but not a label probe to avoid Neo4j warnings
 # on projects whose graph schema never materializes a `:Macro` label.
-_SYMBOL_LABELS = ["Function", "Class", "Struct", "Trait", "Enum", "Method", "Protocol", "Interface"]
+_SYMBOL_LABELS = [
+    "Function",
+    "Class",
+    "Struct",
+    "Trait",
+    "Enum",
+    "Method",
+    "Protocol",
+    "Interface",
+    "Extension",
+    "TypeAlias",
+    "AssociatedType",
+]
 _SYMBOL_KINDS = _SYMBOL_LABELS + ["Macro"]
 _SYMBOL_FILTER_CYPHER = "(" + " OR ".join([f"s:{l}" for l in _SYMBOL_LABELS]) + " OR s.kind IN " + str(_SYMBOL_KINDS) + ")"
 

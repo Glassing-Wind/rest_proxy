@@ -497,14 +497,6 @@ def register(mcp: FastMCP) -> None:
                 except Exception:
                     pass
 
-            rust_duplicate_collapse = os.getenv(
-                "LM_PROXY_RUST_DUPLICATE_COLLAPSE", "0"
-            ).strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
             duplicate_trace_enabled = include_debug or os.getenv(
                 "LM_PROXY_DUPLICATE_TRACE", "0"
             ).strip().lower() in {
@@ -518,24 +510,21 @@ def register(mcp: FastMCP) -> None:
             duplicate_trace: dict | None = None
 
             if dedupe_files:
-                if rust_duplicate_collapse or duplicate_trace_enabled or duplicate_telemetry_enabled or any(
-                    duplicate_experiments.values()
-                ):
+                if duplicate_trace_enabled or duplicate_telemetry_enabled or any(duplicate_experiments.values()):
                     duplicate_trace = sem_helpers.trace_diverse_results(
                         all_results,
                         query=query,
                         mode="code",
                         experiments=duplicate_experiments,
                     )
-                    if rust_duplicate_collapse:
-                        selection = duplicate_trace.get("selection", {}) if isinstance(duplicate_trace, dict) else {}
-                        keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
-                        if isinstance(keep_indices, list):
-                            keep_set = {
-                                idx for idx in keep_indices if isinstance(idx, int) and 0 <= idx < len(all_results)
-                            }
-                            if keep_set:
-                                all_results = [all_results[idx] for idx in keep_indices if idx in keep_set]
+                    selection = duplicate_trace.get("selection", {}) if isinstance(duplicate_trace, dict) else {}
+                    keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
+                    if isinstance(keep_indices, list):
+                        keep_set = {
+                            idx for idx in keep_indices if isinstance(idx, int) and 0 <= idx < len(all_results)
+                        }
+                        if keep_set:
+                            all_results = [all_results[idx] for idx in keep_indices if idx in keep_set]
                 all_results = sem_helpers.dedupe_files(all_results)
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)

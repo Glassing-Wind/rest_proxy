@@ -134,6 +134,51 @@ async def _pick_live_symbol(mcp: FakeMCP, workspace_id: str) -> tuple[str, str]:
     return row["name"], row.get("filepath") or ""
 
 
+async def _pick_live_type_symbol(mcp: FakeMCP, workspace_id: str) -> tuple[str, str] | None:
+    raw = await mcp.tools["query_graph"](
+        """
+        MATCH (n)
+        WHERE n.project_id = $pid
+          AND (
+                n:TypeAlias OR n:AssociatedType OR n:Interface OR n:Protocol
+                OR n:Struct OR n:Class OR n:Enum OR n:Extension
+              )
+          AND n.name IS NOT NULL
+          AND trim(n.name) <> ''
+          AND n.name <> 'unnamed'
+        WITH n.name AS name, count(*) AS occurrences
+        WHERE occurrences = 1
+        MATCH (picked)
+        WHERE picked.project_id = $pid
+          AND picked.name = name
+          AND (
+                picked:TypeAlias OR picked:AssociatedType OR picked:Interface OR picked:Protocol
+                OR picked:Struct OR picked:Class OR picked:Enum OR picked:Extension
+              )
+        RETURN picked.name AS name, picked.filepath AS filepath,
+               CASE
+                 WHEN picked:TypeAlias THEN 0
+                 WHEN picked:AssociatedType THEN 1
+                 WHEN picked:Interface THEN 2
+                 WHEN picked:Protocol THEN 3
+                 WHEN picked:Struct THEN 4
+                 WHEN picked:Class THEN 5
+                 WHEN picked:Enum THEN 6
+                 WHEN picked:Extension THEN 7
+                 ELSE 99
+               END AS rank
+        ORDER BY rank ASC, picked.name ASC
+        LIMIT 1
+        """,
+        workspace_id=workspace_id,
+    )
+    rows = json.loads(raw)
+    if not rows:
+        return None
+    row = rows[0]
+    return row["name"], row.get("filepath") or ""
+
+
 async def _count_apple_files(mcp: FakeMCP, workspace_id: str) -> int:
     raw = await mcp.tools["query_graph"](
         """
@@ -197,6 +242,33 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
         raise RuntimeError(
             f"get_symbol_context resolved '{symbol_name}' to an unexpected file.\n"
             f"Expected file fragment: {symbol_file}\nOutput:\n{symbol_output}"
+        )
+
+    type_runs: list[ToolRun] = []
+    type_symbol = await _pick_live_type_symbol(mcp, workspace_id)
+    if type_symbol:
+        type_name, type_file = type_symbol
+        type_output = await mcp.tools["get_symbol_context"](
+            workspace_id, type_name, include_source_preview=False
+        )
+        _require_non_error("get_symbol_context(type)", type_output)
+        if type_name not in type_output:
+            raise RuntimeError(
+                f"get_symbol_context did not mention selected type symbol '{type_name}'."
+            )
+        if type_file and type_file not in type_output:
+            raise RuntimeError(
+                f"get_symbol_context resolved type '{type_name}' to an unexpected file.\n"
+                f"Expected file fragment: {type_file}\nOutput:\n{type_output}"
+            )
+        type_runs.extend(
+            [
+                ToolRun(
+                    "selected_type_symbol",
+                    json.dumps({"name": type_name, "filepath": type_file}, indent=2),
+                ),
+                ToolRun("get_symbol_context(type)", type_output),
+            ]
         )
 
     call_chain_output = await mcp.tools["get_call_chain"](
@@ -270,6 +342,7 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
             json.dumps({"name": symbol_name, "filepath": symbol_file}, indent=2),
         ),
         ToolRun("get_symbol_context", symbol_output),
+        *type_runs,
         ToolRun("get_call_chain", call_chain_output),
         ToolRun("query_graph", raw_query_output),
         *cargo_runs,

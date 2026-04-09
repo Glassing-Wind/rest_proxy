@@ -8,11 +8,12 @@ import os
 SYMBOL_CONTEXT_CYPHER = """
     MATCH (s {name: $name, project_id: $pid})
     WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:EnumCase OR s:Method
+       OR s:Protocol OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType
     OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
     OPTIONAL MATCH (caller)-[:CALLS|CALLS_INFERRED]->(s)
     OPTIONAL MATCH (s)-[:CALLS|CALLS_INFERRED]->(callee)
     RETURN
-      labels(s)[0]  AS kind,
+      head([label IN labels(s) WHERE label <> 'Node']) AS kind,
       s.filepath    AS filepath,
       s.start_line  AS start_line,
       s.end_line    AS end_line,
@@ -28,7 +29,8 @@ SYMBOL_CONTEXT_CYPHER = """
 CALL_CHAIN_RESOLVE_CYPHER = """
     MATCH (s)
     WHERE s.project_id = $pid
-      AND (s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum)
+      AND (s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum
+           OR s:Protocol OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType)
       AND ($file_path IS NULL OR s.filepath = $file_path)
       AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
     OPTIONAL MATCH (s)<-[:CALLS|CALLS_INFERRED]-(caller)
@@ -66,8 +68,10 @@ CALL_CHAIN_RESOLVE_CYPHER = """
 
 VISUALIZE_SUBGRAPH_FOCUS_CYPHER = """
     MATCH (n {name: $name, project_id: $pid})
-    WHERE n:Function OR n:Class OR n:Struct OR n:Enum OR n:Trait OR n:File
-    RETURN n.id AS id, labels(n)[0] AS kind, n.name AS name,
+    WHERE n:Function OR n:Class OR n:Struct OR n:Enum OR n:Trait
+       OR n:Protocol OR n:Interface OR n:Extension OR n:TypeAlias OR n:AssociatedType
+       OR n:File
+    RETURN n.id AS id, head([label IN labels(n) WHERE label <> 'Node']) AS kind, n.name AS name,
            n.filepath AS fp, n.start_line AS sl
     LIMIT 3
 """
@@ -77,15 +81,19 @@ VISUALIZE_SUBGRAPH_NEIGHBORS_CYPHER = """
     MATCH (n {id: $fid})
      OPTIONAL MATCH (parent:File)-[:CONTAINS]->(n)
      OPTIONAL MATCH (n)<-[:CALLS|CALLS_INFERRED]-(caller)
-         WHERE caller:File OR caller:Function OR caller:Class OR caller:Method
+        WHERE caller:File OR caller:Function OR caller:Class OR caller:Method
+           OR caller:Struct OR caller:Trait OR caller:Enum OR caller:Protocol
+           OR caller:Interface OR caller:Extension OR caller:TypeAlias OR caller:AssociatedType
      OPTIONAL MATCH (n)<-[:IMPORTS]-(importer:File)
     OPTIONAL MATCH (n)-[:CALLS|CALLS_INFERRED]->(callee)
-        WHERE callee:Function OR callee:Class OR callee:Struct
+        WHERE callee:Function OR callee:Class OR callee:Struct OR callee:Method
+           OR callee:Trait OR callee:Enum OR callee:Protocol OR callee:Interface
+           OR callee:Extension OR callee:TypeAlias OR callee:AssociatedType
     RETURN
       parent.id AS parent_id, parent.name AS parent_name, parent.filepath AS parent_fp,
       collect(DISTINCT {id: caller.id, name: caller.name, fp: caller.filepath})[..6]  AS callers,
       collect(DISTINCT {id: importer.id, name: importer.name, fp: importer.filepath})[..6] AS importers,
-      collect(DISTINCT {id: callee.id, name: callee.name, kind: labels(callee)[0],
+      collect(DISTINCT {id: callee.id, name: callee.name, kind: head([label IN labels(callee) WHERE label <> 'Node']),
                         fp: callee.filepath})[..8] AS callees
     LIMIT 1
 """
