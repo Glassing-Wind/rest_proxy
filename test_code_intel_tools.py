@@ -570,6 +570,42 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("[cli/runtime]", output)
         self.assertIn("[sdk/generated]", output)
 
+    def test_get_code_communities_hides_small_mixed_singletons_in_long_tail(self):
+        async def fake_executor(cypher, **kwargs):
+            if "get_code_communities_louvain" in kwargs.get("op", "") or "f.louvainCommunity IS NOT NULL" in cypher:
+                return [
+                    {
+                        "comm": 10,
+                        "file_count": 3,
+                        "total_syms": 120,
+                        "top_files": [
+                            "packages/opencode/src/cli/cmd/run.ts",
+                            "packages/opencode/src/project/instance.ts",
+                            "packages/opencode/src/provider/provider.ts",
+                        ],
+                    },
+                    {
+                        "comm": 99,
+                        "file_count": 1,
+                        "total_syms": 2,
+                        "top_files": ["script/version.ts"],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/opencode"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("cluster #10", output)
+        self.assertNotIn("cluster #99", output)
+
     def test_get_code_importance_downweights_vendor_files(self):
         async def fake_executor(cypher, **kwargs):
             if "get_code_importance_pr" in kwargs.get("op", "") or "f.pagerank IS NOT NULL" in cypher:

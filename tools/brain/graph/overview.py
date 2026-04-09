@@ -39,6 +39,12 @@ def _importance_penalty(filepath: str | None) -> float:
         )
     ):
         return 0.08
+    if "/e2e/" in norm or norm.endswith((".spec.ts", ".spec.tsx")):
+        return 0.24
+    if "/storybook/" in norm or ".stories." in norm:
+        return 0.22
+    if "/components/icons/" in norm:
+        return 0.16
     if norm.startswith("vendors/") or "/vendors/" in norm:
         return 0.35
     return 1.0

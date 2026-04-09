@@ -33,6 +33,12 @@ def register(mcp: FastMCP) -> None:
             )
         ):
             return 0.08
+        if "/e2e/" in norm or norm.endswith((".spec.ts", ".spec.tsx")):
+            return 0.24
+        if "/storybook/" in norm or ".stories." in norm:
+            return 0.22
+        if "/components/icons/" in norm:
+            return 0.16
         if norm.startswith("vendors/") or "/vendors/" in norm:
             return 0.35
         return 1.0
@@ -716,11 +722,17 @@ def register(mcp: FastMCP) -> None:
                 file_count = int(record.get("file_count") or 0)
                 total_syms = int(record.get("total_syms") or 0)
                 top_files = record.get("top_files") or []
+                kind_label, _ = _cluster_kind(top_files)
                 if file_count <= 1 and total_syms == 0:
                     continue
                 if total_syms == 0 and all(
                     str(fp).endswith((".md", ".toml", ".yaml", ".yml", ".sql", ".example", ".json"))
                     for fp in top_files
+                ):
+                    continue
+                if kind_label == "mixed" and (
+                    (file_count <= 1 and total_syms <= 12)
+                    or (file_count <= 2 and total_syms <= 4)
                 ):
                     continue
                 filtered_records.append(record)

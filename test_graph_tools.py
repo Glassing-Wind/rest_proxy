@@ -422,6 +422,49 @@ class GraphToolsTests(unittest.TestCase):
         generated_index = output.index("packages/sdk/js/src/v2/gen/types.gen.ts")
         self.assertLess(config_index, generated_index)
 
+    def test_project_overview_downweights_e2e_and_icon_heavy_files(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 400}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 1200}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "packages", "files": 360, "syms": 1100}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {
+                        "fp": "packages/web/src/components/icons/index.tsx",
+                        "n": 299,
+                        "ex": ["IconAcademicCap", "IconAdjustmentsHorizontal", "IconAdjustmentsVertical"],
+                    },
+                    {
+                        "fp": "packages/app/e2e/actions.ts",
+                        "n": 58,
+                        "ex": ["setHealthPhase", "healthPhase", "defocus"],
+                    },
+                    {
+                        "fp": "packages/opencode/src/config/config.ts",
+                        "n": 54,
+                        "ex": ["Agent", "Command", "Info"],
+                    },
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/opencode"))
+
+        config_index = output.index("packages/opencode/src/config/config.ts")
+        e2e_index = output.index("packages/app/e2e/actions.ts")
+        icons_index = output.index("packages/web/src/components/icons/index.tsx")
+        self.assertLess(config_index, e2e_index)
+        self.assertLess(config_index, icons_index)
+
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
             with mock.patch.object(
