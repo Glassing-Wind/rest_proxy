@@ -64,7 +64,10 @@ class SearchSummaryTests(unittest.TestCase):
     def test_symbol_exports_summary_applies_filters(self):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "get_symbol_exports_summary_symbols":
-                return [{"symbol": "AppFoo", "n": 3}, {"symbol": "Other", "n": 2}]
+                return [
+                    {"symbol": "AppFoo", "exporters": 1, "importers": 3},
+                    {"symbol": "Other", "exporters": 1, "importers": 2},
+                ]
             if kwargs.get("op") == "get_symbol_exports_summary_files":
                 return [
                     {"file": "src/app.py", "n": 2, "symbols": ["AppFoo", "Other"]},
@@ -170,7 +173,10 @@ class SearchSummaryTests(unittest.TestCase):
             if op == "get_symbol_exports_summary_count":
                 return [{"n": 2}]
             if op == "get_symbol_exports_summary_symbols":
-                return [{"symbol": "ProdSymbol", "n": 1}, {"symbol": "FakeSession", "n": 1}]
+                return [
+                    {"symbol": "ProdSymbol", "exporters": 1, "importers": 2},
+                    {"symbol": "FakeSession", "exporters": 1, "importers": 0},
+                ]
             if op == "get_symbol_exports_summary_files":
                 return [
                     {"file": "src/app.py", "n": 1, "symbols": ["ProdSymbol"]},
@@ -190,6 +196,35 @@ class SearchSummaryTests(unittest.TestCase):
 
         self.assertIn("src/app.py", output)
         self.assertNotIn("tests/test_app.py", output)
+
+    def test_symbol_exports_summary_ranks_by_downstream_importers(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 3}]
+            if op == "get_symbol_exports_summary_symbols":
+                return [
+                    {"symbol": "register", "exporters": 3, "importers": 1},
+                    {"symbol": "WorkspaceRegistry", "exporters": 1, "importers": 5},
+                ]
+            if op == "get_symbol_exports_summary_files":
+                return [
+                    {"file": "src/core.py", "n": 2, "symbols": ["WorkspaceRegistry", "register"]},
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertLess(output.find("WorkspaceRegistry"), output.find("register"))
+        self.assertIn("imported by 5 file(s)", output)
 
 
 if __name__ == "__main__":

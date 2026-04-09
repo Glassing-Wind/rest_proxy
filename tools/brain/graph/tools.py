@@ -14,6 +14,13 @@ from tools.brain.graph import utility as graph_utility
 
 def register(mcp: FastMCP) -> None:
 
+    def _is_missing_or_error_result(result: str, missing_prefixes: tuple[str, ...]) -> bool:
+        if not result:
+            return True
+        if result.startswith("Error "):
+            return True
+        return any(result.startswith(prefix) for prefix in missing_prefixes)
+
     @mcp.tool()
     async def get_directory_snapshot(
         workspace_id: str, directory_path: str, limit: int = 5
@@ -63,6 +70,24 @@ def register(mcp: FastMCP) -> None:
             )
         except Exception as e:
             return f"Error generating project overview: {str(e)}"
+
+    @mcp.tool()
+    async def get_repo_dependency_summary(workspace_id: str) -> str:
+        """
+        Summarize repo-linked editable/path dependencies and where they are used.
+
+        Useful for surfacing cross-repo boundaries such as local bindings,
+        sibling workspaces, or editable Git dependencies that should not regress.
+
+        Args:
+            workspace_id: Logical workspace name or absolute project path.
+        """
+        try:
+            return await graph_overview.get_repo_dependency_summary_impl(
+                workspace_id=workspace_id,
+            )
+        except Exception as e:
+            return f"Error generating repo dependency summary: {str(e)}"
 
     @mcp.tool()
     async def get_app_flow_summary(
@@ -219,7 +244,10 @@ def register(mcp: FastMCP) -> None:
             )
             if mode_norm == "ui":
                 return f"### Flow Type: UI -> API -> Service -> DB\n{ui_result}"
-            if not ui_result.startswith("No UI → API → Service → DB paths found"):
+            if not _is_missing_or_error_result(
+                ui_result,
+                ("No UI → API → Service → DB paths found",),
+            ):
                 return f"### Flow Type: UI -> API -> Service -> DB\n{ui_result}"
 
         if mode_norm == "apple":
@@ -244,8 +272,9 @@ def register(mcp: FastMCP) -> None:
             limit=limit,
             as_table=as_table,
         )
-        if mode_norm == "backend" or not backend_result.startswith(
-            "No API → Service → DB paths found"
+        if mode_norm == "backend" or not _is_missing_or_error_result(
+            backend_result,
+            ("No API → Service → DB paths found",),
         ):
             return f"### Flow Type: API -> Service -> DB\n{backend_result}"
 
@@ -258,7 +287,10 @@ def register(mcp: FastMCP) -> None:
             limit=limit,
             as_table=as_table,
         )
-        if mode_norm == "apple" or not apple_result.startswith("No Apple build graph paths found"):
+        if mode_norm == "apple" or not _is_missing_or_error_result(
+            apple_result,
+            ("No Apple build graph paths found",),
+        ):
             return f"### Flow Type: Apple Build Graph\n{apple_result}"
 
         if mode_norm in {"auto", "cli"}:
@@ -268,14 +300,17 @@ def register(mcp: FastMCP) -> None:
                 limit=limit,
                 as_table=as_table,
             )
-            if mode_norm == "cli" or not cli_result.startswith("No CLI"):
+            if mode_norm == "cli" or not _is_missing_or_error_result(
+                cli_result,
+                ("No CLI",),
+            ):
                 return f"### Flow Type: CLI\n{cli_result}"
 
         # Step 2: Heuristic Fallback
         heuristic_result = await get_heuristic_flow_summary(
             workspace_id, limit=limit, as_table=as_table
         )
-        if not heuristic_result.startswith("No heuristic"):
+        if not _is_missing_or_error_result(heuristic_result, ("No heuristic",)):
             return f"### Heuristic Flow Summary\n{heuristic_result}"
 
         # Step 3: Topology Summary (Last Resort)

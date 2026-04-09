@@ -8,7 +8,6 @@ from mcp.server.fastmcp import FastMCP
 
 def register_all(mcp: FastMCP) -> None:
     from tools.brain import memory, code_search, code_intel, documentation
-    from tools.brain.docs import core as docs_tools
     from tools.brain.graph import core as graph_tools
     from tools.brain.search import tools as search_tools
     from tools.hands import dev, indexing, project
@@ -19,7 +18,6 @@ def register_all(mcp: FastMCP) -> None:
     dev.register(mcp)
     documentation.register(mcp)
     indexing.register(mcp)
-    docs_tools.register(mcp)
     graph_tools.register(mcp)
     search_tools.register(mcp)
     project.register(mcp)

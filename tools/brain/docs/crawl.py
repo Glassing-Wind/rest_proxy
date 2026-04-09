@@ -6,8 +6,209 @@ import sys
 from typing import Dict, List
 from urllib.parse import urlparse
 
-from tools.brain.docs.config import DEFAULT_FORCE_PLAYWRIGHT_HOSTS, MAX_PAGE_BYTES
+from tools.brain.docs.config import (
+    host_profile_delay_ms,
+    host_profile_flag,
+    host_profile_selectors,
+    MAX_PAGE_BYTES,
+)
 from tools.brain.docs.discovery import _fetch_url_text
+
+
+def _normalize_text_lines(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    out: list[str] = []
+    prev = None
+    for line in lines:
+        if line == prev:
+            continue
+        out.append(line)
+        prev = line
+    return "\n".join(out)
+
+
+def _extract_host_specific_text(url: str, html: str) -> str:
+    selectors = host_profile_selectors(url, "content_selectors")
+    if not selectors:
+        return ""
+    try:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "noscript", "svg"]):
+            tag.decompose()
+
+        candidates: list[str] = []
+        for selector in selectors:
+            for node in soup.select(selector):
+                text = _normalize_text_lines(node.get_text("\n", strip=True))
+                if len(text) >= 400:
+                    candidates.append(text)
+        if not candidates:
+            return ""
+        return max(candidates, key=len)
+    except Exception:
+        return ""
+
+
+async def _extract_host_specific_rendered_text(page, url: str) -> str:
+    selectors = host_profile_selectors(url, "content_selectors")
+    if not selectors:
+        return ""
+    candidates: list[str] = []
+    for selector in selectors:
+        try:
+            locator = page.locator(selector)
+            count = await locator.count()
+            if not count:
+                continue
+            for idx in range(min(count, 8)):
+                text = await locator.nth(idx).inner_text(timeout=1500)
+                text = _normalize_text_lines(text)
+                if len(text) >= 400:
+                    candidates.append(text)
+        except Exception:
+            continue
+    if not candidates:
+        return ""
+    return max(candidates, key=len)
+
+
+def _extract_host_specific_text_from_parser(url: str, parsed) -> str:
+    selectors = host_profile_selectors(url, "content_selectors")
+    if not selectors:
+        return ""
+    candidates: list[str] = []
+    for selector in selectors:
+        try:
+            nodes = parsed.select(selector)
+        except Exception:
+            continue
+        for node in nodes[:8]:
+            try:
+                text = _normalize_text_lines(node.get_text("\n", strip=True))
+            except Exception:
+                continue
+            if len(text) >= 400:
+                candidates.append(text)
+    if not candidates:
+        return ""
+    return max(candidates, key=len)
+
+
+async def _settle_dynamic_page(page, url: str) -> None:
+    ready_selectors = host_profile_selectors(url, "ready_selectors")
+    for selector in ready_selectors:
+        try:
+            await page.locator(selector).first.wait_for(state="visible", timeout=10_000)
+            break
+        except Exception:
+            continue
+
+    delay_ms = host_profile_delay_ms(url)
+    if delay_ms:
+        try:
+            await page.wait_for_timeout(delay_ms)
+        except Exception:
+            return
+
+
+async def _crawl_direct_playwright(urls: List[str]) -> List[Dict]:
+    from playwright.async_api import async_playwright
+
+    results: List[Dict] = []
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True, args=["--disable-dev-shm-usage"]
+        )
+        try:
+            context = await browser.new_context()
+
+            async def _route_handler(route) -> None:
+                request_url = route.request.url.lower()
+                blocked_tokens = (
+                    "adsbygoogle.js",
+                    "gtm.js",
+                    "analytics.js",
+                    "googletagmanager",
+                    "google-analytics",
+                    "hotjar",
+                    "segment.io",
+                    "intercom",
+                    "drift",
+                    "hubspot",
+                )
+                blocked_suffixes = (
+                    ".png",
+                    ".jpg",
+                    ".jpeg",
+                    ".gif",
+                    ".webp",
+                    ".svg",
+                    ".woff",
+                    ".woff2",
+                )
+                if any(token in request_url for token in blocked_tokens) or request_url.endswith(
+                    blocked_suffixes
+                ):
+                    await route.abort()
+                    return
+                await route.continue_()
+
+            await context.route("**/*", _route_handler)
+            for url in urls:
+                page = await context.new_page()
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+                    await _settle_dynamic_page(page, url)
+                    title = await page.title()
+                    rendered_text = await _extract_host_specific_rendered_text(page, url)
+                    if not rendered_text.strip():
+                        body_text = await page.locator("body").inner_text()
+                        rendered_text = _normalize_text_lines(body_text)
+                    if rendered_text.strip():
+                        results.append(
+                            {"url": url, "markdown": rendered_text, "title": title}
+                        )
+                        print(
+                            f"[doc-indexer] crawled (direct playwright): {url} — {len(rendered_text)} chars",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[doc-indexer] skip (direct playwright, no content): {url}",
+                            flush=True,
+                        )
+                finally:
+                    await page.close()
+            await context.close()
+        finally:
+            await browser.close()
+    return results
+
+
+def _html_text_fallback(url: str, html: str) -> str:
+    """Best-effort plain-text extraction for JS-heavy docs when trafilatura fails."""
+    specific = _extract_host_specific_text(url, html)
+    if specific:
+        return specific
+    try:
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "noscript", "svg"]):
+            tag.decompose()
+
+        root = (
+            soup.find("main")
+            or soup.find("article")
+            or soup.find(attrs={"role": "main"})
+            or soup.body
+            or soup
+        )
+        return _normalize_text_lines(root.get_text("\n", strip=True))
+    except Exception:
+        return ""
 
 
 async def crawl_pages(urls: List[str]) -> List[Dict]:
@@ -125,6 +326,17 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
     if not rest_urls:
         return results
 
+    direct_playwright_urls = [
+        u
+        for u in rest_urls
+        if host_profile_flag(u, "direct_playwright")
+    ]
+    if direct_playwright_urls:
+        results.extend(await _crawl_direct_playwright(direct_playwright_urls))
+        rest_urls = [u for u in rest_urls if u not in set(direct_playwright_urls)]
+    if not rest_urls:
+        return results
+
     max_requests = len(rest_urls)
     if os.getenv("LM_PROXY_DOCS_MAX_REQUESTS"):
         try:
@@ -177,14 +389,14 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
     concurrency_settings = ConcurrencySettings(max_concurrency=max_concurrency)
 
     async with LocalEventManager() as event_manager:
-        force_hosts = DEFAULT_FORCE_PLAYWRIGHT_HOSTS
         env_hosts = os.getenv("LM_PROXY_DOCS_FORCE_PLAYWRIGHT_HOSTS", "")
-        if env_hosts.strip():
-            force_hosts = [h.strip().lower() for h in env_hosts.split(",") if h.strip()]
+        env_force_hosts = [h.strip().lower() for h in env_hosts.split(",") if h.strip()]
 
         def _force_playwright(url: str) -> bool:
             host = urlparse(url).netloc.lower()
-            return any(h in host for h in force_hosts)
+            return host_profile_flag(url, "force_playwright") or any(
+                h in host for h in env_force_hosts
+            )
 
         force_js_urls = [u for u in rest_urls if _force_playwright(u)]
         adaptive_urls = [u for u in rest_urls if u not in set(force_js_urls)]
@@ -273,6 +485,7 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
             html: str,
             title: str,
             mode: str,
+            rendered_text: str = "",
         ) -> None:
             prior = seen_urls.get(url)
             if prior == "http":
@@ -290,6 +503,16 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
                 or ""
             )
             if not xml.strip():
+                if rendered_text.strip():
+                    await context.push_data({"_len": len(rendered_text)})
+                    results.append(
+                        {"url": url, "markdown": rendered_text, "title": title}
+                    )
+                    _log(
+                        f"[doc-indexer] crawled ({mode}, rendered fallback): {url} — {len(rendered_text)} chars"
+                    )
+                    seen_urls[url] = mode
+                    return
                 markdown = (
                     trafilatura.extract(
                         html,
@@ -304,6 +527,17 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
                     results.append({"url": url, "markdown": markdown, "title": title})
                     _log(
                         f"[doc-indexer] crawled ({mode}, md fallback): {url} — {len(markdown)} chars"
+                    )
+                    seen_urls[url] = mode
+                    return
+                text_fallback = _html_text_fallback(url, html)
+                if text_fallback.strip():
+                    await context.push_data({"_len": len(text_fallback)})
+                    results.append(
+                        {"url": url, "markdown": text_fallback, "title": title}
+                    )
+                    _log(
+                        f"[doc-indexer] crawled ({mode}, text fallback): {url} — {len(text_fallback)} chars"
                     )
                     seen_urls[url] = mode
                     return
@@ -340,22 +574,31 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
 
                 if page is not None:
                     try:
-                        await page.wait_for_load_state("networkidle", timeout=5_000)
+                        await context.wait_for_load_state("networkidle", timeout=5_000)
                     except Exception:
                         pass
+                    await _settle_dynamic_page(page, url)
+                    rendered_text = await _extract_host_specific_rendered_text(page, url)
                     html = await page.content()
                     title = await page.title()
                     mode = "js"
                 else:
+                    rendered_text = ""
                     raw = await context.http_response.read()
                     html = raw.decode("utf-8", errors="replace")
+                    if host_profile_selectors(url, "content_selectors"):
+                        try:
+                            parsed = context.parse_with_static_parser()
+                            rendered_text = _extract_host_specific_text_from_parser(url, parsed)
+                        except Exception:
+                            rendered_text = ""
                     title_m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.I)
                     title = (
                         title_m.group(1).strip() if title_m else url.rsplit("/", 1)[-1]
                     )
                     mode = "http"
 
-                await _store_content(context, url, html, title, mode)
+                await _store_content(context, url, html, title, mode, rendered_text)
 
             @adaptive_crawler.failed_request_handler
             async def _error_adaptive(
@@ -376,9 +619,15 @@ async def crawl_pages(urls: List[str]) -> List[Dict]:
                     await context.page.wait_for_load_state("networkidle", timeout=5_000)
                 except Exception:
                     pass
+                await _settle_dynamic_page(context.page, url)
+                rendered_text = await _extract_host_specific_rendered_text(
+                    context.page, url
+                )
                 html = await context.page.content()
                 title = await context.page.title()
-                await _store_content(context, url, html, title, "js")
+                await _store_content(
+                    context, url, html, title, "js", rendered_text
+                )
 
             @js_crawler.failed_request_handler
             async def _error_js(

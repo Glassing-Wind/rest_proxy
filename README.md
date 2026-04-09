@@ -64,6 +64,24 @@ http://localhost:8001/mcp
 After restarting the daemon, refresh or reconnect the MCP client so it picks up
 the new process and current tool list.
 
+To verify that you are talking to the current daemon process instead of a stale
+client session, check the HTTP diagnostics:
+
+```bash
+curl -sS -D - http://127.0.0.1:8001/fingerprint
+curl -sS -D - http://127.0.0.1:8001/health
+```
+
+Look for:
+
+- `x-graphrag-boot-id`: changes after a real restart
+- `x-graphrag-tool-fingerprint`: changes when the registered tool set changes
+- `x-graphrag-session-known: 0`: the client is sending no MCP session or a stale one
+
+The JSON bodies also include `boot_id`, `fingerprint`, `uptime_seconds`, and a
+`session` object so you can tell whether the server recognizes the incoming
+`Mcp-Session-Id`.
+
 ## STDIO Fallback
 
 The legacy stdio MCP path is still available as a fallback for clients that

@@ -2,9 +2,176 @@
 
 from __future__ import annotations
 
+import os
+import re
+from urllib.parse import urlparse
+
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
+from graphrag_core.indexing import watcher as index_watcher
 from tools.brain.graph import core as graph_core
 from .core import _SYMBOL_FILTER_CYPHER
+
+
+_SKIP_DIR_NAMES = {
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    "build",
+    "dist",
+    ".runtime",
+}
+
+
+def _normalize_pkg_name(name: str) -> str:
+    return (name or "").strip().replace("-", "_").lower()
+
+
+def _repo_name_from_url(raw_url: str) -> str:
+    path = urlparse(raw_url).path.rstrip("/")
+    name = path.rsplit("/", 1)[-1] if path else ""
+    if name.endswith(".git"):
+        name = name[:-4]
+    return name
+
+
+def _parse_repo_linked_dependencies(project_path: str) -> list[dict[str, str]]:
+    deps: list[dict[str, str]] = []
+    req_path = os.path.join(project_path, "requirements.txt")
+    if not os.path.exists(req_path):
+        return deps
+
+    git_re = re.compile(
+        r"git\+(?P<url>[^@#\s]+(?:\.git)?)(?:@(?P<rev>[^#\s]+))?"
+        r"#egg=(?P<egg>[A-Za-z0-9_.-]+)(?:&subdirectory=(?P<subdir>[^\s]+))?"
+    )
+
+    try:
+        with open(req_path, "r", encoding="utf-8", errors="replace") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                match = git_re.search(line)
+                if not match:
+                    continue
+                url = match.group("url") or ""
+                deps.append(
+                    {
+                        "package": match.group("egg") or "",
+                        "repo_name": _repo_name_from_url(url),
+                        "repo_url": url,
+                        "rev": match.group("rev") or "",
+                        "subdirectory": match.group("subdir") or "",
+                    }
+                )
+    except Exception:
+        return []
+
+    seen: set[tuple[str, str]] = set()
+    out: list[dict[str, str]] = []
+    for dep in deps:
+        key = (_normalize_pkg_name(dep.get("package", "")), dep.get("repo_name", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(dep)
+    return out
+
+
+def _load_indexed_project_paths() -> dict[str, str]:
+    data = index_watcher.load_indexed_projects()
+    out: dict[str, str] = {}
+    for entry in data.values():
+        path = entry.get("project_path")
+        if isinstance(path, str) and path:
+            out[os.path.basename(path.rstrip(os.sep))] = path
+    return out
+
+
+def _find_repo_link_evidence(project_path: str, package_name: str, limit: int = 4) -> list[str]:
+    pkg = _normalize_pkg_name(package_name)
+    if not pkg or not os.path.isdir(project_path):
+        return []
+    patterns = (
+        re.compile(rf"^\s*import\s+{re.escape(pkg)}(?:\s|$|,)", re.M),
+        re.compile(rf"^\s*from\s+{re.escape(pkg)}(?:\.|\s+import\s+)", re.M),
+    )
+    hits: list[str] = []
+    for root, dirnames, filenames in os.walk(project_path):
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIR_NAMES]
+        for filename in sorted(filenames):
+            if not filename.endswith((".py", ".pyi")):
+                continue
+            abs_path = os.path.join(root, filename)
+            try:
+                if os.path.getsize(abs_path) > 512_000:
+                    continue
+                with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
+            except Exception:
+                continue
+            if any(p.search(text) for p in patterns):
+                hits.append(os.path.relpath(abs_path, project_path))
+                if len(hits) >= limit:
+                    return hits
+    return hits
+
+
+def _summarize_repo_linked_dependencies(project_path: str) -> list[str]:
+    linked = _parse_repo_linked_dependencies(project_path)
+    if not linked:
+        return []
+
+    indexed_paths = _load_indexed_project_paths()
+    lines: list[str] = []
+    for dep in linked[:5]:
+        package = dep.get("package") or "(unknown)"
+        repo_name = dep.get("repo_name") or package
+        repo_path = indexed_paths.get(repo_name, "")
+        evidence = _find_repo_link_evidence(project_path, package)
+        base = f"  - `{package}` from `{repo_name}`"
+        if repo_path:
+            base += f" → local indexed repo `{repo_path}`"
+        if dep.get("subdirectory"):
+            base += f" (subdir `{dep['subdirectory']}`)"
+        lines.append(base)
+        if evidence:
+            lines.append(f"    imported by {', '.join(f'`{item}`' for item in evidence)}")
+    return lines
+
+
+def _summarize_repo_linked_dependencies_for_directory(
+    project_path: str,
+    directory_path: str,
+) -> list[str]:
+    linked = _parse_repo_linked_dependencies(project_path)
+    if not linked:
+        return []
+
+    dir_prefix = directory_path.strip("./")
+    if dir_prefix:
+        dir_prefix = dir_prefix.rstrip("/") + "/"
+    indexed_paths = _load_indexed_project_paths()
+    lines: list[str] = []
+    for dep in linked[:5]:
+        package = dep.get("package") or "(unknown)"
+        evidence = _find_repo_link_evidence(project_path, package, limit=8)
+        if dir_prefix:
+            evidence = [item for item in evidence if item.startswith(dir_prefix)]
+        if not evidence:
+            continue
+        repo_name = dep.get("repo_name") or package
+        repo_path = indexed_paths.get(repo_name, "")
+        base = f"- `{package}` from `{repo_name}`"
+        if repo_path:
+            base += f" → local indexed repo `{repo_path}`"
+        if dep.get("subdirectory"):
+            base += f" (subdir `{dep['subdirectory']}`)"
+        lines.append(base)
+        lines.append(f"- evidence in {', '.join(f'`{item}`' for item in evidence[:4])}")
+    return lines
 
 
 async def has_apple_build_context(session, project_id: str) -> bool:
@@ -245,9 +412,14 @@ async def load_cargo_directory_dependencies(session, project_id: str, dir_prefix
 
 async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: str, directory_path: str, limit: int = 5) -> str:
     project_id = get_project_id(workspace_id)
+    project_path = get_workspace_path(workspace_id)
     dir_prefix = directory_path.strip("./")
     if dir_prefix:
         dir_prefix += "/"
+    repo_linked_dependencies = _summarize_repo_linked_dependencies_for_directory(
+        project_path,
+        directory_path,
+    )
 
     async with driver.session(database=neo4j_db) as session:
         r_files = await graph_core._execute_read(
@@ -379,6 +551,10 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             dependents = ", ".join(rec.get("dependents") or [])
             lines.append(f"- local crate `{rec['crate']}` is used by {dependents}")
 
+    if repo_linked_dependencies:
+        lines.append("\n### 🔗 Repo-Linked Dependencies")
+        lines.extend(repo_linked_dependencies)
+
     if r_inbound:
         lines.append("\n### 📥 Consumers (External files importing from here)")
         for rec in r_inbound:
@@ -399,6 +575,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
 async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str) -> str:
     project_id = get_project_id(workspace_id)
     project_path = get_workspace_path(workspace_id)
+    repo_linked_dependencies = _summarize_repo_linked_dependencies(project_path)
 
     async with driver.session(database=neo4j_db) as session:
         r = await graph_core._execute_read(
@@ -528,4 +705,38 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
         for rec in cargo_dependencies:
             deps = ", ".join(rec.get("deps") or [])
             lines.append(f"  - crate `{rec['crate']}` depends on {deps}")
+    if repo_linked_dependencies:
+        lines.extend(["", "## Repo-Linked Dependencies"])
+        lines.extend(repo_linked_dependencies)
+    return "\n".join(lines)
+
+
+async def get_repo_dependency_summary_impl(*, workspace_id: str) -> str:
+    project_path = get_workspace_path(workspace_id)
+    linked = _parse_repo_linked_dependencies(project_path)
+    if not linked:
+        return f"No repo-linked editable/path dependencies found for `{project_path}`."
+
+    indexed_paths = _load_indexed_project_paths()
+    lines = [f"# Repo Dependency Summary: `{os.path.basename(project_path.rstrip(os.sep))}`"]
+    for dep in linked:
+        package = dep.get("package") or "(unknown)"
+        repo_name = dep.get("repo_name") or package
+        repo_path = indexed_paths.get(repo_name, "")
+        evidence = _find_repo_link_evidence(project_path, package, limit=8)
+        lines.append("")
+        line = f"- package `{package}` from repo `{repo_name}`"
+        if repo_path:
+            line += f" → local indexed repo `{repo_path}`"
+        lines.append(line)
+        if dep.get("subdirectory"):
+            lines.append(f"- binding subdirectory: `{dep['subdirectory']}`")
+        if dep.get("rev"):
+            lines.append(f"- pinned revision: `{dep['rev']}`")
+        if dep.get("repo_url"):
+            lines.append(f"- source URL: `{dep['repo_url']}`")
+        if evidence:
+            lines.append(f"- imported by: {', '.join(f'`{item}`' for item in evidence)}")
+        else:
+            lines.append("- imported by: no direct Python import sites found")
     return "\n".join(lines)

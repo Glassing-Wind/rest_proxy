@@ -23,6 +23,14 @@ WATCHER_ENABLED = os.getenv("LM_PROXY_WATCHER_ENABLED", "0").strip().lower() in 
     "yes",
     "on",
 }
+AUTO_WATCH_SESSION_WORKSPACE = os.getenv(
+    "LM_PROXY_AUTO_WATCH_SESSION_WORKSPACE", "1"
+).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 _WATCHER_TASK: asyncio.Task | None = None
 _WATCHER_INDEX_FN = None
@@ -59,6 +67,28 @@ def add_watch(abs_path: str) -> bool:
         return False
     WATCHED_PATHS[abs_path] = {}
     _save_watched_config()
+    return True
+
+
+def maybe_auto_watch(abs_path: str, *, reason: str = "session") -> bool:
+    """
+    Opportunistically add a workspace root to the watched set.
+
+    This is a no-op unless the watcher loop is enabled and auto-watch is on.
+    """
+    if not WATCHER_ENABLED or not AUTO_WATCH_SESSION_WORKSPACE:
+        return False
+    if not abs_path or not os.path.isdir(abs_path):
+        return False
+    abs_path = os.path.abspath(abs_path)
+    if abs_path in WATCHED_PATHS:
+        return False
+    WATCHED_PATHS[abs_path] = {}
+    _save_watched_config()
+    print(
+        f"[lm-proxy:watcher] Auto-watching project: {abs_path} (reason={reason})",
+        file=sys.stderr,
+    )
     return True
 
 
@@ -216,4 +246,3 @@ async def _poll_watcher(index_fn) -> None:
         except Exception as e:
             print(f"[lm-proxy:watcher] Loop error: {e}", file=sys.stderr)
         await asyncio.sleep(WATCH_INTERVAL)
-

@@ -209,8 +209,11 @@ async def get_symbol_exports_summary_impl(
             session,
             """
             MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
-            RETURN s.name AS symbol, count(*) AS n
-            ORDER BY n DESC
+            OPTIONAL MATCH (importer:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
+            RETURN s.name AS symbol,
+                   count(DISTINCT f) AS exporters,
+                   count(DISTINCT importer) AS importers
+            ORDER BY importers DESC, exporters DESC, symbol
             LIMIT $limit
             """,
             p=project_id,
@@ -222,7 +225,17 @@ async def get_symbol_exports_summary_impl(
             name = rec["symbol"]
             if not _symbol_allowed(name):
                 continue
-            top_symbols.append((name, rec["n"]))
+            top_symbols.append(
+                (
+                    name,
+                    rec.get("exporters") or 0,
+                    rec.get("importers") or 0,
+                )
+            )
+        top_symbols = sorted(
+            top_symbols,
+            key=lambda item: (-item[2], -item[1], item[0]),
+        )[:limit]
 
         fetch_limit = min(limit * 10, 200) if (include_paths or exclude_paths or symbol_prefix) else limit
         r2 = await graph_tools._execute_read(
@@ -316,8 +329,15 @@ async def get_symbol_exports_summary_impl(
     lines.append("")
     if top_symbols:
         lines.append("## Top exported symbols")
-        for name, count in top_symbols:
-            lines.append(f"- {name}  ({count})")
+        for item in top_symbols:
+            if len(item) == 3:
+                name, exporters, importers = item
+                lines.append(
+                    f"- {name}  (imported by {importers} file(s); exported from {exporters} file(s))"
+                )
+            else:
+                name, count = item
+                lines.append(f"- {name}  ({count})")
         lines.append("")
     if top_files:
         lines.append("## Files with most symbol exports")

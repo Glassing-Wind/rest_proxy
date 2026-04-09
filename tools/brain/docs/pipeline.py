@@ -1,9 +1,10 @@
 """tools/docs/pipeline.py — documentation indexing pipeline."""
 
 import hashlib
+import json
 import sys
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
@@ -113,26 +114,100 @@ async def index_docs(
     return total_chunks
 
 
+async def index_authored_document(
+    *,
+    topic: str,
+    url: str,
+    title: str,
+    content: str,
+    fmt: str = "markdown",
+    replace_existing: bool = True,
+    extra_metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Chunk and index authored documentation content into doc_embeddings.
+
+    Intended for agent-written guides or curated notes that should become
+    searchable via search_documentation().
+    """
+    await memory_bootstrap.bootstrap_schema()
+    await memory_store.open_pool()
+
+    if not memory_store._pg_pool_available():
+        raise RuntimeError("Postgres pool not available — check LM_PROXY_PG_DSN in .env")
+
+    if not content.strip():
+        raise ValueError("Documentation content is empty.")
+
+    embedding_svc = get_embedding_service()
+    chunks = chunk_content(content, url, title, fmt=fmt)
+    if not chunks:
+        raise ValueError("No indexable chunks were produced from the supplied content.")
+
+    items = []
+    for idx, chunk in enumerate(chunks):
+        items.append(
+            {
+                "chunk_id": _chunk_id(url, idx),
+                "source_url": url,
+                "title": title,
+                "chunk_index": idx,
+                "text": chunk["text"],
+                "context_path": chunk.get("context_path") or [],
+                "extra_metadata": extra_metadata or {},
+            }
+        )
+
+    texts = [item["text"] for item in items]
+    vectors = await embedding_svc.embed_batch_async(texts)
+
+    if replace_existing:
+        await _delete_doc_chunks(topic=topic, url=url)
+
+    written = await _upsert_doc_chunks_batch(items, vectors, topic)
+    return {
+        "topic": topic,
+        "url": url,
+        "title": title,
+        "chunks": written,
+    }
+
+
+async def _delete_doc_chunks(*, topic: str, url: str) -> int:
+    """Delete existing chunks for a single topic/url pair before re-indexing."""
+    if not memory_store._pg_pool_available():
+        return 0
+    async with memory_store._pg_pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM doc_embeddings WHERE source = %s AND url = %s",
+                (topic, url),
+            )
+            deleted = cur.rowcount if cur.rowcount is not None else 0
+        await conn.commit()
+    return deleted
+
+
 async def _upsert_doc_chunks_batch(
     items: List[Dict], vectors: List[List[float]], topic: str
 ) -> int:
     """Batch-upsert doc chunks into doc_embeddings — one executemany per flush, one round-trip."""
     if not memory_store._pg_pool_available() or not items:
         return 0
-    import json as _json
-
     rows = []
     for item, vector in zip(items, vectors):
         if not vector:
             continue
         vec_str = "[" + ",".join(str(v) for v in vector) + "]"
-        metadata = _json.dumps(
-            {
-                "title": item.get("title", ""),
-                "topic": topic,
-                "context_path": item.get("context_path", []),
-            }
-        )
+        metadata_payload = {
+            "title": item.get("title", ""),
+            "topic": topic,
+            "context_path": item.get("context_path", []),
+        }
+        extra_metadata = item.get("extra_metadata")
+        if isinstance(extra_metadata, dict) and extra_metadata:
+            metadata_payload.update(extra_metadata)
+        metadata = json.dumps(metadata_payload)
         rows.append(
             (
                 item["chunk_id"],

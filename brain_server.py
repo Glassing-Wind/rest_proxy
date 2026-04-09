@@ -17,7 +17,9 @@ import json
 import os
 import resource
 import sys
+import time
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 # ---------------------------------------------------------------------------
 # Resource Limits (v2025-04-07)
@@ -39,6 +41,7 @@ def _apply_resource_limits():
 _apply_resource_limits()
 
 from starlette.applications import Starlette
+from starlette.datastructures import Headers
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -59,12 +62,12 @@ def _compute_tool_fingerprint() -> str:
 
 
 BOOT_FINGERPRINT: str = _compute_tool_fingerprint()
+BOOT_ID: str = f"{os.getpid()}-{uuid4().hex[:8]}"
+STARTED_AT: float = time.time()
 
 
 def _resolve_session_id(scope) -> str:
     """Resolve the most specific available client session identifier."""
-    from starlette.datastructures import Headers
-
     headers = Headers(scope=scope)
     for header_name in (
         "X-Session-ID",
@@ -83,6 +86,52 @@ def _resolve_session_id(scope) -> str:
     ua = headers.get("User-Agent", "vanilla")
     fingerprint = f"{client_ip}:{client_port}:{forwarded_for}:{ua}"
     return f"anon-{hashlib.md5(fingerprint.encode()).hexdigest()[:12]}"
+
+
+def _mcp_transport_session_id(scope) -> str | None:
+    """Return the raw MCP transport session header, if present."""
+    headers = Headers(scope=scope)
+    return headers.get("mcp-session-id") or headers.get("Mcp-Session-Id")
+
+
+def _short_session_id(session_id: str | None) -> str:
+    if not session_id:
+        return "<new>"
+    if len(session_id) <= 16:
+        return session_id
+    return f"{session_id[:8]}..{session_id[-4:]}"
+
+
+def _session_snapshot(session_id: str | None) -> dict:
+    known_session = False
+    active_sessions = 0
+    if session_id:
+        try:
+            known_session = session_id in mcp.session_manager._server_instances
+        except Exception:
+            known_session = False
+    try:
+        active_sessions = len(mcp.session_manager._server_instances)
+    except Exception:
+        active_sessions = 0
+    return {
+        "incoming_session_id": session_id,
+        "incoming_session_short": _short_session_id(session_id),
+        "known_session": known_session,
+        "active_sessions": active_sessions,
+    }
+
+
+def _append_debug_headers(headers: list[tuple[bytes, bytes]], *, session_id: str | None) -> None:
+    snapshot = _session_snapshot(session_id)
+    headers.extend(
+        [
+            (b"x-graphrag-boot-id", BOOT_ID.encode("utf-8")),
+            (b"x-graphrag-tool-fingerprint", BOOT_FINGERPRINT.encode("utf-8")),
+            (b"x-graphrag-session-known", str(int(snapshot["known_session"])).encode("utf-8")),
+            (b"x-graphrag-active-sessions", str(snapshot["active_sessions"]).encode("utf-8")),
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +164,10 @@ async def lifespan(app: Starlette):
         tool_count = len(list(mcp._tool_manager.list_tools()))
     except Exception:
         pass
-    print(f"[brain-server] Startup complete. tools={tool_count} fp={BOOT_FINGERPRINT}", file=sys.stderr)
+    print(
+        f"[brain-server] Startup complete. boot={BOOT_ID} tools={tool_count} fp={BOOT_FINGERPRINT}",
+        file=sys.stderr,
+    )
 
     async with mcp.session_manager.run():
         yield
@@ -153,6 +205,65 @@ class SessionContextMiddleware:
             client_session_id.reset(token)
 
 
+class MCPRequestLoggingMiddleware:
+    """
+    Emit concise transport-level logging for Streamable HTTP MCP requests.
+
+    This intentionally does not change behavior; it only makes session lifecycle
+    explicit across restart boundaries.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("path") != "/mcp":
+            return await self.app(scope, receive, send)
+
+        method = scope.get("method", "UNKNOWN")
+        incoming_session_id = _mcp_transport_session_id(scope)
+        snapshot = _session_snapshot(incoming_session_id)
+        known_session = snapshot["known_session"]
+        active_sessions = snapshot["active_sessions"]
+        if incoming_session_id:
+            print(
+                "[brain-server] MCP request "
+                f"boot={BOOT_ID} method={method} session={_short_session_id(incoming_session_id)} "
+                f"known={int(known_session)} active_sessions={active_sessions}",
+                file=sys.stderr,
+            )
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                _append_debug_headers(headers, session_id=incoming_session_id)
+                message["headers"] = headers
+                status = message.get("status")
+                created_session_id = None
+                for raw_key, raw_value in headers:
+                    if raw_key.decode("latin1").lower() == "mcp-session-id":
+                        created_session_id = raw_value.decode("latin1")
+                        break
+
+                if created_session_id:
+                    print(
+                        "[brain-server] MCP session created "
+                        f"boot={BOOT_ID} method={method} session={_short_session_id(created_session_id)}",
+                        file=sys.stderr,
+                    )
+                elif status == 404 and incoming_session_id:
+                    print(
+                        "[brain-server] MCP stale session rejected "
+                        f"boot={BOOT_ID} method={method} session={_short_session_id(incoming_session_id)} "
+                        "status=404",
+                        file=sys.stderr,
+                    )
+
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
 # ---------------------------------------------------------------------------
 # Health endpoint
 # ---------------------------------------------------------------------------
@@ -163,14 +274,38 @@ async def health(request: Request) -> JSONResponse:
         tool_count = len(list(mcp._tool_manager.list_tools()))
     except Exception:
         pass
-    return JSONResponse({
+    incoming_session_id = _mcp_transport_session_id(request.scope)
+    response = JSONResponse({
         "server": "GraphRAG MCP Brain",
         "standard": "Streamable HTTP (2025-03-26)",
         "transport_path": "/mcp",
         "tools": tool_count,
+        "boot_id": BOOT_ID,
         "fingerprint": BOOT_FINGERPRINT,
+        "uptime_seconds": round(max(0.0, time.time() - STARTED_AT), 3),
+        "session": _session_snapshot(incoming_session_id),
         "status": "online",
     })
+    _append_debug_headers(response.raw_headers, session_id=incoming_session_id)
+    return response
+
+
+async def server_fingerprint(request: Request) -> JSONResponse:
+    incoming_session_id = _mcp_transport_session_id(request.scope)
+    tool_count = 0
+    try:
+        tool_count = len(list(mcp._tool_manager.list_tools()))
+    except Exception:
+        pass
+    response = JSONResponse({
+        "boot_id": BOOT_ID,
+        "fingerprint": BOOT_FINGERPRINT,
+        "tools": tool_count,
+        "uptime_seconds": round(max(0.0, time.time() - STARTED_AT), 3),
+        "session": _session_snapshot(incoming_session_id),
+    })
+    _append_debug_headers(response.raw_headers, session_id=incoming_session_id)
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -188,11 +323,13 @@ app = Starlette(
     routes=[
         Route("/", health),          # health check — matched first
         Route("/health", health),    # also at /health
+        Route("/fingerprint", server_fingerprint),
         Mount("/", app=_mcp_starlette),  # pass-through; MCP handles /mcp
     ],
     lifespan=lifespan,
     middleware=[
         Middleware(SessionContextMiddleware),
+        Middleware(MCPRequestLoggingMiddleware),
     ],
 )
 

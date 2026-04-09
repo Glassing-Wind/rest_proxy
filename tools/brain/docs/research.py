@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import subprocess
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job
@@ -31,9 +32,19 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def research_documentation(topic: str, query: str) -> str:
         """
-        Search the web for documentation relevant to a topic/query.
+        Search the web for external documentation relevant to a topic/query.
         Returns candidate URLs with titles and snippets for the agent to review.
         Call download_documentation() with chosen URLs to crawl and index them.
+
+        This tool is for third-party documentation discovery only. It does not
+        inspect the target repo, synthesize a repo-specific guide, or index
+        authored notes. For that workflow, use author_and_index_documentation().
+
+        Topic naming guidance:
+        - Prefer repo-scoped topics for repo-specific work, such as
+          '<repo>-<integration>' or '<repo>-<system>'.
+        - Avoid generic topics like 'quickbooks' unless cross-repo sharing is
+          intentionally desired.
 
         Args:
             topic: Library or product name (e.g. 'neo4j', 'pgvector', 'crawl4ai').
@@ -92,12 +103,20 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def research_and_index(topic: str, query: str, max_urls: int = 5) -> str:
         """
-        Single-call research pipeline: web search → auto-select best URLs → crawl & index.
+        Single-call external docs pipeline: web search → auto-select best URLs → crawl & index.
 
         Combines research_documentation + download_documentation into one step.
         Searches for documentation relevant to the topic/query, picks the top URLs
         from high-quality domains, and immediately starts background indexing.
         Use get_index_status(job_id) to monitor, search_documentation() once done.
+
+        This tool indexes third-party source documentation, not repo-specific
+        synthesized guides. For authored guides, use author_and_index_documentation().
+
+        Topic naming guidance:
+        - Prefer repo-scoped topics for repo-specific work, such as
+          '<repo>-<integration>' or '<repo>-<system>'.
+        - Avoid generic topics unless cross-repo sharing is intentionally desired.
 
         Args:
             topic:    Library or product name (e.g. 'swift call graph', 'neo4j').
@@ -168,12 +187,12 @@ def register(mcp: FastMCP) -> None:
                 return "No suitable documentation URLs found."
 
             # ── 3. Kick off indexing job ──────────────────────────────────────
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            runtime_dir = os.path.join(base_dir, ".runtime")
+            repo_root = Path(__file__).resolve().parents[3]
+            runtime_dir = repo_root / ".runtime"
             os.makedirs(runtime_dir, exist_ok=True)
             job_id = str(uuid.uuid4())[:8]
 
-            urls_file = os.path.join(runtime_dir, f"doc_{job_id}_urls.json")
+            urls_file = runtime_dir / f"doc_{job_id}_urls.json"
             with open(urls_file, "w") as fh:
                 json.dump(selected, fh)
 
@@ -192,9 +211,9 @@ def register(mcp: FastMCP) -> None:
 
             doc_cmd = [
                 sys.executable,
-                os.path.join(base_dir, "tools", "docs", "indexer.py"),
+                str(repo_root / "tools" / "brain" / "docs" / "indexer.py"),
                 "--urls-file",
-                urls_file,
+                str(urls_file),
                 "--topic",
                 topic,
             ]
@@ -207,7 +226,7 @@ def register(mcp: FastMCP) -> None:
                 daemon=True,
             ).start()
             threading.Thread(
-                target=_finalize_job, args=(job_id, urls_file), daemon=True
+                target=_finalize_job, args=(job_id, str(urls_file)), daemon=True
             ).start()
 
             url_list = "\n".join(f"  • {u}" for u in selected)

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job, client_session_id
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
+from _runtime import resolve_python_runtime
 
 from graphrag_core.config import load_env
 from graphrag_core.indexing import watcher as index_watcher
@@ -238,14 +239,18 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 "cancel_requested": False,
                 "struct_proc": None,
                 "sem_proc": None,
+                "runtime_python": None,
+                "runtime_source": None,
+                "runtime_conda_env": None,
             }
 
         neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://localhost:7687")
         neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
         neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+        runtime = resolve_python_runtime()
+        python_cmd = list(runtime["cmd"])
 
-        struct_cmd = [
-            sys.executable,
+        struct_cmd = python_cmd + [
             os.path.join(base_dir, "scripts", "run_struct_index.py"),
             project_path,
             project_id,
@@ -258,8 +263,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             "--neo4j-pass",
             neo4j_pass,
         ]
-        sem_cmd = [
-            sys.executable,
+        sem_cmd = python_cmd + [
             os.path.join(base_dir, "scripts", "index_workspace.py"),
             project_path,
             project_id,
@@ -282,6 +286,8 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             "on",
         }:
             struct_env.setdefault("TS_PACK_AUTO_DOWNLOAD", "1")
+        struct_env.setdefault("LM_PROXY_RUNTIME_PYTHON", str(runtime.get("python") or ""))
+        struct_env.setdefault("LM_PROXY_RUNTIME_SOURCE", str(runtime.get("source") or ""))
         struct_proc = subprocess.Popen(
             struct_cmd,
             stdout=subprocess.PIPE,
@@ -295,6 +301,15 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
 
         with _JOBS_LOCK:
             if job_id in _JOBS:
+                _JOBS[job_id]["runtime_python"] = runtime.get("python")
+                _JOBS[job_id]["runtime_source"] = runtime.get("source")
+                _JOBS[job_id]["runtime_conda_env"] = runtime.get("conda_env")
+                _JOBS[job_id]["logs"].append(
+                    "[runtime] "
+                    f"python={runtime.get('python')} "
+                    f"source={runtime.get('source')} "
+                    f"conda_env={runtime.get('conda_env') or '-'}"
+                )
                 _JOBS[job_id]["struct_proc"] = struct_proc
                 _JOBS[job_id]["sem_proc"] = sem_proc
 
@@ -370,6 +385,18 @@ async def get_index_status(job_id: str) -> str:
         f"  project:    {job['project_path']}",
         f"  project_id: {job['project_id']}",
         f"  files:      {job['file_count']}",
+        f"  runtime:    {job.get('runtime_python') or 'unknown'}"
+        + (
+            f" [{job.get('runtime_source')}"
+            + (
+                f", env={job.get('runtime_conda_env')}"
+                if job.get("runtime_conda_env")
+                else ""
+            )
+            + "]"
+            if job.get("runtime_source")
+            else ""
+        ),
         f"  elapsed:    {elapsed:.1f}s",
         f"  struct:     exit {struct_rc} ({'ok' if struct_rc == 0 else 'FAILED'})"
         if struct_rc is not None

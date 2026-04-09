@@ -56,27 +56,44 @@ def register_main_loop(loop) -> None:
     _MAIN_LOOP = loop
 
 
+def _append_job_log(job_id: str, line: str) -> None:
+    with _JOBS_LOCK:
+        if job_id in _JOBS:
+            logs = _JOBS[job_id]["logs"]
+            logs.append(line)
+            if len(logs) > _MAX_LOG_LINES:
+                del logs[0]
+
+
+def _drain_stream(stream, job_id: str, prefix: str, sink) -> None:
+    if stream is None:
+        return
+    for raw_line in stream:
+        line = f"{prefix} {raw_line.rstrip()}"
+        print(line, file=sink, flush=True)
+        _append_job_log(job_id, line)
+
+
 def _drain_proc_output(proc, job_id: str, prefix: str, rc_key: str) -> None:
-    """Drain stdout+stderr of *proc* into the job log ring-buffer.
+    """Drain child stdout+stderr into the job log ring-buffer.
 
     Runs in a daemon thread. When the process exits, stores its return code.
     """
-    import time as _time
-
-    assert proc.stderr is not None
-    for raw_line in proc.stderr:
-        line = f"{prefix} {raw_line.rstrip()}"
-        print(line, file=sys.stderr, flush=True)
-        with _JOBS_LOCK:
-            if job_id in _JOBS:
-                logs = _JOBS[job_id]["logs"]
-                logs.append(line)
-                if len(logs) > _MAX_LOG_LINES:
-                    del logs[0]
+    stdout_thread = threading.Thread(
+        target=_drain_stream,
+        args=(proc.stdout, job_id, prefix, sys.stdout),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_drain_stream,
+        args=(proc.stderr, job_id, prefix, sys.stderr),
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
     proc.wait()
-    cancel_requested = False
-    project_path = ""
-    project_id = ""
+    stdout_thread.join(timeout=1)
+    stderr_thread.join(timeout=1)
     with _JOBS_LOCK:
         if job_id in _JOBS:
             _JOBS[job_id][rc_key] = proc.returncode

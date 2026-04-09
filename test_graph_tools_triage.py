@@ -117,6 +117,23 @@ class GraphToolTriageTests(unittest.TestCase):
         self.assertIn("### Flow Type: API -> Service -> DB", output)
         self.assertIn("src/api/routes.py -> src/services/user_service.py", output)
 
+    def test_get_flow_summary_skips_error_results_in_auto_mode(self):
+        module = load_tools_module()
+        module.graph_flow_summary.get_app_flow_summary_impl = mock.AsyncMock(
+            return_value="Error building flow summary: No module named 'neo4j'"
+        )
+        module.graph_flow_summary.get_backend_flow_summary_impl = mock.AsyncMock(
+            return_value="src/api/routes.py -> src/services/user_service.py -> src/db/models.py"
+        )
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": module._graph_bootstrap_mod}):
+            output = asyncio.run(mcp.tools["get_flow_summary"]("/tmp/repo", mode="auto"))
+
+        self.assertIn("### Flow Type: API -> Service -> DB", output)
+        self.assertNotIn("Error building flow summary", output)
+
 
 if __name__ == "__main__":
     unittest.main()

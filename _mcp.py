@@ -13,12 +13,12 @@ from tools import register_all
 load_env()
 
 # Initialize the shared FastMCP instance.
-# stateless_http=True: disables per-client session management for the
-# Streamable HTTP transport. Clients don't need to track Mcp-Session-Id.
+# Use stateful Streamable HTTP so stale Mcp-Session-Id values fail explicitly
+# after a process restart instead of limping along under stateless mode.
 # brain_server.py mounts the MCP Starlette app at "/" (root) so Starlette
 # passes the full path "/mcp" to the sub-app, which matches its internal
 # route at "/mcp" (the default streamable_http_path). No path stripping issues.
-mcp = FastMCP("graphrag-brain", stateless_http=True)
+mcp = FastMCP("graphrag-brain", stateless_http=False)
 
 # Register all tool groups (partitioned into tools/brain and tools/hands)
 register_all(mcp)

@@ -15,6 +15,7 @@ CLI:
 
 import sys
 import os
+from pathlib import Path
 
 # sentence_transformers must own the process Metal/BLAS context first
 from sentence_transformers import SentenceTransformer  # noqa: E402
@@ -25,10 +26,9 @@ from typing import List
 
 from dotenv import load_dotenv
 
-_base_dir = os.path.dirname(os.path.abspath(__file__))
-_repo_root = os.path.dirname(os.path.dirname(_base_dir))
-load_dotenv(os.path.join(_repo_root, ".env"))
-sys.path.insert(0, _repo_root)
+_repo_root = Path(__file__).resolve().parents[3]
+load_dotenv(_repo_root / ".env")
+sys.path.insert(0, str(_repo_root))
 
 from tools.brain.docs.config import DEFAULT_TOPIC_URL_FILTERS, DEFAULT_URL_FILTERS
 from tools.brain.docs.discovery import discover_pages
