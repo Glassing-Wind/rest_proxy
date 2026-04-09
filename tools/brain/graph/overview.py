@@ -24,6 +24,38 @@ _SKIP_DIR_NAMES = {
 }
 
 
+def _importance_penalty(filepath: str | None) -> float:
+    norm = (filepath or "").replace("\\", "/").lower()
+    if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
+        return 0.08
+    if norm.startswith("vendors/") or "/vendors/" in norm:
+        return 0.35
+    return 1.0
+
+
+def _backend_bridge_boost(filepath: str | None) -> float:
+    norm = (filepath or "").replace("\\", "/").lower()
+    if any(
+        token in norm
+        for token in (
+            "src/api/routes/",
+            "src/api/",
+            "src/services/",
+            "src/db/",
+            "prisma/schema.prisma",
+        )
+    ):
+        return 1.8
+    if any(token in norm for token in ("src/config/", "src/lib/", "src/models/")):
+        return 1.12
+    return 1.0
+
+
+def _overview_file_rank(filepath: str | None, symbol_count: int) -> float:
+    base = float(symbol_count or 0) ** 0.85
+    return base * _importance_penalty(filepath) * _backend_bridge_boost(filepath)
+
+
 def _normalize_pkg_name(name: str) -> str:
     return (name or "").strip().replace("-", "_").lower()
 
@@ -619,14 +651,22 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
               AND NOT f.filepath CONTAINS 'test'
               AND NOT f.filepath CONTAINS 'spec'
             WITH f.filepath AS fp, count(s) AS n, collect(DISTINCT s.name)[..3] AS ex
-            ORDER BY n DESC LIMIT 5
+            ORDER BY n DESC LIMIT 20
             RETURN fp, n, ex
         """.format(filters=_SYMBOL_FILTER_CYPHER),
             p=project_id,
             op="get_project_overview_key_files",
         )
         key_files = []
-        for rec in r4:
+        ranked_key_rows = sorted(
+            r4,
+            key=lambda rec: (
+                _overview_file_rank(rec.get("fp"), int(rec.get("n") or 0)),
+                int(rec.get("n") or 0),
+            ),
+            reverse=True,
+        )[:5]
+        for rec in ranked_key_rows:
             ex = ", ".join(e for e in rec["ex"] if e)
             key_files.append(f"  - {rec['fp']}  ({rec['n']} symbols: {ex})")
 

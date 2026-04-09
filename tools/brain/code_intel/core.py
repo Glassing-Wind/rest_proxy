@@ -18,10 +18,12 @@ def register(mcp: FastMCP) -> None:
     _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
     _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "code_intel"}
 
-    def _frontend_asset_penalty(file_path: str | None) -> float:
+    def _importance_penalty(file_path: str | None) -> float:
         norm = (file_path or "").replace("\\", "/").lower()
         if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
             return 0.08
+        if norm.startswith("vendors/") or "/vendors/" in norm:
+            return 0.35
         return 1.0
 
     def _backend_bridge_boost(file_path: str | None) -> float:
@@ -45,7 +47,7 @@ def register(mcp: FastMCP) -> None:
         file_path = record.get("file")
         score = float(record.get("score") or 0.0)
         bridge = float(record.get("betweenness") or 0.0)
-        adjusted = ((score ** 0.7) + (bridge * 0.6)) * _frontend_asset_penalty(file_path) * _backend_bridge_boost(file_path)
+        adjusted = ((score ** 0.7) + (bridge * 0.6)) * _importance_penalty(file_path) * _backend_bridge_boost(file_path)
         return adjusted
 
     def _cluster_kind(top_files: list[str]) -> tuple[str, float]:

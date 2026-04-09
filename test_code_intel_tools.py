@@ -484,6 +484,45 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("[backend/app]", output)
         self.assertIn("[ui/public]", output)
 
+    def test_get_code_importance_downweights_vendor_files(self):
+        async def fake_executor(cypher, **kwargs):
+            if "get_code_importance_pr" in kwargs.get("op", "") or "f.pagerank IS NOT NULL" in cypher:
+                return [
+                    {
+                        "file": "Vendors/ZIPFoundation/Sources/ZIPFoundation/Data+Compression.swift",
+                        "sym_count": 3,
+                        "sym_examples": ["CompressionMethod", "withUnsafeBytes"],
+                        "top_pagerank": 4.3,
+                        "score": 7.5,
+                        "betweenness": 0.0,
+                        "isolated": False,
+                    },
+                    {
+                        "file": "Apps/DrawThingsCLI/DrawThingsCLI.swift",
+                        "sym_count": 41,
+                        "sym_examples": ["ModelsDirectoryResolver", "ModelResolver"],
+                        "top_pagerank": 0.46,
+                        "score": 7.9,
+                        "betweenness": 0.0,
+                        "isolated": False,
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_importance"]("/tmp/draw-things-community"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        app_index = output.index("Apps/DrawThingsCLI/DrawThingsCLI.swift")
+        vendor_index = output.index("Vendors/ZIPFoundation/Sources/ZIPFoundation/Data+Compression.swift")
+        self.assertLess(app_index, vendor_index)
+
     def test_get_related_files_prefers_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):
             if "CALL db.labels()" in cypher:
