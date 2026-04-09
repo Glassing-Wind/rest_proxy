@@ -734,9 +734,11 @@ def register(mcp: FastMCP) -> None:
             WITH f1, collect(imp1.source) AS my_imports
             MATCH (f2:File {project_id: $pid})-[:CONTAINS]->(imp2:Import)
             WHERE f2 <> f1 AND imp2.source IN my_imports
-            WITH f2.filepath AS related_file, count(imp2) AS shared_imports
+            WITH f2.filepath AS related_file,
+                 count(imp2) AS shared_imports,
+                 collect(DISTINCT imp2.source)[..4] AS sample_imports
             ORDER BY shared_imports DESC LIMIT 10
-            RETURN related_file, shared_imports
+            RETURN related_file, shared_imports, sample_imports
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 related = []
@@ -748,8 +750,13 @@ def register(mcp: FastMCP) -> None:
                     op="get_related_files",
                 )
                 for record in records:
+                    import_samples = record.get("sample_imports") or []
+                    sample_text = ", ".join(import_samples[:3])
+                    reason = f"shares {record['shared_imports']} import source(s)"
+                    if sample_text:
+                        reason += f": {sample_text}"
                     related.append(
-                        f"- {record['related_file']} (Strength: {record['shared_imports']})"
+                        f"- {record['related_file']} ({reason})"
                     )
             if cargo_related or related:
                 output = ["Related Files:"]
@@ -805,7 +812,10 @@ def register(mcp: FastMCP) -> None:
 
             output = ["Related Files (semantic co-mentions):"]
             for fp, hits in rows:
-                output.append(f"- {fp} (Mentions: {hits})")
+                preview_symbols = ", ".join(symbols[:3])
+                output.append(
+                    f"- {fp} (semantic co-mentions: {hits}; symbols: {preview_symbols})"
+                )
             return "\n".join(output)
         except Exception as e:
             return f"Error finding related files: {str(e)}"

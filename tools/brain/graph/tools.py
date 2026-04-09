@@ -218,12 +218,12 @@ def register(mcp: FastMCP) -> None:
                 as_table=as_table,
             )
             if mode_norm == "ui":
-                return ui_result
+                return f"### Flow Type: UI -> API -> Service -> DB\n{ui_result}"
             if not ui_result.startswith("No UI → API → Service → DB paths found"):
-                return ui_result
+                return f"### Flow Type: UI -> API -> Service -> DB\n{ui_result}"
 
         if mode_norm == "apple":
-            return await get_apple_build_summary(
+            apple_result = await get_apple_build_summary(
                 workspace_id,
                 source_contains=ui_contains,
                 resource_contains=model_contains,
@@ -232,6 +232,7 @@ def register(mcp: FastMCP) -> None:
                 limit=limit,
                 as_table=as_table,
             )
+            return f"### Flow Type: Apple Build Graph\n{apple_result}"
 
         backend_result = await get_backend_flow_summary(
             workspace_id,
@@ -246,7 +247,7 @@ def register(mcp: FastMCP) -> None:
         if mode_norm == "backend" or not backend_result.startswith(
             "No API → Service → DB paths found"
         ):
-            return backend_result
+            return f"### Flow Type: API -> Service -> DB\n{backend_result}"
 
         apple_result = await get_apple_build_summary(
             workspace_id,
@@ -258,7 +259,7 @@ def register(mcp: FastMCP) -> None:
             as_table=as_table,
         )
         if mode_norm == "apple" or not apple_result.startswith("No Apple build graph paths found"):
-            return apple_result
+            return f"### Flow Type: Apple Build Graph\n{apple_result}"
 
         if mode_norm in {"auto", "cli"}:
             cli_result = await graph_core._get_cli_flow_summary(
@@ -268,7 +269,7 @@ def register(mcp: FastMCP) -> None:
                 as_table=as_table,
             )
             if mode_norm == "cli" or not cli_result.startswith("No CLI"):
-                return cli_result
+                return f"### Flow Type: CLI\n{cli_result}"
 
         # Step 2: Heuristic Fallback
         heuristic_result = await get_heuristic_flow_summary(

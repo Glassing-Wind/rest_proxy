@@ -131,6 +131,66 @@ class SearchSummaryTests(unittest.TestCase):
         self.assertIn("WHERE f.filepath ENDS WITH '.swift'", implicit_queries["get_symbol_imports_overview_imp_symbols"])
         self.assertIn("WHERE f.filepath ENDS WITH '.swift'", implicit_queries["get_symbol_imports_overview_imp_files"])
 
+    def test_symbol_exports_summary_falls_back_to_visibility_and_python_naming(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 0}]
+            if op == "get_symbol_exports_summary_symbols":
+                return []
+            if op == "get_symbol_exports_summary_files":
+                return []
+            if op == "get_symbol_exports_summary_heuristic":
+                return [
+                    {"file": "src/api/lib.rs", "symbol": "Router", "visibility": "pub"},
+                    {"file": "src/api/lib.rs", "symbol": "_internal_router", "visibility": "pub"},
+                    {"file": "pkg/service.py", "symbol": "PublicService", "visibility": ""},
+                    {"file": "pkg/service.py", "symbol": "_private_helper", "visibility": ""},
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertIn("Source: heuristic public-surface inference", output)
+        self.assertIn("Router", output)
+        self.assertIn("PublicService", output)
+        self.assertNotIn("_private_helper", output)
+
+    def test_symbol_exports_summary_excludes_test_files_by_default(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 2}]
+            if op == "get_symbol_exports_summary_symbols":
+                return [{"symbol": "ProdSymbol", "n": 1}, {"symbol": "FakeSession", "n": 1}]
+            if op == "get_symbol_exports_summary_files":
+                return [
+                    {"file": "src/app.py", "n": 1, "symbols": ["ProdSymbol"]},
+                    {"file": "tests/test_app.py", "n": 1, "symbols": ["FakeSession"]},
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertIn("src/app.py", output)
+        self.assertNotIn("tests/test_app.py", output)
+
 
 if __name__ == "__main__":
     unittest.main()

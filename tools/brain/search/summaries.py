@@ -3,9 +3,26 @@
 from __future__ import annotations
 
 import fnmatch
+import os
 
 from _helpers import get_project_id
 from tools.brain.graph import core as graph_tools
+
+
+def _is_test_like_path(file_path: str) -> bool:
+    normalized = (file_path or "").lower()
+    return (
+        normalized.startswith("tests/")
+        or "/tests/" in normalized
+        or "__tests__" in normalized
+        or "/spec/" in normalized
+        or normalized.startswith("spec/")
+        or ".test." in normalized
+        or normalized.endswith("_test.py")
+        or normalized.endswith("_test.rs")
+        or normalized.endswith("_test.go")
+        or normalized.endswith("_spec.rb")
+    )
 
 
 async def get_symbol_imports_overview_impl(
@@ -150,7 +167,44 @@ async def get_symbol_exports_summary_impl(
     project_id = get_project_id(project_path)
     limit = max(1, min(int(limit), 100))
 
+    def _path_allowed(file_path: str) -> bool:
+        if include_paths and not any(fnmatch.fnmatch(file_path, pat) for pat in include_paths):
+            return False
+        if exclude_paths and any(fnmatch.fnmatch(file_path, pat) for pat in exclude_paths):
+            return False
+        if not include_paths and _is_test_like_path(file_path):
+            return False
+        return True
+
+    def _symbol_allowed(name: str) -> bool:
+        if not isinstance(name, str) or not name:
+            return False
+        if symbol_prefix and not name.startswith(symbol_prefix):
+            return False
+        return True
+
+    def _heuristic_visibility_ok(file_path: str, visibility: str | None, name: str) -> bool:
+        visibility_norm = (visibility or "").strip().lower()
+        if visibility_norm in {"public", "open", "pub"} or visibility_norm.startswith("pub("):
+            return True
+
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".py":
+            return not name.startswith("_")
+        return False
+
+    export_mode = "graph"
+    export_edges = 0
+
     async with driver.session(database=neo4j_db) as session:
+        count_rows = await graph_tools._execute_read(
+            session,
+            "MATCH (:File {project_id:$p})-[r:EXPORTS_SYMBOL]->() RETURN count(r) AS n",
+            p=project_id,
+            op="get_symbol_exports_summary_count",
+        )
+        export_edges = count_rows[0]["n"] if count_rows else 0
+
         r1 = await graph_tools._execute_read(
             session,
             """
@@ -166,7 +220,7 @@ async def get_symbol_exports_summary_impl(
         top_symbols = []
         for rec in r1:
             name = rec["symbol"]
-            if symbol_prefix and isinstance(name, str) and not name.startswith(symbol_prefix):
+            if not _symbol_allowed(name):
                 continue
             top_symbols.append((name, rec["n"]))
 
@@ -187,9 +241,7 @@ async def get_symbol_exports_summary_impl(
         top_files = []
         for rec in r2:
             file = rec["file"]
-            if include_paths and not any(fnmatch.fnmatch(file, pat) for pat in include_paths):
-                continue
-            if exclude_paths and any(fnmatch.fnmatch(file, pat) for pat in exclude_paths):
+            if not _path_allowed(file):
                 continue
             symbols = rec["symbols"]
             if symbol_prefix:
@@ -198,10 +250,70 @@ async def get_symbol_exports_summary_impl(
                     continue
             top_files.append((file, rec["n"], symbols))
 
+        if not top_symbols and not top_files:
+            export_mode = "heuristic"
+            heuristic_limit = min(limit * 10, 400)
+            r3 = await graph_tools._execute_read(
+                session,
+                """
+                MATCH (f:File {project_id:$p})-[:CONTAINS]->(s)
+                WHERE s.name IS NOT NULL
+                  AND (
+                    s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait
+                    OR s:Enum OR s:Protocol OR s:Extension OR s:TypeAlias OR s:AssociatedType
+                  )
+                RETURN f.filepath AS file, s.name AS symbol, coalesce(s.visibility, '') AS visibility
+                ORDER BY f.filepath, s.name
+                LIMIT $limit
+                """,
+                p=project_id,
+                limit=heuristic_limit,
+                op="get_symbol_exports_summary_heuristic",
+            )
+
+            file_symbols: dict[str, list[str]] = {}
+            symbol_counts: dict[str, int] = {}
+            for rec in r3:
+                file = rec["file"]
+                name = rec["symbol"]
+                visibility = rec.get("visibility")
+                if not file or not _path_allowed(file) or not _symbol_allowed(name):
+                    continue
+                if not _heuristic_visibility_ok(file, visibility, name):
+                    continue
+                file_symbols.setdefault(file, [])
+                if name not in file_symbols[file]:
+                    file_symbols[file].append(name)
+                symbol_counts[name] = symbol_counts.get(name, 0) + 1
+
+            top_symbols = sorted(
+                symbol_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:limit]
+            top_files = sorted(
+                (
+                    (file, len(symbols), symbols)
+                    for file, symbols in file_symbols.items()
+                    if symbols
+                ),
+                key=lambda item: (-item[1], item[0]),
+            )[:limit]
+
     if not top_symbols and not top_files:
-        return "No EXPORTS_SYMBOL edges found."
+        return (
+            "No symbol exports found.\n"
+            "Checked EXPORTS_SYMBOL edges, then visibility/name-based public-surface heuristics."
+        )
 
     lines = [f"# Symbol export summary: {project_path.split('/')[-1]}", ""]
+    if export_mode == "graph":
+        lines.append(f"Source: EXPORTS_SYMBOL edges ({export_edges})")
+    else:
+        lines.append(
+            "Source: heuristic public-surface inference "
+            "(visibility metadata, or Python non-underscore naming when visibility is absent)"
+        )
+    lines.append("")
     if top_symbols:
         lines.append("## Top exported symbols")
         for name, count in top_symbols:

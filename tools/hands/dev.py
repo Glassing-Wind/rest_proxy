@@ -48,17 +48,6 @@ def register(mcp: FastMCP) -> None:
         return await _tx(session)
 
     @mcp.tool()
-    async def list_dir(DirectoryPath: str) -> str:
-        """
-        List the contents of a directory.
-        """
-        path = get_workspace_path(DirectoryPath)
-        try:
-            return "\n".join(os.listdir(path))
-        except Exception as e:
-            return f"Error listing directory: {str(e)}"
-
-    @mcp.tool()
     async def git_summary(workspace_id: str) -> str:
         """
         Show the current git state of a project: recent commits, working-tree
@@ -180,11 +169,18 @@ def register(mcp: FastMCP) -> None:
         """
         project_path = get_workspace_path(workspace_id)
         try:
-            import hashlib, subprocess
+            import re
+            import subprocess
 
             project_id = get_project_id(workspace_id)
             basename = os.path.splitext(os.path.basename(file_path))[0]
             results: dict[str, str] = {}
+            normalized_file_path = normalize_neo4j_path(file_path)
+            module_tokens = [
+                token
+                for token in re.split(r"[^A-Za-z0-9_]+", basename)
+                if token and len(token) >= 3
+            ]
 
             candidates = [
                 f"test_{basename}.py",
@@ -273,9 +269,46 @@ def register(mcp: FastMCP) -> None:
                 pass
 
             if not results:
+                try:
+                    memory_store, _, _, _, _ = get_memory_modules()
+                    await memory_store.open_pool()
+                    semantic_terms = [normalized_file_path, basename]
+                    semantic_terms.extend(module_tokens[:4])
+                    semantic_terms = list(dict.fromkeys(term for term in semantic_terms if term))
+                    async with memory_store._pg_pool.connection() as conn:
+                        async with conn.cursor() as cur:
+                            ors = " OR ".join(["content ILIKE %s"] * len(semantic_terms))
+                            sql = (
+                                "SELECT file_path, count(*) AS hits "
+                                "FROM codebase_embeddings "
+                                "WHERE project_id = %s "
+                                "  AND file_path <> %s "
+                                "  AND (file_path ILIKE %s OR file_path ILIKE %s OR file_path ILIKE %s) "
+                                f"  AND ({ors}) "
+                                "GROUP BY file_path "
+                                "ORDER BY hits DESC, file_path "
+                                "LIMIT 10"
+                            )
+                            params = [
+                                project_id,
+                                normalized_file_path,
+                                "%test%",
+                                "%spec%",
+                                "%__tests__%",
+                            ] + [f"%{term}%" for term in semantic_terms]
+                            await cur.execute(sql, params)
+                            for hit_file, hits in await cur.fetchall():
+                                results.setdefault(
+                                    hit_file,
+                                    f"semantic test-chunk match ({hits})",
+                                )
+                except Exception:
+                    pass
+
+            if not results:
                 return (
                     f"No test files found for `{file_path}`.\n"
-                    "Either no tests exist yet or the project is not indexed."
+                    "Tried name patterns, graph imports, text matches, and semantic test chunks."
                 )
             out = [f"## Tests covering `{file_path}`\n"]
             for rel, reason in sorted(results.items()):
