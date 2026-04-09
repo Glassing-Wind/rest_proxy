@@ -528,6 +528,48 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("[backend/app]", output)
         self.assertIn("[ui/public]", output)
 
+    def test_get_code_communities_labels_monorepo_sdk_generated_and_cli_clusters(self):
+        async def fake_executor(cypher, **kwargs):
+            if "get_code_communities_louvain" in kwargs.get("op", "") or "f.louvainCommunity IS NOT NULL" in cypher:
+                return [
+                    {
+                        "comm": 10,
+                        "file_count": 2,
+                        "total_syms": 900,
+                        "top_files": [
+                            "packages/sdk/js/src/v2/gen/types.gen.ts",
+                            "packages/sdk/js/src/gen/types.gen.ts",
+                        ],
+                    },
+                    {
+                        "comm": 11,
+                        "file_count": 3,
+                        "total_syms": 120,
+                        "top_files": [
+                            "packages/opencode/src/cli/cmd/run.ts",
+                            "packages/opencode/src/project/instance.ts",
+                            "packages/opencode/src/provider/provider.ts",
+                        ],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/opencode"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        cli_index = output.index("cluster #11")
+        gen_index = output.index("cluster #10")
+        self.assertLess(cli_index, gen_index)
+        self.assertIn("[cli/runtime]", output)
+        self.assertIn("[sdk/generated]", output)
+
     def test_get_code_importance_downweights_vendor_files(self):
         async def fake_executor(cypher, **kwargs):
             if "get_code_importance_pr" in kwargs.get("op", "") or "f.pagerank IS NOT NULL" in cypher:

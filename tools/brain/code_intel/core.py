@@ -22,6 +22,17 @@ def register(mcp: FastMCP) -> None:
         norm = (file_path or "").replace("\\", "/").lower()
         if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
             return 0.08
+        if any(
+            token in norm
+            for token in (
+                "/gen/",
+                ".gen.ts",
+                ".generated.ts",
+                "_generated.swift",
+                "pregeneratedspm/",
+            )
+        ):
+            return 0.08
         if norm.startswith("vendors/") or "/vendors/" in norm:
             return 0.35
         return 1.0
@@ -54,7 +65,42 @@ def register(mcp: FastMCP) -> None:
         files = [str(fp).replace("\\", "/").lower() for fp in (top_files or [])]
         if not files:
             return "misc", 1.0
+        generated_count = sum(
+            any(
+                token in fp
+                for token in ("/gen/", "gen/", ".gen.ts", ".generated.ts", "_generated.swift", "pregeneratedspm/")
+            )
+            for fp in files
+        )
         public_count = sum("/public/" in fp or fp.startswith("src/public/") for fp in files)
+        ui_count = sum(
+            any(
+                token in fp
+                for token in (
+                    "/packages/ui/",
+                    "packages/ui/",
+                    "/packages/app/",
+                    "packages/app/",
+                    "/src/components/",
+                    "src/components/",
+                    "/src/context/",
+                    "src/context/",
+                )
+            )
+            for fp in files
+        )
+        web_count = sum(
+            any(token in fp for token in ("/packages/web/", "packages/web/", "/web/src/", "web/src/"))
+            for fp in files
+        )
+        cli_count = sum(
+            any(token in fp for token in ("/cli/", "cli/", "/packages/opencode/src/", "packages/opencode/src/"))
+            for fp in files
+        )
+        sdk_count = sum(
+            any(token in fp for token in ("/packages/sdk/", "packages/sdk/", "/sdk/js/", "sdk/js/"))
+            for fp in files
+        )
         api_count = sum("/src/api/" in fp or fp.startswith("src/api/") for fp in files)
         service_count = sum("/src/services/" in fp or fp.startswith("src/services/") for fp in files)
         db_count = sum(
@@ -66,8 +112,18 @@ def register(mcp: FastMCP) -> None:
         )
         jobs_count = sum("/src/jobs/" in fp or fp.startswith("src/jobs/") for fp in files)
         total = max(len(files), 1)
+        if generated_count / total >= 0.5 and sdk_count >= 1:
+            return "sdk/generated", 0.22
         if public_count / total >= 0.6:
             return "ui/public", 0.3
+        if sdk_count / total >= 0.6:
+            return "sdk/runtime", 1.35
+        if cli_count / total >= 0.5:
+            return "cli/runtime", 1.5
+        if web_count / total >= 0.5:
+            return "web/site", 1.15
+        if ui_count / total >= 0.5:
+            return "ui/app", 1.1
         if api_count + service_count + db_count >= 2:
             return "backend/app", 2.0
         if db_count >= 1:

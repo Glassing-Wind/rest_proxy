@@ -28,6 +28,17 @@ def _importance_penalty(filepath: str | None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
         return 0.08
+    if any(
+        token in norm
+        for token in (
+            "/gen/",
+            ".gen.ts",
+            ".generated.ts",
+            "_generated.swift",
+            "pregeneratedspm/",
+        )
+    ):
+        return 0.08
     if norm.startswith("vendors/") or "/vendors/" in norm:
         return 0.35
     return 1.0

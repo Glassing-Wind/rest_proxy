@@ -386,6 +386,42 @@ class GraphToolsTests(unittest.TestCase):
         financials_index = output.index("src/public/assets/financials.js")
         self.assertLess(quickbooks_index, financials_index)
 
+    def test_project_overview_downweights_generated_sdk_files(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 200}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 800}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "packages", "files": 180, "syms": 760}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {
+                        "fp": "packages/sdk/js/src/v2/gen/types.gen.ts",
+                        "n": 597,
+                        "ex": ["Agent", "AgentConfig", "AgentPart"],
+                    },
+                    {
+                        "fp": "packages/opencode/src/config/config.ts",
+                        "n": 54,
+                        "ex": ["Agent", "Command", "Info"],
+                    },
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/opencode"))
+
+        config_index = output.index("packages/opencode/src/config/config.ts")
+        generated_index = output.index("packages/sdk/js/src/v2/gen/types.gen.ts")
+        self.assertLess(config_index, generated_index)
+
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
             with mock.patch.object(
