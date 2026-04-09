@@ -28,6 +28,7 @@ async def insert_turns_batch(
         if not driver:
             return []
 
+        started_at = time.perf_counter()
         now = time.time()
         prepared_rows: list[dict[str, Any]] = []
         row_ids: list[str] = []
@@ -81,7 +82,11 @@ async def insert_turns_batch(
                 "insert_turns_batch",
                 rows=prepared_rows,
             )
-        store_core._debug("graph_insert_turns_batch", count=len(prepared_rows))
+        store_core._debug(
+            "graph_insert_turns_batch",
+            count=len(prepared_rows),
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
         return row_ids
     except Exception as exc:
         store_core._debug("graph_insert_turns_batch_error", error=str(exc))
@@ -123,9 +128,6 @@ async def insert_turn(
         row_id = row_ids[0] if row_ids else None
         if not row_id:
             return None
-        store_core._debug(
-            "graph_insert_turn", session_id=session_id, project_id=_project_id_for_path(project_path)
-        )
         return row_id
     except Exception as exc:
         store_core._debug(
@@ -157,9 +159,6 @@ async def insert_summary(
         row_id = row_ids[0] if row_ids else None
         if not row_id:
             return None
-        store_core._debug(
-            "graph_insert_summary", session_id=session_id, type=summary_type
-        )
         return row_id
     except Exception as exc:
         store_core._debug(
@@ -195,9 +194,6 @@ async def insert_tool_output(
         row_id = row_ids[0] if row_ids else None
         if not row_id:
             return None
-        store_core._debug(
-            "graph_insert_tool_output", session_id=session_id, tool=tool_name
-        )
         return row_id
     except Exception as exc:
         store_core._debug(
@@ -229,7 +225,6 @@ async def insert_checkpoint(
         row_id = row_ids[0] if row_ids else None
         if not row_id:
             return None
-        store_core._debug("graph_insert_checkpoint", session_id=session_id)
         return row_id
     except Exception as exc:
         store_core._debug(
@@ -249,6 +244,7 @@ async def insert_summaries_batch(rows: list[dict[str, Any]]) -> list[str]:
         if not driver:
             return []
 
+        started_at = time.perf_counter()
         now = time.time()
         prepared_rows: list[dict[str, Any]] = []
         row_ids: list[str] = []
@@ -286,6 +282,11 @@ async def insert_summaries_batch(rows: list[dict[str, Any]]) -> list[str]:
                 "insert_summaries_batch",
                 rows=prepared_rows,
             )
+        store_core._debug(
+            "graph_insert_summaries_batch",
+            count=len(prepared_rows),
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
         return row_ids
     except Exception as exc:
         store_core._debug("graph_insert_summaries_batch_error", error=str(exc))
@@ -303,6 +304,7 @@ async def insert_tool_outputs_batch(rows: list[dict[str, Any]]) -> list[str]:
         if not driver:
             return []
 
+        started_at = time.perf_counter()
         now = time.time()
         prepared_rows: list[dict[str, Any]] = []
         row_ids: list[str] = []
@@ -344,6 +346,11 @@ async def insert_tool_outputs_batch(rows: list[dict[str, Any]]) -> list[str]:
                 "insert_tool_outputs_batch",
                 rows=prepared_rows,
             )
+        store_core._debug(
+            "graph_insert_tool_outputs_batch",
+            count=len(prepared_rows),
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
         return row_ids
     except Exception as exc:
         store_core._debug("graph_insert_tool_outputs_batch_error", error=str(exc))
@@ -361,6 +368,7 @@ async def insert_checkpoints_batch(rows: list[dict[str, Any]]) -> list[str]:
         if not driver:
             return []
 
+        started_at = time.perf_counter()
         now = time.time()
         prepared_rows: list[dict[str, Any]] = []
         row_ids: list[str] = []
@@ -398,6 +406,11 @@ async def insert_checkpoints_batch(rows: list[dict[str, Any]]) -> list[str]:
                 "insert_checkpoints_batch",
                 rows=prepared_rows,
             )
+        store_core._debug(
+            "graph_insert_checkpoints_batch",
+            count=len(prepared_rows),
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+        )
         return row_ids
     except Exception as exc:
         store_core._debug("graph_insert_checkpoints_batch_error", error=str(exc))
