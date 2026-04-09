@@ -513,14 +513,7 @@ def register(mcp: FastMCP) -> None:
                 "yes",
                 "on",
             }
-            duplicate_telemetry_enabled = os.getenv(
-                "LM_PROXY_DUPLICATE_TELEMETRY", "0"
-            ).strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
+            duplicate_telemetry_enabled = sem_helpers.duplicate_telemetry_enabled()
             duplicate_experiments = sem_helpers.duplicate_experiment_flags_from_env()
             duplicate_trace: dict | None = None
 
@@ -564,6 +557,12 @@ def register(mcp: FastMCP) -> None:
             if duplicate_trace and duplicate_telemetry_enabled:
                 telemetry = duplicate_trace.get("telemetry") if isinstance(duplicate_trace, dict) else {}
                 if isinstance(telemetry, dict):
+                    sem_helpers.append_duplicate_telemetry_event(
+                        duplicate_trace,
+                        query=query,
+                        tool="search_codebase",
+                        mode="code",
+                    )
                     debug_log(
                         "duplicate_rerank_telemetry",
                         query=query[:200],
@@ -576,8 +575,12 @@ def register(mcp: FastMCP) -> None:
                         topk_redundancy_before=telemetry.get("topk_redundancy_before"),
                         topk_redundancy_after=telemetry.get("topk_redundancy_after"),
                         kept_group_multi_member_count=telemetry.get("kept_group_multi_member_count"),
+                        multi_representative_group_count=telemetry.get("multi_representative_group_count"),
+                        query_distinct_multi_rep_count=telemetry.get("query_distinct_multi_rep_count"),
                         canonical_doc_preference_success=telemetry.get("canonical_doc_preference_success"),
                         version_sensitive_query=telemetry.get("version_sensitive_query"),
+                        best_answer_loss_suspect=telemetry.get("best_answer_loss_suspect"),
+                        regression_alerts=telemetry.get("regression_alerts"),
                         experiments=duplicate_trace.get("experiments"),
                     )
 

@@ -13,6 +13,57 @@ from tools.brain.docs.policy import (
 )
 
 
+def _apply_diverse_docs_selection(results: list[dict], *, query: str, k: int) -> tuple[list[dict], dict | None]:
+    """Apply the lower-level duplicate/diversification contract in docs mode."""
+    if len(results) < 2:
+        return results[:k], None
+    try:
+        from tools.brain.search.semantic_helpers import (
+            duplicate_experiment_flags_from_env,
+            trace_diverse_results,
+        )
+    except Exception:
+        return _url_diverse_docs_selection(results, k), None
+
+    experiments = duplicate_experiment_flags_from_env()
+    try:
+        trace = trace_diverse_results(results, query=query, mode="docs", experiments=experiments)
+    except Exception:
+        return _url_diverse_docs_selection(results, k), None
+
+    selection = trace.get("selection") if isinstance(trace, dict) else {}
+    keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
+    if not isinstance(keep_indices, list):
+        return _url_diverse_docs_selection(results, k), trace if isinstance(trace, dict) else None
+
+    chosen: list[dict] = []
+    seen: set[int] = set()
+    for idx in keep_indices:
+        if not isinstance(idx, int) or idx in seen or idx < 0 or idx >= len(results):
+            continue
+        chosen.append(results[idx])
+        seen.add(idx)
+        if len(chosen) >= k:
+            break
+    if chosen:
+            return chosen, trace if isinstance(trace, dict) else None
+    return _url_diverse_docs_selection(results, k), trace if isinstance(trace, dict) else None
+
+
+def _url_diverse_docs_selection(results: list[dict], k: int) -> list[dict]:
+    """Conservative fallback when the lower-level contract is unavailable."""
+    seen_url: dict[str, int] = {}
+    diverse = []
+    for result in results:
+        source_url = result["source_url"]
+        if seen_url.get(source_url, 0) < 1:
+            diverse.append(result)
+            seen_url[source_url] = seen_url.get(source_url, 0) + 1
+        if len(diverse) >= k:
+            break
+    return diverse[:k]
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -165,14 +216,20 @@ def register(mcp: FastMCP) -> None:
                 tip = f" (topic='{topic}')" if topic else ""
                 return f"No documentation found for: '{query}'{tip}\nRun download_documentation() first."
 
-            seen_url: dict[str, int] = {}
-            diverse = []
-            for r in results:
-                source_url = r["source_url"]
-                if seen_url.get(source_url, 0) < 1:
-                    diverse.append(r)
-                    seen_url[source_url] = seen_url.get(source_url, 0) + 1
-            results = diverse[:k]
+            results, trace = _apply_diverse_docs_selection(results, query=query, k=k)
+            if isinstance(trace, dict):
+                try:
+                    from tools.brain.search.semantic_helpers import append_duplicate_telemetry_event
+
+                    append_duplicate_telemetry_event(
+                        trace,
+                        query=query,
+                        tool="search_documentation",
+                        mode="docs",
+                        topic=topic,
+                    )
+                except Exception:
+                    pass
 
             lines = [
                 f"Documentation search: '{query}'" + (f"  [topic={topic}]" if topic else ""),

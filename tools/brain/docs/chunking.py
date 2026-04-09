@@ -5,7 +5,12 @@ import sys
 from typing import Dict, List
 from urllib.parse import urlparse
 
-from tools.brain.docs.config import CHUNK_LINES, CHUNK_MAX_BYTES, OVERLAP_LINES
+from tools.brain.docs.config import (
+    CHUNK_LINES,
+    CHUNK_MAX_BYTES,
+    CHUNK_OVERLAP_BYTES,
+    OVERLAP_LINES,
+)
 
 
 def _infer_doc_type(url: str, title: str) -> str:
@@ -47,7 +52,11 @@ def chunk_content(
     try:
         import tree_sitter_language_pack as ts_pack
 
-        config = ts_pack.ProcessConfig(fmt, chunk_max_size=CHUNK_MAX_BYTES)
+        config = ts_pack.ProcessConfig(
+            fmt,
+            chunk_max_size=CHUNK_MAX_BYTES,
+            chunk_overlap=CHUNK_OVERLAP_BYTES,
+        )
         result = ts_pack.process(content, config)
         chunks = result.get("chunks", [])
         if chunks:

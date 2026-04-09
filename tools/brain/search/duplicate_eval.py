@@ -147,6 +147,19 @@ def _order_from_trace(trace: dict, config_name: str) -> list[int]:
     return list(keep)
 
 
+def _promotion_alerts(config: dict, baseline: dict) -> list[str]:
+    alerts: list[str] = []
+    if config["hit_at_k"] < baseline["hit_at_k"]:
+        alerts.append("hit_at_k_regressed")
+    if config["best_answer_retained"] is False and baseline["best_answer_retained"] is True:
+        alerts.append("best_answer_retention_regressed")
+    if config["topk_redundancy_rate"] > baseline["topk_redundancy_rate"]:
+        alerts.append("no_redundancy_gain")
+    if config["false_collapse_rate"] > baseline["false_collapse_rate"]:
+        alerts.append("false_collapse_regressed")
+    return alerts
+
+
 def evaluate_case(case: dict) -> dict:
     results = case.get("results") or []
     query = str(case.get("query") or "")
@@ -166,6 +179,7 @@ def evaluate_case(case: dict) -> dict:
         "query_aware": trace_default,
         "conservative_penalties": trace_default,
         "narrow_non_exact_experiments": trace_experimental,
+        "promoted_non_exact": trace_experimental,
     }
     labels = {
         int(idx): float(score)
@@ -211,6 +225,9 @@ def evaluate_case(case: dict) -> dict:
                 "after": top,
             },
         }
+    baseline_cfg = out_configs["baseline"]
+    for name, cfg in out_configs.items():
+        cfg["promotion_alerts"] = [] if name == "baseline" else _promotion_alerts(cfg, baseline_cfg)
     return {
         "id": case.get("id"),
         "mode": mode,
@@ -230,6 +247,7 @@ def evaluate_benchmarks(path: str | None = None) -> dict:
         "query_aware",
         "conservative_penalties",
         "narrow_non_exact_experiments",
+        "promoted_non_exact",
     ]:
         bucket = {
             "hit_at_k": 0.0,
@@ -245,7 +263,32 @@ def evaluate_benchmarks(path: str | None = None) -> dict:
             for key in bucket:
                 bucket[key] += float(cfg.get(key, 0.0))
         summary[config_name] = {key: value / count for key, value in bucket.items()}
+    by_mode: dict[str, dict[str, dict[str, float]]] = {}
+    alerts: dict[str, list[str]] = {}
+    for report in reports:
+        mode = report["mode"]
+        mode_bucket = by_mode.setdefault(mode, {})
+        for config_name, cfg in report["configs"].items():
+            bucket = mode_bucket.setdefault(
+                config_name,
+                {"hit_at_k": 0.0, "topk_redundancy_rate": 0.0, "false_collapse_rate": 0.0, "_count": 0.0},
+            )
+            bucket["hit_at_k"] += float(cfg.get("hit_at_k", 0.0))
+            bucket["topk_redundancy_rate"] += float(cfg.get("topk_redundancy_rate", 0.0))
+            bucket["false_collapse_rate"] += float(cfg.get("false_collapse_rate", 0.0))
+            bucket["_count"] += 1.0
+            for alert in cfg.get("promotion_alerts", []):
+                alerts.setdefault(config_name, [])
+                if alert not in alerts[config_name]:
+                    alerts[config_name].append(alert)
+    for mode_bucket in by_mode.values():
+        for config_name, bucket in mode_bucket.items():
+            count = max(1.0, bucket.pop("_count", 1.0))
+            for key in list(bucket.keys()):
+                bucket[key] = bucket[key] / count
     return {
         "cases": reports,
         "summary": summary,
+        "by_mode": by_mode,
+        "alerts": alerts,
     }

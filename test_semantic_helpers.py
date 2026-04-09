@@ -1,5 +1,8 @@
 import importlib.util
+import json
+import os
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -112,6 +115,64 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(trace["selection"]["keep_indices"], [0, 1])
         self.assertEqual(trace["telemetry"]["query_class"], "symbol_lookup")
         fake_ts_pack.trace_diverse_texts.assert_called_once()
+
+    def test_duplicate_experiment_flags_respect_rollout_stage(self):
+        with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_ROLLOUT_STAGE": "stage2"}, clear=False):
+            flags = module.duplicate_experiment_flags_from_env()
+        self.assertTrue(flags["boilerplate_variant_suppression"])
+        self.assertTrue(flags["canonical_docs_mirror_suppression"])
+        self.assertFalse(flags["helper_clone_suppression"])
+
+    def test_duplicate_experiment_flags_default_to_stage2(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            flags = module.duplicate_experiment_flags_from_env()
+        self.assertTrue(flags["boilerplate_variant_suppression"])
+        self.assertTrue(flags["canonical_docs_mirror_suppression"])
+        self.assertFalse(flags["helper_clone_suppression"])
+
+    def test_duplicate_experiment_flags_allow_exact_only_disable(self):
+        with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_ROLLOUT_STAGE": "off"}, clear=False):
+            flags = module.duplicate_experiment_flags_from_env()
+        self.assertFalse(flags["boilerplate_variant_suppression"])
+        self.assertFalse(flags["canonical_docs_mirror_suppression"])
+        self.assertFalse(flags["helper_clone_suppression"])
+
+    def test_append_duplicate_telemetry_event_writes_ndjson(self):
+        trace = {
+            "selection": {"keep_indices": [0]},
+            "telemetry": {"query_class": "docs_incident", "experimental_suppressions": 1},
+            "suppression_policy": "exact_only",
+            "experiments": {"boilerplate_variant_suppression": True},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "dup.ndjson")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "LM_PROXY_DUPLICATE_TELEMETRY": "1",
+                    "LM_PROXY_DUPLICATE_TELEMETRY_PATH": target,
+                },
+                clear=False,
+            ):
+                module.append_duplicate_telemetry_event(
+                    trace,
+                    query="deadlock retry",
+                    tool="search_documentation",
+                    mode="docs",
+                    topic="neo4j",
+                )
+            with open(target, "r", encoding="utf-8") as fh:
+                event = json.loads(fh.read().strip())
+        self.assertEqual(event["tool"], "search_documentation")
+        self.assertEqual(event["mode"], "docs")
+        self.assertEqual(event["topic"], "neo4j")
+        self.assertEqual(event["telemetry"]["experimental_suppressions"], 1)
+
+    def test_duplicate_telemetry_enabled_defaults_on_and_can_disable(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(module.duplicate_telemetry_enabled())
+        with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_TELEMETRY": "0"}, clear=False):
+            self.assertFalse(module.duplicate_telemetry_enabled())
 
     def test_duplicate_helpers_fail_open(self):
         rows = [

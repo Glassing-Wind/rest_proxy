@@ -37,6 +37,8 @@ def load_search_module():
     brain_pkg.__path__ = []
     docs_pkg = types.ModuleType("tools.brain.docs")
     docs_pkg.__path__ = []
+    search_pkg = types.ModuleType("tools.brain.search")
+    search_pkg.__path__ = []
     config_mod = load_config_module()
     policy_mod = load_policy_module()
 
@@ -55,6 +57,7 @@ def load_search_module():
             "tools": tools_pkg,
             "tools.brain": brain_pkg,
             "tools.brain.docs": docs_pkg,
+            "tools.brain.search": search_pkg,
             "tools.brain.docs.config": config_mod,
             "tools.brain.docs.policy": policy_mod,
         },
@@ -186,6 +189,40 @@ class DocsSearchHelperTests(unittest.TestCase):
         sql, params = self.module.topic_filter_sql("pgvector")
         self.assertEqual(sql, "AND source = %(topic)s")
         self.assertEqual(params["topic"], "pgvector")
+
+    def test_apply_diverse_docs_selection_prefers_lower_level_trace(self):
+        rows = [
+            {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "canonical", "rrf": 1.0},
+            {"source_url": "https://mirror.example/transactions/", "content": "mirror", "rrf": 0.99},
+            {"source_url": "https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/", "content": "ops", "rrf": 0.8},
+        ]
+        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod.duplicate_experiment_flags_from_env = lambda: {"canonical_docs_mirror_suppression": True}
+        helper_mod.trace_diverse_results = lambda results, query, mode, experiments: {
+            "selection": {"keep_indices": [0, 2]},
+            "telemetry": {"experimental_suppressions": 1},
+        }
+        with mock.patch.dict(sys.modules, {"tools.brain.search.semantic_helpers": helper_mod}):
+            selected, trace = self.search_module._apply_diverse_docs_selection(rows, query="neo4j transactions", k=2)
+
+        self.assertEqual([row["source_url"] for row in selected], [rows[0]["source_url"], rows[2]["source_url"]])
+        self.assertEqual(trace["telemetry"]["experimental_suppressions"], 1)
+
+    def test_apply_diverse_docs_selection_falls_back_to_url_dedupe(self):
+        rows = [
+            {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "canonical", "rrf": 1.0},
+            {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "same-url", "rrf": 0.95},
+            {"source_url": "https://neo4j.com/developer/kb/diagnose-locking-issues/", "content": "kb", "rrf": 0.8},
+        ]
+        with mock.patch.dict(sys.modules, {}, clear=False):
+            sys.modules.pop("tools.brain.search.semantic_helpers", None)
+            selected, trace = self.search_module._apply_diverse_docs_selection(rows, query="neo4j transactions", k=2)
+
+        self.assertEqual(
+            [row["source_url"] for row in selected],
+            [rows[0]["source_url"], rows[2]["source_url"]],
+        )
+        self.assertIsNone(trace)
 
 
 if __name__ == "__main__":

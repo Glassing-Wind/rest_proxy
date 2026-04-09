@@ -33,6 +33,9 @@ class RetrievalDuplicateEvalTests(unittest.TestCase):
         self.assertIn("cases", report)
         self.assertIn("query_aware", report["summary"])
         self.assertIn("narrow_non_exact_experiments", report["summary"])
+        self.assertIn("promoted_non_exact", report["summary"])
+        self.assertIn("by_mode", report)
+        self.assertIn("alerts", report)
 
     def test_query_aware_keeps_best_answers_and_reduces_repetition(self):
         report = _run_eval_in_lmproxy()
@@ -57,6 +60,11 @@ class RetrievalDuplicateEvalTests(unittest.TestCase):
         top = code_case["configs"]["query_aware"]["top_k"]
         self.assertIn(2, top)
         self.assertIn(0, top)
+
+    def test_promoted_non_exact_has_no_regression_alerts_for_safe_docs_case(self):
+        report = _run_eval_in_lmproxy()
+        docs_case = next(case for case in report["cases"] if case["id"] == "docs_canonical_mirror_preferred")
+        self.assertEqual(docs_case["configs"]["promoted_non_exact"]["promotion_alerts"], [])
 
 
 if __name__ == "__main__":

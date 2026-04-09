@@ -5,15 +5,43 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
 
 
 def duplicate_experiment_flags_from_env() -> dict:
+    stage = (os.getenv("LM_PROXY_DUPLICATE_ROLLOUT_STAGE") or "stage2").strip().lower()
     raw = (os.getenv("LM_PROXY_DUPLICATE_EXPERIMENTS") or "").strip()
     flags = {
         "boilerplate_variant_suppression": False,
         "canonical_docs_mirror_suppression": False,
         "helper_clone_suppression": False,
+        "threshold_struct": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_STRUCT"),
+        "threshold_lexical": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_LEXICAL"),
+        "threshold_role": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_ROLE"),
+        "min_length_ratio": _float_env("LM_PROXY_DUPLICATE_MIN_LENGTH_RATIO"),
+        "max_length_ratio": _float_env("LM_PROXY_DUPLICATE_MAX_LENGTH_RATIO"),
+        "threshold_query_distinction": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_QUERY_DISTINCTION"),
+        "allow_cross_role_suppression": False,
     }
+    stage_map = {
+        "off": {},
+        "none": {},
+        "exact_only": {},
+        "stage1": {"boilerplate_variant_suppression": True},
+        "stage2": {
+            "boilerplate_variant_suppression": True,
+            "canonical_docs_mirror_suppression": True,
+        },
+        "stage3": {
+            "boilerplate_variant_suppression": True,
+            "canonical_docs_mirror_suppression": True,
+            "helper_clone_suppression": True,
+        },
+    }
+    for key, value in stage_map.get(stage, {}).items():
+        flags[key] = value
     if not raw:
         return flags
     enabled = {
@@ -30,6 +58,57 @@ def duplicate_experiment_flags_from_env() -> dict:
     return flags
 
 
+def duplicate_telemetry_enabled() -> bool:
+    raw = os.getenv("LM_PROXY_DUPLICATE_TELEMETRY", "1").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
+def append_duplicate_telemetry_event(
+    trace: dict,
+    *,
+    query: str,
+    tool: str,
+    mode: str,
+    topic: str = "",
+) -> None:
+    if not duplicate_telemetry_enabled() or not isinstance(trace, dict):
+        return
+    path = os.getenv("LM_PROXY_DUPLICATE_TELEMETRY_PATH", "").strip()
+    if path:
+        target = Path(os.path.expanduser(path))
+    else:
+        target = Path(__file__).resolve().parents[3] / ".runtime" / "duplicate_telemetry.ndjson"
+    event = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "tool": tool,
+        "mode": mode,
+        "topic": topic,
+        "query": (query or "")[:500],
+        "selection": trace.get("selection", {}),
+        "telemetry": trace.get("telemetry", {}),
+        "suppression_policy": trace.get("suppression_policy", "exact_only"),
+        "experiments": trace.get("experiments", {}),
+    }
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, sort_keys=True) + "\n")
+    except Exception:
+        return
+
+
+def _float_env(name: str) -> float | None:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def _context_payload(results: list[dict]) -> str:
     payload: list[dict] = []
     for result in results:
@@ -40,6 +119,90 @@ def _context_payload(results: list[dict]) -> str:
             }
         )
     return json.dumps(payload)
+
+
+def _load_ts_pack():
+    try:
+        import tree_sitter_language_pack as ts_pack
+    except Exception:
+        return None
+    return ts_pack
+
+
+def _ts_pack_runtime_call(
+    function_name: str,
+    *,
+    texts: list[str],
+    relevance_scores: list[float] | None = None,
+    query: str = "",
+    mode: str = "code",
+    contexts_json: str = "[]",
+    experiments: dict | None = None,
+):
+    try:
+        from _runtime import resolve_python_runtime
+    except Exception:
+        return None
+    runtime = resolve_python_runtime()
+    python_cmd = list(runtime.get("cmd") or [])
+    if not python_cmd:
+        return None
+    payload = {
+        "function": function_name,
+        "texts": texts,
+        "relevance_scores": relevance_scores or [],
+        "query": query or None,
+        "mode": mode,
+        "contexts_json": contexts_json,
+        "experiments": experiments or {},
+    }
+    script = """
+import json, sys
+import tree_sitter_language_pack as ts_pack
+payload = json.loads(sys.stdin.read())
+fn = payload["function"]
+if fn == "analyze_duplicate_texts":
+    result = ts_pack.analyze_duplicate_texts(
+        payload["texts"],
+        payload.get("query"),
+        payload.get("mode"),
+        payload.get("contexts_json"),
+    )
+elif fn == "rerank_diverse_texts":
+    result = ts_pack.rerank_diverse_texts(
+        payload["texts"],
+        payload.get("relevance_scores") or [],
+        payload.get("query"),
+        payload.get("mode"),
+        payload.get("contexts_json"),
+    )
+elif fn == "trace_diverse_texts":
+    result = ts_pack.trace_diverse_texts(
+        payload["texts"],
+        payload.get("relevance_scores") or [],
+        payload.get("query"),
+        payload.get("mode"),
+        payload.get("contexts_json"),
+        json.dumps(payload.get("experiments") or {}),
+    )
+else:
+    raise SystemExit(f"unknown function: {fn}")
+print(json.dumps(result))
+"""
+    try:
+        completed = subprocess.run(
+            python_cmd + ["-c", script],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except Exception:
+        return None
+    try:
+        return json.loads(completed.stdout)
+    except Exception:
+        return None
 
 
 def collapse_near_duplicate_results(results: list[dict], *, query: str = "", mode: str = "code") -> list[dict]:
@@ -99,13 +262,28 @@ def trace_diverse_results(
             "suppression_policy": "exact_only",
             "experiments": experiments or {},
         }
-    try:
-        import tree_sitter_language_pack as ts_pack
-    except Exception:
-        return trace_diverse_results(results[:1], query=query, mode=mode, experiments=experiments)
+    ts_pack = _load_ts_pack()
 
-    trace = getattr(ts_pack, "trace_diverse_texts", None)
+    trace = getattr(ts_pack, "trace_diverse_texts", None) if ts_pack is not None else None
     if not callable(trace):
+        payload = experiments if isinstance(experiments, dict) else duplicate_experiment_flags_from_env()
+        fallback = _ts_pack_runtime_call(
+            "trace_diverse_texts",
+            texts=[
+                result.get("content") if isinstance(result.get("content"), str) else ""
+                for result in results
+            ],
+            relevance_scores=[
+                float(result.get("rrf", 0.0)) if isinstance(result.get("rrf", 0.0), (int, float)) else 0.0
+                for result in results
+            ],
+            query=query,
+            mode=mode,
+            contexts_json=_context_payload(results),
+            experiments=payload,
+        )
+        if isinstance(fallback, dict):
+            return fallback
         selection = rerank_diverse_results(results, query=query, mode=mode)
         return {
             "selection": selection,
@@ -125,7 +303,7 @@ def trace_diverse_results(
                 "version_sensitive_query": False,
             },
             "suppression_policy": "exact_only",
-            "experiments": experiments or {},
+            "experiments": payload,
         }
 
     texts: list[str] = []
@@ -184,19 +362,22 @@ def analyze_near_duplicate_results(results: list[dict], *, query: str = "", mode
             "pairs": [],
             "groups": [],
         }
-    try:
-        import tree_sitter_language_pack as ts_pack
-    except Exception:
-        return {
-            "mode": "code_retrieval",
-            "keep_indices": list(range(len(results))),
-            "suppressed_indices": [],
-            "pairs": [],
-            "groups": [],
-        }
+    ts_pack = _load_ts_pack()
 
-    analyze = getattr(ts_pack, "analyze_duplicate_texts", None)
+    analyze = getattr(ts_pack, "analyze_duplicate_texts", None) if ts_pack is not None else None
     if not callable(analyze):
+        fallback = _ts_pack_runtime_call(
+            "analyze_duplicate_texts",
+            texts=[
+                result.get("content") if isinstance(result.get("content"), str) else ""
+                for result in results
+            ],
+            query=query,
+            mode=mode,
+            contexts_json=_context_payload(results),
+        )
+        if isinstance(fallback, dict):
+            return fallback
         return {
             "mode": "code_retrieval",
             "keep_indices": list(range(len(results))),
@@ -239,9 +420,24 @@ def rerank_diverse_results(results: list[dict], *, query: str = "", mode: str = 
             "group_order": list(range(len(results))),
             "representative_indices": list(range(len(results))),
         }
-    try:
-        import tree_sitter_language_pack as ts_pack
-    except Exception:
+    ts_pack = _load_ts_pack()
+    if ts_pack is None:
+        fallback = _ts_pack_runtime_call(
+            "rerank_diverse_texts",
+            texts=[
+                result.get("content") if isinstance(result.get("content"), str) else ""
+                for result in results
+            ],
+            relevance_scores=[
+                float(result.get("rrf", 0.0)) if isinstance(result.get("rrf", 0.0), (int, float)) else 0.0
+                for result in results
+            ],
+            query=query,
+            mode=mode,
+            contexts_json=_context_payload(results),
+        )
+        if isinstance(fallback, dict):
+            return fallback
         return {
             "mode": "code_retrieval",
             "keep_indices": list(range(len(results))),
@@ -305,6 +501,9 @@ def summarize_trace_for_debug(trace: dict) -> list[str]:
         f"- query_class={telemetry.get('query_class', 'unknown')}",
         f"- topk_redundancy_before={telemetry.get('topk_redundancy_before', 0.0):.3f}",
         f"- topk_redundancy_after={telemetry.get('topk_redundancy_after', 0.0):.3f}",
+        f"- multi_rep_groups={telemetry.get('multi_representative_group_count', 0)}",
+        f"- query_distinct_multi_rep={telemetry.get('query_distinct_multi_rep_count', 0)}",
+        f"- alerts={','.join(telemetry.get('regression_alerts', []) or []) or '(none)'}",
     ]
     candidates = trace.get("candidates") if isinstance(trace, dict) else []
     if isinstance(candidates, list):
@@ -312,12 +511,13 @@ def summarize_trace_for_debug(trace: dict) -> list[str]:
             if not isinstance(candidate, dict):
                 continue
             lines.append(
-                "- idx={idx} group={group} kept={kept} reason={reason} beat_by={beat} rels={rels}".format(
+                "- idx={idx} group={group} kept={kept} reason={reason} beat_by={beat} qdist={qdist:.3f} rels={rels}".format(
                     idx=candidate.get("idx"),
                     group=candidate.get("group_id"),
                     kept=candidate.get("kept"),
                     reason=candidate.get("decision_reason"),
                     beat=candidate.get("beaten_by"),
+                    qdist=float(candidate.get("query_distinction_score", 0.0)),
                     rels=",".join(candidate.get("duplicate_relations") or []),
                 )
             )

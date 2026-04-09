@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 CHUNK_LINES = 250  # fallback: target lines per chunk
 OVERLAP_LINES = 25  # fallback: line overlap between chunks
 CHUNK_MAX_BYTES = 8_000  # max bytes per section chunk (ts_pack split_markdown)
+CHUNK_OVERLAP_BYTES = 200  # ts_pack chunk overlap for retrieval-oriented docs chunks
 MAX_PAGE_BYTES = 2_000_000  # skip pages > 2MB of markdown
 
 DEFAULT_URL_FILTERS = [
