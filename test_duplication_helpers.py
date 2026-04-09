@@ -103,6 +103,7 @@ class DuplicationHelperTests(unittest.TestCase):
     def test_filter_duplicate_symbol_name_records_skips_common_noise_by_default(self):
         records = [
             {"name": "__init__", "count": 3, "files": ["a.py", "b.py"]},
+            {"name": "_execute_read", "count": 14, "files": ["a.py", "b.py"]},
             {"name": "buildRouter", "count": 2, "files": ["src/a.ts", "src/b.ts"]},
         ]
         filtered = module.filter_duplicate_symbol_name_records(

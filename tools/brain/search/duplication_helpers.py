@@ -109,6 +109,10 @@ def filter_duplicate_symbol_name_records(
             continue
         if name in DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST:
             continue
+        if name.startswith("__") and name.endswith("__"):
+            continue
+        if name.startswith("_"):
+            continue
         filtered.append(record)
     return filtered
 
