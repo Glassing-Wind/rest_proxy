@@ -399,6 +399,33 @@ def register(mcp: FastMCP) -> None:
         try:
             import subprocess, re
 
+            def _extract_changed_symbol(line: str) -> str | None:
+                patterns = [
+                    re.compile(
+                        r"^\+[ \t]*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)"
+                    ),
+                    re.compile(
+                        r"^\+[ \t]*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_][A-Za-z0-9_]*)\s*=>"
+                    ),
+                    re.compile(
+                        r"^\+[ \t]*(?:export\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)"
+                    ),
+                    re.compile(
+                        r"^\+[ \t]*(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)"
+                    ),
+                    re.compile(
+                        r"^\+[ \t]*(?:export\s+)?type\s+([A-Za-z_][A-Za-z0-9_]*)\s*="
+                    ),
+                    re.compile(
+                        r"^\+[ \t]*(?:pub\s+(?:async\s+)?)?(?:def |async def |fn |class |struct |impl |trait |enum |func |(?:public|private|internal|open|final) (?:class|struct|func|enum|protocol))([A-Za-z_][A-Za-z0-9_<>]*)"
+                    ),
+                ]
+                for pattern in patterns:
+                    match = pattern.match(line)
+                    if match:
+                        return match.group(1)
+                return None
+
             r = subprocess.run(
                 ["git", "diff", "--unified=4", since],
                 cwd=project_path,
@@ -411,16 +438,6 @@ def register(mcp: FastMCP) -> None:
                 return f"No changes vs `{since}`. Working tree is clean."
 
             file_re = re.compile(r"^diff --git a/.+ b/(.+)$")
-            def_re = re.compile(
-                r"^\+[ \t]*(?:pub (?:async )?)?(?:"
-                r"def |async def |fn |class |struct |impl |trait |enum |"
-                r"func |function |"
-                r"(?:public|private|internal|open|final) (?:class|struct|func|enum|protocol)|"
-                r"(?:export )?(?:default )?(?:async )?function "
-                r")"
-                r"([A-Za-z_][A-Za-z0-9_<>]*)"
-            )
-
             current_file = ""
             changed: dict[str, set] = {}
             all_files: set[str] = set()
@@ -431,9 +448,9 @@ def register(mcp: FastMCP) -> None:
                     current_file = m.group(1)
                     all_files.add(current_file)
                     continue
-                dm = def_re.match(line)
-                if dm and current_file:
-                    changed.setdefault(current_file, set()).add(dm.group(1))
+                symbol = _extract_changed_symbol(line)
+                if symbol and current_file:
+                    changed.setdefault(current_file, set()).add(symbol)
 
             unnamed = all_files - set(changed)
             out = [f"## Changed symbols vs `{since}`\n"]
@@ -442,7 +459,7 @@ def register(mcp: FastMCP) -> None:
                     syms = ", ".join(f"`{s}`" for s in sorted(changed[fp]))
                     out.append(f"**{fp}** — {syms}")
             if unnamed:
-                out.append("\n**Files changed (no symbol-level detection):**")
+                out.append("\n**Files changed (file-level only):**")
                 for fp in sorted(unnamed):
                     out.append(f"  - {fp}")
             return "\n".join(out)

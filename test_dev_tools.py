@@ -141,6 +141,38 @@ class DevToolsTests(unittest.TestCase):
         self.assertIn("tests/routes.test.ts", output)
         self.assertIn("route test match", output)
 
+    def test_get_changed_symbols_detects_exported_const_arrow_and_typealias(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        diff = """diff --git a/src/api/routes.ts b/src/api/routes.ts
+++/src/api/routes.ts
+@@
++export const buildRouter = async () => {
++export type RouteContext = {
++export interface RouteHelpers {
+diff --git a/src/misc.ts b/src/misc.ts
+++/src/misc.ts
+@@
++const unrelated = value
+"""
+
+        def fake_subprocess_run(cmd, **kwargs):
+            return types.SimpleNamespace(stdout=diff)
+
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+            output = asyncio.run(
+                mcp.tools["get_changed_symbols"]("/tmp/repo", "HEAD~1")
+            )
+
+        self.assertIn("`buildRouter`", output)
+        self.assertIn("`RouteContext`", output)
+        self.assertIn("`RouteHelpers`", output)
+        self.assertIn("**Files changed (file-level only):**", output)
+        self.assertIn("src/misc.ts", output)
+
 
 if __name__ == "__main__":
     unittest.main()
