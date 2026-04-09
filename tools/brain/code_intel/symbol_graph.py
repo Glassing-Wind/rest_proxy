@@ -365,6 +365,84 @@ def pick_visualize_candidate(candidates: list[dict], *, symbol_name: str) -> dic
     return ranked[0]
 
 
+def filter_visualize_neighbors(focus: dict, neighbors: dict) -> dict:
+    focus_fp = (focus.get("fp") or "").replace("\\", "/")
+    focus_prefix = ""
+    if focus_fp:
+        parts = focus_fp.split("/")
+        if len(parts) >= 3 and parts[0] == "packages" and parts[2] == "src":
+            focus_prefix = "/".join(parts[:3]) + "/"
+        elif focus_fp.startswith("src/"):
+            focus_prefix = "src/"
+
+    def _low_value_name(name: str | None) -> bool:
+        normalized = (name or "").strip().lower()
+        return normalized in {"", "unnamed", "<anonymous>", "anonymous", "iife", "fn"}
+
+    def _path_penalty(filepath: str | None) -> int:
+        normalized = (filepath or "").replace("\\", "/").lower()
+        if not normalized:
+            return 6
+        if any(token in normalized for token in ("/tests/", "/test/", "/e2e/", "/fixtures/", ".spec.", ".stories.")):
+            return 5
+        if any(token in normalized for token in ("/gen/", "/generated/", ".gen.", "_generated.", "pregeneratedspm", "/vendors/", "vendors/")):
+            return 4
+        if normalized.startswith(("script/", "scripts/", "nix/")) or "/script/" in normalized or "/scripts/" in normalized:
+            return 4
+        if any(token in normalized for token in ("/packages/ui/", "packages/ui/", "/packages/app/", "packages/app/", "/public/", "public/")):
+            return 3
+        if focus_prefix and normalized.startswith(focus_prefix.lower()):
+            return 0
+        if "/src/" in normalized or normalized.startswith("src/"):
+            return 1
+        return 2
+
+    def _sort_key(entry: dict) -> tuple:
+        file_path = (entry.get("fp") or "").replace("\\", "/")
+        return (
+            0 if (focus_prefix and file_path.startswith(focus_prefix)) else 1,
+            _path_penalty(file_path),
+            file_path,
+            entry.get("name") or "",
+        )
+
+    def _filter_group(items: list[dict], *, require_named: bool, limit: int) -> list[dict]:
+        filtered_items = [
+            entry
+            for entry in sorted(items or [], key=_sort_key)
+            if entry.get("id")
+            and (not require_named or not _low_value_name(entry.get("name")))
+            and _path_penalty(entry.get("fp")) < 4
+        ]
+        if focus_prefix:
+            focused = [
+                entry
+                for entry in filtered_items
+                if (entry.get("fp") or "").replace("\\", "/").startswith(focus_prefix)
+            ]
+            if focused:
+                filtered_items = focused
+        return filtered_items[:limit]
+
+    filtered: dict = dict(neighbors or {})
+    filtered["callees"] = _filter_group(
+        neighbors.get("callees") or [],
+        require_named=True,
+        limit=6,
+    )
+    filtered["importers"] = _filter_group(
+        neighbors.get("importers") or [],
+        require_named=False,
+        limit=4,
+    )
+    filtered["callers"] = _filter_group(
+        neighbors.get("callers") or [],
+        require_named=True,
+        limit=6,
+    )
+    return filtered
+
+
 def is_backend_filepath(filepath: str | None) -> bool:
     if not filepath:
         return False

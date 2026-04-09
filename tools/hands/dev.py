@@ -31,6 +31,15 @@ def register(mcp: FastMCP) -> None:
                 return p
         return None
 
+    def _package_root_prefix(file_path: str) -> str:
+        normalized = (file_path or "").replace("\\", "/")
+        parts = [part for part in normalized.split("/") if part]
+        if len(parts) >= 2 and parts[0] == "packages":
+            return "/".join(parts[:2]) + "/"
+        if len(parts) >= 1 and parts[0] in {"src", "tests", "test"}:
+            return parts[0] + "/"
+        return ""
+
     async def _execute_read(session, cypher: str, op: str | None = None, **params):
         metadata = dict(_TX_METADATA_BASE)
         op_value = op or "read"
@@ -176,6 +185,7 @@ def register(mcp: FastMCP) -> None:
             basename = os.path.splitext(os.path.basename(file_path))[0]
             results: dict[str, str] = {}
             normalized_file_path = normalize_neo4j_path(file_path)
+            source_prefix = _package_root_prefix(normalized_file_path)
             module_tokens = [
                 token
                 for token in re.split(r"[^A-Za-z0-9_]+", basename)
@@ -374,8 +384,42 @@ def register(mcp: FastMCP) -> None:
                     f"No test files found for `{file_path}`.\n"
                     "Tried name patterns, graph imports, text matches, and semantic test chunks."
                 )
+
+            reason_rank = {
+                "name convention": 0,
+                "imports this file": 1,
+                "imports symbol": 2,
+                "route test match": 3,
+                "generic route suite": 4,
+            }
+
+            def _reason_rank(reason: str) -> int:
+                if reason.startswith("semantic test-chunk match"):
+                    return 5
+                if reason == "mentions basename":
+                    return 6
+                return reason_rank.get(reason, 7)
+
+            sorted_items = sorted(
+                results.items(),
+                key=lambda item: (
+                    0 if (source_prefix and item[0].startswith(source_prefix)) else 1,
+                    _reason_rank(item[1]),
+                    item[0],
+                ),
+            )
+            basename_items = [item for item in sorted_items if item[1] == "mentions basename"]
+            stronger_items = [item for item in sorted_items if item[1] != "mentions basename"]
+            if basename_items:
+                focused_basename = [
+                    item for item in basename_items if source_prefix and item[0].startswith(source_prefix)
+                ]
+                other_basename = [item for item in basename_items if item not in focused_basename]
+                basename_items = focused_basename[:6] + other_basename[:4]
+            sorted_items = stronger_items + basename_items
+
             out = [f"## Tests covering `{file_path}`\n"]
-            for rel, reason in sorted(results.items()):
+            for rel, reason in sorted_items[:25]:
                 out.append(f"- `{rel}`  ← {reason}")
             return "\n".join(out)
         except Exception as e:

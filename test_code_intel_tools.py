@@ -283,6 +283,56 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("DrawThingsCLI.swift", output)
         self.assertNotIn("config_data_model_generated.swift", output)
 
+    def test_visualize_subgraph_filters_wrapper_and_test_neighbors_for_monorepo_runtime_symbol(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN n.id AS id" in cypher:
+                return [
+                    {
+                        "id": "focus-boot",
+                        "kind": "Function",
+                        "name": "boot",
+                        "fp": "packages/opencode/src/project/instance.ts",
+                        "sl": 35,
+                    }
+                ]
+            if "parent.id AS parent_id" in cypher:
+                return [
+                    {
+                        "parent_id": "file-1",
+                        "parent_name": "instance.ts",
+                        "parent_fp": "packages/opencode/src/project/instance.ts",
+                        "callers": [
+                            {"id": "caller-test", "name": "project-init-git.test.ts", "fp": "packages/opencode/test/server/project-init-git.test.ts"},
+                            {"id": "caller-runtime", "name": "router.ts", "fp": "packages/opencode/src/server/router.ts"},
+                        ],
+                        "importers": [
+                            {"id": "imp-test", "name": "prompt-effect.test.ts", "fp": "packages/opencode/test/session/prompt-effect.test.ts"},
+                            {"id": "imp-runtime", "name": "index.ts", "fp": "packages/opencode/src/worktree/index.ts"},
+                        ],
+                        "callees": [
+                            {"id": "callee-wrap", "name": "iife", "kind": "Function", "fp": "packages/util/src/iife.ts"},
+                            {"id": "callee-ui", "name": "track", "kind": "Function", "fp": "packages/ui/src/pierre/selection-bridge.ts"},
+                            {"id": "callee-runtime", "name": "restore", "kind": "Function", "fp": "packages/opencode/src/project/instance.ts"},
+                        ],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["visualize_subgraph"]("/tmp/opencode", "boot"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("restore", output)
+        self.assertIn("router.ts", output)
+        self.assertIn("worktree/index.ts", output)
+        self.assertNotIn("iife", output)
+        self.assertNotIn("project-init-git.test.ts", output)
+        self.assertNotIn("prompt-effect.test.ts", output)
+
     def test_describe_file_includes_type_alias_symbols_from_graph(self):
         async def fake_executor(cypher, **kwargs):
             if "RETURN labels(s) AS kinds" in cypher or "RETURN head([label IN labels(s)" in cypher:

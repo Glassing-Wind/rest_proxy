@@ -141,6 +141,48 @@ class DevToolsTests(unittest.TestCase):
         self.assertIn("tests/routes.test.ts", output)
         self.assertIn("route test match", output)
 
+    def test_get_test_coverage_for_prioritizes_same_package_and_caps_basename_noise(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        def fake_subprocess_run(cmd, **kwargs):
+            if cmd[:2] == ["find", "/tmp/repo"]:
+                return types.SimpleNamespace(stdout="/tmp/repo/packages/opencode/test/config/config.test.ts\n")
+            if cmd and cmd[0] == "rg":
+                return types.SimpleNamespace(
+                    stdout="\n".join(
+                        [
+                            "packages/opencode/test/config/config.test.ts",
+                            "packages/opencode/test/config/markdown.test.ts",
+                            "packages/app/src/utils/persist.test.ts",
+                            "packages/app/src/utils/server-health.test.ts",
+                            "packages/ui/src/components/x.test.ts",
+                            "packages/opencode/test/provider/provider.test.ts",
+                            "packages/opencode/test/session/llm.test.ts",
+                            "packages/desktop-electron/src/renderer/html.test.ts",
+                            "packages/app/src/context/model-variant.test.ts",
+                            "packages/opencode/test/project/vcs.test.ts",
+                            "packages/opencode/test/snapshot/snapshot.test.ts",
+                            "packages/app/src/pages/layout/helpers.test.ts",
+                        ]
+                    )
+                )
+            return types.SimpleNamespace(stdout="")
+
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+            output = asyncio.run(
+                mcp.tools["get_test_coverage_for"](
+                    "/tmp/repo",
+                    "packages/opencode/src/config/config.ts",
+                )
+            )
+
+        lines = [line for line in output.splitlines() if line.startswith("- `")]
+        self.assertIn("packages/opencode/test/config/config.test.ts", lines[0])
+        self.assertLessEqual(len(lines), 11)
+
     def test_get_changed_symbols_detects_exported_const_arrow_and_typealias(self):
         memory_store = FakeMemoryStore([])
         module = load_module(memory_store)
