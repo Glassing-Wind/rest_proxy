@@ -984,7 +984,12 @@ def register(mcp: FastMCP) -> None:
                 )
                 if not focus_nodes:
                     return f"No symbol named '{symbol_name}' found in this project."
-                focus = focus_nodes[0]
+                focus = symbol_graph.pick_visualize_candidate(
+                    focus_nodes,
+                    symbol_name=symbol_name,
+                )
+                if not focus:
+                    return f"No symbol named '{symbol_name}' found in this project."
                 focus_id = focus["id"]
 
                 nbr_rows = await _execute_read(

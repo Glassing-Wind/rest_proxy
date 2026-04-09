@@ -73,7 +73,7 @@ VISUALIZE_SUBGRAPH_FOCUS_CYPHER = """
        OR n:File
     RETURN n.id AS id, head([label IN labels(n) WHERE label <> 'Node']) AS kind, n.name AS name,
            n.filepath AS fp, n.start_line AS sl
-    LIMIT 3
+    LIMIT 12
 """
 
 
@@ -154,6 +154,60 @@ def pick_call_chain_candidate(
         if signature_matches:
             return signature_matches[0]
     return ranked_candidates[0]
+
+
+def pick_visualize_candidate(candidates: list[dict], *, symbol_name: str) -> dict | None:
+    if not candidates:
+        return None
+
+    def _path_penalty(filepath: str | None) -> int:
+        normalized = (filepath or "").lower()
+        if not normalized:
+            return 3
+        if any(
+            marker in normalized
+            for marker in (
+                "/pregeneratedspm/",
+                "/vendors/",
+                "/generated/",
+                "generated.swift",
+                "generated.ts",
+                "generated.js",
+            )
+        ):
+            return 3
+        if any(marker in normalized for marker in ("/tests/", "/test/", "/fixtures/")):
+            return 2
+        return 0
+
+    def _kind_rank(kind: str | None) -> int:
+        return {
+            "Struct": 0,
+            "Class": 0,
+            "Enum": 0,
+            "Protocol": 1,
+            "Interface": 1,
+            "Trait": 1,
+            "Function": 2,
+            "Method": 2,
+            "TypeAlias": 3,
+            "Extension": 4,
+            "AssociatedType": 4,
+            "EnumCase": 5,
+            "File": 6,
+        }.get(kind or "", 7)
+
+    ranked = sorted(
+        candidates,
+        key=lambda candidate: (
+            0 if candidate.get("name") == symbol_name else 1,
+            _path_penalty(candidate.get("fp")),
+            _kind_rank(candidate.get("kind")),
+            candidate.get("sl") or 0,
+            len(candidate.get("fp") or ""),
+        ),
+    )
+    return ranked[0]
 
 
 def is_backend_filepath(filepath: str | None) -> bool:

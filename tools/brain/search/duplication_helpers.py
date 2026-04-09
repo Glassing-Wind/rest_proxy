@@ -13,17 +13,26 @@ TOKEN_PATTERN = re.compile(
 )
 
 DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS = [
+    "docs/node_types/**",
     "**/docs/node_types/**",
+    "node_modules/**",
     "**/node_modules/**",
+    "dist/**",
     "**/dist/**",
+    "build/**",
     "**/build/**",
+    ".next/**",
     "**/.next/**",
+    "coverage/**",
     "**/coverage/**",
+    "site-packages/**",
     "**/site-packages/**",
+    "__pycache__/**",
     "**/__pycache__/**",
     "**/*.min.js",
     "**/*.bundle.js",
     "**/*.generated.*",
+    "generated/**",
     "**/generated/**",
 ]
 

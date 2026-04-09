@@ -237,6 +237,50 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("|calls|", output)
         self.assertIn("leaseRouter", output)
 
+    def test_visualize_subgraph_prefers_repo_owned_symbol_over_generated_match(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN n.id AS id" in cypher:
+                return [
+                    {
+                        "id": "focus-generated",
+                        "kind": "Struct",
+                        "name": "LoRA",
+                        "fp": "Libraries/DataModels/PreGeneratedSPM/config_data_model_generated.swift",
+                        "sl": 157,
+                    },
+                    {
+                        "id": "focus-owned",
+                        "kind": "Struct",
+                        "name": "LoRA",
+                        "fp": "Apps/DrawThingsCLI/DrawThingsCLI.swift",
+                        "sl": 44,
+                    },
+                ]
+            if "parent.id AS parent_id" in cypher:
+                self.assertEqual(kwargs.get("fid"), "focus-owned")
+                return [
+                    {
+                        "parent_id": "file-1",
+                        "parent_name": "DrawThingsCLI.swift",
+                        "parent_fp": "Apps/DrawThingsCLI/DrawThingsCLI.swift",
+                        "callers": [],
+                        "importers": [],
+                        "callees": [],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["visualize_subgraph"]("/tmp/draw-things-community", "LoRA"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("DrawThingsCLI.swift", output)
+        self.assertNotIn("config_data_model_generated.swift", output)
+
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:

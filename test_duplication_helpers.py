@@ -69,9 +69,22 @@ class DuplicationHelperTests(unittest.TestCase):
             "**/docs/node_types/**",
             module.default_duplication_exclude_patterns([]),
         )
+        self.assertIn(
+            "docs/node_types/**",
+            module.default_duplication_exclude_patterns([]),
+        )
         self.assertEqual(
             module.default_duplication_exclude_patterns(["src/**/*.ts"]),
             [],
+        )
+
+    def test_root_level_generated_docs_paths_are_excluded_by_default(self):
+        self.assertFalse(
+            module.path_allowed(
+                "docs/node_types/swift-node-types.json",
+                include_patterns=[],
+                exclude_patterns=module.default_duplication_exclude_patterns([]),
+            )
         )
 
 
