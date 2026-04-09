@@ -21,7 +21,10 @@ import sys
 from typing import List
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_BASE_URL = os.getenv("LM_BASE", "http://127.0.0.1:1234").rstrip("/")
+_BASE_URL = os.getenv(
+    "LM_PROXY_MEMORY_EMBEDDING_BASE_URL",
+    os.getenv("LM_BASE", "http://127.0.0.1:1234"),
+).rstrip("/")
 _MODEL = os.getenv(
     "LM_PROXY_MEMORY_EMBEDDING_MODEL",
     "text-embedding-jina-embeddings-v2-base-code",

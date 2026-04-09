@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from embedding_service import get_embedding_service
 from memory.types import AssembledMemory, _empty_working_memory
 
 # ---------------------------------------------------------------------------
@@ -145,45 +146,32 @@ async def get_embedding(text: str) -> Optional[List[float]]:
         return _embed_cache[cache_key]
 
     try:
-        payload = {"input": text[:4000]}
-        if _EMBEDDING_MODEL:
-            payload["model"] = _EMBEDDING_MODEL
-
-        timeout = httpx.Timeout(20.0, connect=5.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.post(f"{_EMBEDDING_BASE_URL}/v1/embeddings", json=payload)
-            if r.status_code >= 400:
-                error_body = r.text[:200]
-                _debug("embedding_request_error", status=r.status_code, body=error_body)
-
-                # SELF-HEALING: If no models are loaded, try to load the configured model
-                if "No models loaded" in error_body or r.status_code == 404:
-                    _debug("attempting_self_healing_load", model=_EMBEDDING_MODEL)
-                    await _load_model_explicitly()
-                    # Retry once
-                    r = await client.post(
-                        f"{_EMBEDDING_BASE_URL}/v1/embeddings", json=payload
-                    )
-                    if r.status_code >= 400:
-                        return None
-                else:
+        svc = get_embedding_service()
+        try:
+            vectors = await svc.embed_batch_async([text[:4000]], batch_size=1)
+        except Exception as exc:
+            error_text = str(exc)
+            _debug("embedding_request_error", error=error_text[:200])
+            if "No models loaded" in error_text or "404" in error_text:
+                _debug("attempting_self_healing_load", model=_EMBEDDING_MODEL)
+                if not await _load_model_explicitly():
                     return None
-            data = r.json()
-            embedding_data = data.get("data", [])
-            if embedding_data and isinstance(embedding_data[0], dict):
-                vec = embedding_data[0].get("embedding")
-                if isinstance(vec, list) and vec:
-                    # Populate cache; evict oldest entry if full (FIFO)
-                    if len(_embed_cache) >= _EMBED_CACHE_MAX:
-                        _embed_cache.pop(next(iter(_embed_cache)))
-                    _embed_cache[cache_key] = vec
-                    _debug(
-                        "embedding_obtained",
-                        model=_EMBEDDING_MODEL,
-                        dim=len(vec),
-                        cache_size=len(_embed_cache),
-                    )
-                    return vec
+                vectors = await svc.embed_batch_async([text[:4000]], batch_size=1)
+            else:
+                return None
+
+        if vectors and isinstance(vectors[0], list) and vectors[0]:
+            vec = vectors[0]
+            if len(_embed_cache) >= _EMBED_CACHE_MAX:
+                _embed_cache.pop(next(iter(_embed_cache)))
+            _embed_cache[cache_key] = vec
+            _debug(
+                "embedding_obtained",
+                model=_EMBEDDING_MODEL,
+                dim=len(vec),
+                cache_size=len(_embed_cache),
+            )
+            return vec
     except Exception as exc:
         _debug("embedding_exception", error=str(exc))
     return None
