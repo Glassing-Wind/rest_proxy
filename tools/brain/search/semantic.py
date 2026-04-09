@@ -121,6 +121,8 @@ def register(mcp: FastMCP) -> None:
 
             multi = len(workspace_ids) > 1
 
+            impl_intent = sem_helpers.implementation_query_intent(query)
+
             svc = get_embedding_service()
             vecs = await svc.embed_batch_async([query])
             query_vector = vecs[0]
@@ -161,6 +163,18 @@ def register(mcp: FastMCP) -> None:
                                        ) AS sem_rank
                                 FROM codebase_embeddings
                                 WHERE project_id = %(pid)s
+                                  AND (
+                                      NOT %(impl_intent)s
+                                      OR (
+                                          lower(file_path) NOT LIKE 'node-types/%%'
+                                          AND lower(file_path) NOT LIKE '%%/node-types/%%'
+                                          AND lower(file_path) NOT LIKE 'grammars/%%'
+                                          AND lower(file_path) NOT LIKE '%%/grammars/%%'
+                                          AND lower(file_path) NOT LIKE '%%-grammar.json'
+                                          AND lower(file_path) NOT LIKE '%%_grammar.json'
+                                          AND lower(file_path) NOT LIKE '%%/grammar.json'
+                                      )
+                                  )
                                 LIMIT %(fetch)s
                             ),
                             keyword AS (
@@ -172,6 +186,18 @@ def register(mcp: FastMCP) -> None:
                                 FROM codebase_embeddings
                                 WHERE project_id = %(pid)s
                                   AND search_vec @@ websearch_to_tsquery('english', %(qt)s)
+                                  AND (
+                                      NOT %(impl_intent)s
+                                      OR (
+                                          lower(file_path) NOT LIKE 'node-types/%%'
+                                          AND lower(file_path) NOT LIKE '%%/node-types/%%'
+                                          AND lower(file_path) NOT LIKE 'grammars/%%'
+                                          AND lower(file_path) NOT LIKE '%%/grammars/%%'
+                                          AND lower(file_path) NOT LIKE '%%-grammar.json'
+                                          AND lower(file_path) NOT LIKE '%%_grammar.json'
+                                          AND lower(file_path) NOT LIKE '%%/grammar.json'
+                                      )
+                                  )
                                 LIMIT %(fetch)s
                             )
                             SELECT s.file_path, s.chunk_index, s.content, s.project_id, s.metadata,
@@ -184,7 +210,13 @@ def register(mcp: FastMCP) -> None:
                             ORDER BY rrf DESC
                             LIMIT %(fetch)s
                         """,
-                            {"vec": vec_str, "pid": pid, "qt": query, "fetch": fetch},
+                            {
+                                "vec": vec_str,
+                                "pid": pid,
+                                "qt": query,
+                                "fetch": fetch,
+                                "impl_intent": impl_intent,
+                            },
                         )
                         rows = await cur.fetchall()
                         return [
@@ -279,8 +311,6 @@ def register(mcp: FastMCP) -> None:
                     for pid, rows in grouped.items():
                         sem_helpers.attach_cargo_crate_meta(rows, cargo_rows_by_pid.get(pid) or [])
 
-            impl_intent = sem_helpers.implementation_query_intent(query)
-
             if include_metadata:
                 for r in all_results:
                     r_meta = sem_helpers.coerce_meta(r)
@@ -313,35 +343,55 @@ def register(mcp: FastMCP) -> None:
                     except (TypeError, ValueError):
                         base_score = 0.0
                     is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
+                    is_low_signal_parser_data = (
+                        impl_intent
+                        and sem_helpers.is_low_signal_parser_data_path(r.get("file_path"))
+                    )
                     doc_penalty = 0.05 if impl_intent and is_doc_like else 0.0
+                    parser_data_penalty = 0.08 if is_low_signal_parser_data else 0.0
                     r["doc_like"] = is_doc_like
+                    r["low_signal_parser_data"] = is_low_signal_parser_data
                     if meta_boost > 0:
                         r["rank_score"] = base_score + (
                             r.get("meta_score", 0) * meta_boost
-                        ) - doc_penalty
+                        ) - doc_penalty - parser_data_penalty
                     else:
-                        r["rank_score"] = base_score - doc_penalty
-                all_results.sort(
-                    key=lambda r: (
-                        0 if impl_intent and r.get("doc_like") else 1,
-                        r.get("rank_score", r["rrf"]),
-                        r.get("meta_score", 0),
-                    ),
-                    reverse=True,
-                )
+                        r["rank_score"] = base_score - doc_penalty - parser_data_penalty
+                all_results.sort(key=sem_helpers.implementation_rank_tuple)
             else:
                 if impl_intent:
                     for r in all_results:
                         r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                all_results.sort(key=lambda r: r["rrf"], reverse=True)
+                        r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
+                            r.get("file_path")
+                        )
+                    all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                else:
+                    all_results.sort(key=lambda r: r["rrf"], reverse=True)
 
             if impl_intent:
-                code_results = [r for r in all_results if not r.get("doc_like")]
+                code_results = [
+                    r
+                    for r in all_results
+                    if not r.get("doc_like") and not r.get("low_signal_parser_data")
+                ]
+                parser_results = [
+                    r for r in all_results if r.get("low_signal_parser_data") and not r.get("doc_like")
+                ]
                 doc_results = [r for r in all_results if r.get("doc_like")]
                 if code_results:
                     all_results = code_results
+                elif parser_results:
+                    all_results = parser_results
                 else:
                     all_results = doc_results
+
+            if impl_intent:
+                non_parser_candidates = [
+                    r for r in all_results if not sem_helpers.is_low_signal_parser_data_path(r.get("file_path"))
+                ]
+                if non_parser_candidates:
+                    all_results = non_parser_candidates
 
             if clone_dedup:
                 try:

@@ -258,7 +258,22 @@ class SemanticHelperTests(unittest.TestCase):
     def test_implementation_query_intent_detects_code_seeking_queries(self):
         self.assertTrue(module.implementation_query_intent("QuickBooks accounting sync attempts and tenant credit application"))
         self.assertTrue(module.implementation_query_intent("where is the route handler for tenant credit"))
+
+    def test_is_low_signal_parser_data_path_flags_grammar_payloads(self):
+        self.assertTrue(module.is_low_signal_parser_data_path("node-types/ocaml/ocaml-grammar.json"))
+        self.assertTrue(module.is_low_signal_parser_data_path("grammars/python/grammar.json"))
+        self.assertFalse(module.is_low_signal_parser_data_path("repo_analyzer/parser.py"))
         self.assertFalse(module.implementation_query_intent("overview of the system"))
+
+    def test_implementation_rank_tuple_prefers_code_over_docs_and_parser_data(self):
+        rows = [
+            {"file_path": "node-types/ocaml/ocaml-grammar.json", "low_signal_parser_data": True, "doc_like": False, "rank_score": 0.9},
+            {"file_path": "docs/parser.md", "low_signal_parser_data": False, "doc_like": True, "rank_score": 0.8},
+            {"file_path": "repo_analyzer/parser.py", "low_signal_parser_data": False, "doc_like": False, "rank_score": 0.7},
+        ]
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "repo_analyzer/parser.py")
+        self.assertEqual(rows[-1]["file_path"], "node-types/ocaml/ocaml-grammar.json")
 
 
 if __name__ == "__main__":

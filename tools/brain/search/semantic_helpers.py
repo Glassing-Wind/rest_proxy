@@ -149,6 +149,12 @@ def implementation_query_intent(query: str) -> bool:
         "function",
         "method",
         "class",
+        "parser",
+        "symbol",
+        "extraction",
+        "repository analysis",
+        "code intel",
+        "call graph",
         "implementation",
         "code path",
         "where is",
@@ -168,6 +174,30 @@ def implementation_query_intent(query: str) -> bool:
         return True
     token_hits = re.findall(r"[a-zA-Z_]{3,}", text)
     return any(tok in {"svc", "api", "db", "route", "model", "handler"} for tok in token_hits)
+
+
+def is_low_signal_parser_data_path(file_path: str | None) -> bool:
+    if not file_path:
+        return False
+    norm = (file_path or "").replace("\\", "/").lower()
+    return (
+        norm.startswith("node-types/")
+        or "/node-types/" in norm
+        or norm.endswith("-grammar.json")
+        or norm.endswith("_grammar.json")
+        or norm.endswith("/grammar.json")
+        or "/grammars/" in norm
+        or norm.startswith("grammars/")
+    )
+
+
+def implementation_rank_tuple(result: dict) -> tuple[int, int, float, float]:
+    """Rank implementation-intent results with code first, then docs/parser data last."""
+    low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
+    doc_like = 1 if result.get("doc_like") else 0
+    rank_score = float(result.get("rank_score", result.get("rrf", 0.0)) or 0.0)
+    meta_score = float(result.get("meta_score", 0.0) or 0.0)
+    return (low_signal_parser_data, doc_like, -rank_score, -meta_score)
 
 
 def _context_payload(results: list[dict]) -> str:
