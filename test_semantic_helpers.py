@@ -87,6 +87,32 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual([row["file_path"] for row in collapsed], ["src/c.py", "src/a.py"])
         fake_ts_pack.rerank_diverse_texts.assert_called_once()
 
+    def test_trace_diverse_results_returns_telemetry_contract(self):
+        rows = [
+            {"file_path": "src/a.py", "project_id": "p", "rrf": 1.0, "content": "same-a"},
+            {"file_path": "src/b.py", "project_id": "p", "rrf": 0.9, "content": "same-b"},
+        ]
+        fake_ts_pack = mock.Mock()
+        fake_ts_pack.trace_diverse_texts.return_value = {
+            "selection": {
+                "mode": "code_retrieval",
+                "keep_indices": [0, 1],
+                "suppressed_indices": [],
+                "exact_suppressed_indices": [],
+                "group_order": [0],
+                "representative_indices": [0],
+            },
+            "candidates": [{"idx": 0, "kept": True}],
+            "telemetry": {"query_class": "symbol_lookup", "topk_redundancy_before": 0.5, "topk_redundancy_after": 0.2},
+            "suppression_policy": "exact_only",
+            "experiments": {"helper_clone_suppression": False},
+        }
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+            trace = module.trace_diverse_results(rows, query="lookup symbol", mode="code")
+        self.assertEqual(trace["selection"]["keep_indices"], [0, 1])
+        self.assertEqual(trace["telemetry"]["query_class"], "symbol_lookup")
+        fake_ts_pack.trace_diverse_texts.assert_called_once()
+
     def test_duplicate_helpers_fail_open(self):
         rows = [
             {"file_path": "src/a.py", "project_id": "p", "rrf": 1.0, "content": "same-a"},

@@ -1,0 +1,244 @@
+{
+  "cases": [
+    {
+      "id": "code_exact_duplicate_helpers",
+      "mode": "code",
+      "query": "add user helper",
+      "results": [
+        {
+          "file_path": "src/helpers/user_helper.py",
+          "project_id": "bench",
+          "rrf": 0.98,
+          "content": "def add_user(user_id): normalize(user_id); insert_user(user_id)",
+          "metadata": {"file_symbols": ["add_user"], "context_path": ["Helper", "Users"], "node_types": ["function_definition"]}
+        },
+        {
+          "file_path": "src/helpers/user_helper_copy.py",
+          "project_id": "bench",
+          "rrf": 0.97,
+          "content": "def add_user(user_id): normalize(user_id); insert_user(user_id)",
+          "metadata": {"file_symbols": ["add_user"], "context_path": ["Helper", "Users"], "node_types": ["function_definition"]}
+        },
+        {
+          "file_path": "src/api/users.py",
+          "project_id": "bench",
+          "rrf": 0.82,
+          "content": "def delete_user(user_id): remove_user(user_id)",
+          "metadata": {"file_symbols": ["delete_user"], "context_path": ["Api", "Users"], "node_types": ["function_definition"]}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0],
+        "must_survive": [0, 2],
+        "cluster_pairs": [[0, 1]],
+        "relevance_labels": {"0": 3.0, "1": 2.0, "2": 1.0}
+      },
+      "experiments": {"boilerplate_variant_suppression": true}
+    },
+    {
+      "id": "code_renamed_helper_clones",
+      "mode": "code",
+      "query": "user api delete",
+      "results": [
+        {
+          "file_path": "src/api/users.rs",
+          "project_id": "bench",
+          "rrf": 0.98,
+          "content": "fn create_user(user_id: i64) { insert_user(user_id); audit_user(user_id); }",
+          "metadata": {"file_symbols": ["create_user"], "context_path": ["Api", "Users"], "node_types": ["function_item"]}
+        },
+        {
+          "file_path": "src/helpers/customer_helper.rs",
+          "project_id": "bench",
+          "rrf": 0.92,
+          "content": "fn create_customer(customer_id: i64) { insert_user(customer_id); audit_user(customer_id); }",
+          "metadata": {"file_symbols": ["create_customer"], "context_path": ["Helper", "Customer"], "node_types": ["function_item"]}
+        },
+        {
+          "file_path": "src/api/users.rs",
+          "project_id": "bench",
+          "rrf": 0.95,
+          "content": "fn delete_user(user_id: i64) { remove_user(user_id); }",
+          "metadata": {"file_symbols": ["delete_user"], "context_path": ["Api", "Users"], "node_types": ["function_item"]}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [2],
+        "must_survive": [0, 2],
+        "cluster_pairs": [[0, 1]],
+        "relevance_labels": {"0": 2.0, "1": 1.0, "2": 3.0}
+      },
+      "experiments": {"helper_clone_suppression": true}
+    },
+    {
+      "id": "code_definition_and_implementation_survive",
+      "mode": "code",
+      "query": "user validation implementation",
+      "results": [
+        {
+          "file_path": "src/api/contracts.py",
+          "project_id": "bench",
+          "rrf": 0.93,
+          "content": "def validate_user(user): ...",
+          "metadata": {"file_symbols": ["validate_user"], "context_path": ["Api", "Contracts"], "node_types": ["function_definition"]}
+        },
+        {
+          "file_path": "src/services/user_validation.py",
+          "project_id": "bench",
+          "rrf": 0.91,
+          "content": "def validate_user_impl(user): check_required(user); check_age(user)",
+          "metadata": {"file_symbols": ["validate_user_impl"], "context_path": ["Service", "Users"], "node_types": ["function_definition"]}
+        },
+        {
+          "file_path": "src/helpers/user_validation_helper.py",
+          "project_id": "bench",
+          "rrf": 0.85,
+          "content": "def validate_customer_impl(customer): check_required(customer); check_age(customer)",
+          "metadata": {"file_symbols": ["validate_customer_impl"], "context_path": ["Helper", "Users"], "node_types": ["function_definition"]}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0, 1],
+        "must_survive": [0, 1],
+        "cluster_pairs": [[1, 2]],
+        "relevance_labels": {"0": 3.0, "1": 3.0, "2": 1.0}
+      },
+      "experiments": {"helper_clone_suppression": true}
+    },
+    {
+      "id": "code_short_chunks_safe",
+      "mode": "code",
+      "query": "increment counter",
+      "results": [
+        {
+          "file_path": "src/a.py",
+          "project_id": "bench",
+          "rrf": 0.9,
+          "content": "count += 1",
+          "metadata": {"file_symbols": ["inc_a"], "context_path": ["Helper"], "node_types": ["expression_statement"]}
+        },
+        {
+          "file_path": "src/b.py",
+          "project_id": "bench",
+          "rrf": 0.89,
+          "content": "count -= 1",
+          "metadata": {"file_symbols": ["dec_b"], "context_path": ["Helper"], "node_types": ["expression_statement"]}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0],
+        "must_survive": [0, 1],
+        "relevance_labels": {"0": 3.0, "1": 1.0}
+      }
+    },
+    {
+      "id": "docs_canonical_mirror_preferred",
+      "mode": "docs",
+      "query": "neo4j 5.26 transactions",
+      "results": [
+        {
+          "file_path": "https://neo4j.com/docs/python-manual/5.26/transactions/",
+          "project_id": "bench",
+          "rrf": 0.82,
+          "content": "Transactions guide for Neo4j version 5.26",
+          "metadata": {"context_path": ["Transactions"], "source_type": "driver-manual", "file_symbols": []}
+        },
+        {
+          "file_path": "https://mirror.example.com/docs/python-manual/5.26/transactions/",
+          "project_id": "bench",
+          "rrf": 0.86,
+          "content": "Transactions guide mirror for Neo4j version 5.26",
+          "metadata": {"context_path": ["Transactions"], "source_type": "mirror", "file_symbols": []}
+        },
+        {
+          "file_path": "https://neo4j.com/docs/python-manual/4.4/transactions/",
+          "project_id": "bench",
+          "rrf": 0.81,
+          "content": "Transactions guide for Neo4j version 4.4",
+          "metadata": {"context_path": ["Transactions"], "source_type": "driver-manual", "file_symbols": []}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0],
+        "must_survive": [0, 2],
+        "cluster_pairs": [[0, 1]],
+        "canonical_index": 0,
+        "version_sensitive_indices": [0, 2],
+        "relevance_labels": {"0": 3.0, "1": 1.0, "2": 2.0}
+      },
+      "experiments": {"canonical_docs_mirror_suppression": true}
+    },
+    {
+      "id": "docs_tutorial_and_reference_survive",
+      "mode": "docs",
+      "query": "neo4j transactions tutorial reference",
+      "results": [
+        {
+          "file_path": "https://neo4j.com/docs/python-manual/current/transactions/",
+          "project_id": "bench",
+          "rrf": 0.88,
+          "content": "Transactions reference guide",
+          "metadata": {"context_path": ["Transactions", "Reference"], "source_type": "driver-manual", "file_symbols": []}
+        },
+        {
+          "file_path": "https://neo4j.com/docs/python-manual/current/tutorials/transactions/",
+          "project_id": "bench",
+          "rrf": 0.85,
+          "content": "Transactions tutorial walkthrough",
+          "metadata": {"context_path": ["Transactions", "Tutorial"], "source_type": "driver-manual", "file_symbols": []}
+        },
+        {
+          "file_path": "https://mirror.example.com/docs/python-manual/current/tutorials/transactions/",
+          "project_id": "bench",
+          "rrf": 0.84,
+          "content": "Transactions tutorial walkthrough mirror",
+          "metadata": {"context_path": ["Transactions", "Tutorial"], "source_type": "mirror", "file_symbols": []}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0, 1],
+        "must_survive": [0, 1],
+        "cluster_pairs": [[1, 2]],
+        "canonical_index": 0,
+        "relevance_labels": {"0": 3.0, "1": 3.0, "2": 1.0}
+      },
+      "experiments": {"canonical_docs_mirror_suppression": true}
+    },
+    {
+      "id": "docs_prose_near_duplicates_do_not_overcollapse",
+      "mode": "docs",
+      "query": "deadlock detected retry transaction",
+      "results": [
+        {
+          "file_path": "https://neo4j.com/developer/kb/diagnose-locking-issues/",
+          "project_id": "bench",
+          "rrf": 0.92,
+          "content": "Diagnose locking issues and deadlock retry guidance",
+          "metadata": {"context_path": ["Deadlocks"], "source_type": "kb", "file_symbols": []}
+        },
+        {
+          "file_path": "https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/",
+          "project_id": "bench",
+          "rrf": 0.9,
+          "content": "Concurrent data access and lock management guidance",
+          "metadata": {"context_path": ["Concurrency"], "source_type": "operations-manual", "file_symbols": []}
+        },
+        {
+          "file_path": "https://mirror.example.com/deadlock-notes",
+          "project_id": "bench",
+          "rrf": 0.87,
+          "content": "Diagnose locking issues and deadlock retry guidance mirror copy",
+          "metadata": {"context_path": ["Deadlocks"], "source_type": "mirror", "file_symbols": []}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0, 1],
+        "must_survive": [0, 1],
+        "cluster_pairs": [[0, 2]],
+        "canonical_index": 0,
+        "relevance_labels": {"0": 3.0, "1": 3.0, "2": 1.0}
+      },
+      "experiments": {"canonical_docs_mirror_suppression": true}
+    }
+  ]
+}

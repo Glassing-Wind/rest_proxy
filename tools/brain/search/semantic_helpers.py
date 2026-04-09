@@ -7,6 +7,29 @@ import json
 import os
 
 
+def duplicate_experiment_flags_from_env() -> dict:
+    raw = (os.getenv("LM_PROXY_DUPLICATE_EXPERIMENTS") or "").strip()
+    flags = {
+        "boilerplate_variant_suppression": False,
+        "canonical_docs_mirror_suppression": False,
+        "helper_clone_suppression": False,
+    }
+    if not raw:
+        return flags
+    enabled = {
+        token.strip().lower()
+        for token in raw.split(",")
+        if token.strip()
+    }
+    if "boilerplate" in enabled or "boilerplate_variant_suppression" in enabled:
+        flags["boilerplate_variant_suppression"] = True
+    if "canonical_docs_mirror" in enabled or "canonical_docs_mirror_suppression" in enabled:
+        flags["canonical_docs_mirror_suppression"] = True
+    if "helper_clone" in enabled or "helper_clone_suppression" in enabled:
+        flags["helper_clone_suppression"] = True
+    return flags
+
+
 def _context_payload(results: list[dict]) -> str:
     payload: list[dict] = []
     for result in results:
@@ -34,6 +57,122 @@ def collapse_near_duplicate_results(results: list[dict], *, query: str = "", mod
     if not keep_set:
         return results
     return [results[idx] for idx in keep_indices if idx in keep_set]
+
+
+def trace_diverse_results(
+    results: list[dict],
+    *,
+    query: str = "",
+    mode: str = "code",
+    experiments: dict | None = None,
+) -> dict:
+    if len(results) < 2:
+        keep = list(range(len(results)))
+        mode_name = "docs_retrieval" if mode == "docs" else "code_retrieval"
+        return {
+            "selection": {
+                "mode": mode_name,
+                "keep_indices": keep,
+                "suppressed_indices": [],
+                "exact_suppressed_indices": [],
+                "group_order": keep,
+                "representative_indices": keep,
+                "mmr_lambda": 0.78,
+                "aspect_lambda": 0.18,
+                "selected_aspects": [],
+            },
+            "candidates": [],
+            "telemetry": {
+                "mode": mode_name,
+                "query_class": "unknown",
+                "exact_suppressions": 0,
+                "experimental_suppressions": 0,
+                "relation_counts": {},
+                "group_sizes": [],
+                "representative_selection_reasons": {},
+                "topk_redundancy_before": 0.0,
+                "topk_redundancy_after": 0.0,
+                "kept_group_multi_member_count": 0,
+                "canonical_doc_preference_success": None,
+                "version_sensitive_query": False,
+            },
+            "suppression_policy": "exact_only",
+            "experiments": experiments or {},
+        }
+    try:
+        import tree_sitter_language_pack as ts_pack
+    except Exception:
+        return trace_diverse_results(results[:1], query=query, mode=mode, experiments=experiments)
+
+    trace = getattr(ts_pack, "trace_diverse_texts", None)
+    if not callable(trace):
+        selection = rerank_diverse_results(results, query=query, mode=mode)
+        return {
+            "selection": selection,
+            "candidates": [],
+            "telemetry": {
+                "mode": selection.get("mode", "code_retrieval"),
+                "query_class": "unknown",
+                "exact_suppressions": len(selection.get("exact_suppressed_indices", [])),
+                "experimental_suppressions": 0,
+                "relation_counts": {},
+                "group_sizes": [],
+                "representative_selection_reasons": {},
+                "topk_redundancy_before": 0.0,
+                "topk_redundancy_after": 0.0,
+                "kept_group_multi_member_count": 0,
+                "canonical_doc_preference_success": None,
+                "version_sensitive_query": False,
+            },
+            "suppression_policy": "exact_only",
+            "experiments": experiments or {},
+        }
+
+    texts: list[str] = []
+    relevance_scores: list[float] = []
+    for result in results:
+        content = result.get("content")
+        texts.append(content if isinstance(content, str) else "")
+        try:
+            relevance_scores.append(float(result.get("rrf", 0.0)))
+        except (TypeError, ValueError):
+            relevance_scores.append(0.0)
+
+    payload = experiments if isinstance(experiments, dict) else duplicate_experiment_flags_from_env()
+    try:
+        traced = trace(
+            texts,
+            relevance_scores,
+            query or None,
+            mode,
+            _context_payload(results),
+            json.dumps(payload),
+        )
+    except Exception:
+        selection = rerank_diverse_results(results, query=query, mode=mode)
+        return {
+            "selection": selection,
+            "candidates": [],
+            "telemetry": {
+                "mode": selection.get("mode", "code_retrieval"),
+                "query_class": "unknown",
+                "exact_suppressions": len(selection.get("exact_suppressed_indices", [])),
+                "experimental_suppressions": 0,
+                "relation_counts": {},
+                "group_sizes": [],
+                "representative_selection_reasons": {},
+                "topk_redundancy_before": 0.0,
+                "topk_redundancy_after": 0.0,
+                "kept_group_multi_member_count": 0,
+                "canonical_doc_preference_success": None,
+                "version_sensitive_query": False,
+            },
+            "suppression_policy": "exact_only",
+            "experiments": payload,
+        }
+    if isinstance(traced, dict):
+        return traced
+    return trace_diverse_results(results[:1], query=query, mode=mode, experiments=payload)
 
 
 def analyze_near_duplicate_results(results: list[dict], *, query: str = "", mode: str = "code") -> dict:
@@ -152,6 +291,37 @@ def rerank_diverse_results(results: list[dict], *, query: str = "", mode: str = 
         "group_order": list(range(len(results))),
         "representative_indices": list(range(len(results))),
     }
+
+
+def summarize_trace_for_debug(trace: dict) -> list[str]:
+    selection = trace.get("selection") if isinstance(trace, dict) else {}
+    telemetry = trace.get("telemetry") if isinstance(trace, dict) else {}
+    lines = [
+        "duplicate trace:",
+        f"- suppression_policy={trace.get('suppression_policy', 'exact_only')}",
+        f"- keep={selection.get('keep_indices', [])}",
+        f"- exact_suppressed={selection.get('exact_suppressed_indices', [])}",
+        f"- experimental_suppressed={telemetry.get('experimental_suppressions', 0)}",
+        f"- query_class={telemetry.get('query_class', 'unknown')}",
+        f"- topk_redundancy_before={telemetry.get('topk_redundancy_before', 0.0):.3f}",
+        f"- topk_redundancy_after={telemetry.get('topk_redundancy_after', 0.0):.3f}",
+    ]
+    candidates = trace.get("candidates") if isinstance(trace, dict) else []
+    if isinstance(candidates, list):
+        for candidate in candidates[:6]:
+            if not isinstance(candidate, dict):
+                continue
+            lines.append(
+                "- idx={idx} group={group} kept={kept} reason={reason} beat_by={beat} rels={rels}".format(
+                    idx=candidate.get("idx"),
+                    group=candidate.get("group_id"),
+                    kept=candidate.get("kept"),
+                    reason=candidate.get("decision_reason"),
+                    beat=candidate.get("beaten_by"),
+                    rels=",".join(candidate.get("duplicate_relations") or []),
+                )
+            )
+    return lines
 
 
 def format_meta(meta: dict) -> list[str]:

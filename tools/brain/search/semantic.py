@@ -4,6 +4,7 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules, get_project_id
+from proxy.logging import debug_log
 from tools.brain.search import core as search_core
 from tools.brain.search import semantic_helpers as sem_helpers
 
@@ -504,14 +505,44 @@ def register(mcp: FastMCP) -> None:
                 "yes",
                 "on",
             }
+            duplicate_trace_enabled = include_debug or os.getenv(
+                "LM_PROXY_DUPLICATE_TRACE", "0"
+            ).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            duplicate_telemetry_enabled = os.getenv(
+                "LM_PROXY_DUPLICATE_TELEMETRY", "0"
+            ).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            duplicate_experiments = sem_helpers.duplicate_experiment_flags_from_env()
+            duplicate_trace: dict | None = None
 
             if dedupe_files:
-                if rust_duplicate_collapse:
-                    all_results = sem_helpers.collapse_near_duplicate_results(
+                if rust_duplicate_collapse or duplicate_trace_enabled or duplicate_telemetry_enabled or any(
+                    duplicate_experiments.values()
+                ):
+                    duplicate_trace = sem_helpers.trace_diverse_results(
                         all_results,
                         query=query,
                         mode="code",
+                        experiments=duplicate_experiments,
                     )
+                    if rust_duplicate_collapse:
+                        selection = duplicate_trace.get("selection", {}) if isinstance(duplicate_trace, dict) else {}
+                        keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
+                        if isinstance(keep_indices, list):
+                            keep_set = {
+                                idx for idx in keep_indices if isinstance(idx, int) and 0 <= idx < len(all_results)
+                            }
+                            if keep_set:
+                                all_results = [all_results[idx] for idx in keep_indices if idx in keep_set]
                 all_results = sem_helpers.dedupe_files(all_results)
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)
@@ -526,6 +557,29 @@ def register(mcp: FastMCP) -> None:
                 pid_to_name=pid_to_name,
                 include_metadata=include_metadata,
             )
+
+            if duplicate_trace and (include_debug or duplicate_trace_enabled):
+                lines.extend(sem_helpers.summarize_trace_for_debug(duplicate_trace))
+                lines.append("")
+            if duplicate_trace and duplicate_telemetry_enabled:
+                telemetry = duplicate_trace.get("telemetry") if isinstance(duplicate_trace, dict) else {}
+                if isinstance(telemetry, dict):
+                    debug_log(
+                        "duplicate_rerank_telemetry",
+                        query=query[:200],
+                        mode=telemetry.get("mode"),
+                        query_class=telemetry.get("query_class"),
+                        exact_suppressions=telemetry.get("exact_suppressions"),
+                        experimental_suppressions=telemetry.get("experimental_suppressions"),
+                        relation_counts=telemetry.get("relation_counts"),
+                        group_sizes=telemetry.get("group_sizes"),
+                        topk_redundancy_before=telemetry.get("topk_redundancy_before"),
+                        topk_redundancy_after=telemetry.get("topk_redundancy_after"),
+                        kept_group_multi_member_count=telemetry.get("kept_group_multi_member_count"),
+                        canonical_doc_preference_success=telemetry.get("canonical_doc_preference_success"),
+                        version_sensitive_query=telemetry.get("version_sensitive_query"),
+                        experiments=duplicate_trace.get("experiments"),
+                    )
 
             if fallback == "grep" and top:
                 unique_files = len(

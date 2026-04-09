@@ -40,3 +40,27 @@ No broader non-exact suppression should become default behavior until golden ret
 - version-distinct docs survive when the query names a version
 
 Until those goldens pass, the default remains `exact_only`.
+
+## Experimental Buckets
+
+The current experimental buckets are intentionally narrow and independently gated:
+
+- `boilerplate_variant_suppression`
+- `canonical_docs_mirror_suppression`
+- `helper_clone_suppression`
+
+These buckets are rollout-only. They are not part of the default-safe retrieval contract.
+
+## Release Gates
+
+Any broader non-exact rollout must clear both offline evaluation and live telemetry.
+
+Minimum expectations:
+
+- no regression in best-answer retention / hit@k
+- reduced top-k repetition
+- no increase in false-collapse rate on golden cases
+- canonical docs preference remains correct
+- version-sensitive docs retention remains correct
+
+Threshold churn without benchmark improvement is not a valid rollout reason.
