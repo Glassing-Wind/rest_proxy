@@ -209,8 +209,11 @@ async def get_symbol_exports_summary_impl(
             session,
             """
             MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
+            OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
             OPTIONAL MATCH (importer:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
-            RETURN s.name AS symbol,
+            RETURN coalesce(alias.name, s.name) AS symbol,
+                   s.name AS target_symbol,
+                   count(DISTINCT alias) AS alias_edges,
                    count(DISTINCT f) AS exporters,
                    count(DISTINCT importer) AS importers
             ORDER BY importers DESC, exporters DESC, symbol
@@ -228,13 +231,15 @@ async def get_symbol_exports_summary_impl(
             top_symbols.append(
                 (
                     name,
+                    rec.get("target_symbol") or name,
+                    rec.get("alias_edges") or 0,
                     rec.get("exporters") or 0,
                     rec.get("importers") or 0,
                 )
             )
         top_symbols = sorted(
             top_symbols,
-            key=lambda item: (-item[2], -item[1], item[0]),
+            key=lambda item: (-item[4], -item[3], item[0], item[1]),
         )[:limit]
 
         fetch_limit = min(limit * 10, 200) if (include_paths or exclude_paths or symbol_prefix) else limit
@@ -242,7 +247,13 @@ async def get_symbol_exports_summary_impl(
             session,
             """
             MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
-            WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
+            OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
+            WITH f.filepath AS file,
+                 count(*) AS n,
+                 collect(DISTINCT CASE
+                   WHEN alias.name IS NOT NULL AND alias.name <> s.name THEN alias.name + ' -> ' + s.name
+                   ELSE coalesce(alias.name, s.name)
+                 END) AS symbols
             ORDER BY n DESC
             LIMIT $limit
             RETURN file, n, symbols
@@ -330,11 +341,16 @@ async def get_symbol_exports_summary_impl(
     if top_symbols:
         lines.append("## Top exported symbols")
         for item in top_symbols:
-            if len(item) == 3:
-                name, exporters, importers = item
-                lines.append(
-                    f"- {name}  (imported by {importers} file(s); exported from {exporters} file(s))"
-                )
+            if len(item) == 5:
+                name, target_name, alias_edges, exporters, importers = item
+                if alias_edges and name != target_name:
+                    lines.append(
+                        f"- {name} -> {target_name}  (imported by {importers} file(s); exported from {exporters} file(s))"
+                    )
+                else:
+                    lines.append(
+                        f"- {name}  (imported by {importers} file(s); exported from {exporters} file(s))"
+                    )
             else:
                 name, count = item
                 lines.append(f"- {name}  ({count})")

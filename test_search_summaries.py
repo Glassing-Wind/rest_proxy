@@ -204,8 +204,20 @@ class SearchSummaryTests(unittest.TestCase):
                 return [{"n": 3}]
             if op == "get_symbol_exports_summary_symbols":
                 return [
-                    {"symbol": "register", "exporters": 3, "importers": 1},
-                    {"symbol": "WorkspaceRegistry", "exporters": 1, "importers": 5},
+                    {
+                        "symbol": "register",
+                        "target_symbol": "register",
+                        "alias_edges": 0,
+                        "exporters": 3,
+                        "importers": 1,
+                    },
+                    {
+                        "symbol": "WorkspaceRegistry",
+                        "target_symbol": "WorkspaceRegistry",
+                        "alias_edges": 0,
+                        "exporters": 1,
+                        "importers": 5,
+                    },
                 ]
             if op == "get_symbol_exports_summary_files":
                 return [
@@ -225,6 +237,40 @@ class SearchSummaryTests(unittest.TestCase):
 
         self.assertLess(output.find("WorkspaceRegistry"), output.find("register"))
         self.assertIn("imported by 5 file(s)", output)
+
+    def test_symbol_exports_summary_surfaces_alias_exports(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 1}]
+            if op == "get_symbol_exports_summary_symbols":
+                return [
+                    {
+                        "symbol": "PublicFoo",
+                        "target_symbol": "Foo",
+                        "alias_edges": 1,
+                        "exporters": 1,
+                        "importers": 4,
+                    }
+                ]
+            if op == "get_symbol_exports_summary_files":
+                return [
+                    {"file": "src/index.ts", "n": 1, "symbols": ["PublicFoo -> Foo"]},
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertIn("PublicFoo -> Foo", output)
+        self.assertIn("src/index.ts", output)
 
 
 if __name__ == "__main__":
