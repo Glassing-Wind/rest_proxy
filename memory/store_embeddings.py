@@ -13,6 +13,33 @@ except Exception:
     ts_pack = None
 
 
+async def _neo4j_link_embedding_refs_batch(
+    session,
+    *,
+    session_id: str,
+    project_id: str,
+    ref_ids: list[str],
+) -> None:
+    cypher = """\
+MERGE (s:Session {id: $session_id})
+MERGE (p:Project {id: $project_id})
+WITH s, p
+UNWIND $items AS item
+MERGE (m:Node {id: item.id})
+ON CREATE SET m:Chunk, m.project_id = item.project_id
+MERGE (s)-[:HAS_EMBEDDING]->(m)
+MERGE (p)-[:HAS_EMBEDDING]->(m)
+"""
+    await store_core._neo4j_write(
+        session,
+        cypher,
+        "link_embedding_refs_batch",
+        session_id=session_id,
+        project_id=project_id,
+        items=[{"id": rid, "project_id": project_id} for rid in ref_ids],
+    )
+
+
 async def insert_codebase_embedding(
     chunk_id: str,
     project_id: str,
@@ -113,37 +140,9 @@ async def insert_embeddings_batch(
             driver = graph_bootstrap.get_driver()
             if driver:
                 ref_ids = [it["ref_id"] for it in batch]
-                items_bolt = [{"id": rid, "project_id": project_id} for rid in ref_ids]
-
-                chunk_ref_cypher = """\
-UNWIND $items AS item
-MERGE (c:Node {id: item.id})
-ON CREATE SET c:Chunk, c.project_id = item.project_id
-"""
                 async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-                    await s.run(chunk_ref_cypher, items=items_bolt)
-
-                # Session + Project linking (once per batch)
-                node_cypher = """\
-MERGE (s:Session {id: $session_id})
-MERGE (p:Project {id: $project_id})
-"""
-                edge_cypher = """\
-MATCH (s:Session {id: $session_id})
-MATCH (p:Project {id: $project_id})
-WITH s, p
-UNWIND $ref_ids AS rid
-MATCH (m:Node {id: rid})
-MERGE (s)-[:HAS_EMBEDDING]->(m)
-MERGE (p)-[:HAS_EMBEDDING]->(m)
-"""
-                async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-                    await s.run(
-                        node_cypher, session_id=session_id, project_id=project_id
-                    )
-                async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-                    await s.run(
-                        edge_cypher,
+                    await _neo4j_link_embedding_refs_batch(
+                        s,
                         session_id=session_id,
                         project_id=project_id,
                         ref_ids=ref_ids,
@@ -202,8 +201,10 @@ ON CREATE SET
     m.created_at  = $created_at
 """
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
-            await s.run(
+            await store_core._neo4j_write(
+                s,
                 chunk_cypher,
+                "neo4j_insert_embeddings_batch",
                 items=items,
                 session_id=session_id,
                 project_id=project_id,

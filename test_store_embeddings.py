@@ -9,13 +9,30 @@ from unittest import mock
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/memory/store_embeddings.py"
 
 
-def load_store_embeddings_module():
+class FakeSession:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class FakeDriver:
+    def __init__(self):
+        self.session_calls = []
+
+    def session(self, **kwargs):
+        self.session_calls.append(kwargs)
+        return FakeSession()
+
+
+def load_store_embeddings_module(*, pool_available=False, driver=None, neo4j_calls=None):
     spec = importlib.util.spec_from_file_location("store_embeddings_under_test", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
 
     graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
-    graph_bootstrap_mod.get_driver = lambda: None
+    graph_bootstrap_mod.get_driver = lambda: driver
     graph_bootstrap_mod._NEO4J_DB = "proxy"
 
     memory_pkg = types.ModuleType("memory")
@@ -23,9 +40,15 @@ def load_store_embeddings_module():
     store_core_mod._ENABLE_EMBEDDINGS = True
     store_core_mod._EXPECTED_EMBEDDING_DIM = 2
     store_core_mod._pg_pool_available = lambda: True
-    store_core_mod._pool_available = lambda: False
+    store_core_mod._pool_available = lambda: pool_available
     store_core_mod._debug = lambda *args, **kwargs: None
     store_core_mod._pg_pool = None
+
+    async def _neo4j_write(session, cypher, op, **params):
+        if neo4j_calls is not None:
+            neo4j_calls.append((session, cypher, op, params))
+
+    store_core_mod._neo4j_write = _neo4j_write
 
     stub_modules = {
         "graph_bootstrap": graph_bootstrap_mod,
@@ -155,6 +178,45 @@ class StoreEmbeddingsTests(unittest.TestCase):
         self.assertEqual(captured["expected_dim"], 2)
         self.assertEqual(captured["batch"][0]["metadata"]["file"], "src/a.ts")
         self.assertEqual(captured["batch"][0]["metadata"]["chunk_index"], 9)
+
+    def test_insert_embeddings_batch_uses_single_managed_neo4j_link_write(self):
+        neo4j_calls = []
+        driver = FakeDriver()
+        module = load_store_embeddings_module(
+            pool_available=True,
+            driver=driver,
+            neo4j_calls=neo4j_calls,
+        )
+        cursor = FakeCursor()
+        module.store_core._pg_pool = FakePool(cursor)
+
+        fake_ts_pack = types.SimpleNamespace()
+
+        async def _execute_upsert(cursor_obj, batch, project_id, *, expected_dim=None, created_at=None):
+            return len(batch)
+
+        fake_ts_pack.execute_codebase_embedding_upsert = _execute_upsert
+        module.ts_pack = fake_ts_pack
+
+        written = asyncio.run(
+            module.insert_embeddings_batch(
+                "sess1",
+                "proj123",
+                [
+                    {"ref_id": "chunk-1", "text": "hello", "vector": [0.1, 0.2], "metadata": {}},
+                    {"ref_id": "chunk-2", "text": "world", "vector": [0.3, 0.4], "metadata": {}},
+                ],
+            )
+        )
+
+        self.assertEqual(written, 2)
+        self.assertEqual(len(driver.session_calls), 1)
+        self.assertEqual(len(neo4j_calls), 1)
+        _, cypher, op, params = neo4j_calls[0]
+        self.assertEqual(op, "link_embedding_refs_batch")
+        self.assertIn("UNWIND $items AS item", cypher)
+        self.assertEqual(params["session_id"], "sess1")
+        self.assertEqual(len(params["items"]), 2)
 
 
 if __name__ == "__main__":

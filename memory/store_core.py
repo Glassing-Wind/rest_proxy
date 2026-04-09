@@ -346,6 +346,12 @@ async def insert_turn(
     )
 
 
+async def insert_turns_batch(rows: List[Dict[str, Any]]) -> List[str]:
+    from memory import store_graph_ops
+
+    return await store_graph_ops.insert_turns_batch(rows)
+
+
 async def insert_summary(
     session_id: str,
     summary_text: str,
@@ -360,6 +366,12 @@ async def insert_summary(
         summary_type=summary_type,
         metadata=metadata,
     )
+
+
+async def insert_summaries_batch(rows: List[Dict[str, Any]]) -> List[str]:
+    from memory import store_graph_ops
+
+    return await store_graph_ops.insert_summaries_batch(rows)
 
 
 async def insert_tool_output(
@@ -382,6 +394,12 @@ async def insert_tool_output(
     )
 
 
+async def insert_tool_outputs_batch(rows: List[Dict[str, Any]]) -> List[str]:
+    from memory import store_graph_ops
+
+    return await store_graph_ops.insert_tool_outputs_batch(rows)
+
+
 async def insert_checkpoint(
     session_id: str,
     working_memory: Dict[str, Any],
@@ -396,6 +414,12 @@ async def insert_checkpoint(
         rolling_summary,
         metadata=metadata,
     )
+
+
+async def insert_checkpoints_batch(rows: List[Dict[str, Any]]) -> List[str]:
+    from memory import store_graph_ops
+
+    return await store_graph_ops.insert_checkpoints_batch(rows)
 
 
 async def insert_codebase_embedding(

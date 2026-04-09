@@ -1,9 +1,9 @@
 """graph_bootstrap.py – Neo4j Graph Database connection and schema initialization."""
 
-import os
 import json
+import os
 import sys
-from typing import Optional, Any
+from typing import Any, Optional
 from neo4j import AsyncGraphDatabase, unit_of_work
 
 _NEO4J_ENABLED = os.getenv("LM_PROXY_GRAPH_ENABLED", "1").strip().lower() in {
@@ -20,6 +20,24 @@ _EMBEDDING_DIM = int(os.getenv("LM_PROXY_MEMORY_EMBEDDING_DIM", "768"))
 _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
 _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
 _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "graph_bootstrap"}
+_MAX_CONNECTION_POOL_SIZE = int(
+    os.getenv("LM_PROXY_NEO4J_MAX_CONNECTION_POOL_SIZE", "100")
+)
+_CONNECTION_ACQUISITION_TIMEOUT = float(
+    os.getenv("LM_PROXY_NEO4J_CONNECTION_ACQUISITION_TIMEOUT", "60.0")
+)
+_MAX_TRANSACTION_RETRY_TIME = float(
+    os.getenv("LM_PROXY_NEO4J_MAX_TRANSACTION_RETRY_TIME", "30.0")
+)
+_LIVENESS_CHECK_TIMEOUT = float(
+    os.getenv("LM_PROXY_NEO4J_LIVENESS_CHECK_TIMEOUT", "30.0")
+)
+_KEEP_ALIVE = os.getenv("LM_PROXY_NEO4J_KEEP_ALIVE", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 _ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
     "1",
     "true",
@@ -28,6 +46,18 @@ _ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
 }
 
 _driver: Optional[Any] = None
+
+
+def _driver_config() -> dict[str, Any]:
+    return {
+        "max_connection_pool_size": max(1, _MAX_CONNECTION_POOL_SIZE),
+        "connection_acquisition_timeout": max(
+            1.0, _CONNECTION_ACQUISITION_TIMEOUT
+        ),
+        "max_transaction_retry_time": max(0.0, _MAX_TRANSACTION_RETRY_TIME),
+        "liveness_check_timeout": max(0.0, _LIVENESS_CHECK_TIMEOUT),
+        "keep_alive": _KEEP_ALIVE,
+    }
 
 
 def _debug(message: str, **fields: Any) -> None:
@@ -59,12 +89,15 @@ async def init_graph_db() -> None:
         return
 
     try:
+        driver_config = _driver_config()
         _driver = AsyncGraphDatabase.driver(
-            _NEO4J_URI, auth=(_NEO4J_USER, _NEO4J_PASSWORD)
+            _NEO4J_URI,
+            auth=(_NEO4J_USER, _NEO4J_PASSWORD),
+            **driver_config,
         )
         # Verify connection
         await _driver.verify_connectivity()
-        _debug("neo4j_connected", uri=_NEO4J_URI, db=_NEO4J_DB)
+        _debug("neo4j_connected", uri=_NEO4J_URI, db=_NEO4J_DB, **driver_config)
 
         # Apply Schema Constraints using a session
         # Use single-property uniqueness (node.id) since Neo4j Community Edition

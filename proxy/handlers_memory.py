@@ -164,14 +164,6 @@ async def _persist_memory_best_effort(
             )
 
             user_compact = _memory_summary.compact_turn_content("user", user_content)
-            user_turn_id = await _memory_store.insert_turn(
-                session_id=session_id,
-                turn_index=turn_count,
-                role="user",
-                content=user_content,
-                compact_content=user_compact,
-                model=model,
-            )
 
             asst_content = assistant_text
             if tool_calls:
@@ -179,14 +171,28 @@ async def _persist_memory_best_effort(
             asst_compact = _memory_summary.compact_turn_content(
                 "assistant", asst_content
             )
-            asst_turn_id = await _memory_store.insert_turn(
-                session_id=session_id,
-                turn_index=turn_count + 1,
-                role="assistant",
-                content=asst_content,
-                compact_content=asst_compact,
-                model=model,
+            turn_ids = await _memory_store.insert_turns_batch(
+                [
+                    {
+                        "session_id": session_id,
+                        "turn_index": turn_count,
+                        "role": "user",
+                        "content": user_content,
+                        "compact_content": user_compact,
+                        "model": model,
+                    },
+                    {
+                        "session_id": session_id,
+                        "turn_index": turn_count + 1,
+                        "role": "assistant",
+                        "content": asst_content,
+                        "compact_content": asst_compact,
+                        "model": model,
+                    },
+                ]
             )
+            user_turn_id = turn_ids[0] if len(turn_ids) > 0 else None
+            asst_turn_id = turn_ids[1] if len(turn_ids) > 1 else None
 
             # Persist summary snapshot periodically (every call; lightweight since text is small)
             if _ENABLE_REDIS:
