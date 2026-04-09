@@ -744,6 +744,7 @@ class FlowSummaryTests(unittest.TestCase):
             [
                 "get_backend_flow_summary",
                 "get_backend_flow_summary_fallback",
+                "get_backend_flow_summary_routes",
                 "backend_flow_cargo_schema_labels",
                 "backend_flow_cargo_crates",
             ],
@@ -791,6 +792,51 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("crate/library-oriented", output)
         self.assertIn("ts-pack-index", output)
         self.assertIn("project overview", output)
+
+    def test_get_backend_flow_summary_expands_multi_route_api_without_fake_service_binding(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_backend_flow_summary":
+                return [
+                    {
+                        "api": "src/api/routes/financeAdminRoutes.ts",
+                        "svc": "src/services/AccountingSyncBatchService.ts",
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    }
+                ]
+            if op == "get_backend_flow_summary_routes":
+                return [
+                    {
+                        "api": "src/api/routes/financeAdminRoutes.ts",
+                        "routes": [
+                            "GET /api/charges",
+                            "POST /api/financials/accounting-sync/quickbooks/export-batch",
+                        ],
+                    }
+                ]
+            if op == "backend_flow_cargo_schema_labels":
+                return [{"labels": []}]
+            if op == "backend_flow_cargo_crates":
+                return []
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_backend_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    api_contains="financeAdminRoutes",
+                    limit=20,
+                    as_table=True,
+                )
+            )
+
+        self.assertIn("GET /api/charges", output)
+        self.assertIn("POST /api/financials/accounting-sync/quickbooks/export-batch", output)
+        self.assertNotIn("src/services/AccountingSyncBatchService.ts", output)
 
 
 if __name__ == "__main__":

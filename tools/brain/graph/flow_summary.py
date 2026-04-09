@@ -184,6 +184,13 @@ ORDER BY api, svc, model, schema, external
 LIMIT $limit
 """
 
+_BACKEND_ROUTE_QUERY = """
+MATCH (route:ApiRoute {project_id:$p})-[:HANDLED_BY]->(api:File {project_id:$p})
+RETURN api.filepath AS api,
+       collect(distinct (coalesce(route.method, 'ANY') + ' ' + route.path)) AS routes
+ORDER BY api
+"""
+
 
 async def _load_cargo_crate_roots(session, project_id: str):
     schema_labels = await graph_core._execute_read(
@@ -228,8 +235,8 @@ def _match_cargo_crate(filepath: str | None, crate_rows) -> tuple[str | None, st
     return None, None
 
 
-def _format_backend_flow_row(api, svc, model, schema, external, api_crate=None, svc_crate=None) -> str:
-    parts = [value for value in [api, svc, model, schema, external] if value]
+def _format_backend_flow_row(api, route, svc, model, schema, external, api_crate=None, svc_crate=None) -> str:
+    parts = [value for value in [api, route, svc, model, schema, external] if value]
     flow = " -> ".join(parts)
     crate_bits = []
     if api_crate:
@@ -261,6 +268,7 @@ def _group_backend_flow_rows(rows: list[dict], limit: int) -> list[str]:
         groups[group].append(
             _format_backend_flow_row(
                 row["api"],
+                row.get("route"),
                 row["svc"],
                 row["model"],
                 row["schema"],
@@ -301,6 +309,45 @@ def _format_backend_flow_empty_message(crate_rows) -> str:
         + detail
         + " Prefer project overview, code importance, related files, communities, and directory snapshots here."
     )
+
+
+async def _load_backend_api_routes(session, project_id: str) -> dict[str, list[str]]:
+    rows = await graph_core._execute_read(
+        session,
+        _BACKEND_ROUTE_QUERY,
+        p=project_id,
+        op="get_backend_flow_summary_routes",
+    )
+    return {
+        row.get("api"): sorted(route for route in (row.get("routes") or []) if route)
+        for row in rows
+        if row.get("api")
+    }
+
+
+def _expand_backend_rows_by_route_context(rows: list[dict], api_routes: dict[str, list[str]]) -> list[dict]:
+    expanded: list[dict] = []
+    for row in rows:
+        api = row.get("api")
+        routes = api_routes.get(api) or []
+        if not routes:
+            expanded.append({**row, "route": None})
+            continue
+        if len(routes) == 1:
+            expanded.append({**row, "route": routes[0]})
+            continue
+        for route in routes:
+            expanded.append(
+                {
+                    **row,
+                    "route": route,
+                    "svc": None,
+                    "model": None,
+                    "schema": None,
+                    "external": None,
+                }
+            )
+    return expanded
 
 
 async def _resolve_entry_files(session, project_id: str, entry_files, entry_glob):
@@ -777,10 +824,12 @@ async def get_backend_flow_summary_impl(
                 limit=query_limit,
                 op="get_backend_flow_summary_fallback",
             )
+        api_routes = await _load_backend_api_routes(session, project_id)
         cargo_crate_rows = await _load_cargo_crate_roots(session, project_id)
     rows = [
         {
             "api": row.get("api"),
+            "route": row.get("route"),
             "svc": row.get("svc"),
             "model": row.get("model"),
             "schema": row.get("schema"),
@@ -788,6 +837,7 @@ async def get_backend_flow_summary_impl(
         }
         for row in result
     ]
+    rows = _expand_backend_rows_by_route_context(rows, api_routes)
     for row in rows:
         row["api_crate"], row["api_crate_name"] = _match_cargo_crate(row["api"], cargo_crate_rows)
         row["svc_crate"], row["svc_crate_name"] = _match_cargo_crate(row["svc"], cargo_crate_rows)
@@ -808,18 +858,18 @@ async def get_backend_flow_summary_impl(
             or (r["svc_crate_name"] and needle in r["svc_crate_name"].lower())
         ]
 
-    rows = [r for r in rows if r["svc"] or r["model"] or r["schema"] or r["external"]]
+    rows = [r for r in rows if r.get("route") or r["svc"] or r["model"] or r["schema"] or r["external"]]
     if not rows:
         return _format_backend_flow_empty_message(cargo_crate_rows)
 
     if as_table:
         output = [
-            "| API Crate | Service Crate | API | Service | Model | Schema | External |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| API Crate | Service Crate | API | Route | Service | Model | Schema | External |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for row in rows[:limit]:
             output.append(
-                f"| {row['api_crate'] or ''} | {row['svc_crate'] or ''} | {row['api'] or ''} | {row['svc'] or ''} | {row['model'] or ''} | {row['schema'] or ''} | {row['external'] or ''} |"
+                f"| {row['api_crate'] or ''} | {row['svc_crate'] or ''} | {row['api'] or ''} | {row.get('route') or ''} | {row['svc'] or ''} | {row['model'] or ''} | {row['schema'] or ''} | {row['external'] or ''} |"
             )
     else:
         if any(row.get("api_crate") or row.get("svc_crate") for row in rows):
@@ -828,6 +878,7 @@ async def get_backend_flow_summary_impl(
             output = [
                 _format_backend_flow_row(
                     row["api"],
+                    row.get("route"),
                     row["svc"],
                     row["model"],
                     row["schema"],
