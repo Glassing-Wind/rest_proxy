@@ -376,6 +376,33 @@ def _row_has_app_signal(row) -> bool:
     return any(row[idx] for idx in (2, 3, 4, 5, 6, 7))
 
 
+def _collapse_ambiguous_app_rows(raw_rows):
+    grouped: dict[tuple[str | None, str | None, str | None, str | None, str | None], dict[str, set[str]]] = {}
+    for ui, js, route, api, svc, model, schema, external in raw_rows:
+        key = (ui, js, route, api, external)
+        bucket = grouped.setdefault(key, {"svc": set(), "model": set(), "schema": set()})
+        if svc:
+            bucket["svc"].add(svc)
+        if model:
+            bucket["model"].add(model)
+        if schema:
+            bucket["schema"].add(schema)
+
+    collapsed = []
+    for (ui, js, route, api, external), bucket in grouped.items():
+        svc_values = sorted(bucket["svc"])
+        model_values = sorted(bucket["model"])
+        schema_values = sorted(bucket["schema"])
+
+        svc = svc_values[0] if len(svc_values) == 1 else (f"{len(svc_values)} services" if len(svc_values) > 1 else None)
+        model = model_values[0] if len(model_values) == 1 else (f"{len(model_values)} models" if len(model_values) > 1 else None)
+        schema = schema_values[0] if len(schema_values) == 1 else (f"{len(schema_values)} schemas" if len(schema_values) > 1 else None)
+        collapsed.append((ui, js, route, api, svc, model, schema, external))
+
+    collapsed.sort(key=lambda row: tuple("" if value is None else str(value) for value in row))
+    return collapsed
+
+
 def _normalize_route_literal(path: str | None) -> str | None:
     if not path:
         return None
@@ -620,6 +647,7 @@ async def get_app_flow_summary_impl(
                 raw_rows,
             )
         raw_rows = _prefer_concrete_app_rows(raw_rows)
+        raw_rows = _collapse_ambiguous_app_rows(raw_rows)
 
         if expand_api_calls:
             ui_candidates = sorted({row[0] for row in raw_rows if row[0]})

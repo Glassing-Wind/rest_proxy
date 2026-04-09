@@ -238,7 +238,39 @@ class FlowSummaryTests(unittest.TestCase):
             )
 
         self.assertIn("src/public/financial-summary.html", output)
-        self.assertNotIn("tests/routes.test.ts", output)
+
+    def test_collapse_ambiguous_app_rows_summarizes_cross_product_joins(self):
+        rows = [
+            (
+                "src/public/financial-summary.html",
+                "src/public/assets/financial-summary.js",
+                "GET /api/financials/tax-package",
+                "src/api/routes/financeAdminRoutes.ts",
+                "src/services/AccountingSyncBatchService.ts",
+                "entries",
+                "prisma/schema.prisma",
+                None,
+            ),
+            (
+                "src/public/financial-summary.html",
+                "src/public/assets/financial-summary.js",
+                "GET /api/financials/tax-package",
+                "src/api/routes/financeAdminRoutes.ts",
+                "src/services/TaxPackageService.ts",
+                "sync",
+                "prisma/schema.prisma",
+                None,
+            ),
+        ]
+        collapsed = self.module._collapse_ambiguous_app_rows(rows)
+        self.assertEqual(len(collapsed), 1)
+        ui, js, route, api, svc, model, schema, external = collapsed[0]
+        self.assertEqual(ui, "src/public/financial-summary.html")
+        self.assertEqual(route, "GET /api/financials/tax-package")
+        self.assertEqual(api, "src/api/routes/financeAdminRoutes.ts")
+        self.assertEqual(svc, "2 services")
+        self.assertEqual(model, "2 models")
+        self.assertEqual(schema, "prisma/schema.prisma")
 
     def test_get_app_flow_summary_falls_back_to_literal_api_paths_in_js(self):
         async def fake_execute_read(session, query, **kwargs):

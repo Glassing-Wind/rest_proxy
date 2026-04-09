@@ -250,6 +250,16 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(filtered[0]["file_path"], "crates/core/src/lib.rs")
         self.assertTrue(any("crate=api" in line for line in module.format_meta(rows[0]["_meta"])))
 
+    def test_is_doc_like_path_flags_docs_and_markdown(self):
+        self.assertTrue(module.is_doc_like_path("docs/guide.md"))
+        self.assertTrue(module.is_doc_like_path("QUICKBOOKS_INTEGRATION_GUIDE.md"))
+        self.assertFalse(module.is_doc_like_path("src/services/QuickBooksService.ts"))
+
+    def test_implementation_query_intent_detects_code_seeking_queries(self):
+        self.assertTrue(module.implementation_query_intent("QuickBooks accounting sync attempts and tenant credit application"))
+        self.assertTrue(module.implementation_query_intent("where is the route handler for tenant credit"))
+        self.assertFalse(module.implementation_query_intent("overview of the system"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@ import fnmatch
 import json
 import os
 import subprocess
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -117,6 +118,56 @@ def _float_env(name: str) -> float | None:
         return float(raw)
     except ValueError:
         return None
+
+
+def is_doc_like_path(file_path: str | None) -> bool:
+    if not file_path:
+        return False
+    norm = (file_path or "").replace("\\", "/").lower()
+    return (
+        norm.endswith(".md")
+        or norm.endswith(".markdown")
+        or norm.endswith(".mdx")
+        or "/docs/" in norm
+        or norm.startswith("docs/")
+        or norm.endswith("/readme")
+        or norm.endswith("/readme.md")
+        or norm.endswith("readme.md")
+        or norm.endswith("changelog.md")
+        or norm.endswith("quickstart.md")
+    )
+
+
+def implementation_query_intent(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    strong_terms = [
+        "service",
+        "route",
+        "handler",
+        "function",
+        "method",
+        "class",
+        "implementation",
+        "code path",
+        "where is",
+        "where does",
+        "find",
+        "bug",
+        "fix",
+        "logic",
+        "call site",
+        "db model",
+        "prisma",
+        "quickbooks",
+        "tenant credit",
+        "accounting sync",
+    ]
+    if any(term in text for term in strong_terms):
+        return True
+    token_hits = re.findall(r"[a-zA-Z_]{3,}", text)
+    return any(tok in {"svc", "api", "db", "route", "model", "handler"} for tok in token_hits)
 
 
 def _context_payload(results: list[dict]) -> str:

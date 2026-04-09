@@ -304,20 +304,25 @@ def register(mcp: FastMCP) -> None:
                     ]
                 if crate_contains:
                     all_results = sem_helpers.filter_by_cargo_crate(all_results, crate_contains)
+                impl_intent = sem_helpers.implementation_query_intent(query)
                 for r in all_results:
                     base_score = r.get("rrf", 0.0)
                     try:
                         base_score = float(base_score)
                     except (TypeError, ValueError):
                         base_score = 0.0
+                    is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
+                    doc_penalty = 0.05 if impl_intent and is_doc_like else 0.0
+                    r["doc_like"] = is_doc_like
                     if meta_boost > 0:
                         r["rank_score"] = base_score + (
                             r.get("meta_score", 0) * meta_boost
-                        )
+                        ) - doc_penalty
                     else:
-                        r["rank_score"] = base_score
+                        r["rank_score"] = base_score - doc_penalty
                 all_results.sort(
                     key=lambda r: (
+                        0 if impl_intent and r.get("doc_like") else 1,
                         r.get("rank_score", r["rrf"]),
                         r.get("meta_score", 0),
                     ),
