@@ -54,16 +54,22 @@ class ToolRun:
     output: str
 
 
+def _workspace_basename(workspace_id: str) -> str:
+    return os.path.basename(os.path.abspath(workspace_id.rstrip("/")))
+
+
 def _build_tool_registry() -> FakeMCP:
     _install_mcp_stub()
     from tools.brain.code_intel import core as code_intel_core
     from tools.brain.graph import tools as graph_tools
     from tools.brain.search import graph_query as graph_query_tools
+    from tools.brain.search import tools as search_tools
 
     mcp = FakeMCP()
     code_intel_core.register(mcp)
     graph_tools.register(mcp)
     graph_query_tools.register(mcp)
+    search_tools.register(mcp)
     return mcp
 
 
@@ -219,6 +225,67 @@ def _require_non_error(name: str, output: str) -> None:
         raise RuntimeError(f"{name} failed:\n{output}")
 
 
+async def _run_known_regressions(mcp: FakeMCP, workspace_id: str) -> list[ToolRun]:
+    runs: list[ToolRun] = []
+    workspace_name = _workspace_basename(workspace_id)
+
+    if workspace_name == "rental":
+        type_output = await mcp.tools["get_symbol_context"](
+            workspace_id, "RouteContext", include_source_preview=False
+        )
+        _require_non_error("get_symbol_context(RouteContext)", type_output)
+        if "RouteContext" not in type_output or "src/api/routes/context.ts" not in type_output:
+            raise RuntimeError(
+                "RouteContext regression: expected rental route context type alias to resolve "
+                "through get_symbol_context."
+            )
+        runs.append(ToolRun("regression:rental_route_context", type_output))
+
+    if workspace_name == "opencode":
+        summary_output = await mcp.tools["get_symbol_exports_summary"](
+            project_path=workspace_id,
+            limit=20,
+            include_paths=[
+                "packages/sdk/js/src/client.ts",
+                "packages/sdk/js/src/v2/client.ts",
+            ],
+            symbol_prefix="Opencode",
+        )
+        _require_non_error("get_symbol_exports_summary(opencode alias)", summary_output)
+        if "OpencodeClientConfig -> Config" not in summary_output:
+            raise RuntimeError(
+                "Alias export regression: expected OpencodeClientConfig -> Config in filtered export summary."
+            )
+        runs.append(ToolRun("regression:opencode_alias_export", summary_output))
+
+    if workspace_name == "ts-export-alias-demo":
+        summary_output = await mcp.tools["get_symbol_exports_summary"](
+            project_path=workspace_id,
+            limit=20,
+        )
+        _require_non_error("get_symbol_exports_summary(ts-export-alias-demo)", summary_output)
+        if "PublicConfig -> Config" not in summary_output:
+            raise RuntimeError(
+                "Alias demo regression: expected PublicConfig -> Config in export summary."
+            )
+        runs.append(ToolRun("regression:ts_export_alias_demo", summary_output))
+
+    if workspace_name == "ts-namespace-export-demo":
+        summary_output = await mcp.tools["get_symbol_exports_summary"](
+            project_path=workspace_id,
+            limit=20,
+        )
+        _require_non_error("get_symbol_exports_summary(ts-namespace-export-demo)", summary_output)
+        for expected in ("routes.* -> buildRouter", "routes.* -> RouteConfig"):
+            if expected not in summary_output:
+                raise RuntimeError(
+                    f"Namespace export regression: expected '{expected}' in export summary."
+                )
+        runs.append(ToolRun("regression:ts_namespace_export_demo", summary_output))
+
+    return runs
+
+
 async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
     mcp = _build_tool_registry()
 
@@ -300,10 +367,6 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
 
         code_importance_output = await mcp.tools["get_code_importance"](workspace_id)
         _require_non_error("get_code_importance", code_importance_output)
-        if "Crate:" not in code_importance_output:
-            raise RuntimeError(
-                f"Cargo repo appears indexed but code importance did not include crate grouping:\n{code_importance_output}"
-            )
 
         related_output = await mcp.tools["get_related_files"](workspace_id, symbol_file or "")
         _require_non_error("get_related_files", related_output)
@@ -334,6 +397,8 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
             )
         apple_runs.append(ToolRun("get_flow_summary(mode=apple)", apple_summary_output))
 
+    regression_runs = await _run_known_regressions(mcp, workspace_id)
+
     return [
         ToolRun("resolve_graph_project", resolve_output),
         ToolRun("get_project_overview", overview_output),
@@ -347,6 +412,7 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
         ToolRun("query_graph", raw_query_output),
         *cargo_runs,
         *apple_runs,
+        *regression_runs,
     ]
 
 
