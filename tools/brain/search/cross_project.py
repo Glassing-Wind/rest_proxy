@@ -51,6 +51,7 @@ def register(mcp: FastMCP) -> None:
 
             # ── 1. Definition in source project ──────────────────────────────
             definition: dict = {}
+            resolved_names: list[str] = [symbol_name]
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await search_core._execute_read(
                     session,
@@ -73,6 +74,31 @@ def register(mcp: FastMCP) -> None:
                 )
                 if records:
                     definition = dict(records[0])
+                else:
+                    alias_records = await search_core._execute_read(
+                        session,
+                        """
+                        MATCH (f:File {project_id: $pid})-[alias:EXPORTS_SYMBOL_AS]->(target)
+                        WHERE alias.name = $name
+                        OPTIONAL MATCH (f)-[:EXPORTS_SYMBOL]->(target)
+                        RETURN 'ExportAlias' AS kind,
+                               f.filepath AS filepath,
+                               alias.line AS start_line,
+                               alias.line AS end_line,
+                               coalesce(target.signature, target.name) AS signature,
+                               target.name AS target_name
+                        ORDER BY f.filepath ASC
+                        LIMIT 1
+                    """,
+                        name=symbol_name,
+                        pid=src_id,
+                        op="trace_symbol_alias_definition",
+                    )
+                    if alias_records:
+                        definition = dict(alias_records[0])
+                        target_name = definition.get("target_name")
+                        if isinstance(target_name, str) and target_name and target_name != symbol_name:
+                            resolved_names.append(target_name)
 
             # ── 2. Call-graph usages in target project ────────────────────────
             graph_usages: list[str] = []
@@ -80,10 +106,11 @@ def register(mcp: FastMCP) -> None:
                 records = await search_core._execute_read(
                     session,
                     """
-                    MATCH (target {name: $name})
-                    WHERE target:Function OR target:Class OR target:Struct
+                    MATCH (target)
+                    WHERE target.name IN $names
+                      AND (target:Function OR target:Class OR target:Struct
                        OR target:Method   OR target:Trait OR target:Protocol
-                       OR target:Interface OR target:Extension OR target:TypeAlias OR target:AssociatedType
+                       OR target:Interface OR target:Extension OR target:TypeAlias OR target:AssociatedType)
                     MATCH (caller {project_id: $tpid})-[:CALLS|CALLS_INFERRED]->(target)
                     RETURN DISTINCT
                            caller.name      AS caller_name,
@@ -93,7 +120,7 @@ def register(mcp: FastMCP) -> None:
                     ORDER BY caller.filepath, caller.start_line
                     LIMIT 20
                 """,
-                    name=symbol_name,
+                    names=resolved_names,
                     tpid=tgt_id,
                     op="trace_symbol_graph_usages",
                 )
@@ -110,7 +137,8 @@ def register(mcp: FastMCP) -> None:
             await memory_store.open_pool()
 
             svc = get_embedding_service()
-            vecs = await svc.embed_batch_async([symbol_name])
+            semantic_query = " ".join(dict.fromkeys(resolved_names))
+            vecs = await svc.embed_batch_async([semantic_query])
             query_vector = vecs[0]
 
             async def _fetch_semantic():
@@ -136,21 +164,30 @@ def register(mcp: FastMCP) -> None:
                                        ) AS kw_rank
                                 FROM codebase_embeddings
                                 WHERE project_id = %(pid)s
-                                  AND content ILIKE %(ilike)s
+                                  AND (
+                                    content ILIKE %(ilike)s
+                                    OR (%(ilike_alt)s <> '' AND content ILIKE %(ilike_alt)s)
+                                  )
                                 LIMIT 40
                             )
                             SELECT s.file_path, s.chunk_index, s.content,
                                    (1.0/(60+s.sem_rank) + COALESCE(1.0/(60+k.kw_rank), 0.0)) AS rrf
                             FROM sem s LEFT JOIN kw k
                               ON s.file_path = k.file_path AND s.chunk_index = k.chunk_index
-                            WHERE s.content ILIKE %(ilike)s
+                            WHERE (
+                                s.content ILIKE %(ilike)s
+                                OR (%(ilike_alt)s <> '' AND s.content ILIKE %(ilike_alt)s)
+                            )
                             ORDER BY rrf DESC LIMIT 5
                         """,
                             {
                                 "vec": vec_str,
                                 "pid": tgt_id,
-                                "qt": symbol_name,
+                                "qt": semantic_query,
                                 "ilike": f"%{symbol_name}%",
+                                "ilike_alt": (
+                                    f"%{resolved_names[1]}%" if len(resolved_names) > 1 else ""
+                                ),
                             },
                         )
                         return await cur.fetchall()
