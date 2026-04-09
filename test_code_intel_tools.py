@@ -396,6 +396,49 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("cluster #20", output)
         self.assertNotIn("README.md", output)
 
+    def test_get_code_communities_downweights_ui_public_clusters(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.louvainCommunity IS NOT NULL" in cypher:
+                return [
+                    {
+                        "comm": 20,
+                        "file_count": 31,
+                        "total_syms": 301,
+                        "top_files": [
+                            "src/public/applications.html",
+                            "src/public/payments.html",
+                            "src/public/properties.html",
+                        ],
+                    },
+                    {
+                        "comm": 18,
+                        "file_count": 22,
+                        "total_syms": 32,
+                        "top_files": [
+                            "src/api/routes.ts",
+                            "src/services/PaymentMonitoringService.ts",
+                            "src/db/prisma.ts",
+                        ],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/repo"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        backend_index = output.index("cluster #18")
+        ui_index = output.index("cluster #20")
+        self.assertLess(backend_index, ui_index)
+        self.assertIn("[backend/app]", output)
+        self.assertIn("[ui/public]", output)
+
     def test_get_related_files_prefers_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):
             if "CALL db.labels()" in cypher:

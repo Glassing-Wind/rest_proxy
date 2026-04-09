@@ -48,6 +48,32 @@ def register(mcp: FastMCP) -> None:
         adjusted = ((score ** 0.7) + (bridge * 0.6)) * _frontend_asset_penalty(file_path) * _backend_bridge_boost(file_path)
         return adjusted
 
+    def _cluster_kind(top_files: list[str]) -> tuple[str, float]:
+        files = [str(fp).replace("\\", "/").lower() for fp in (top_files or [])]
+        if not files:
+            return "misc", 1.0
+        public_count = sum("/public/" in fp or fp.startswith("src/public/") for fp in files)
+        api_count = sum("/src/api/" in fp or fp.startswith("src/api/") for fp in files)
+        service_count = sum("/src/services/" in fp or fp.startswith("src/services/") for fp in files)
+        db_count = sum(
+            "/src/db/" in fp
+            or fp.startswith("src/db/")
+            or "prisma/schema.prisma" in fp
+            or "/prisma/" in fp
+            for fp in files
+        )
+        jobs_count = sum("/src/jobs/" in fp or fp.startswith("src/jobs/") for fp in files)
+        total = max(len(files), 1)
+        if public_count / total >= 0.6:
+            return "ui/public", 0.3
+        if api_count + service_count + db_count >= 2:
+            return "backend/app", 2.0
+        if db_count >= 1:
+            return "data/schema", 1.4
+        if jobs_count >= 1:
+            return "jobs/runtime", 1.25
+        return "mixed", 1.0
+
     async def _execute_read(
         session,
         cypher: str,
@@ -640,7 +666,14 @@ def register(mcp: FastMCP) -> None:
                 ):
                     continue
                 filtered_records.append(record)
-            records = filtered_records
+            records = sorted(
+                filtered_records,
+                key=lambda record: (
+                    (int(record.get("total_syms") or 0) ** 0.5) * _cluster_kind(record.get("top_files") or [])[1],
+                    int(record.get("file_count") or 0),
+                ),
+                reverse=True,
+            )
             if cargo_rows and not using_louvain:
                 crate_groups: dict[str, list[dict]] = {}
                 for record in records:
@@ -667,6 +700,7 @@ def register(mcp: FastMCP) -> None:
                 for record in records:
                     if using_louvain:
                         comm_label = f"cluster #{record['comm']}"
+                        kind_label, _ = _cluster_kind(record.get("top_files") or [])
                         if cargo_rows:
                             dominant_crates: dict[str, int] = {}
                             for fp in record.get("top_files") or []:
@@ -679,9 +713,11 @@ def register(mcp: FastMCP) -> None:
                             crate_text = ""
                     else:
                         comm_label = record["dominant_dir"]
+                        kind_label, _ = _cluster_kind(record.get("top_files") or [])
                         crate_text = ""
                     output.append(
                         f"\n\U0001f4e6 {comm_label}"
+                        f"  [{kind_label}]"
                         f"  ({record['file_count']} files, {record['total_syms']} symbols)"
                         + (f"  crates: {crate_text}" if crate_text else "")
                         + f"\n   Top files: {', '.join(record['top_files'])}"
