@@ -15,6 +15,26 @@ if REPO_ROOT not in sys.path:
 import tree_sitter_language_pack as ts_pack
 
 
+def _metric_status_line(label: str, payload: dict, suffix: str) -> str:
+    status = (payload or {}).get("status") or "unknown"
+    updated = int((payload or {}).get("updated") or 0)
+    if status == "ok":
+        return f"[ts-pack:{label}] Done — {suffix.format(updated=updated)}"
+    if status == "skipped":
+        reason = (payload or {}).get("reason") or "unknown"
+        file_nodes = int((payload or {}).get("file_nodes") or 0)
+        rel_total = int((payload or {}).get("file_rel_total") or 0)
+        rel_counts = (payload or {}).get("file_rel_counts") or {}
+        return (
+            f"[ts-pack:{label}] Skipped — reason={reason} file_nodes={file_nodes} "
+            f"file_rels={rel_total} rel_breakdown={rel_counts}"
+        )
+    if status == "failed":
+        error = (payload or {}).get("error") or "unknown"
+        return f"[ts-pack:{label}] Failed — {error}"
+    return f"[ts-pack:{label}] Unknown status — {payload}"
+
+
 def _count_file_metric(neo4j_uri: str, neo4j_user: str, neo4j_pass: str, neo4j_db: str, project_id: str, property_name: str) -> int:
     import neo4j
 
@@ -148,23 +168,34 @@ def main() -> int:
         pagerank_count = _count_file_metric(
             args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id, "pagerank"
         )
-        louvain_count = _count_file_metric(
-            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id, "louvainCommunity"
-        )
-        betweenness_count = _count_file_metric(
-            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id, "betweenness"
-        )
-        isolated_count = _count_isolated_files(
-            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id
-        )
         print(f"[ts-pack:pagerank] Done — pagerank written to {pagerank_count} File nodes.", file=sys.stderr, flush=True)
-        print(f"[ts-pack:leiden] Done — community written to {louvain_count} File nodes.", file=sys.stderr, flush=True)
         print(
-            f"[ts-pack:betweenness] Done — betweenness written to {betweenness_count} File nodes.",
+            _metric_status_line(
+                "leiden",
+                finalize.get("louvain") or {},
+                "community written to {updated} File nodes.",
+            ),
             file=sys.stderr,
             flush=True,
         )
-        print(f"[ts-pack:wcc] Done — {isolated_count} isolated File nodes marked.", file=sys.stderr, flush=True)
+        print(
+            _metric_status_line(
+                "betweenness",
+                finalize.get("betweenness") or {},
+                "betweenness written to {updated} File nodes.",
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+        print(
+            _metric_status_line(
+                "wcc",
+                finalize.get("isolated") or {},
+                "{updated} isolated File nodes marked.",
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
     except Exception as exc:
         print(
             f"[ts-pack:struct] WARNING: Rust graph finalization failed: {exc}",
