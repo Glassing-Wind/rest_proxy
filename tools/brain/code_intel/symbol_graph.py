@@ -450,6 +450,7 @@ def format_call_chain_rows(
     symbol_name: str,
     direction: str,
     depth: int,
+    resolved_filepath: str | None,
 ) -> str:
     LOW_VALUE_HELPER_NAMES = {"iife", "fn"}
 
@@ -459,6 +460,39 @@ def format_call_chain_rows(
 
     from collections import OrderedDict
 
+    def focus_prefix(filepath: str | None) -> str:
+        normalized = (filepath or "").replace("\\", "/")
+        if not normalized:
+            return ""
+        parts = normalized.split("/")
+        if len(parts) >= 3 and parts[0] == "packages" and parts[2] == "src":
+            return "/".join(parts[:3]) + "/"
+        if normalized.startswith("src/"):
+            return "src/"
+        if len(parts) >= 2 and parts[0] in {"apps", "app", "crates", "packages"}:
+            return "/".join(parts[:2]) + "/"
+        return parts[0] + "/" if parts else ""
+
+    def path_penalty(filepath: str | None) -> int:
+        normalized = (filepath or "").replace("\\", "/").lower()
+        if not normalized:
+            return 6
+        if any(token in normalized for token in ("/test/", "/tests/", "/e2e/", "/fixtures/", ".spec.", ".stories.")):
+            return 5
+        if any(token in normalized for token in ("/gen/", "/generated/", ".gen.", "_generated.", "pregeneratedspm")):
+            return 4
+        if normalized.startswith(("script/", "scripts/", "nix/")) or "/script/" in normalized or "/scripts/" in normalized:
+            return 4
+        if any(token in normalized for token in ("/packages/ui/", "packages/ui/", "/packages/app/", "packages/app/")):
+            return 3
+        if any(token in normalized for token in ("/public/", "public/", ".html", ".css")):
+            return 3
+        if any(token in normalized for token in ("/src/api/", "/src/services/", "/src/db/", "/src/server/", "/src/runtime/", "/src/project/")):
+            return 0
+        if "/src/" in normalized or normalized.startswith("src/"):
+            return 1
+        return 2
+
     header_name = resolved_name or symbol_name
     out = [f"## Call chain: `{header_name}` ({direction}, depth={depth})\n"]
     if resolved_name and resolved_name != symbol_name:
@@ -467,6 +501,7 @@ def format_call_chain_rows(
     first_hop_groups: "OrderedDict[tuple[str, str], OrderedDict[tuple[str, str], None]]" = OrderedDict()
     first_hop_counts: dict[tuple[str, str], int] = {}
     terminal_paths = 0
+    root_focus = focus_prefix(resolved_filepath)
 
     for rec in rows:
         chain = rec["chain"]
@@ -517,11 +552,28 @@ def format_call_chain_rows(
     emitted = 0
     max_first_hops = 12
     max_children_per_hop = 3
-    hidden_first_hops = max(0, len(first_hop_groups) - max_first_hops)
+    ranked_first_hops = sorted(
+        first_hop_groups.items(),
+        key=lambda item: (
+            0 if (root_focus and (item[0][1] or "").startswith(root_focus)) else 1,
+            path_penalty(item[0][1]),
+            -first_hop_counts.get(item[0], 0),
+            item[0][1] or "",
+            item[0][0] or "",
+        ),
+    )
+    if root_focus:
+        focused_first_hops = [
+            item for item in ranked_first_hops if (item[0][1] or "").startswith(root_focus)
+        ]
+        if focused_first_hops:
+            ranked_first_hops = focused_first_hops + [
+                item for item in ranked_first_hops if item not in focused_first_hops
+            ]
+    visible_first_hops = ranked_first_hops[:max_first_hops]
+    hidden_first_hops = max(0, len(ranked_first_hops) - len(visible_first_hops))
 
-    for idx, ((first_name, first_file), children) in enumerate(first_hop_groups.items()):
-        if idx >= max_first_hops:
-            break
+    for (first_name, first_file), children in visible_first_hops:
         out.append(f"   `{first_name}`  ({first_file})")
         emitted += 1
         child_items = list(children.keys())

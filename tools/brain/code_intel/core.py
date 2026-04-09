@@ -382,6 +382,7 @@ def register(mcp: FastMCP) -> None:
                 symbol_name=symbol_name,
                 direction=direction,
                 depth=depth,
+                resolved_filepath=resolved_filepath,
             )
         except Exception as e:
             return f"Error tracing call chain: {str(e)}"

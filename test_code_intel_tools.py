@@ -633,6 +633,61 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertNotIn("`iife`", output)
         self.assertNotIn("`fn`", output)
 
+    def test_get_call_chain_prefers_same_package_runtime_hops_for_monorepo_entrypoint(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "boot",
+                        "qualified_name": "boot",
+                        "signature": None,
+                        "filepath": "packages/opencode/src/project/instance.ts",
+                        "rank": 0,
+                        "path_rank": 1,
+                        "callers_in": 7,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return [
+                    {
+                        "chain": ["boot", "track", "leafTrack"],
+                        "files": [
+                            "packages/opencode/src/project/instance.ts",
+                            "packages/ui/src/pierre/selection-bridge.ts",
+                            "packages/ui/src/components/message-part.tsx",
+                        ],
+                        "lines": [12, 30, 44],
+                    },
+                    {
+                        "chain": ["boot", "loadProject", "readSettings"],
+                        "files": [
+                            "packages/opencode/src/project/instance.ts",
+                            "packages/opencode/src/project/load.ts",
+                            "packages/opencode/src/config/load.ts",
+                        ],
+                        "lines": [12, 18, 52],
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/opencode",
+                        "boot",
+                        depth=3,
+                        direction="down",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertLess(output.index("`loadProject`"), output.index("`track`"))
+
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):
             if "f.pagerank IS NOT NULL" in cypher:
