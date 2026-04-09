@@ -87,6 +87,30 @@ class DuplicationHelperTests(unittest.TestCase):
             )
         )
 
+    def test_keep_default_winnow_pair_suppresses_low_signal_default_pairs(self):
+        low_signal = ({}, {}, 0.50, 0.0)
+        stronger = ({}, {}, 0.72, 0.0)
+        self.assertFalse(
+            module.keep_default_winnow_pair(low_signal, include_patterns=[])
+        )
+        self.assertTrue(
+            module.keep_default_winnow_pair(stronger, include_patterns=[])
+        )
+        self.assertTrue(
+            module.keep_default_winnow_pair(low_signal, include_patterns=["src/**/*.py"])
+        )
+
+    def test_filter_duplicate_symbol_name_records_skips_common_noise_by_default(self):
+        records = [
+            {"name": "__init__", "count": 3, "files": ["a.py", "b.py"]},
+            {"name": "buildRouter", "count": 2, "files": ["src/a.ts", "src/b.ts"]},
+        ]
+        filtered = module.filter_duplicate_symbol_name_records(
+            records,
+            include_patterns=[],
+        )
+        self.assertEqual([rec["name"] for rec in filtered], ["buildRouter"])
+
 
 if __name__ == "__main__":
     unittest.main()

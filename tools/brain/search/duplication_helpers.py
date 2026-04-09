@@ -36,6 +36,18 @@ DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS = [
     "**/generated/**",
 ]
 
+DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST = {
+    "__init__",
+    "__aenter__",
+    "__aexit__",
+    "setUp",
+    "session",
+    "decorator",
+    "tool",
+    "register",
+    "_tx",
+}
+
 
 def glob_to_like(pattern: str) -> str:
     pattern = pattern.replace("%", r"\%")
@@ -68,6 +80,37 @@ def default_duplication_exclude_patterns(include_patterns: list[str]) -> list[st
     if include_patterns:
         return []
     return list(DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS)
+
+
+def keep_default_winnow_pair(
+    pair: tuple[dict, dict, float, float],
+    *,
+    include_patterns: list[str],
+) -> bool:
+    if include_patterns:
+        return True
+    _row_a, _row_b, score, struct_score = pair
+    if score <= 0.50 and struct_score <= 0.0:
+        return False
+    return True
+
+
+def filter_duplicate_symbol_name_records(
+    records: list[dict],
+    *,
+    include_patterns: list[str],
+) -> list[dict]:
+    if include_patterns:
+        return records
+    filtered: list[dict] = []
+    for record in records:
+        name = record.get("name")
+        if not isinstance(name, str):
+            continue
+        if name in DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST:
+            continue
+        filtered.append(record)
+    return filtered
 
 
 def tokenize(text: str) -> list[str]:

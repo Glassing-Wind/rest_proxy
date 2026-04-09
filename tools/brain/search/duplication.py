@@ -531,6 +531,14 @@ def register(mcp: FastMCP) -> None:
                     ),
                     reverse=True,
                 )
+                winnow_pairs = [
+                    pair
+                    for pair in winnow_pairs
+                    if dup_helpers.keep_default_winnow_pair(
+                        pair,
+                        include_patterns=include_patterns,
+                    )
+                ]
                 if winnow_pairs:
                     lines.append(
                         "\nWinnowed duplicates (multi-scale fingerprints + token fallback)"
@@ -613,6 +621,10 @@ def register(mcp: FastMCP) -> None:
                                 op="dup_symbol_names",
                                 pid=project_id,
                             )
+                        records = dup_helpers.filter_duplicate_symbol_name_records(
+                            records,
+                            include_patterns=include_patterns,
+                        )
                         dup_report.append_duplicate_symbol_names(lines, records)
                 except Exception:
                     pass
