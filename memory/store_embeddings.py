@@ -226,86 +226,112 @@ async def insert_embedding(
     project_path: Optional[str] = None,
 ) -> Optional[str]:
     """Insert a vector embedding record into Neo4j; links to optional Project."""
-    if not store_core._ENABLE_EMBEDDINGS or not store_core._pool_available():
-        return None
+    row_ids = await insert_memory_embeddings_batch(
+        [
+            {
+                "session_id": session_id,
+                "ref_id": ref_id,
+                "ref_type": ref_type,
+                "compact_text": compact_text,
+                "vector": vector,
+                "metadata": metadata,
+                "project_path": project_path,
+            }
+        ]
+    )
+    return row_ids[0] if row_ids else None
 
-    if not isinstance(vector, list) or not vector:
-        store_core._debug(
-            "graph_insert_embedding_invalid_vector",
-            session_id=session_id,
-            ref_type=ref_type,
-        )
-        return None
 
-    actual_dim = len(vector)
-    if actual_dim != store_core._EXPECTED_EMBEDDING_DIM:
-        store_core._debug(
-            "graph_insert_embedding_dim_mismatch",
-            session_id=session_id,
-            ref_type=ref_type,
-            expected_dim=store_core._EXPECTED_EMBEDDING_DIM,
-            actual_dim=actual_dim,
-        )
-        return None
-    try:
-        import hashlib
+async def insert_memory_embeddings_batch(
+    rows: List[Dict[str, Any]],
+) -> List[str]:
+    """Insert multiple memory embedding records into Neo4j in one UNWIND write."""
+    if not store_core._ENABLE_EMBEDDINGS or not store_core._pool_available() or not rows:
+        return []
+
+    prepared_rows: list[dict[str, Any]] = []
+    for row in rows:
+        vector = row.get("vector")
+        if not isinstance(vector, list) or not vector:
+            store_core._debug(
+                "graph_insert_embedding_invalid_vector",
+                session_id=row.get("session_id"),
+                ref_type=row.get("ref_type"),
+            )
+            continue
+        actual_dim = len(vector)
+        if actual_dim != store_core._EXPECTED_EMBEDDING_DIM:
+            store_core._debug(
+                "graph_insert_embedding_dim_mismatch",
+                session_id=row.get("session_id"),
+                ref_type=row.get("ref_type"),
+                expected_dim=store_core._EXPECTED_EMBEDDING_DIM,
+                actual_dim=actual_dim,
+            )
+            continue
 
         project_id = None
+        project_path = row.get("project_path")
         if project_path:
+            import hashlib
+
             project_id = hashlib.md5(project_path.encode()).hexdigest()[:12]
 
-        cypher = """
-        MERGE (m:Chunk {id: $ref_id})
-        SET m:MemoryEmbedding,
-            m.session_id = $session_id,
-            m.project_id = $project_id,
-            m.ref_type = $ref_type,
-            m.text = $text,
-            m.embedding = $vector,
-            m.metadata = $metadata,
-            m.created_at = $created_at
-        WITH m
-        MERGE (s:Session {id: $session_id})
-        MERGE (s)-[:HAS_EMBEDDING]->(m)
-        WITH m
-        WHERE $project_id IS NOT NULL
-        MERGE (p:Project {id: $project_id})
-        MERGE (p)-[:HAS_EMBEDDING]->(m)
-        WITH m, p
-        // Link to File if metadata contains it
-        FOREACH (_ IN CASE WHEN $file_path IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (f:File {id: $project_id + ":" + $file_path})
-            MERGE (p)-[:HAS_FILE]->(f)
-            MERGE (f)-[:HAS_CHUNK]->(m)
+        metadata = dict(row.get("metadata") or {})
+        prepared_rows.append(
+            {
+                "ref_id": row["ref_id"],
+                "session_id": row["session_id"],
+                "project_id": project_id,
+                "ref_type": row["ref_type"],
+                "text": row["compact_text"],
+                "vector": vector,
+                "metadata": json.dumps(metadata),
+                "created_at": row.get("created_at", time.time()),
+                "file_path": metadata.get("file"),
+            }
         )
-        """
+
+    if not prepared_rows:
+        return []
+
+    cypher = """
+    UNWIND $rows AS row
+    MERGE (m:Chunk {id: row.ref_id})
+    SET m:MemoryEmbedding,
+        m.session_id = row.session_id,
+        m.project_id = row.project_id,
+        m.ref_type = row.ref_type,
+        m.text = row.text,
+        m.embedding = row.vector,
+        m.metadata = row.metadata,
+        m.created_at = row.created_at
+    WITH m, row
+    MERGE (s:Session {id: row.session_id})
+    MERGE (s)-[:HAS_EMBEDDING]->(m)
+    WITH m, row
+    WHERE row.project_id IS NOT NULL
+    MERGE (p:Project {id: row.project_id})
+    MERGE (p)-[:HAS_EMBEDDING]->(m)
+    WITH m, p, row
+    FOREACH (_ IN CASE WHEN row.file_path IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (f:File {id: row.project_id + ":" + row.file_path})
+        MERGE (p)-[:HAS_FILE]->(f)
+        MERGE (f)-[:HAS_CHUNK]->(m)
+    )
+    """
+    try:
         driver = graph_bootstrap.get_driver()
         if not driver:
-            return None
-
-        file_path = metadata.get("file") if metadata else None
-
+            return []
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
             await store_core._neo4j_write(
                 session,
                 cypher,
-                "insert_embedding",
-                ref_id=ref_id,
-                session_id=session_id,
-                project_id=project_id,
-                ref_type=ref_type,
-                text=compact_text,
-                vector=vector,
-                metadata=json.dumps(metadata or {}),
-                created_at=time.time(),
-                file_path=file_path,
+                "insert_memory_embeddings_batch",
+                rows=prepared_rows,
             )
-        store_core._debug(
-            "graph_insert_embedding_ok", session_id=session_id, project_id=project_id
-        )
-        return ref_id
+        return [row["ref_id"] for row in prepared_rows]
     except Exception as exc:
-        store_core._debug(
-            "graph_insert_embedding_error", session_id=session_id, error=str(exc)
-        )
-        return None
+        store_core._debug("graph_insert_memory_embeddings_batch_error", error=str(exc))
+        return []

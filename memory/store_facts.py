@@ -102,6 +102,7 @@ async def insert_summary_facts(
     if not facts:
         return created_ids
 
+    rows_to_insert: List[Dict[str, Any]] = []
     for fact in facts:
         fact_type = fact["fact_type"]
         content = fact["content"]
@@ -115,20 +116,20 @@ async def insert_summary_facts(
             if not vector:
                 continue
 
-            row_id = await store_embeddings.insert_embedding(
-                session_id=session_id,
-                ref_id=f"{session_id}:{fact_type}:{abs(hash(content))}",
-                ref_type=ref_type,
-                compact_text=content,
-                vector=vector,
-                metadata={
-                    "source": "rolling_summary",
-                    "fact_type": fact_type,
-                    **(metadata or {}),
-                },
+            rows_to_insert.append(
+                {
+                    "session_id": session_id,
+                    "ref_id": f"{session_id}:{fact_type}:{abs(hash(content))}",
+                    "ref_type": ref_type,
+                    "compact_text": content,
+                    "vector": vector,
+                    "metadata": {
+                        "source": "rolling_summary",
+                        "fact_type": fact_type,
+                        **(metadata or {}),
+                    },
+                }
             )
-            if row_id:
-                created_ids.append(row_id)
         except Exception as exc:
             store_core._debug(
                 "pg_insert_summary_fact_error",
@@ -136,6 +137,19 @@ async def insert_summary_facts(
                 fact_type=fact_type,
                 error=str(exc),
             )
+
+    if rows_to_insert:
+        try:
+            created_ids = await store_embeddings.insert_memory_embeddings_batch(
+                rows_to_insert
+            )
+        except Exception as exc:
+            store_core._debug(
+                "pg_insert_summary_facts_batch_error",
+                session_id=session_id,
+                error=str(exc),
+            )
+            created_ids = []
 
     if created_ids:
         store_core._debug(

@@ -211,6 +211,7 @@ async def _persist_memory_best_effort(
 
             # --- Embed compact turn text and store vectors for hybrid retrieval ---
             if _ENABLE_EMBEDDINGS and _memory_retrieval is not None:
+                embedding_rows = []
                 for ref_id, ref_role, compact_text in [
                     (user_turn_id, "user", user_compact),
                     (asst_turn_id, "assistant", asst_compact),
@@ -220,19 +221,31 @@ async def _persist_memory_best_effort(
                     try:
                         vec = await _memory_retrieval.get_embedding(compact_text)
                         if vec:
-                            await _memory_store.insert_embedding(
-                                session_id=session_id,
-                                ref_id=ref_id,
-                                ref_type="turn",
-                                compact_text=compact_text,
-                                vector=vec,
-                                metadata={"role": ref_role},
+                            embedding_rows.append(
+                                {
+                                    "session_id": session_id,
+                                    "ref_id": ref_id,
+                                    "ref_type": "turn",
+                                    "compact_text": compact_text,
+                                    "vector": vec,
+                                    "metadata": {"role": ref_role},
+                                }
                             )
                     except Exception as _emb_exc:
                         debug_log(
                             "memory_embed_turn_error",
                             role=ref_role,
                             error=str(_emb_exc),
+                        )
+                if embedding_rows:
+                    try:
+                        await _memory_store.insert_memory_embeddings_batch(
+                            embedding_rows
+                        )
+                    except Exception as _emb_batch_exc:
+                        debug_log(
+                            "memory_embed_turn_batch_error",
+                            error=str(_emb_batch_exc),
                         )
 
         debug_log("memory_persisted", session_id=session_id, model=model)

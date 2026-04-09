@@ -218,6 +218,46 @@ class StoreEmbeddingsTests(unittest.TestCase):
         self.assertEqual(params["session_id"], "sess1")
         self.assertEqual(len(params["items"]), 2)
 
+    def test_insert_memory_embeddings_batch_uses_single_unwind_write(self):
+        neo4j_calls = []
+        driver = FakeDriver()
+        module = load_store_embeddings_module(
+            pool_available=True,
+            driver=driver,
+            neo4j_calls=neo4j_calls,
+        )
+
+        row_ids = asyncio.run(
+            module.insert_memory_embeddings_batch(
+                [
+                    {
+                        "session_id": "sess1",
+                        "ref_id": "turn-1",
+                        "ref_type": "turn",
+                        "compact_text": "hello",
+                        "vector": [0.1, 0.2],
+                        "metadata": {"role": "user"},
+                    },
+                    {
+                        "session_id": "sess1",
+                        "ref_id": "turn-2",
+                        "ref_type": "turn",
+                        "compact_text": "world",
+                        "vector": [0.3, 0.4],
+                        "metadata": {"role": "assistant"},
+                    },
+                ]
+            )
+        )
+
+        self.assertEqual(row_ids, ["turn-1", "turn-2"])
+        self.assertEqual(len(driver.session_calls), 1)
+        self.assertEqual(len(neo4j_calls), 1)
+        _, cypher, op, params = neo4j_calls[0]
+        self.assertEqual(op, "insert_memory_embeddings_batch")
+        self.assertIn("UNWIND $rows AS row", cypher)
+        self.assertEqual(len(params["rows"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

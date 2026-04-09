@@ -484,6 +484,12 @@ async def insert_embedding(
     )
 
 
+async def insert_memory_embeddings_batch(rows: List[Dict[str, Any]]) -> List[str]:
+    from memory import store_embeddings
+
+    return await store_embeddings.insert_memory_embeddings_batch(rows)
+
+
 async def search_similar_memory(
     session_id: str,
     query_vector: List[float],
