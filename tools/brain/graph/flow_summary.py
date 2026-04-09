@@ -403,6 +403,34 @@ def _collapse_ambiguous_app_rows(raw_rows):
     return collapsed
 
 
+async def _load_api_route_counts(session, project_id: str) -> dict[str, int]:
+    rows = await graph_core._execute_read(
+        session,
+        """
+        MATCH (route:ApiRoute {project_id:$p})-[:HANDLED_BY]->(api:File {project_id:$p})
+        RETURN api.filepath AS api, count(route) AS route_count
+        ORDER BY api
+        """,
+        p=project_id,
+        op="get_app_flow_summary_api_route_counts",
+    )
+    return {
+        row.get("api"): int(row.get("route_count") or 0)
+        for row in rows
+        if row.get("api")
+    }
+
+
+def _suppress_coarse_route_service_rows(raw_rows, api_route_counts: dict[str, int]):
+    adjusted = []
+    for ui, js, route, api, svc, model, schema, external in raw_rows:
+        if route and api and api_route_counts.get(api, 0) > 1:
+            adjusted.append((ui, js, route, api, None, None, None, external))
+            continue
+        adjusted.append((ui, js, route, api, svc, model, schema, external))
+    return adjusted
+
+
 def _normalize_route_literal(path: str | None) -> str | None:
     if not path:
         return None
@@ -602,6 +630,7 @@ async def get_app_flow_summary_impl(
         entry_files = await _resolve_entry_files(session, project_id, entry_files, entry_glob)
         if include_coverage:
             coverage_lines = await _coverage_lines(session, project_id)
+        api_route_counts = await _load_api_route_counts(session, project_id)
 
         result = await graph_core._execute_read(
             session,
@@ -646,6 +675,7 @@ async def get_app_flow_summary_impl(
                 workspace_id,
                 raw_rows,
             )
+        raw_rows = _suppress_coarse_route_service_rows(raw_rows, api_route_counts)
         raw_rows = _prefer_concrete_app_rows(raw_rows)
         raw_rows = _collapse_ambiguous_app_rows(raw_rows)
 

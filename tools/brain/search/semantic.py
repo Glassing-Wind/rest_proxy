@@ -279,6 +279,8 @@ def register(mcp: FastMCP) -> None:
                     for pid, rows in grouped.items():
                         sem_helpers.attach_cargo_crate_meta(rows, cargo_rows_by_pid.get(pid) or [])
 
+            impl_intent = sem_helpers.implementation_query_intent(query)
+
             if include_metadata:
                 for r in all_results:
                     r_meta = sem_helpers.coerce_meta(r)
@@ -304,7 +306,6 @@ def register(mcp: FastMCP) -> None:
                     ]
                 if crate_contains:
                     all_results = sem_helpers.filter_by_cargo_crate(all_results, crate_contains)
-                impl_intent = sem_helpers.implementation_query_intent(query)
                 for r in all_results:
                     base_score = r.get("rrf", 0.0)
                     try:
@@ -329,7 +330,18 @@ def register(mcp: FastMCP) -> None:
                     reverse=True,
                 )
             else:
+                if impl_intent:
+                    for r in all_results:
+                        r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
                 all_results.sort(key=lambda r: r["rrf"], reverse=True)
+
+            if impl_intent:
+                code_results = [r for r in all_results if not r.get("doc_like")]
+                doc_results = [r for r in all_results if r.get("doc_like")]
+                if code_results:
+                    all_results = code_results
+                else:
+                    all_results = doc_results
 
             if clone_dedup:
                 try:

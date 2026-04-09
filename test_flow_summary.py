@@ -158,6 +158,37 @@ class FlowSummaryTests(unittest.TestCase):
             output,
         )
 
+    def test_suppress_coarse_route_service_rows_drops_file_level_service_for_multi_route_api(self):
+        rows = [
+            (
+                "src/public/financials.html",
+                "src/public/assets/financials.js",
+                "POST /api/financials/accounting-sync/quickbooks/export-batch",
+                "src/api/routes/financeAdminRoutes.ts",
+                "src/services/AccountingSyncBatchService.ts",
+                "JournalEntry",
+                "prisma/schema.prisma",
+                None,
+            )
+        ]
+        adjusted = self.module._suppress_coarse_route_service_rows(
+            rows,
+            {"src/api/routes/financeAdminRoutes.ts": 27},
+        )
+        self.assertEqual(
+            adjusted[0],
+            (
+                "src/public/financials.html",
+                "src/public/assets/financials.js",
+                "POST /api/financials/accounting-sync/quickbooks/export-batch",
+                "src/api/routes/financeAdminRoutes.ts",
+                None,
+                None,
+                None,
+                None,
+            ),
+        )
+
     def test_get_app_flow_summary_dedupes_same_ui_and_js_path(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
