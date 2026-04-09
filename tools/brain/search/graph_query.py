@@ -29,6 +29,59 @@ def register(mcp: FastMCP) -> None:
             return False
         return True
 
+    def _definition_path_penalty(file_path: str | None) -> int:
+        norm = (file_path or "").replace("\\", "/").lower()
+        if not norm:
+            return 5
+        if any(
+            token in norm
+            for token in (
+                "/pregeneratedspm/",
+                "/vendors/",
+                "vendors/",
+                "/generated/",
+                "/gen/",
+                ".gen.ts",
+                ".generated.ts",
+                ".generated.js",
+                "_generated.swift",
+            )
+        ):
+            return 4
+        if any(
+            token in norm
+            for token in (
+                "/e2e/",
+                "/tests/",
+                "/test/",
+                ".spec.",
+                ".stories.",
+                "/storybook/",
+                "/fixtures/",
+                "/examples/",
+            )
+        ):
+            return 3
+        if any(token in norm for token in ("/src/", "src/", "/packages/", "packages/")):
+            return 0
+        return 2
+
+    def _definition_kind_rank(kind: str | None) -> int:
+        return {
+            "Function": 0,
+            "Method": 0,
+            "Class": 1,
+            "Struct": 1,
+            "Enum": 2,
+            "Protocol": 3,
+            "Interface": 3,
+            "Trait": 3,
+            "TypeAlias": 4,
+            "AssociatedType": 4,
+            "Extension": 5,
+            "EnumCase": 6,
+        }.get(kind or "", 7)
+
     @mcp.tool()
     async def query_graph(
         cypher_query: str,
@@ -112,22 +165,39 @@ def register(mcp: FastMCP) -> None:
             driver = await graph_bootstrap.require_driver()
             cypher = """
             MATCH (n)
-            WHERE (n:Class OR n:Function OR n:Struct OR n:Trait OR n:Enum) AND n.name = $name
+            WHERE (
+                n:Class OR n:Function OR n:Struct OR n:Trait OR n:Enum
+                OR n:Method OR n:Protocol OR n:Interface OR n:Extension
+                OR n:TypeAlias OR n:AssociatedType OR n:EnumCase
+            ) AND n.name = $name
             OPTIONAL MATCH (p:Project {id: n.project_id})
             RETURN n.project_id AS project_id, p.project_path AS project_path,
-                   n.filepath AS file, n.start_line AS line, labels(n)[0] AS type
+                   n.filepath AS file, n.start_line AS line,
+                   head([label IN labels(n) WHERE label <> 'Node']) AS type
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                output = [f"Found {symbol_name} in the following locations:"]
                 records = await search_core._execute_read(
                     session, cypher, name=symbol_name, op="find_definitions"
                 )
-                for record in records:
-                    if not _project_display_allowed(
+                filtered = [
+                    record
+                    for record in records
+                    if _project_display_allowed(
                         record.get("project_id"),
                         record.get("project_path"),
-                    ):
-                        continue
+                    )
+                ]
+                filtered.sort(
+                    key=lambda record: (
+                        _definition_path_penalty(record.get("file")),
+                        _definition_kind_rank(record.get("type")),
+                        len(record.get("project_path") or record.get("project_id") or ""),
+                        len(record.get("file") or ""),
+                        record.get("line") or 0,
+                    )
+                )
+                output = [f"Found {symbol_name} in the following locations:"]
+                for record in filtered:
                     loc = record["file"] or "unknown"
                     line = record["line"]
                     loc_str = f"{loc}:{line}" if line is not None else loc

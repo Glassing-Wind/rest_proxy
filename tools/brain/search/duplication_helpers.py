@@ -87,8 +87,6 @@ def keep_default_winnow_pair(
     *,
     include_patterns: list[str],
 ) -> bool:
-    if include_patterns:
-        return True
     _row_a, _row_b, score, struct_score = pair
     if score <= 0.50 and struct_score <= 0.0:
         return False

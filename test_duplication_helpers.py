@@ -96,7 +96,7 @@ class DuplicationHelperTests(unittest.TestCase):
         self.assertTrue(
             module.keep_default_winnow_pair(stronger, include_patterns=[])
         )
-        self.assertTrue(
+        self.assertFalse(
             module.keep_default_winnow_pair(low_signal, include_patterns=["src/**/*.py"])
         )
 

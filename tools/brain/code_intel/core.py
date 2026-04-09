@@ -230,7 +230,18 @@ def register(mcp: FastMCP) -> None:
                     pid=project_id,
                     op="get_symbol_context",
                 )
-                rec = records[0] if records else None
+                if symbol_graph.should_disambiguate_symbol_context(
+                    records or [],
+                    symbol_name=symbol_name,
+                ):
+                    return symbol_graph.format_symbol_context_ambiguity(
+                        records or [],
+                        symbol_name=symbol_name,
+                    )
+                rec = symbol_graph.pick_symbol_context_candidate(
+                    records or [],
+                    symbol_name=symbol_name,
+                )
 
             if not rec:
                 return f"Symbol '{symbol_name}' not found. Run index_workspace() first."

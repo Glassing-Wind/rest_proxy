@@ -164,6 +164,8 @@ class CodeIntelToolTests(unittest.TestCase):
                 ]
             if "MATCH path = (start)" in cypher:
                 self.assertIn("/public/", cypher)
+                self.assertIn("/test/", cypher)
+                self.assertIn("/gen/", cypher)
                 return [
                     {
                         "chain": ["buildRouter", "leaseRouter", "LeaseService"],
@@ -336,6 +338,160 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("[TypeAlias] Project", output)
         self.assertIn("[TypeAlias] ClientOptions", output)
 
+    def test_get_symbol_context_prefers_repo_owned_runtime_symbol_over_generated_match(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (s {name: $name, project_id: $pid})" in cypher:
+                return [
+                    {
+                        "kind": "TypeAlias",
+                        "filepath": "packages/sdk/js/src/v2/gen/types.gen.ts",
+                        "start_line": 1,
+                        "end_line": 12,
+                        "signature": None,
+                        "parent_file": "packages/sdk/js/src/v2/gen/types.gen.ts",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    },
+                    {
+                        "kind": "Class",
+                        "filepath": "packages/opencode/src/config/config.ts",
+                        "start_line": 8,
+                        "end_line": 60,
+                        "signature": "class Config",
+                        "parent_file": "packages/opencode/src/config/config.ts",
+                        "callers": [{"name": "boot", "file": "packages/opencode/src/app/app.ts", "line": 14}],
+                        "callees": [],
+                        "callers_in": 3,
+                        "callees_out": 1,
+                    },
+                ]
+            return []
+
+        fake_pool = types.SimpleNamespace(
+            connection=lambda: types.SimpleNamespace(
+                __aenter__=lambda self: self,
+                __aexit__=lambda self, exc_type, exc, tb: False,
+                cursor=lambda: types.SimpleNamespace(
+                    __aenter__=lambda self: self,
+                    __aexit__=lambda self, exc_type, exc, tb: False,
+                    execute=mock.AsyncMock(),
+                    fetchall=mock.AsyncMock(return_value=[]),
+                ),
+            )
+        )
+        fake_memory_store = types.SimpleNamespace(
+            open_pool=mock.AsyncMock(),
+            _pg_pool=fake_pool,
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_symbol_context"](
+                            "/tmp/opencode",
+                            "Config",
+                            include_source_preview=False,
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("packages/opencode/src/config/config.ts", output)
+        self.assertNotIn("packages/sdk/js/src/v2/gen/types.gen.ts", output)
+
+    def test_get_symbol_context_reports_ambiguous_generic_monorepo_name(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (s {name: $name, project_id: $pid})" in cypher:
+                return [
+                    {
+                        "kind": "TypeAlias",
+                        "filepath": "packages/sdk/js/src/v2/gen/types.gen.ts",
+                        "start_line": 1,
+                        "end_line": 12,
+                        "signature": None,
+                        "parent_file": "packages/sdk/js/src/v2/gen/types.gen.ts",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    },
+                    {
+                        "kind": "Class",
+                        "filepath": "packages/sdk/js/src/gen/sdk.gen.ts",
+                        "start_line": 337,
+                        "end_line": 371,
+                        "signature": "class Config",
+                        "parent_file": "packages/sdk/js/src/gen/sdk.gen.ts",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    },
+                    {
+                        "kind": "TypeAlias",
+                        "filepath": "packages/plugin/src/index.ts",
+                        "start_line": 38,
+                        "end_line": 40,
+                        "signature": None,
+                        "parent_file": "packages/plugin/src/index.ts",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 1,
+                        "callees_out": 0,
+                    },
+                    {
+                        "kind": "TypeAlias",
+                        "filepath": "packages/desktop-electron/src/main/cli.ts",
+                        "start_line": 23,
+                        "end_line": 29,
+                        "signature": None,
+                        "parent_file": "packages/desktop-electron/src/main/cli.ts",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    },
+                    {
+                        "kind": "TypeAlias",
+                        "filepath": "packages/opencode/src/control-plane/adaptors/worktree.ts",
+                        "start_line": 11,
+                        "end_line": 17,
+                        "signature": None,
+                        "parent_file": "packages/opencode/src/control-plane/adaptors/worktree.ts",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 2,
+                        "callees_out": 0,
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/opencode",
+                        "Config",
+                        include_source_preview=False,
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Multiple exact matches found for `Config`", output)
+        self.assertIn("packages/opencode/src/control-plane/adaptors/worktree.ts", output)
+
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:
@@ -427,6 +583,55 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("no named callers", output)
         self.assertNotIn("`unnamed`", output)
         self.assertIn("src/public/assets/financial-summary.js:183", output)
+
+    def test_get_call_chain_skips_iife_and_fn_wrapper_nodes(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "boot",
+                        "qualified_name": "boot",
+                        "signature": None,
+                        "filepath": "packages/opencode/src/project/instance.ts",
+                        "rank": 0,
+                        "path_rank": 1,
+                        "callers_in": 7,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return [
+                    {
+                        "chain": ["boot", "iife", "fn", "loadProject"],
+                        "files": [
+                            "packages/opencode/src/project/instance.ts",
+                            "packages/util/src/iife.ts",
+                            "packages/opencode/test/snapshot/snapshot.test.ts",
+                            "packages/opencode/src/project/load.ts",
+                        ],
+                        "lines": [12, 3, 10, 44],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/opencode",
+                        "boot",
+                        depth=3,
+                        direction="down",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("`loadProject`", output)
+        self.assertNotIn("`iife`", output)
+        self.assertNotIn("`fn`", output)
 
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):

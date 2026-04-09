@@ -21,8 +21,10 @@ SYMBOL_CONTEXT_CYPHER = """
       parent.filepath AS parent_file,
       collect(DISTINCT {name: caller.name, file: caller.filepath,
                         line: caller.start_line})[..10] AS callers,
-      collect(DISTINCT {name: callee.name, file: callee.filepath})[..10] AS callees
-    LIMIT 1
+      collect(DISTINCT {name: callee.name, file: callee.filepath})[..10] AS callees,
+      count(DISTINCT caller) AS callers_in,
+      count(DISTINCT callee) AS callees_out
+    LIMIT 12
 """
 
 
@@ -54,6 +56,12 @@ CALL_CHAIN_RESOLVE_CYPHER = """
            s.signature AS signature, s.filepath AS filepath, rank,
            CASE
              WHEN s.filepath IS NULL THEN 2
+             WHEN s.filepath CONTAINS '/tests/' OR s.filepath CONTAINS '/test/' OR s.filepath CONTAINS '/e2e/'
+               OR s.filepath CONTAINS '/fixtures/' OR s.filepath CONTAINS '.spec.' OR s.filepath CONTAINS '.stories.'
+               THEN 4
+             WHEN s.filepath CONTAINS '/gen/' OR s.filepath CONTAINS '/generated/' OR s.filepath CONTAINS 'PreGeneratedSPM'
+               OR s.filepath CONTAINS '.gen.' OR s.filepath CONTAINS '_generated.'
+               THEN 3
              WHEN s.filepath CONTAINS '/api/' OR s.filepath CONTAINS '/routes/' OR s.filepath CONTAINS '/services/' OR s.filepath CONTAINS '/db/'
                OR s.filepath STARTS WITH 'api/' OR s.filepath STARTS WITH 'routes/' OR s.filepath STARTS WITH 'services/' OR s.filepath STARTS WITH 'db/'
                THEN 0
@@ -123,6 +131,152 @@ def normalize_query_file_path(workspace_id: str, file_path: str | None) -> str |
     return normalized or None
 
 
+def _symbol_path_penalty(filepath: str | None) -> int:
+    normalized = (filepath or "").replace("\\", "/").lower()
+    if not normalized:
+        return 6
+    if any(
+        token in normalized
+        for token in (
+            "/pregeneratedspm/",
+            "/vendors/",
+            "vendors/",
+            "/generated/",
+            "/gen/",
+            ".gen.ts",
+            ".generated.ts",
+            ".generated.js",
+            "_generated.swift",
+        )
+    ):
+        return 5
+    if any(
+        token in normalized
+        for token in (
+            "/e2e/",
+            "/tests/",
+            "/test/",
+            ".spec.",
+            ".stories.",
+            "/storybook/",
+            "/fixtures/",
+            "/examples/",
+        )
+    ):
+        return 4
+    if any(
+        token in normalized
+        for token in (
+            "/public/assets/",
+            "src/public/assets/",
+            "/components/icons/",
+        )
+    ):
+        return 3
+    if "packages/" in normalized and "/src/" in normalized:
+        return 0
+    if any(
+        token in normalized
+        for token in (
+            "/src/server/",
+            "/server/",
+            "/src/runtime/",
+            "/runtime/",
+            "/src/config/",
+            "/config/",
+            "/src/app/",
+            "/app/",
+            "/src/api/",
+            "/api/",
+            "/src/services/",
+            "/services/",
+            "/src/db/",
+            "/db/",
+            "/src/lib/",
+            "/lib/",
+        )
+    ):
+        return 1
+    if "/src/" in normalized or normalized.startswith("src/"):
+        return 2
+    return 3
+
+
+def _symbol_kind_rank(kind: str | None) -> int:
+    return {
+        "Function": 0,
+        "Method": 0,
+        "Class": 1,
+        "Struct": 1,
+        "Enum": 2,
+        "Protocol": 3,
+        "Interface": 3,
+        "Trait": 3,
+        "TypeAlias": 4,
+        "AssociatedType": 4,
+        "Extension": 5,
+        "EnumCase": 6,
+    }.get(kind or "", 7)
+
+
+def pick_symbol_context_candidate(candidates: list[dict], *, symbol_name: str) -> dict | None:
+    if not candidates:
+        return None
+
+    ranked = sorted(
+        candidates,
+        key=lambda candidate: (
+            0 if candidate.get("kind") in {"Function", "Method", "Class", "Struct"} else 1,
+            _symbol_path_penalty(candidate.get("filepath")),
+            _symbol_kind_rank(candidate.get("kind")),
+            -(candidate.get("callers_in") or 0),
+            -(candidate.get("callees_out") or 0),
+            len(candidate.get("filepath") or ""),
+            candidate.get("start_line") or 0,
+        ),
+    )
+    return ranked[0]
+
+
+def should_disambiguate_symbol_context(candidates: list[dict], *, symbol_name: str) -> bool:
+    normalized_name = (symbol_name or "").strip()
+    if not normalized_name:
+        return False
+    if "." in normalized_name or "(" in normalized_name or len(normalized_name) > 18:
+        return False
+    distinct_paths = {c.get("filepath") for c in candidates if c.get("filepath")}
+    distinct_kinds = {c.get("kind") for c in candidates if c.get("kind")}
+    if len(distinct_paths) >= 5:
+        return True
+    if len(distinct_paths) >= 3 and len(distinct_kinds) >= 2:
+        return True
+    return False
+
+
+def format_symbol_context_ambiguity(candidates: list[dict], *, symbol_name: str) -> str:
+    ranked = sorted(
+        candidates,
+        key=lambda candidate: (
+            _symbol_path_penalty(candidate.get("filepath")),
+            _symbol_kind_rank(candidate.get("kind")),
+            -(candidate.get("callers_in") or 0),
+            len(candidate.get("filepath") or ""),
+            candidate.get("start_line") or 0,
+        ),
+    )
+    lines = [
+        f"Multiple exact matches found for `{symbol_name}`. Be more specific or use `list_symbol_matches`.",
+        "",
+        "Top matches:",
+    ]
+    for candidate in ranked[:6]:
+        lines.append(
+            f"- [{candidate.get('kind') or 'Symbol'}] "
+            f"{candidate.get('filepath') or 'unknown'}:{candidate.get('start_line') or 1}"
+        )
+    return "\n".join(lines)
+
+
 def pick_call_chain_candidate(
     candidates: list[dict],
     *,
@@ -135,7 +289,8 @@ def pick_call_chain_candidate(
         candidates,
         key=lambda candidate: (
             candidate.get("rank", 99),
-            candidate.get("path_rank", 99),
+            min(candidate.get("path_rank", 99), _symbol_path_penalty(candidate.get("filepath"))),
+            -int(candidate.get("callers_in") or 0),
             len(candidate.get("qualified_name") or candidate.get("name") or ""),
         ),
     )
@@ -230,9 +385,21 @@ def build_call_chain_path_cypher(direction: str, depth: int, *, is_backend_root:
         hop_label = "callee"
         edge_pattern = f"-[:CALLS|CALLS_INFERRED*1..{depth}]->(hop)"
 
-    path_filter = ""
+    path_filter = (
+        " AND NOT (coalesce(hop.filepath, '') CONTAINS '/tests/'"
+        " OR coalesce(hop.filepath, '') CONTAINS '/test/'"
+        " OR coalesce(hop.filepath, '') CONTAINS '/e2e/'"
+        " OR coalesce(hop.filepath, '') CONTAINS '/fixtures/'"
+        " OR coalesce(hop.filepath, '') CONTAINS '.spec.'"
+        " OR coalesce(hop.filepath, '') CONTAINS '.stories.'"
+        " OR coalesce(hop.filepath, '') CONTAINS '/gen/'"
+        " OR coalesce(hop.filepath, '') CONTAINS '/generated/'"
+        " OR coalesce(hop.filepath, '') CONTAINS 'PreGeneratedSPM'"
+        " OR coalesce(hop.filepath, '') CONTAINS '/vendors/'"
+        " OR coalesce(hop.filepath, '') STARTS WITH 'vendors/')"
+    )
     if is_backend_root:
-        path_filter = (
+        path_filter += (
             " AND NOT (coalesce(hop.filepath, '') CONTAINS '/public/'"
             " OR coalesce(hop.filepath, '') STARTS WITH 'public/'"
             " OR coalesce(hop.filepath, '') ENDS WITH '.html'"
@@ -284,9 +451,11 @@ def format_call_chain_rows(
     direction: str,
     depth: int,
 ) -> str:
+    LOW_VALUE_HELPER_NAMES = {"iife", "fn"}
+
     def is_low_value_name(name: str | None) -> bool:
         normalized = (name or "").strip().lower()
-        return normalized in {"", "unnamed", "<anonymous>", "anonymous"}
+        return normalized in {"", "unnamed", "<anonymous>", "anonymous"} or normalized in LOW_VALUE_HELPER_NAMES
 
     from collections import OrderedDict
 
@@ -303,6 +472,19 @@ def format_call_chain_rows(
         chain = rec["chain"]
         files = rec["files"]
         lines = rec.get("lines") or []
+        compact_chain: list[tuple[str | None, str | None, int | None]] = []
+        for idx, name in enumerate(chain):
+            file_path = files[idx] if idx < len(files) else None
+            line = lines[idx] if idx < len(lines) else None
+            if idx > 0 and is_low_value_name(name):
+                hint = f"{file_path}:{line}" if file_path and line else (file_path or "?")
+                if hint not in anonymous_hints:
+                    anonymous_hints.append(hint)
+                continue
+            compact_chain.append((name, file_path, line))
+        chain = [entry[0] for entry in compact_chain]
+        files = [entry[1] for entry in compact_chain]
+        lines = [entry[2] for entry in compact_chain]
         if len(chain) < 2:
             continue
         first_name = chain[1]
