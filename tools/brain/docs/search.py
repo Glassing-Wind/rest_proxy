@@ -25,7 +25,7 @@ def _apply_diverse_docs_selection(results: list[dict], *, query: str, k: int) ->
     except Exception:
         return _url_diverse_docs_selection(results, k), None
 
-    experiments = duplicate_experiment_flags_from_env()
+    experiments = duplicate_experiment_flags_from_env("docs")
     try:
         trace = trace_diverse_results(results, query=query, mode="docs", experiments=experiments)
     except Exception:

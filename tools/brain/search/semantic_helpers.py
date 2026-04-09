@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def duplicate_experiment_flags_from_env() -> dict:
+def duplicate_experiment_flags_from_env(mode: str = "code") -> dict:
+    mode_norm = (mode or "code").strip().lower()
     stage = (os.getenv("LM_PROXY_DUPLICATE_ROLLOUT_STAGE") or "stage2").strip().lower()
     raw = (os.getenv("LM_PROXY_DUPLICATE_EXPERIMENTS") or "").strip()
     flags = {
@@ -42,6 +43,9 @@ def duplicate_experiment_flags_from_env() -> dict:
     }
     for key, value in stage_map.get(stage, {}).items():
         flags[key] = value
+    if mode_norm == "docs":
+        flags["boilerplate_variant_suppression"] = False
+        flags["helper_clone_suppression"] = False
     if not raw:
         return flags
     enabled = {
@@ -49,11 +53,17 @@ def duplicate_experiment_flags_from_env() -> dict:
         for token in raw.split(",")
         if token.strip()
     }
-    if "boilerplate" in enabled or "boilerplate_variant_suppression" in enabled:
+    if (
+        mode_norm != "docs"
+        and ("boilerplate" in enabled or "boilerplate_variant_suppression" in enabled)
+    ):
         flags["boilerplate_variant_suppression"] = True
     if "canonical_docs_mirror" in enabled or "canonical_docs_mirror_suppression" in enabled:
         flags["canonical_docs_mirror_suppression"] = True
-    if "helper_clone" in enabled or "helper_clone_suppression" in enabled:
+    if (
+        mode_norm != "docs"
+        and ("helper_clone" in enabled or "helper_clone_suppression" in enabled)
+    ):
         flags["helper_clone_suppression"] = True
     return flags
 
@@ -112,9 +122,10 @@ def _float_env(name: str) -> float | None:
 def _context_payload(results: list[dict]) -> str:
     payload: list[dict] = []
     for result in results:
+        file_path = result.get("file_path") or result.get("source_url") or ""
         payload.append(
             {
-                "file_path": result.get("file_path") or "",
+                "file_path": file_path,
                 "metadata": coerce_meta(result),
             }
         )
@@ -266,7 +277,7 @@ def trace_diverse_results(
 
     trace = getattr(ts_pack, "trace_diverse_texts", None) if ts_pack is not None else None
     if not callable(trace):
-        payload = experiments if isinstance(experiments, dict) else duplicate_experiment_flags_from_env()
+        payload = experiments if isinstance(experiments, dict) else duplicate_experiment_flags_from_env(mode)
         fallback = _ts_pack_runtime_call(
             "trace_diverse_texts",
             texts=[
@@ -316,7 +327,7 @@ def trace_diverse_results(
         except (TypeError, ValueError):
             relevance_scores.append(0.0)
 
-    payload = experiments if isinstance(experiments, dict) else duplicate_experiment_flags_from_env()
+    payload = experiments if isinstance(experiments, dict) else duplicate_experiment_flags_from_env(mode)
     try:
         traced = trace(
             texts,

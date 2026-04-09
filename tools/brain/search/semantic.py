@@ -506,7 +506,7 @@ def register(mcp: FastMCP) -> None:
                 "on",
             }
             duplicate_telemetry_enabled = sem_helpers.duplicate_telemetry_enabled()
-            duplicate_experiments = sem_helpers.duplicate_experiment_flags_from_env()
+            duplicate_experiments = sem_helpers.duplicate_experiment_flags_from_env("code")
             duplicate_trace: dict | None = None
 
             if dedupe_files:

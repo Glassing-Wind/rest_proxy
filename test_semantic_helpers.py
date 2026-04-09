@@ -118,23 +118,30 @@ class SemanticHelperTests(unittest.TestCase):
 
     def test_duplicate_experiment_flags_respect_rollout_stage(self):
         with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_ROLLOUT_STAGE": "stage2"}, clear=False):
-            flags = module.duplicate_experiment_flags_from_env()
+            flags = module.duplicate_experiment_flags_from_env("code")
         self.assertTrue(flags["boilerplate_variant_suppression"])
         self.assertTrue(flags["canonical_docs_mirror_suppression"])
         self.assertFalse(flags["helper_clone_suppression"])
 
     def test_duplicate_experiment_flags_default_to_stage2(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            flags = module.duplicate_experiment_flags_from_env()
+            flags = module.duplicate_experiment_flags_from_env("code")
         self.assertTrue(flags["boilerplate_variant_suppression"])
         self.assertTrue(flags["canonical_docs_mirror_suppression"])
         self.assertFalse(flags["helper_clone_suppression"])
 
     def test_duplicate_experiment_flags_allow_exact_only_disable(self):
         with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_ROLLOUT_STAGE": "off"}, clear=False):
-            flags = module.duplicate_experiment_flags_from_env()
+            flags = module.duplicate_experiment_flags_from_env("code")
         self.assertFalse(flags["boilerplate_variant_suppression"])
         self.assertFalse(flags["canonical_docs_mirror_suppression"])
+        self.assertFalse(flags["helper_clone_suppression"])
+
+    def test_duplicate_experiment_flags_docs_mode_only_enables_docs_safe_flags(self):
+        with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_ROLLOUT_STAGE": "stage2"}, clear=False):
+            flags = module.duplicate_experiment_flags_from_env("docs")
+        self.assertFalse(flags["boilerplate_variant_suppression"])
+        self.assertTrue(flags["canonical_docs_mirror_suppression"])
         self.assertFalse(flags["helper_clone_suppression"])
 
     def test_append_duplicate_telemetry_event_writes_ndjson(self):
@@ -167,6 +174,22 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(event["mode"], "docs")
         self.assertEqual(event["topic"], "neo4j")
         self.assertEqual(event["telemetry"]["experimental_suppressions"], 1)
+
+    def test_context_payload_uses_source_url_when_file_path_missing(self):
+        payload = json.loads(
+            module._context_payload(
+                [
+                    {
+                        "source_url": "https://neo4j.com/docs/python-manual/current/transactions/",
+                        "metadata": {"domain": "neo4j.com"},
+                    }
+                ]
+            )
+        )
+        self.assertEqual(
+            payload[0]["file_path"],
+            "https://neo4j.com/docs/python-manual/current/transactions/",
+        )
 
     def test_duplicate_telemetry_enabled_defaults_on_and_can_disable(self):
         with mock.patch.dict(os.environ, {}, clear=True):

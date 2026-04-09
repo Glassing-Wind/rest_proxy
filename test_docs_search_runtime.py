@@ -197,7 +197,9 @@ class DocsSearchHelperTests(unittest.TestCase):
             {"source_url": "https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/", "content": "ops", "rrf": 0.8},
         ]
         helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
-        helper_mod.duplicate_experiment_flags_from_env = lambda: {"canonical_docs_mirror_suppression": True}
+        helper_mod.duplicate_experiment_flags_from_env = (
+            lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
+        )
         helper_mod.trace_diverse_results = lambda results, query, mode, experiments: {
             "selection": {"keep_indices": [0, 2]},
             "telemetry": {"experimental_suppressions": 1},
