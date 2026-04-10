@@ -1079,6 +1079,7 @@ def register(mcp: FastMCP) -> None:
                     op="visualize_subgraph_neighbors",
                 )
                 nbr = dict(nbr_rows[0]) if nbr_rows else {}
+                nbr = symbol_graph.filter_visualize_neighbors(focus, nbr)
             rendered = symbol_graph.render_subgraph_mermaid(focus, nbr)
             if not rendered:
                 return f"No relationships found for '{symbol_name}'."
