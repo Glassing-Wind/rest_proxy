@@ -242,6 +242,28 @@ The lower-level retrieval stack should expose separate contracts for:
 - duplicate candidate generation
 - result reranking/diversification
 
+## MCP Tool Surface
+
+`rest_proxy` is now the single owner of duplicate-aware retrieval policy at the MCP layer.
+
+Cross-repo callers should use:
+
+- `rerank_retrieval_results`
+- `analyze_duplicate_results`
+
+`rerank_retrieval_results` accepts a caller-supplied ranked list and returns:
+
+- final reranked/diversified results
+- kept and suppressed original indices
+- duplicate groups and pairs
+- selection metadata
+- telemetry and suppression policy
+- optional compact debug trace
+
+`analyze_duplicate_results` exposes duplicate group and pair structure without changing order.
+
+This keeps duplicate-policy logic centralized in `rest_proxy` while allowing other repos to reuse it without reimplementing retrieval semantics locally.
+
 ### Duplicate Candidate API
 
 This should live below `rest_proxy`.

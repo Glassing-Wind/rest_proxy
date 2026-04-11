@@ -190,7 +190,7 @@ class DocsSearchHelperTests(unittest.TestCase):
         self.assertEqual(sql, "AND source = %(topic)s")
         self.assertEqual(params["topic"], "pgvector")
 
-    def test_apply_diverse_docs_selection_prefers_lower_level_trace(self):
+    def test_apply_diverse_docs_selection_prefers_shared_rerank_contract(self):
         rows = [
             {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "canonical", "rrf": 1.0},
             {"source_url": "https://mirror.example/transactions/", "content": "mirror", "rrf": 0.99},
@@ -200,7 +200,8 @@ class DocsSearchHelperTests(unittest.TestCase):
         helper_mod.duplicate_experiment_flags_from_env = (
             lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
         )
-        helper_mod.trace_diverse_results = lambda results, query, mode, experiments: {
+        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
+            "results": [dict(rows[0]), dict(rows[2])],
             "selection": {"keep_indices": [0, 2]},
             "telemetry": {"experimental_suppressions": 1},
         }

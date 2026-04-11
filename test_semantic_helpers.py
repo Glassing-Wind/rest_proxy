@@ -8,12 +8,22 @@ from unittest import mock
 
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic_helpers.py"
+GOLDENS_PATH = "/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json"
 
 
 spec = importlib.util.spec_from_file_location("semantic_helpers_under_test", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
+
+
+def load_benchmark_case(case_id: str) -> dict:
+    with open(GOLDENS_PATH, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    for case in payload.get("cases") or []:
+        if case.get("id") == case_id:
+            return case
+    raise AssertionError(f"missing benchmark case: {case_id}")
 
 
 class SemanticHelperTests(unittest.TestCase):
@@ -69,26 +79,19 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(analysis["groups"][0]["members"], [0, 1])
         fake_ts_pack.analyze_duplicate_texts.assert_called_once()
 
-    def test_collapse_near_duplicate_results_prefers_lower_level_rerank_contract(self):
+    def test_collapse_near_duplicate_results_prefers_shared_rerank_contract(self):
         rows = [
             {"file_path": "src/a.py", "project_id": "p", "rrf": 1.0, "content": "same-a"},
             {"file_path": "src/b.py", "project_id": "p", "rrf": 0.9, "content": "same-b"},
             {"file_path": "src/c.py", "project_id": "p", "rrf": 0.8, "content": "different"},
         ]
-        fake_ts_pack = mock.Mock()
-        fake_ts_pack.rerank_diverse_texts.return_value = {
-            "mode": "code_retrieval",
-            "keep_indices": [2, 0],
-            "suppressed_indices": [1],
-            "exact_suppressed_indices": [1],
-            "group_order": [1, 0],
-            "representative_indices": [2, 0],
-            "mmr_lambda": 0.78,
-        }
-        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+        with mock.patch.object(
+            module,
+            "rerank_retrieval_results_contract",
+            return_value={"keep_indices": [2, 0], "suppressed_indices": [1]},
+        ):
             collapsed = module.collapse_near_duplicate_results(rows, query="delete user helper", mode="code")
         self.assertEqual([row["file_path"] for row in collapsed], ["src/c.py", "src/a.py"])
-        fake_ts_pack.rerank_diverse_texts.assert_called_once()
 
     def test_trace_diverse_results_returns_telemetry_contract(self):
         rows = [
@@ -115,6 +118,187 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(trace["selection"]["keep_indices"], [0, 1])
         self.assertEqual(trace["telemetry"]["query_class"], "symbol_lookup")
         fake_ts_pack.trace_diverse_texts.assert_called_once()
+
+    def test_rerank_contract_collapses_code_exact_duplicates(self):
+        case = load_benchmark_case("code_exact_duplicate_helpers")
+        fake_trace = {
+            "selection": {
+                "mode": "code_retrieval",
+                "keep_indices": [0, 2],
+                "suppressed_indices": [1],
+                "exact_suppressed_indices": [1],
+                "group_order": [0, 2],
+                "representative_indices": [0, 2],
+                "mmr_lambda": 0.78,
+                "aspect_lambda": 0.18,
+                "selected_aspects": [],
+            },
+            "candidates": [
+                {"idx": 0, "group_id": 0, "kept": True, "decision_reason": "best_answer"},
+                {"idx": 1, "group_id": 0, "kept": False, "beaten_by": 0, "decision_reason": "exact_duplicate"},
+                {"idx": 2, "group_id": 2, "kept": True, "decision_reason": "distinct"},
+            ],
+            "telemetry": {"query_class": "symbol_lookup", "exact_suppressions": 1},
+            "suppression_policy": "exact_only",
+            "experiments": case.get("experiments"),
+        }
+        fake_analysis = {
+            "mode": "code_retrieval",
+            "keep_indices": [0, 2],
+            "suppressed_indices": [1],
+            "pairs": [{"left": 0, "right": 1, "duplicate": True, "score": 0.99}],
+            "groups": [{"group_id": 0, "members": [0, 1], "canonical_candidates": [0]}],
+        }
+        with (
+            mock.patch.object(module, "trace_diverse_results", return_value=fake_trace),
+            mock.patch.object(module, "analyze_near_duplicate_results", return_value=fake_analysis),
+        ):
+            contract = module.rerank_retrieval_results_contract(
+                case["results"],
+                query=case["query"],
+                mode=case["mode"],
+                experiments=case.get("experiments"),
+                include_debug=True,
+            )
+        self.assertEqual(contract["keep_indices"], [0, 2])
+        self.assertEqual(contract["suppressed_indices"], [1])
+        self.assertEqual([row["original_index"] for row in contract["results"]], [0, 2])
+        self.assertEqual(contract["pairs"][0]["left"], 0)
+        self.assertEqual(contract["groups"][0]["members"], [0, 1])
+        self.assertEqual(contract["trace"][1]["decision_reason"], "exact_duplicate")
+
+    def test_rerank_contract_keeps_docs_reference_and_tutorial(self):
+        case = load_benchmark_case("docs_tutorial_and_reference_survive")
+        fake_trace = {
+            "selection": {
+                "mode": "docs_retrieval",
+                "keep_indices": [0, 1],
+                "suppressed_indices": [2],
+                "exact_suppressed_indices": [],
+                "group_order": [0, 1],
+                "representative_indices": [0, 1],
+            },
+            "candidates": [],
+            "telemetry": {"canonical_doc_preference_success": True},
+            "suppression_policy": "exact_only",
+            "experiments": case.get("experiments"),
+        }
+        fake_analysis = {
+            "mode": "docs_retrieval",
+            "keep_indices": [0, 1],
+            "suppressed_indices": [2],
+            "pairs": [{"left": 1, "right": 2, "duplicate": True, "score": 0.93}],
+            "groups": [{"group_id": 1, "members": [1, 2], "canonical_candidates": [1]}],
+        }
+        with (
+            mock.patch.object(module, "trace_diverse_results", return_value=fake_trace),
+            mock.patch.object(module, "analyze_near_duplicate_results", return_value=fake_analysis),
+        ):
+            contract = module.rerank_retrieval_results_contract(
+                case["results"],
+                query=case["query"],
+                mode=case["mode"],
+                experiments=case.get("experiments"),
+            )
+        self.assertEqual(contract["keep_indices"], [0, 1])
+        self.assertEqual([row["original_index"] for row in contract["results"]], [0, 1])
+        self.assertEqual(contract["suppressed_indices"], [2])
+
+    def test_rerank_contract_preserves_best_answer_for_query_aware_code_case(self):
+        case = load_benchmark_case("code_renamed_helper_clones")
+        fake_trace = {
+            "selection": {
+                "mode": "code_retrieval",
+                "keep_indices": [2, 0],
+                "suppressed_indices": [1],
+                "exact_suppressed_indices": [],
+                "group_order": [2, 0],
+                "representative_indices": [2, 0],
+            },
+            "candidates": [],
+            "telemetry": {"best_answer_loss_suspect": False},
+            "suppression_policy": "query_aware",
+            "experiments": case.get("experiments"),
+        }
+        fake_analysis = {
+            "mode": "code_retrieval",
+            "keep_indices": [2, 0],
+            "suppressed_indices": [1],
+            "pairs": [{"left": 0, "right": 1, "duplicate": True, "score": 0.9}],
+            "groups": [{"group_id": 0, "members": [0, 1], "canonical_candidates": [0]}],
+        }
+        with (
+            mock.patch.object(module, "trace_diverse_results", return_value=fake_trace),
+            mock.patch.object(module, "analyze_near_duplicate_results", return_value=fake_analysis),
+        ):
+            contract = module.rerank_retrieval_results_contract(
+                case["results"],
+                query=case["query"],
+                mode=case["mode"],
+                experiments=case.get("experiments"),
+            )
+        self.assertEqual(contract["results"][0]["original_index"], 2)
+        self.assertEqual(contract["keep_indices"], [2, 0])
+
+    def test_analyze_duplicate_results_contract_reports_groups_without_reranking(self):
+        case = load_benchmark_case("docs_canonical_mirror_preferred")
+        fake_analysis = {
+            "mode": "docs_retrieval",
+            "keep_indices": [0, 2],
+            "suppressed_indices": [1],
+            "pairs": [{"left": 0, "right": 1, "duplicate": True, "score": 0.95}],
+            "groups": [{"group_id": 0, "members": [0, 1], "canonical_candidates": [0]}],
+        }
+        with mock.patch.object(module, "analyze_near_duplicate_results", return_value=fake_analysis):
+            contract = module.analyze_duplicate_results_contract(
+                case["results"],
+                query=case["query"],
+                mode=case["mode"],
+            )
+        self.assertEqual(contract["keep_indices"], [0, 2])
+        self.assertEqual(contract["suppressed_indices"], [1])
+        self.assertEqual(contract["pairs"][0]["right"], 1)
+
+    def test_rerank_contract_is_deterministic_for_same_input(self):
+        case = load_benchmark_case("docs_prose_near_duplicates_do_not_overcollapse")
+        fake_trace = {
+            "selection": {
+                "mode": "docs_retrieval",
+                "keep_indices": [0, 1],
+                "suppressed_indices": [2],
+                "exact_suppressed_indices": [],
+                "group_order": [0, 1],
+                "representative_indices": [0, 1],
+            },
+            "candidates": [],
+            "telemetry": {"query_class": "docs_incident"},
+            "suppression_policy": "exact_only",
+            "experiments": case.get("experiments"),
+        }
+        fake_analysis = {
+            "mode": "docs_retrieval",
+            "keep_indices": [0, 1],
+            "suppressed_indices": [2],
+            "pairs": [{"left": 0, "right": 2, "duplicate": True, "score": 0.91}],
+            "groups": [{"group_id": 0, "members": [0, 2], "canonical_candidates": [0]}],
+        }
+        with (
+            mock.patch.object(module, "trace_diverse_results", return_value=fake_trace),
+            mock.patch.object(module, "analyze_near_duplicate_results", return_value=fake_analysis),
+        ):
+            first = module.rerank_retrieval_results_contract(
+                case["results"],
+                query=case["query"],
+                mode=case["mode"],
+                experiments=case.get("experiments"),
+            )
+            second = module.rerank_retrieval_results_contract(
+                case["results"],
+                query=case["query"],
+                mode=case["mode"],
+                experiments=case.get("experiments"),
+            )
+        self.assertEqual(first, second)
 
     def test_duplicate_experiment_flags_respect_rollout_stage(self):
         with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_ROLLOUT_STAGE": "stage2"}, clear=False):

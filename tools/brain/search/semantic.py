@@ -1,5 +1,6 @@
 """tools/search/semantic.py — semantic + keyword search tool."""
 
+import json
 import os
 from mcp.server.fastmcp import FastMCP
 
@@ -47,6 +48,70 @@ async def _load_cargo_crate_rows(driver, neo4j_db: str, project_ids: list[str]) 
 
 
 def register(mcp: FastMCP) -> None:
+
+    @mcp.tool()
+    async def rerank_retrieval_results(
+        query: str,
+        results: list[dict],
+        mode: str = "code",
+        experiments: dict | None = None,
+        include_debug: bool = False,
+    ) -> str:
+        """
+        Rerank a caller-supplied ranked result list using rest_proxy duplicate-aware retrieval policy.
+
+        Args:
+            query: Retrieval query that produced the ranked candidates.
+            results: Ranked candidate list. Each item should include content plus file_path or source_url.
+            mode: Retrieval corpus mode: "code" or "docs".
+            experiments: Optional duplicate-policy overrides.
+            include_debug: Include compact duplicate decision trace.
+        """
+        try:
+            mode_norm = (mode or "code").strip().lower()
+            if mode_norm not in {"code", "docs"}:
+                return json.dumps({"error": "Invalid mode. Use 'code' or 'docs'."}, indent=2)
+            if not isinstance(results, list):
+                return json.dumps({"error": "results must be a list of dict items."}, indent=2)
+            contract = sem_helpers.rerank_retrieval_results_contract(
+                results,
+                query=query,
+                mode=mode_norm,
+                experiments=experiments,
+                include_debug=include_debug,
+            )
+            return json.dumps(contract, indent=2, sort_keys=True)
+        except Exception as e:
+            return json.dumps({"error": f"Error reranking retrieval results: {str(e)}"}, indent=2)
+
+    @mcp.tool()
+    async def analyze_duplicate_results(
+        query: str,
+        results: list[dict],
+        mode: str = "code",
+    ) -> str:
+        """
+        Analyze duplicate structure for a ranked result list without reranking it.
+
+        Args:
+            query: Retrieval query that produced the ranked candidates.
+            results: Ranked candidate list. Each item should include content plus file_path or source_url.
+            mode: Retrieval corpus mode: "code" or "docs".
+        """
+        try:
+            mode_norm = (mode or "code").strip().lower()
+            if mode_norm not in {"code", "docs"}:
+                return json.dumps({"error": "Invalid mode. Use 'code' or 'docs'."}, indent=2)
+            if not isinstance(results, list):
+                return json.dumps({"error": "results must be a list of dict items."}, indent=2)
+            contract = sem_helpers.analyze_duplicate_results_contract(
+                results,
+                query=query,
+                mode=mode_norm,
+            )
+            return json.dumps(contract, indent=2, sort_keys=True)
+        except Exception as e:
+            return json.dumps({"error": f"Error analyzing duplicate results: {str(e)}"}, indent=2)
 
     @mcp.tool()
     async def search_codebase(
@@ -578,20 +643,16 @@ def register(mcp: FastMCP) -> None:
 
             if dedupe_files:
                 if duplicate_trace_enabled or duplicate_telemetry_enabled or any(duplicate_experiments.values()):
-                    duplicate_trace = sem_helpers.trace_diverse_results(
+                    duplicate_trace = sem_helpers.rerank_retrieval_results_contract(
                         all_results,
                         query=query,
                         mode="code",
                         experiments=duplicate_experiments,
+                        include_debug=include_debug or duplicate_trace_enabled,
                     )
-                    selection = duplicate_trace.get("selection", {}) if isinstance(duplicate_trace, dict) else {}
-                    keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
-                    if isinstance(keep_indices, list):
-                        keep_set = {
-                            idx for idx in keep_indices if isinstance(idx, int) and 0 <= idx < len(all_results)
-                        }
-                        if keep_set:
-                            all_results = [all_results[idx] for idx in keep_indices if idx in keep_set]
+                    reranked = duplicate_trace.get("results") if isinstance(duplicate_trace, dict) else None
+                    if isinstance(reranked, list) and reranked:
+                        all_results = reranked
                 all_results = sem_helpers.dedupe_files(all_results)
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)

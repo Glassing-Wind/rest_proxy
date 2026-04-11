@@ -11,6 +11,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def merge_duplicate_experiments(mode: str, experiments: dict | None) -> dict:
+    merged = duplicate_experiment_flags_from_env(mode)
+    if isinstance(experiments, dict):
+        merged.update(experiments)
+    return merged
+
+
 def duplicate_experiment_flags_from_env(mode: str = "code") -> dict:
     mode_norm = (mode or "code").strip().lower()
     stage = (os.getenv("LM_PROXY_DUPLICATE_ROLLOUT_STAGE") or "stage2").strip().lower()
@@ -300,8 +307,8 @@ print(json.dumps(result))
 def collapse_near_duplicate_results(results: list[dict], *, query: str = "", mode: str = "code") -> list[dict]:
     if len(results) < 2:
         return results
-    selection = rerank_diverse_results(results, query=query, mode=mode)
-    keep_indices = selection.get("keep_indices")
+    contract = rerank_retrieval_results_contract(results, query=query, mode=mode)
+    keep_indices = contract.get("keep_indices")
     if not isinstance(keep_indices, list):
         return results
     keep_set = {
@@ -312,6 +319,97 @@ def collapse_near_duplicate_results(results: list[dict], *, query: str = "", mod
     if not keep_set:
         return results
     return [results[idx] for idx in keep_indices if idx in keep_set]
+
+
+def _coerce_result_score(result: dict) -> float:
+    for key in ("rrf", "rank_score", "score", "relevance_score"):
+        value = result.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return 0.0
+
+
+def _normalize_result_item(result: dict, index: int) -> dict:
+    normalized = dict(result) if isinstance(result, dict) else {"content": str(result)}
+    normalized["original_index"] = index
+    content = normalized.get("content")
+    if not isinstance(content, str):
+        normalized["content"] = "" if content is None else str(content)
+    normalized["rrf"] = _coerce_result_score(normalized)
+    meta = normalized.get("metadata")
+    if meta is None and isinstance(normalized.get("_meta"), dict):
+        normalized["metadata"] = dict(normalized["_meta"])
+    elif isinstance(meta, dict):
+        normalized["metadata"] = dict(meta)
+    return normalized
+
+
+def _normalize_result_items(results: list[dict]) -> list[dict]:
+    return [_normalize_result_item(result, idx) for idx, result in enumerate(results)]
+
+
+def _dedupe_int_list(values, *, limit: int) -> list[int]:
+    output: list[int] = []
+    seen: set[int] = set()
+    for value in values or []:
+        if not isinstance(value, int) or value in seen or value < 0 or value >= limit:
+            continue
+        seen.add(value)
+        output.append(value)
+    return output
+
+
+def _normalize_duplicate_pairs(pairs, *, limit: int) -> list[dict]:
+    normalized: list[dict] = []
+    for pair in pairs or []:
+        if not isinstance(pair, dict):
+            continue
+        left = pair.get("left")
+        right = pair.get("right")
+        if not isinstance(left, int) or not isinstance(right, int):
+            continue
+        if left < 0 or right < 0 or left >= limit or right >= limit:
+            continue
+        normalized.append(dict(pair))
+    return normalized
+
+
+def _normalize_duplicate_groups(groups, *, limit: int) -> list[dict]:
+    normalized: list[dict] = []
+    for group in groups or []:
+        if not isinstance(group, dict):
+            continue
+        members = _dedupe_int_list(group.get("members") or [], limit=limit)
+        if not members:
+            continue
+        entry = dict(group)
+        entry["members"] = members
+        if "canonical_candidates" in entry:
+            entry["canonical_candidates"] = _dedupe_int_list(
+                entry.get("canonical_candidates") or [],
+                limit=limit,
+            )
+        normalized.append(entry)
+    return normalized
+
+
+def _compact_candidate_trace(candidates) -> list[dict]:
+    compact: list[dict] = []
+    for candidate in candidates or []:
+        if not isinstance(candidate, dict):
+            continue
+        compact.append(
+            {
+                "idx": candidate.get("idx"),
+                "group_id": candidate.get("group_id"),
+                "kept": candidate.get("kept"),
+                "beaten_by": candidate.get("beaten_by"),
+                "decision_reason": candidate.get("decision_reason"),
+                "query_distinction_score": candidate.get("query_distinction_score"),
+                "duplicate_relations": candidate.get("duplicate_relations") or [],
+            }
+        )
+    return compact
 
 
 def trace_diverse_results(
@@ -579,6 +677,95 @@ def rerank_diverse_results(results: list[dict], *, query: str = "", mode: str = 
         "group_order": list(range(len(results))),
         "representative_indices": list(range(len(results))),
     }
+
+
+def analyze_duplicate_results_contract(
+    results: list[dict],
+    *,
+    query: str = "",
+    mode: str = "code",
+) -> dict:
+    prepared = _normalize_result_items(results)
+    analysis = analyze_near_duplicate_results(prepared, query=query, mode=mode)
+    keep_indices = _dedupe_int_list(
+        analysis.get("keep_indices") or list(range(len(prepared))),
+        limit=len(prepared),
+    )
+    suppressed_indices = _dedupe_int_list(
+        analysis.get("suppressed_indices") or [],
+        limit=len(prepared),
+    )
+    return {
+        "keep_indices": keep_indices,
+        "suppressed_indices": suppressed_indices,
+        "pairs": _normalize_duplicate_pairs(analysis.get("pairs"), limit=len(prepared)),
+        "groups": _normalize_duplicate_groups(analysis.get("groups"), limit=len(prepared)),
+        "mode": analysis.get("mode", "docs_retrieval" if mode == "docs" else "code_retrieval"),
+    }
+
+
+def rerank_retrieval_results_contract(
+    results: list[dict],
+    *,
+    query: str = "",
+    mode: str = "code",
+    experiments: dict | None = None,
+    include_debug: bool = False,
+) -> dict:
+    prepared = _normalize_result_items(results)
+    payload = merge_duplicate_experiments(mode, experiments)
+    trace = trace_diverse_results(prepared, query=query, mode=mode, experiments=payload)
+    analysis = analyze_near_duplicate_results(prepared, query=query, mode=mode)
+
+    selection = trace.get("selection") if isinstance(trace, dict) else {}
+    telemetry = trace.get("telemetry") if isinstance(trace, dict) else {}
+    keep_indices = _dedupe_int_list(
+        selection.get("keep_indices") or analysis.get("keep_indices") or list(range(len(prepared))),
+        limit=len(prepared),
+    )
+    suppressed_indices = _dedupe_int_list(
+        selection.get("suppressed_indices") or analysis.get("suppressed_indices") or [],
+        limit=len(prepared),
+    )
+    exact_suppressed = _dedupe_int_list(
+        selection.get("exact_suppressed_indices") or [],
+        limit=len(prepared),
+    )
+    representative_indices = _dedupe_int_list(
+        selection.get("representative_indices") or keep_indices,
+        limit=len(prepared),
+    )
+    group_order = _dedupe_int_list(
+        selection.get("group_order") or representative_indices,
+        limit=len(prepared),
+    )
+
+    contract = {
+        "results": [dict(prepared[idx]) for idx in keep_indices],
+        "keep_indices": keep_indices,
+        "suppressed_indices": suppressed_indices,
+        "groups": _normalize_duplicate_groups(analysis.get("groups"), limit=len(prepared)),
+        "pairs": _normalize_duplicate_pairs(analysis.get("pairs"), limit=len(prepared)),
+        "selection": {
+            "mode": selection.get("mode", "docs_retrieval" if mode == "docs" else "code_retrieval"),
+            "keep_indices": keep_indices,
+            "suppressed_indices": suppressed_indices,
+            "exact_suppressed_indices": exact_suppressed,
+            "group_order": group_order,
+            "representative_indices": representative_indices,
+            "mmr_lambda": selection.get("mmr_lambda"),
+            "aspect_lambda": selection.get("aspect_lambda"),
+            "selected_aspects": selection.get("selected_aspects") or [],
+        },
+        "telemetry": telemetry if isinstance(telemetry, dict) else {},
+        "suppression_policy": trace.get("suppression_policy", "exact_only") if isinstance(trace, dict) else "exact_only",
+        "experiments": trace.get("experiments", payload) if isinstance(trace, dict) else payload,
+    }
+    if include_debug:
+        candidates = trace.get("candidates") if isinstance(trace, dict) else []
+        contract["trace"] = _compact_candidate_trace(candidates)
+        contract["candidates"] = candidates if isinstance(candidates, list) else []
+    return contract
 
 
 def summarize_trace_for_debug(trace: dict) -> list[str]:

@@ -20,34 +20,32 @@ def _apply_diverse_docs_selection(results: list[dict], *, query: str, k: int) ->
     try:
         from tools.brain.search.semantic_helpers import (
             duplicate_experiment_flags_from_env,
-            trace_diverse_results,
+            rerank_retrieval_results_contract,
         )
     except Exception:
         return _url_diverse_docs_selection(results, k), None
 
     experiments = duplicate_experiment_flags_from_env("docs")
     try:
-        trace = trace_diverse_results(results, query=query, mode="docs", experiments=experiments)
+        contract = rerank_retrieval_results_contract(
+            results,
+            query=query,
+            mode="docs",
+            experiments=experiments,
+            include_debug=False,
+        )
     except Exception:
         return _url_diverse_docs_selection(results, k), None
 
-    selection = trace.get("selection") if isinstance(trace, dict) else {}
+    selection = contract.get("selection") if isinstance(contract, dict) else {}
     keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
     if not isinstance(keep_indices, list):
-        return _url_diverse_docs_selection(results, k), trace if isinstance(trace, dict) else None
+        return _url_diverse_docs_selection(results, k), contract if isinstance(contract, dict) else None
 
-    chosen: list[dict] = []
-    seen: set[int] = set()
-    for idx in keep_indices:
-        if not isinstance(idx, int) or idx in seen or idx < 0 or idx >= len(results):
-            continue
-        chosen.append(results[idx])
-        seen.add(idx)
-        if len(chosen) >= k:
-            break
+    chosen = [row for row in (contract.get("results") or []) if isinstance(row, dict)][:k]
     if chosen:
-            return chosen, trace if isinstance(trace, dict) else None
-    return _url_diverse_docs_selection(results, k), trace if isinstance(trace, dict) else None
+            return chosen, contract if isinstance(contract, dict) else None
+    return _url_diverse_docs_selection(results, k), contract if isinstance(contract, dict) else None
 
 
 def _url_diverse_docs_selection(results: list[dict], k: int) -> list[dict]:
