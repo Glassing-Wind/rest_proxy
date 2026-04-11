@@ -212,6 +212,35 @@ class DocsSearchHelperTests(unittest.TestCase):
         self.assertEqual([row["source_url"] for row in selected], [rows[0]["source_url"], rows[2]["source_url"]])
         self.assertEqual(trace["telemetry"]["experimental_suppressions"], 1)
 
+    def test_apply_diverse_docs_selection_collapses_same_url_after_rerank(self):
+        rows = [
+            {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "chunk-a", "rrf": 1.0},
+            {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "chunk-b", "rrf": 0.98},
+            {"source_url": "https://neo4j.com/docs/cypher-manual/current/clauses/transaction-clauses/", "content": "chunk-c", "rrf": 0.94},
+            {"source_url": "https://neo4j.com/docs/operations-manual/current/database-internals/transaction-management/", "content": "chunk-d", "rrf": 0.90},
+        ]
+        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod.duplicate_experiment_flags_from_env = (
+            lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
+        )
+        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
+            "results": [dict(rows[0]), dict(rows[1]), dict(rows[2]), dict(rows[3])],
+            "selection": {"keep_indices": [0, 1, 2, 3]},
+            "telemetry": {"experimental_suppressions": 0},
+        }
+        with mock.patch.dict(sys.modules, {"tools.brain.search.semantic_helpers": helper_mod}):
+            selected, trace = self.search_module._apply_diverse_docs_selection(rows, query="neo4j 5.26 transactions", k=3)
+
+        self.assertEqual(
+            [row["source_url"] for row in selected],
+            [
+                rows[0]["source_url"],
+                rows[2]["source_url"],
+                rows[3]["source_url"],
+            ],
+        )
+        self.assertIsNotNone(trace)
+
     def test_apply_diverse_docs_selection_falls_back_to_url_dedupe(self):
         rows = [
             {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "canonical", "rrf": 1.0},
@@ -364,6 +393,161 @@ class DocsSearchHelperTests(unittest.TestCase):
         self.assertIn("Transactions guide canonical", output)
         self.assertIn("Transactions guide 4.4", output)
         self.assertNotIn("Transactions guide mirror", output)
+
+    def test_search_documentation_hides_same_url_duplicates_after_rerank(self):
+        class FakeCursor:
+            def __init__(self, rows):
+                self.rows = rows
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, sql, params=None):
+                self.sql = sql
+                self.params = params or {}
+
+            def __aiter__(self):
+                self._iter = iter(self.rows)
+                return self
+
+            async def __anext__(self):
+                try:
+                    return next(self._iter)
+                except StopIteration:
+                    raise StopAsyncIteration
+
+        class FakeConn:
+            def __init__(self, rows):
+                self.rows = rows
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, sql):
+                self.sql = sql
+
+            def cursor(self):
+                return FakeCursor(self.rows)
+
+        class FakePool:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def connection(self):
+                return FakeConn(self.rows)
+
+        class FakeMCP:
+            def __init__(self):
+                self.tools = {}
+
+            def tool(self):
+                def decorator(fn):
+                    self.tools[fn.__name__] = fn
+                    return fn
+
+                return decorator
+
+        rows = [
+            (
+                "https://neo4j.com/docs/python-manual/current/transactions/",
+                "Run your own transactions - Neo4j Python Driver Manual",
+                0,
+                "Chunk A",
+                0.95,
+                ["Transactions"],
+                {"domain": "neo4j.com", "source_type": "driver-manual"},
+            ),
+            (
+                "https://neo4j.com/docs/python-manual/current/transactions/",
+                "Run your own transactions - Neo4j Python Driver Manual",
+                1,
+                "Chunk B",
+                0.94,
+                ["Transactions"],
+                {"domain": "neo4j.com", "source_type": "driver-manual"},
+            ),
+            (
+                "https://neo4j.com/docs/cypher-manual/current/clauses/transaction-clauses/",
+                "Transaction commands - Cypher Manual",
+                0,
+                "Chunk C",
+                0.93,
+                ["Transactions"],
+                {"domain": "neo4j.com", "source_type": "cypher-manual"},
+            ),
+            (
+                "https://neo4j.com/docs/cypher-manual/current/clauses/transaction-clauses/",
+                "Transaction commands - Cypher Manual",
+                1,
+                "Chunk D",
+                0.92,
+                ["Transactions"],
+                {"domain": "neo4j.com", "source_type": "cypher-manual"},
+            ),
+            (
+                "https://neo4j.com/docs/operations-manual/current/database-internals/transaction-management/",
+                "Transaction management - Operations Manual",
+                0,
+                "Chunk E",
+                0.90,
+                ["Transactions"],
+                {"domain": "neo4j.com", "source_type": "operations-manual"},
+            ),
+        ]
+
+        memory_mod = types.ModuleType("memory.store")
+        memory_mod._pg_pool = FakePool(rows)
+        memory_mod.open_pool = mock.AsyncMock()
+        memory_mod._pg_pool_available = lambda: True
+
+        embed_mod = types.ModuleType("embedding_service")
+
+        class FakeEmbeddingService:
+            async def embed_batch_async(self, texts):
+                return [[0.1, 0.2, 0.3] for _ in texts]
+
+        embed_mod.get_embedding_service = lambda: FakeEmbeddingService()
+
+        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod.duplicate_experiment_flags_from_env = (
+            lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
+        )
+        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
+            "results": [dict(result) for result in results],
+            "selection": {"keep_indices": list(range(len(results))), "suppressed_indices": []},
+            "telemetry": {"experimental_suppressions": 0},
+            "suppression_policy": "experimental_non_exact",
+            "experiments": experiments,
+        }
+        helper_mod.append_duplicate_telemetry_event = lambda *args, **kwargs: None
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "memory.store": memory_mod,
+                "embedding_service": embed_mod,
+                "tools.brain.search.semantic_helpers": helper_mod,
+            },
+        ):
+            mcp = FakeMCP()
+            self.search_module.register(mcp)
+            output = asyncio.run(
+                mcp.tools["search_documentation"](
+                    "neo4j 5.26 transactions",
+                    topic="neo4j",
+                    k=8,
+                )
+            )
+
+        self.assertEqual(output.count("https://neo4j.com/docs/python-manual/current/transactions/"), 1)
+        self.assertEqual(output.count("https://neo4j.com/docs/cypher-manual/current/clauses/transaction-clauses/"), 1)
+        self.assertIn("https://neo4j.com/docs/operations-manual/current/database-internals/transaction-management/", output)
 
 
 if __name__ == "__main__":

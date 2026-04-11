@@ -264,7 +264,7 @@ Cross-repo callers should use:
 
 This keeps duplicate-policy logic centralized in `rest_proxy` while allowing other repos to reuse it without reimplementing retrieval semantics locally.
 
-For normal agent usage, documentation retrieval already applies this reranking by default through `search_documentation`. The standalone MCP tools remain for debugging, evaluation, and caller-supplied custom candidate lists.
+For normal agent usage, documentation retrieval already applies this reranking by default through `search_documentation`. That default path returns the post-rerank final list and collapses repeated chunks from the same documentation URL. The standalone MCP tools remain for debugging, evaluation, and caller-supplied custom candidate lists.
 
 ### Duplicate Candidate API
 

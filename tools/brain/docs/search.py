@@ -42,9 +42,12 @@ def _apply_diverse_docs_selection(results: list[dict], *, query: str, k: int) ->
     if not isinstance(keep_indices, list):
         return _url_diverse_docs_selection(results, k), contract if isinstance(contract, dict) else None
 
-    chosen = [row for row in (contract.get("results") or []) if isinstance(row, dict)][:k]
+    chosen = _url_diverse_docs_selection(
+        [row for row in (contract.get("results") or []) if isinstance(row, dict)],
+        k,
+    )
     if chosen:
-            return chosen, contract if isinstance(contract, dict) else None
+        return chosen, contract if isinstance(contract, dict) else None
     return _url_diverse_docs_selection(results, k), contract if isinstance(contract, dict) else None
 
 
