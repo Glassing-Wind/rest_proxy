@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import os
 import stat
@@ -226,6 +227,143 @@ class DocsSearchHelperTests(unittest.TestCase):
             [rows[0]["source_url"], rows[2]["source_url"]],
         )
         self.assertIsNone(trace)
+
+    def test_search_documentation_reranks_docs_by_default(self):
+        class FakeCursor:
+            def __init__(self, rows):
+                self.rows = rows
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, sql, params=None):
+                self.sql = sql
+                self.params = params or {}
+
+            def __aiter__(self):
+                self._iter = iter(self.rows)
+                return self
+
+            async def __anext__(self):
+                try:
+                    return next(self._iter)
+                except StopIteration:
+                    raise StopAsyncIteration
+
+        class FakeConn:
+            def __init__(self, rows):
+                self.rows = rows
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, sql):
+                self.sql = sql
+
+            def cursor(self):
+                return FakeCursor(self.rows)
+
+        class FakePool:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def connection(self):
+                return FakeConn(self.rows)
+
+        class FakeMCP:
+            def __init__(self):
+                self.tools = {}
+
+            def tool(self):
+                def decorator(fn):
+                    self.tools[fn.__name__] = fn
+                    return fn
+
+                return decorator
+
+        rows = [
+            (
+                "https://mirror.example.com/docs/python-manual/5.26/transactions/",
+                "Transactions guide mirror",
+                0,
+                "Mirror transactions guide",
+                0.91,
+                ["Transactions"],
+                {"domain": "mirror.example.com", "source_type": "mirror"},
+            ),
+            (
+                "https://neo4j.com/docs/python-manual/5.26/transactions/",
+                "Transactions guide canonical",
+                0,
+                "Canonical transactions guide",
+                0.89,
+                ["Transactions"],
+                {"domain": "neo4j.com", "source_type": "driver-manual"},
+            ),
+            (
+                "https://neo4j.com/docs/python-manual/4.4/transactions/",
+                "Transactions guide 4.4",
+                0,
+                "Version 4.4 transactions guide",
+                0.85,
+                ["Transactions"],
+                {"domain": "neo4j.com", "source_type": "driver-manual"},
+            ),
+        ]
+
+        memory_mod = types.ModuleType("memory.store")
+        memory_mod._pg_pool = FakePool(rows)
+        memory_mod.open_pool = mock.AsyncMock()
+        memory_mod._pg_pool_available = lambda: True
+
+        embed_mod = types.ModuleType("embedding_service")
+
+        class FakeEmbeddingService:
+            async def embed_batch_async(self, texts):
+                return [[0.1, 0.2, 0.3] for _ in texts]
+
+        embed_mod.get_embedding_service = lambda: FakeEmbeddingService()
+
+        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod.duplicate_experiment_flags_from_env = (
+            lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
+        )
+        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
+            "results": [dict(results[1]), dict(results[2])],
+            "selection": {"keep_indices": [1, 2], "suppressed_indices": [0]},
+            "telemetry": {"experimental_suppressions": 1},
+            "suppression_policy": "experimental_non_exact",
+            "experiments": experiments,
+        }
+        helper_mod.append_duplicate_telemetry_event = lambda *args, **kwargs: None
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "memory.store": memory_mod,
+                "embedding_service": embed_mod,
+                "tools.brain.search.semantic_helpers": helper_mod,
+            },
+        ):
+            mcp = FakeMCP()
+            self.search_module.register(mcp)
+            output = asyncio.run(
+                mcp.tools["search_documentation"](
+                    "neo4j 5.26 transactions",
+                    topic="neo4j",
+                    k=2,
+                )
+            )
+
+        self.assertIn("Transactions guide canonical", output)
+        self.assertIn("Transactions guide 4.4", output)
+        self.assertNotIn("Transactions guide mirror", output)
 
 
 if __name__ == "__main__":
