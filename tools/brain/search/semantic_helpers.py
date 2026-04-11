@@ -412,6 +412,38 @@ def _compact_candidate_trace(candidates) -> list[dict]:
     return compact
 
 
+def _effective_suppression_policy(
+    trace: dict | None,
+    telemetry: dict | None,
+    experiments: dict,
+) -> str:
+    if isinstance(trace, dict):
+        policy = str(trace.get("suppression_policy") or "exact_only")
+    else:
+        policy = "exact_only"
+    if policy != "exact_only":
+        return policy
+    telemetry = telemetry if isinstance(telemetry, dict) else {}
+    if int(telemetry.get("experimental_suppressions") or 0) > 0:
+        return "experimental_non_exact"
+    if any(bool(experiments.get(key)) for key in (
+        "boilerplate_variant_suppression",
+        "canonical_docs_mirror_suppression",
+        "helper_clone_suppression",
+    )):
+        candidates = trace.get("candidates") if isinstance(trace, dict) else []
+        for candidate in candidates or []:
+            if not isinstance(candidate, dict) or candidate.get("kept") is not False:
+                continue
+            relations = {str(rel) for rel in (candidate.get("duplicate_relations") or [])}
+            reason = str(candidate.get("decision_reason") or "")
+            if reason not in {"exact_duplicate_suppressed", "exact_duplicate"} or (
+                relations and relations != {"exact_duplicate"}
+            ):
+                return "experimental_non_exact"
+    return policy
+
+
 def trace_diverse_results(
     results: list[dict],
     *,
@@ -758,7 +790,11 @@ def rerank_retrieval_results_contract(
             "selected_aspects": selection.get("selected_aspects") or [],
         },
         "telemetry": telemetry if isinstance(telemetry, dict) else {},
-        "suppression_policy": trace.get("suppression_policy", "exact_only") if isinstance(trace, dict) else "exact_only",
+        "suppression_policy": _effective_suppression_policy(
+            trace if isinstance(trace, dict) else None,
+            telemetry if isinstance(telemetry, dict) else None,
+            payload,
+        ),
         "experiments": trace.get("experiments", payload) if isinstance(trace, dict) else payload,
     }
     if include_debug:

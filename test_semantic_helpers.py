@@ -203,6 +203,52 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(contract["keep_indices"], [0, 1])
         self.assertEqual([row["original_index"] for row in contract["results"]], [0, 1])
         self.assertEqual(contract["suppressed_indices"], [2])
+        self.assertEqual(contract["suppression_policy"], "exact_only")
+
+    def test_rerank_contract_labels_non_exact_suppression_policy_honestly(self):
+        case = load_benchmark_case("docs_canonical_mirror_preferred")
+        fake_trace = {
+            "selection": {
+                "mode": "docs_retrieval",
+                "keep_indices": [0, 2],
+                "suppressed_indices": [1],
+                "exact_suppressed_indices": [],
+                "group_order": [0, 2],
+                "representative_indices": [0, 2],
+            },
+            "candidates": [
+                {
+                    "idx": 1,
+                    "group_id": 0,
+                    "kept": False,
+                    "beaten_by": 0,
+                    "decision_reason": "experimental_non_exact_suppressed",
+                    "duplicate_relations": ["canonical_docs_mirror"],
+                }
+            ],
+            "telemetry": {"experimental_suppressions": 1},
+            "suppression_policy": "exact_only",
+            "experiments": case.get("experiments"),
+        }
+        fake_analysis = {
+            "mode": "docs_retrieval",
+            "keep_indices": [0, 2],
+            "suppressed_indices": [1],
+            "pairs": [{"left": 0, "right": 1, "duplicate": True, "score": 0.95}],
+            "groups": [{"group_id": 0, "members": [0, 1], "canonical_candidates": [0]}],
+        }
+        with (
+            mock.patch.object(module, "trace_diverse_results", return_value=fake_trace),
+            mock.patch.object(module, "analyze_near_duplicate_results", return_value=fake_analysis),
+        ):
+            contract = module.rerank_retrieval_results_contract(
+                case["results"],
+                query=case["query"],
+                mode=case["mode"],
+                experiments=case.get("experiments"),
+                include_debug=True,
+            )
+        self.assertEqual(contract["suppression_policy"], "experimental_non_exact")
 
     def test_rerank_contract_preserves_best_answer_for_query_aware_code_case(self):
         case = load_benchmark_case("code_renamed_helper_clones")
