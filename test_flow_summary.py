@@ -1,6 +1,8 @@
 import asyncio
 import importlib.util
+import os
 import sys
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -157,6 +159,24 @@ class FlowSummaryTests(unittest.TestCase):
             "src/public/properties.html -> src/public/assets/properties.js -> src/api/leaseRoutes.ts -> src/services/leaseService.ts",
             output,
         )
+
+    def test_get_app_flow_summary_as_table_reports_empty_when_no_rows(self):
+        async def fake_execute_read(session, query, **kwargs):
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rentallaw",
+                    include_coverage=False,
+                    limit=20,
+                    as_table=True,
+                )
+            )
+
+        self.assertEqual("No UI → API → Service → DB paths found.", output)
 
     def test_suppress_coarse_route_service_rows_drops_file_level_service_for_multi_route_api(self):
         rows = [
@@ -893,6 +913,75 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("GET /api/charges", output)
         self.assertIn("POST /api/financials/accounting-sync/quickbooks/export-batch", output)
         self.assertNotIn("src/services/AccountingSyncBatchService.ts", output)
+
+    def test_get_backend_flow_summary_falls_back_for_fastapi_import_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            api_dir = os.path.join(tmpdir, "app", "api")
+            os.makedirs(api_dir, exist_ok=True)
+            api_file = os.path.join(api_dir, "endpoints.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import APIRouter, Depends\n"
+                    "from sqlalchemy.orm import Session\n"
+                    "from app.db.session import get_db\n"
+                    "from app.retrieval.hybrid_search import HybridRetriever\n"
+                    "from app.ingestion.processor import IngestionProcessor\n"
+                    "from app.models.legal_source import LegalSource\n"
+                    "router = APIRouter()\n\n"
+                    "@router.post('/search')\n"
+                    "async def search_legal_content(db: Session = Depends(get_db)):\n"
+                    "    retriever = HybridRetriever(db)\n"
+                    "    return await retriever.search(query='x')\n\n"
+                    "@router.get('/sources')\n"
+                    "def list_sources(db: Session = Depends(get_db)):\n"
+                    "    return db.query(LegalSource).all()\n\n"
+                    "@router.post('/ingest')\n"
+                    "async def trigger_ingestion(db: Session = Depends(get_db)):\n"
+                    "    processor = IngestionProcessor(db)\n"
+                    "    return await processor.process_document(source_id='1')\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [
+                        {"api": "app/api/endpoints.py", "dep": "app/db/session.py"},
+                        {"api": "app/api/endpoints.py", "dep": "app/retrieval/hybrid_search.py"},
+                        {"api": "app/api/endpoints.py", "dep": "app/ingestion/processor.py"},
+                        {"api": "app/api/endpoints.py", "dep": "app/models/legal_source.py"},
+                    ]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="endpoints.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertIn("POST /search", output)
+        self.assertIn("app/retrieval/hybrid_search.py", output)
+        self.assertIn("GET /sources", output)
+        self.assertIn("app/models/legal_source.py", output)
+        self.assertIn("app/db/session.py", output)
 
 
 if __name__ == "__main__":

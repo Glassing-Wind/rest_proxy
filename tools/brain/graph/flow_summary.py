@@ -5,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import os
 import re
+from collections import defaultdict
 
 from _helpers import get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
@@ -191,6 +192,18 @@ RETURN api.filepath AS api,
 ORDER BY api
 """
 
+_BACKEND_IMPORT_FALLBACK_QUERY = """
+MATCH (api:File {project_id:$p})-[:IMPORTS]->(dep:File {project_id:$p})
+WHERE (
+    api.filepath CONTAINS '/api/'
+    OR api.filepath CONTAINS '/routes/'
+    OR api.filepath STARTS WITH 'api/'
+    OR api.filepath STARTS WITH 'app/api/'
+)
+RETURN api.filepath AS api, dep.filepath AS dep
+ORDER BY api, dep
+"""
+
 
 async def _load_cargo_crate_roots(session, project_id: str):
     schema_labels = await graph_core._execute_read(
@@ -311,6 +324,185 @@ def _format_backend_flow_empty_message(crate_rows) -> str:
     )
 
 
+def _is_backend_api_path(filepath: str | None) -> bool:
+    if not filepath:
+        return False
+    normalized = filepath.replace("\\", "/")
+    return (
+        "/api/" in normalized
+        or "/routes/" in normalized
+        or normalized.startswith("api/")
+        or normalized.startswith("app/api/")
+    )
+
+
+def _classify_backend_dep(filepath: str | None) -> str | None:
+    if not filepath:
+        return None
+    normalized = filepath.replace("\\", "/").lower()
+    if any(token in normalized for token in ("/services/", "/service/", "/retrieval/", "/ingestion/")):
+        return "svc"
+    if "/models/" in normalized:
+        return "model"
+    if any(token in normalized for token in ("/db/", "/database/", "/repositories/", "/repository/")):
+        return "schema"
+    return None
+
+
+def _module_name_from_filepath(filepath: str | None) -> str | None:
+    if not filepath:
+        return None
+    normalized = filepath.replace("\\", "/")
+    if normalized.endswith(".py"):
+        normalized = normalized[:-3]
+    if normalized.endswith("/__init__"):
+        normalized = normalized[:-9]
+    module_name = normalized.replace("/", ".").strip(".")
+    return module_name or None
+
+
+def _extract_python_import_map(source_text: str) -> dict[str, str]:
+    symbol_to_module: dict[str, str] = {}
+    for match in re.finditer(
+        r"(?m)^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+([A-Za-z0-9_,\s]+)$",
+        source_text,
+    ):
+        module_name = match.group(1).strip()
+        raw_symbols = match.group(2)
+        for item in raw_symbols.split(","):
+            symbol = item.strip()
+            if not symbol or " as " in symbol:
+                symbol = symbol.split(" as ", 1)[-1].strip()
+            if symbol:
+                symbol_to_module[symbol] = module_name
+    return symbol_to_module
+
+
+def _extract_fastapi_route_blocks(source_text: str) -> list[dict[str, str | None]]:
+    pattern = re.compile(
+        r"(?ms)^\s*@router\.(get|post|put|patch|delete|options|head)\(\s*([\"'])(.*?)\2.*?\)\s*"
+        r"\n\s*(?:async\s+def|def)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\):\s*\n(.*?)(?=^\s*@router\.|\Z)"
+    )
+    routes: list[dict[str, str | None]] = []
+    for match in pattern.finditer(source_text):
+        method = match.group(1).upper()
+        path = match.group(3).strip()
+        signature = match.group(5) or ""
+        body = match.group(6) or ""
+        routes.append(
+            {
+                "route": f"{method} {path}",
+                "signature": signature,
+                "body": body,
+            }
+        )
+    return routes
+
+
+def _select_python_route_dep(
+    route_text: str,
+    symbol_to_kind: dict[str, tuple[str, str]],
+    preferred_kind: str,
+) -> str | None:
+    for symbol, (kind, dep_path) in symbol_to_kind.items():
+        if kind != preferred_kind or not dep_path:
+            continue
+        if re.search(rf"\b{re.escape(symbol)}\b", route_text):
+            return dep_path
+    return None
+
+
+async def _load_backend_import_fallback_rows(session, project_id: str) -> list[dict]:
+    rows = await graph_core._execute_read(
+        session,
+        _BACKEND_IMPORT_FALLBACK_QUERY,
+        p=project_id,
+        op="get_backend_flow_summary_import_fallback",
+    )
+    return [row for row in rows if _is_backend_api_path(row.get("api")) and row.get("dep")]
+
+
+async def _build_python_backend_flow_fallback(
+    *,
+    session,
+    project_id: str,
+    workspace_id: str,
+    include_tests: bool,
+) -> list[dict]:
+    import_rows = await _load_backend_import_fallback_rows(session, project_id)
+    if not import_rows:
+        return []
+
+    deps_by_api: dict[str, list[str]] = defaultdict(list)
+    for row in import_rows:
+        api = row.get("api")
+        dep = row.get("dep")
+        if not api or not dep:
+            continue
+        deps_by_api[api].append(dep)
+
+    workspace_path = get_workspace_path(workspace_id)
+    if not workspace_path:
+        return []
+
+    fallback_rows: list[dict] = []
+    for api_path, deps in sorted(deps_by_api.items()):
+        if not include_tests and _is_test_like_path(api_path):
+            continue
+        api_abs = os.path.join(workspace_path, api_path)
+        try:
+            with open(api_abs, "r", encoding="utf-8") as fh:
+                source_text = fh.read()
+        except Exception:
+            continue
+        if "APIRouter" not in source_text and "@router." not in source_text and "FastAPI" not in source_text:
+            continue
+
+        symbol_to_module = _extract_python_import_map(source_text)
+        module_to_dep = {
+            _module_name_from_filepath(dep): dep
+            for dep in deps
+            if _module_name_from_filepath(dep)
+        }
+        symbol_to_kind: dict[str, tuple[str, str]] = {}
+        for symbol, module_name in symbol_to_module.items():
+            dep_path = module_to_dep.get(module_name)
+            dep_kind = _classify_backend_dep(dep_path)
+            if dep_path and dep_kind:
+                symbol_to_kind[symbol] = (dep_kind, dep_path)
+
+        db_dep = None
+        for dep in deps:
+            if _classify_backend_dep(dep) == "schema":
+                db_dep = dep
+                break
+
+        for route_block in _extract_fastapi_route_blocks(source_text):
+            route_text = f"{route_block.get('signature') or ''}\n{route_block.get('body') or ''}"
+            service_dep = _select_python_route_dep(route_text, symbol_to_kind, "svc")
+            model_dep = _select_python_route_dep(route_text, symbol_to_kind, "model")
+            schema_dep = None
+            if db_dep and (
+                "Depends(get_db)" in route_text
+                or re.search(r"\bdb\s*:\s*Session\b", route_text)
+                or "db." in route_text
+            ):
+                schema_dep = db_dep
+            if not any([route_block.get("route"), service_dep, model_dep, schema_dep]):
+                continue
+            fallback_rows.append(
+                {
+                    "api": api_path,
+                    "route": route_block.get("route"),
+                    "svc": service_dep,
+                    "model": model_dep,
+                    "schema": schema_dep,
+                    "external": None,
+                }
+            )
+    return fallback_rows
+
+
 async def _load_backend_api_routes(session, project_id: str) -> dict[str, list[str]]:
     rows = await graph_core._execute_read(
         session,
@@ -328,6 +520,9 @@ async def _load_backend_api_routes(session, project_id: str) -> dict[str, list[s
 def _expand_backend_rows_by_route_context(rows: list[dict], api_routes: dict[str, list[str]]) -> list[dict]:
     expanded: list[dict] = []
     for row in rows:
+        if row.get("route"):
+            expanded.append(row)
+            continue
         api = row.get("api")
         routes = api_routes.get(api) or []
         if not routes:
@@ -749,6 +944,9 @@ async def get_app_flow_summary_impl(
                 routes = api_calls_result[0].get("routes") if api_calls_result else []
                 ui_routes[ui_path] = sorted(route for route in routes if route)
 
+    if not raw_rows:
+        return "No UI → API → Service → DB paths found."
+
     if as_table:
         rows = [
             "| UI | JS | Route | API | Service | Model | Schema | External |",
@@ -784,8 +982,6 @@ async def get_app_flow_summary_impl(
 
     if limit and len(rows) > limit:
         rows = rows[:limit]
-    if not rows:
-        return "No UI → API → Service → DB paths found."
     output = []
     if coverage_lines:
         output.extend(coverage_lines)
@@ -828,6 +1024,13 @@ async def get_backend_flow_summary_impl(
                 include_tests=include_tests,
                 limit=query_limit,
                 op="get_backend_flow_summary_fallback",
+            )
+        if not result:
+            result = await _build_python_backend_flow_fallback(
+                session=session,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                include_tests=include_tests,
             )
         api_routes = await _load_backend_api_routes(session, project_id)
         cargo_crate_rows = await _load_cargo_crate_roots(session, project_id)
