@@ -364,7 +364,7 @@ def _module_name_from_filepath(filepath: str | None) -> str | None:
 def _extract_python_import_map(source_text: str) -> dict[str, str]:
     symbol_to_module: dict[str, str] = {}
     for match in re.finditer(
-        r"(?m)^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+([A-Za-z0-9_,\s]+)$",
+        r"(?m)^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+([A-Za-z0-9_, ]+)$",
         source_text,
     ):
         module_name = match.group(1).strip()
@@ -1016,6 +1016,15 @@ async def get_backend_flow_summary_impl(
             limit=query_limit,
             op="get_backend_flow_summary",
         )
+        result = [
+            row
+            for row in result
+            if row.get("route")
+            or row.get("svc")
+            or row.get("model")
+            or row.get("schema")
+            or row.get("external")
+        ]
         if not result:
             result = await graph_core._execute_read(
                 session,
@@ -1025,6 +1034,15 @@ async def get_backend_flow_summary_impl(
                 limit=query_limit,
                 op="get_backend_flow_summary_fallback",
             )
+            result = [
+                row
+                for row in result
+                if row.get("route")
+                or row.get("svc")
+                or row.get("model")
+                or row.get("schema")
+                or row.get("external")
+            ]
         if not result:
             result = await _build_python_backend_flow_fallback(
                 session=session,
