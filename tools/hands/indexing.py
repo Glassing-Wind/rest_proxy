@@ -372,6 +372,7 @@ async def get_index_status(job_id: str) -> str:
     struct_rc = job.get("struct_rc")
     sem_rc = job.get("sem_rc")
     logs = job.get("logs", [])
+    run_summary = job.get("run_summary") or {}
 
     try:
         from tools.hands.project import get_last_graph_build_metric
@@ -405,6 +406,23 @@ async def get_index_status(job_id: str) -> str:
         if sem_rc is not None
         else "  semantic:   running…",
     ]
+    if run_summary:
+        struct_run = run_summary.get("struct_active_run_id") or "unknown"
+        semantic_run = run_summary.get("semantic_active_run_id") or "unknown"
+        semantic_struct = run_summary.get("semantic_active_struct_run_id") or "unknown"
+        aligned = (
+            run_summary.get("semantic_index_status") == "done"
+            and struct_run != "unknown"
+            and struct_run == semantic_struct
+        )
+        lines.extend(
+            [
+                f"  struct_run: {struct_run}",
+                f"  semantic_run: {semantic_run}",
+                f"  semantic_struct_run: {semantic_struct}",
+                f"  aligned:    {'yes' if aligned else 'no'}",
+            ]
+        )
     if last_build:
         lines.append(
             "  graph_build: "

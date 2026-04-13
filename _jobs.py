@@ -145,10 +145,12 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
     ):
         try:
             import graph_bootstrap
+            run_summary = None
 
             async def _post_index_maintenance() -> None:
                 from neo4j import unit_of_work
 
+                nonlocal run_summary
                 driver = await graph_bootstrap.require_driver()
                 async with driver.session(
                     database=graph_bootstrap._NEO4J_DB
@@ -200,10 +202,31 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                             )
                             await promote_semantic.consume()
 
+                    async def _read_summary(tx):
+                        result = await tx.run(
+                            """
+                            MATCH (p:Project {id:$pid})
+                            RETURN
+                              p.struct_active_run_id AS struct_active_run_id,
+                              p.semantic_active_run_id AS semantic_active_run_id,
+                              p.semantic_active_struct_run_id AS semantic_active_struct_run_id,
+                              p.struct_index_status AS struct_index_status,
+                              p.semantic_index_status AS semantic_index_status
+                            """,
+                            pid=project_id,
+                        )
+                        return await result.data()
+
                     if hasattr(session, "execute_write"):
                         await session.execute_write(_tx)
                     else:
                         await _tx(session)
+                    if hasattr(session, "execute_read"):
+                        rows = await session.execute_read(_read_summary)
+                    else:
+                        rows = await _read_summary(session)
+                    if rows:
+                        run_summary = rows[0]
             if _MAIN_LOOP is not None and _MAIN_LOOP.is_running():
                 future = asyncio.run_coroutine_threadsafe(
                     _post_index_maintenance(),
@@ -227,6 +250,8 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                             for line in _JOBS[job_id]["logs"]
                             if "[clone-enrich]" not in line
                         ]
+                    if run_summary:
+                        _JOBS[job_id]["run_summary"] = run_summary
                     _JOBS[job_id]["logs"].append(f"[struct-index] {queued}")
         except Exception as e:
             graph_build_error = str(e)

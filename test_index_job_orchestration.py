@@ -12,8 +12,14 @@ MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/_jobs.py"
 
 
 class FakeConsumeResult:
+    def __init__(self, rows=None):
+        self.rows = rows or []
+
     async def consume(self):
         return None
+
+    async def data(self):
+        return list(self.rows)
 
 
 class FakeTx:
@@ -22,6 +28,18 @@ class FakeTx:
 
     async def run(self, cypher, **params):
         self.calls.append((cypher, params))
+        if "RETURN\n                              p.struct_active_run_id AS struct_active_run_id" in cypher:
+            return FakeConsumeResult(
+                [
+                    {
+                        "struct_active_run_id": "struct-1",
+                        "semantic_active_run_id": "sem-1",
+                        "semantic_active_struct_run_id": "struct-1",
+                        "struct_index_status": "done",
+                        "semantic_index_status": "done",
+                    }
+                ]
+            )
         return FakeConsumeResult()
 
 
@@ -36,6 +54,9 @@ class FakeSession:
         return False
 
     async def execute_write(self, fn):
+        return await fn(self.tx)
+
+    async def execute_read(self, fn):
         return await fn(self.tx)
 
 
@@ -118,6 +139,9 @@ class IndexJobOrchestrationTests(unittest.TestCase):
             self.assertEqual(job["status"], "done")
             self.assertIsNotNone(job["finished_at"])
             self.assertTrue(any("timestamps refreshed" in line for line in job["logs"]))
+            self.assertEqual(job["run_summary"]["struct_active_run_id"], "struct-1")
+            self.assertEqual(job["run_summary"]["semantic_active_run_id"], "sem-1")
+            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-1")
 
         cyphers = [cypher for cypher, _ in tx.calls]
         self.assertTrue(any("SET f.indexed_at = timestamp(), f.vector_indexed_at = timestamp()" in c for c in cyphers))
