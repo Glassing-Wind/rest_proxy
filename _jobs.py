@@ -178,6 +178,28 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                         res = await tx.run(cypher, pid=project_id)
                         await res.consume()
 
+                        if struct_rc == 0 and sem_rc == 0:
+                            promote_semantic = await tx.run(
+                                """
+                                MATCH (p:Project {id:$pid})
+                                WITH p, coalesce(p.struct_active_run_id, p.struct_last_successful_run_id) AS struct_run_id
+                                WHERE struct_run_id IS NOT NULL AND p.semantic_active_run_id IS NOT NULL
+                                SET p.semantic_target_struct_run_id = struct_run_id,
+                                    p.semantic_active_struct_run_id = struct_run_id,
+                                    p.semantic_index_status = 'done',
+                                    p.semantic_index_finished_at = timestamp()
+                                WITH p, struct_run_id
+                                MATCH (r:IndexRun {id:p.semantic_active_run_id})
+                                SET r.target_struct_run_id = struct_run_id,
+                                    r.status = 'done',
+                                    r.finished_at = timestamp(),
+                                    r.promoted_at = timestamp()
+                                RETURN struct_run_id AS struct_run_id, p.semantic_active_run_id AS semantic_run_id
+                                """,
+                                pid=project_id,
+                            )
+                            await promote_semantic.consume()
+
                     if hasattr(session, "execute_write"):
                         await session.execute_write(_tx)
                     else:

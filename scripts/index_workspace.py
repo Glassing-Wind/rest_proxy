@@ -16,6 +16,7 @@ import inspect
 import json
 import time
 import threading
+import uuid
 from collections import Counter
 from typing import List, Dict, Tuple
 from dotenv import load_dotenv
@@ -472,6 +473,109 @@ def _report_chunking_results(
     return all_chunks, parsed_files, skipped_files
 
 
+def _semantic_run_id(project_id: str) -> str:
+    return f"{project_id}:semantic:{uuid.uuid4().hex[:12]}"
+
+
+def _get_struct_active_run_id(project_id: str) -> str | None:
+    try:
+        import neo4j
+    except Exception:
+        return None
+
+    neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
+    neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
+    neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            record = session.run(
+                """
+                MATCH (p:Project {id:$pid})
+                RETURN coalesce(p.struct_active_run_id, p.struct_last_successful_run_id) AS run_id
+                """,
+                pid=project_id,
+            ).single()
+            return record["run_id"] if record and record["run_id"] else None
+    except Exception:
+        return None
+    finally:
+        driver.close()
+
+
+def _set_semantic_run_status(
+    project_id: str,
+    run_id: str,
+    status: str,
+    *,
+    struct_run_id: str | None = None,
+    error: str | None = None,
+) -> None:
+    try:
+        import neo4j
+    except Exception:
+        return
+
+    neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
+    neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
+    neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            session.run(
+                """
+                MERGE (p:Project {id:$pid})
+                SET p.project_id = $pid,
+                    p.semantic_index_status = $status,
+                    p.semantic_index_run_id = $run_id,
+                    p.semantic_index_finished_at = timestamp()
+                FOREACH (_ IN CASE WHEN $struct_run_id IS NULL THEN [] ELSE [1] END |
+                    SET p.semantic_target_struct_run_id = $struct_run_id
+                )
+                FOREACH (_ IN CASE WHEN $status = 'done' THEN [1] ELSE [] END |
+                    SET p.semantic_active_run_id = $run_id,
+                        p.semantic_last_successful_run_id = $run_id,
+                        p.semantic_last_successful_finished_at = timestamp(),
+                        p.semantic_active_struct_run_id = coalesce($struct_run_id, p.semantic_active_struct_run_id)
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [1] ELSE [] END |
+                    REMOVE p.semantic_index_error
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [] ELSE [1] END |
+                    SET p.semantic_index_error = $error
+                )
+                MERGE (r:IndexRun {id:$run_id})
+                SET r.project_id = $pid,
+                    r.phase = 'semantic',
+                    r.status = $status,
+                    r.finished_at = timestamp()
+                FOREACH (_ IN CASE WHEN $struct_run_id IS NULL THEN [] ELSE [1] END |
+                    SET r.target_struct_run_id = $struct_run_id
+                )
+                FOREACH (_ IN CASE WHEN $status = 'done' THEN [1] ELSE [] END |
+                    SET r.promoted_at = timestamp()
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [1] ELSE [] END |
+                    REMOVE r.error
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [] ELSE [1] END |
+                    SET r.error = $error
+                )
+                """,
+                pid=project_id,
+                run_id=run_id,
+                status=status,
+                struct_run_id=struct_run_id,
+                error=(error[:2000] if error else None),
+            ).consume()
+    except Exception:
+        return
+    finally:
+        driver.close()
+
+
 async def index_project(
     target_dir: str,
     project_id: str,
@@ -496,6 +600,14 @@ async def index_project(
     Returns total new chunks written.
     """
     t0 = time.time()
+    semantic_run_id = _semantic_run_id(project_id)
+    struct_run_id = _get_struct_active_run_id(project_id)
+    _set_semantic_run_status(
+        project_id,
+        semantic_run_id,
+        "in_progress",
+        struct_run_id=struct_run_id,
+    )
     await memory_bootstrap.bootstrap_schema()
     await memory_store.open_pool()
 
@@ -504,6 +616,13 @@ async def index_project(
         print(
             "[lm-proxy:indexer] ERROR: PG pool unavailable — semantic indexing skipped",
             file=sys.stderr,
+        )
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "failed",
+            struct_run_id=struct_run_id,
+            error="pg_pool_unavailable",
         )
         return 0
 
@@ -586,6 +705,13 @@ async def index_project(
             file=sys.stderr,
             flush=True,
         )
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "failed",
+            struct_run_id=struct_run_id,
+            error=str(exc),
+        )
         index_result = {
             "new_chunks": [],
             "skipped_chunks": 0,
@@ -612,6 +738,12 @@ async def index_project(
         )
     if cleanup_only:
         print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "done",
+            struct_run_id=struct_run_id,
+        )
         return 0
 
     existing_count = len(index_result.get("existing_ids") or set())
@@ -638,6 +770,12 @@ async def index_project(
         f"(parsed={parsed_files} skipped_files={skipped_files})",
         file=sys.stderr,
         flush=True,
+    )
+    _set_semantic_run_status(
+        project_id,
+        semantic_run_id,
+        "done",
+        struct_run_id=struct_run_id,
     )
     return total_indexed
 

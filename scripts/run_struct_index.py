@@ -241,41 +241,88 @@ def _promote_struct_shadow_graph(
 ) -> None:
     import neo4j
 
+    promote_delete_query = """
+    MATCH (old {project_id:$canonical_pid})
+    WHERE NOT old:Chunk AND NOT old:Project AND NOT old:IndexRun
+    DETACH DELETE old
+    """
+    promote_nodes_query = """
+    MATCH (n {project_id:$shadow_pid})
+    WHERE NOT n:Chunk AND NOT n:Project AND NOT n:IndexRun
+    SET n.project_id = $canonical_pid,
+        n.last_promoted_run = $run_id,
+        n.id = coalesce(n.stable_id, n.id),
+        n.file_id = coalesce(n.stable_file_id, n.file_id)
+    """
+    promote_rels_query = """
+    MATCH ()-[r]->()
+    WHERE r.project_id = $shadow_pid
+    SET r.project_id = $canonical_pid,
+        r.last_promoted_run = $run_id
+    """
+    verify_shadow_cleared_query = """
+    MATCH (n {project_id:$shadow_pid})
+    RETURN count(n) AS node_count
+    """
+    verify_shadow_rels_query = """
+    MATCH ()-[r]->()
+    WHERE r.project_id = $shadow_pid
+    RETURN count(r) AS rel_count
+    """
+    verify_canonical_ids_query = """
+    MATCH (n {project_id:$canonical_pid})
+    WHERE NOT n:Project AND NOT n:IndexRun
+      AND (
+        n.id CONTAINS '::shadow::'
+        OR (n.file_id IS NOT NULL AND n.file_id CONTAINS '::shadow::')
+      )
+    RETURN count(n) AS invalid_count
+    """
+
+    def _promote_tx(tx: neo4j.ManagedTransaction) -> None:
+        tx.run(
+            promote_delete_query,
+            canonical_pid=canonical_project_id,
+        ).consume()
+        tx.run(
+            promote_nodes_query,
+            canonical_pid=canonical_project_id,
+            shadow_pid=shadow_project_id,
+            run_id=run_id,
+        ).consume()
+        tx.run(
+            promote_rels_query,
+            canonical_pid=canonical_project_id,
+            shadow_pid=shadow_project_id,
+            run_id=run_id,
+        ).consume()
+        node_record = tx.run(
+            verify_shadow_cleared_query,
+            shadow_pid=shadow_project_id,
+        ).single()
+        rel_record = tx.run(
+            verify_shadow_rels_query,
+            shadow_pid=shadow_project_id,
+        ).single()
+        invalid_record = tx.run(
+            verify_canonical_ids_query,
+            canonical_pid=canonical_project_id,
+        ).single()
+
+        node_count = int(node_record["node_count"]) if node_record else 0
+        rel_count = int(rel_record["rel_count"]) if rel_record else 0
+        invalid_count = int(invalid_record["invalid_count"]) if invalid_record else 0
+        if node_count or rel_count or invalid_count:
+            raise RuntimeError(
+                "Atomic shadow promotion invariant failed: "
+                f"shadow_nodes={node_count} shadow_rels={rel_count} "
+                f"canonical_shadow_ids={invalid_count}"
+            )
+
     driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
     try:
         with driver.session(database=neo4j_db) as session:
-            session.run(
-                """
-                MATCH (old {project_id:$canonical_pid})
-                WHERE NOT old:Chunk AND NOT old:Project AND NOT old:IndexRun
-                DETACH DELETE old
-                """,
-                canonical_pid=canonical_project_id,
-            ).consume()
-            session.run(
-                """
-                MATCH (n {project_id:$shadow_pid})
-                WHERE NOT n:Chunk AND NOT n:Project AND NOT n:IndexRun
-                SET n.project_id = $canonical_pid,
-                    n.last_promoted_run = $run_id,
-                    n.id = coalesce(n.stable_id, n.id),
-                    n.file_id = coalesce(n.stable_file_id, n.file_id)
-                """,
-                canonical_pid=canonical_project_id,
-                shadow_pid=shadow_project_id,
-                run_id=run_id,
-            ).consume()
-            session.run(
-                """
-                MATCH ()-[r]->()
-                WHERE r.project_id = $shadow_pid
-                SET r.project_id = $canonical_pid,
-                    r.last_promoted_run = $run_id
-                """,
-                canonical_pid=canonical_project_id,
-                shadow_pid=shadow_project_id,
-                run_id=run_id,
-            ).consume()
+            session.execute_write(_promote_tx)
     finally:
         driver.close()
 

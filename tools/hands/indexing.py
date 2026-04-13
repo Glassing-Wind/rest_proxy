@@ -510,6 +510,14 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     parsed_true = 0
     parsed_false = 0
     parsed_unknown = 0
+    struct_active_run_id: str | None = None
+    struct_last_successful_run_id: str | None = None
+    struct_index_status: str | None = None
+    semantic_active_run_id: str | None = None
+    semantic_last_successful_run_id: str | None = None
+    semantic_target_struct_run_id: str | None = None
+    semantic_active_struct_run_id: str | None = None
+    semantic_index_status: str | None = None
     
     # --- Structural Integrity Metrics (Level 2) ---
     import_total = 0
@@ -539,6 +547,34 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             if p is True: parsed_true += 1
             elif p is False: parsed_false += 1
             else: parsed_unknown += 1
+
+        run_records = await _execute_read(
+            session,
+            """
+            MATCH (p:Project {id:$pid})
+            RETURN
+              p.struct_active_run_id AS struct_active_run_id,
+              p.struct_last_successful_run_id AS struct_last_successful_run_id,
+              p.struct_index_status AS struct_index_status,
+              p.semantic_active_run_id AS semantic_active_run_id,
+              p.semantic_last_successful_run_id AS semantic_last_successful_run_id,
+              p.semantic_target_struct_run_id AS semantic_target_struct_run_id,
+              p.semantic_active_struct_run_id AS semantic_active_struct_run_id,
+              p.semantic_index_status AS semantic_index_status
+            """,
+            pid=project_id,
+            op="get_indexing_health_runs",
+        )
+        if run_records:
+            rec = run_records[0]
+            struct_active_run_id = rec.get("struct_active_run_id")
+            struct_last_successful_run_id = rec.get("struct_last_successful_run_id")
+            struct_index_status = rec.get("struct_index_status")
+            semantic_active_run_id = rec.get("semantic_active_run_id")
+            semantic_last_successful_run_id = rec.get("semantic_last_successful_run_id")
+            semantic_target_struct_run_id = rec.get("semantic_target_struct_run_id")
+            semantic_active_struct_run_id = rec.get("semantic_active_struct_run_id")
+            semantic_index_status = rec.get("semantic_index_status")
 
         if audit:
             # 2. Internal Import Resolution Rate (Level 2)
@@ -704,6 +740,23 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     if ghost_files:
         lines.append(f"    - 👻 {len(ghost_files)} Ghost files with {ghost_chunks_count} dangling chunks")
 
+    lines.append("\n## 1.5 Run Alignment")
+    lines.append(f"  - Structural status:        `{struct_index_status or 'unknown'}`")
+    lines.append(f"  - Structural active run:    `{struct_active_run_id or 'none'}`")
+    lines.append(f"  - Structural last success:  `{struct_last_successful_run_id or 'none'}`")
+    lines.append(f"  - Semantic status:          `{semantic_index_status or 'unknown'}`")
+    lines.append(f"  - Semantic active run:      `{semantic_active_run_id or 'none'}`")
+    lines.append(f"  - Semantic last success:    `{semantic_last_successful_run_id or 'none'}`")
+    lines.append(f"  - Semantic target struct:   `{semantic_target_struct_run_id or 'none'}`")
+    lines.append(f"  - Semantic active struct:   `{semantic_active_struct_run_id or 'none'}`")
+    aligned = bool(
+        struct_active_run_id
+        and semantic_active_struct_run_id
+        and struct_active_run_id == semantic_active_struct_run_id
+        and semantic_index_status == "done"
+    )
+    lines.append(f"  - **Run Alignment**:        {'✅ Aligned' if aligned else '⚠️ Not aligned'}")
+
     # Bucket 2: Structural Integrity (Level 2)
     lines.append("\n## 2. Structural Integrity (Level 2)")
     parse_rate = (parsed_true / file_nodes * 100) if file_nodes > 0 else 0
@@ -742,6 +795,10 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}')` to synchronize stale/missing files.")
     if orphans_graph or ghost_files:
         recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}', mode='cleanup')` to prune orphaned data.")
+    if not aligned:
+        recommendations.append(
+            f"- Structural and semantic runs are not aligned. Re-run `index_workspace(workspace_id='{workspace_id}')` and confirm both phases complete successfully."
+        )
     
     if audit:
         if parse_rate < 80 or (import_total > 0 and (import_resolved_internal/import_total) < 0.5):
