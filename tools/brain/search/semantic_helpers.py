@@ -203,7 +203,7 @@ def implementation_query_class(query: str) -> str:
     if not implementation_query_intent(text):
         return "general"
     if "call site" in text or "where is it called" in text or "usage" in text:
-        return "usage_oriented"
+        return "usage_lookup"
     if (
         "where is" in text
         or "where does" in text
@@ -213,12 +213,20 @@ def implementation_query_class(query: str) -> str:
         or "public api" in text
         or "api entrypoint" in text
     ):
-        return "definition_oriented"
+        return "api_definition_lookup"
     if re.search(r"\bhow does\b", text) and re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
-        return "definition_oriented"
+        return "implementation_explanation"
     if re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
-        return "definition_oriented"
+        return "symbol_lookup"
     return "implementation_search"
+
+
+def query_class_prefers_definitions(query_class: str) -> bool:
+    return query_class in {"api_definition_lookup", "implementation_explanation", "symbol_lookup"}
+
+
+def query_class_prefers_usage(query_class: str) -> bool:
+    return query_class == "usage_lookup"
 
 
 def is_low_signal_parser_data_path(file_path: str | None) -> bool:

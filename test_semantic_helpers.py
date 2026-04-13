@@ -500,16 +500,21 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertTrue(module.implementation_query_intent("how does graph finalization build file graph links for GDS"))
         self.assertEqual(
             module.implementation_query_class("how does process(source, config) work in tree-sitter-language-pack"),
-            "definition_oriented",
+            "implementation_explanation",
         )
         self.assertEqual(
             module.implementation_query_class("where is process defined"),
-            "definition_oriented",
+            "api_definition_lookup",
         )
         self.assertEqual(
             module.implementation_query_class("where is it called"),
-            "usage_oriented",
+            "usage_lookup",
         )
+        self.assertEqual(module.implementation_query_class("process(source, config)"), "symbol_lookup")
+        self.assertTrue(module.query_class_prefers_definitions("symbol_lookup"))
+        self.assertTrue(module.query_class_prefers_definitions("api_definition_lookup"))
+        self.assertTrue(module.query_class_prefers_definitions("implementation_explanation"))
+        self.assertFalse(module.query_class_prefers_definitions("usage_lookup"))
 
     def test_is_low_signal_parser_data_path_flags_grammar_payloads(self):
         self.assertTrue(module.is_low_signal_parser_data_path("node-types/ocaml/ocaml-grammar.json"))
@@ -660,6 +665,7 @@ class SemanticHelperTests(unittest.TestCase):
 
     def test_definition_entrypoint_golden_prefers_library_root_over_cli(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
+        self.assertEqual(case["query_class"], "implementation_explanation")
         rows = []
         for result in case["results"]:
             row = dict(result)
@@ -679,7 +685,7 @@ class SemanticHelperTests(unittest.TestCase):
                 row.get("file_path", ""), row.get("implementation_definition_hit", 0)
             )
             row["implementation_usage_heavy_penalty"] = (
-                module.implementation_query_class(case["query"]) == "definition_oriented"
+                module.query_class_prefers_definitions(module.implementation_query_class(case["query"]))
                 and module.is_usage_heavy_path(row.get("file_path", ""))
             )
             rows.append(row)
@@ -689,6 +695,7 @@ class SemanticHelperTests(unittest.TestCase):
 
     def test_definition_lookup_golden_prefers_library_root_over_docs(self):
         case = load_benchmark_case("code_definition_lookup_surfaces_library_root")
+        self.assertEqual(case["query_class"], "api_definition_lookup")
         rows = []
         for result in case["results"]:
             row = dict(result)
@@ -708,12 +715,66 @@ class SemanticHelperTests(unittest.TestCase):
                 row.get("file_path", ""), row.get("implementation_definition_hit", 0)
             )
             row["implementation_usage_heavy_penalty"] = (
-                module.implementation_query_class(case["query"]) == "definition_oriented"
+                module.query_class_prefers_definitions(module.implementation_query_class(case["query"]))
                 and module.is_usage_heavy_path(row.get("file_path", ""))
             )
             rows.append(row)
         rows.sort(key=module.implementation_rank_tuple)
         self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+
+    def test_symbol_lookup_golden_prefers_definition_over_usage(self):
+        case = load_benchmark_case("code_symbol_lookup_prefers_definition_over_usage")
+        self.assertEqual(case["query_class"], "symbol_lookup")
+        rows = []
+        for result in case["results"]:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["doc_like"] = module.is_doc_like_path(row.get("file_path"))
+            row["low_signal_parser_data"] = module.is_low_signal_parser_data_path(row.get("file_path"))
+            row["low_signal_binding_surface"] = module.is_low_signal_binding_surface_path(row.get("file_path"))
+            row["implementation_symbol_hit"] = module.implementation_symbol_hit(row["_meta"], case["query"])
+            row["implementation_definition_hit"] = module.implementation_definition_hit(
+                row.get("content", ""), case["query"]
+            )
+            row["implementation_api_entrypoint_hit"] = module.implementation_api_entrypoint_hit(
+                row.get("file_path", ""), row.get("implementation_definition_hit", 0)
+            )
+            row["implementation_usage_heavy_penalty"] = (
+                module.query_class_prefers_definitions(module.implementation_query_class(case["query"]))
+                and module.is_usage_heavy_path(row.get("file_path", ""))
+            )
+            rows.append(row)
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+
+    def test_usage_lookup_golden_prefers_callsite_over_definition(self):
+        case = load_benchmark_case("code_usage_lookup_prefers_callsite_over_definition")
+        self.assertEqual(case["query_class"], "usage_lookup")
+        rows = []
+        for result in case["results"]:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["doc_like"] = module.is_doc_like_path(row.get("file_path"))
+            row["low_signal_parser_data"] = module.is_low_signal_parser_data_path(row.get("file_path"))
+            row["low_signal_binding_surface"] = module.is_low_signal_binding_surface_path(row.get("file_path"))
+            row["implementation_symbol_hit"] = module.implementation_symbol_hit(row["_meta"], case["query"])
+            row["implementation_definition_hit"] = module.implementation_definition_hit(
+                row.get("content", ""), case["query"]
+            )
+            row["implementation_api_entrypoint_hit"] = module.implementation_api_entrypoint_hit(
+                row.get("file_path", ""), row.get("implementation_definition_hit", 0)
+            )
+            row["implementation_usage_heavy_penalty"] = (
+                module.query_class_prefers_definitions(module.implementation_query_class(case["query"]))
+                and module.is_usage_heavy_path(row.get("file_path", ""))
+            )
+            rows.append(row)
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertIn(
+            rows[0]["file_path"],
+            {"crates/ts-pack-cli/src/main.rs", "crates/ts-pack-node/src/lib.rs"},
+        )
+        self.assertNotEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
 
 
 if __name__ == "__main__":

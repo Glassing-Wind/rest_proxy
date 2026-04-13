@@ -485,7 +485,7 @@ def register(mcp: FastMCP) -> None:
                         else 0
                     )
                     r["implementation_usage_heavy_penalty"] = (
-                        impl_query_class == "definition_oriented"
+                        sem_helpers.query_class_prefers_definitions(impl_query_class)
                         and sem_helpers.is_usage_heavy_path(r.get("file_path", ""))
                     )
                     if meta_boost > 0:
@@ -541,7 +541,7 @@ def register(mcp: FastMCP) -> None:
                 if non_parser_candidates:
                     all_results = non_parser_candidates
 
-            if impl_intent and impl_query_class == "definition_oriented" and all_results:
+            if impl_intent and sem_helpers.query_class_prefers_definitions(impl_query_class) and all_results:
                 top_probe = all_results[: min(5, len(all_results))]
                 has_definition_hit = any(
                     int(r.get("implementation_definition_hit", 0) or 0) > 0
@@ -592,7 +592,7 @@ def register(mcp: FastMCP) -> None:
                                 )
                             )
                             r["implementation_usage_heavy_penalty"] = (
-                                impl_query_class == "definition_oriented"
+                                sem_helpers.query_class_prefers_definitions(impl_query_class)
                                 and sem_helpers.is_usage_heavy_path(r.get("file_path", ""))
                             )
                             r["rank_score"] = float(r.get("rrf", 0.0) or 0.0) + 0.02

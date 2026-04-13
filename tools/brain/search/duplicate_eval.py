@@ -168,6 +168,7 @@ def evaluate_case(case: dict) -> dict:
     results = case.get("results") or []
     query = str(case.get("query") or "")
     mode = str(case.get("mode") or "code")
+    query_class = str(case.get("query_class") or "")
     expected = case.get("expected") or {}
     trace_default = sem_helpers.trace_diverse_results(results, query=query, mode=mode, experiments={})
     trace_experimental = sem_helpers.trace_diverse_results(
@@ -235,6 +236,7 @@ def evaluate_case(case: dict) -> dict:
     return {
         "id": case.get("id"),
         "mode": mode,
+        "query_class": query_class or None,
         "query": query,
         "configs": out_configs,
     }
@@ -290,9 +292,14 @@ def evaluate_benchmarks(path: str | None = None) -> dict:
             count = max(1.0, bucket.pop("_count", 1.0))
             for key in list(bucket.keys()):
                 bucket[key] = bucket[key] / count
+    by_query_class: dict[str, int] = {}
+    for report in reports:
+        qclass = report.get("query_class") or "unspecified"
+        by_query_class[qclass] = by_query_class.get(qclass, 0) + 1
     return {
         "cases": reports,
         "summary": summary,
         "by_mode": by_mode,
+        "query_class_counts": by_query_class,
         "alerts": alerts,
     }
