@@ -40,6 +40,7 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
 
         graph_refs = []
         graph_ref_keys: set[tuple[str, str | None]] = set()
+        external_refs = []
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
             records = await _execute_read(
                 session,
@@ -77,6 +78,33 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
                 graph_refs.append(f"- {rec['fp']}{line_part} ({rec['cn']}) [Project: {rec['tpid']}]")
                 graph_ref_keys.add((rec["fp"], str(line) if line else None))
 
+            external_records = await _execute_read(
+                session,
+                """
+                MATCH (target:ExternalSymbol)
+                WHERE target.project_id IN $pids
+                  AND (target.name = $name OR target.qualified_name = $name)
+                MATCH (caller:Node)-[:CALLS_EXTERNAL_SYMBOL]->(target)
+                MATCH (f:File)-[:CONTAINS]->(caller)
+                RETURN f.filepath AS fp,
+                       caller.start_line AS sl,
+                       caller.name AS cn,
+                       target.qualified_name AS qn,
+                       target.language AS language,
+                       target.project_id AS tpid
+                """,
+                name=symbol_name,
+                pids=pids,
+                op="find_references_external",
+            )
+            for rec in external_records:
+                line = rec.get("sl")
+                line_part = f":{line}" if line else ""
+                external_refs.append(
+                    f"- {rec['fp']}{line_part} ({rec['cn']}) -> {rec.get('qn') or symbol_name} "
+                    f"[{rec.get('language') or 'external'} | Project: {rec['tpid']}]"
+                )
+
         semantic_refs = []
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
@@ -102,6 +130,8 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
         sections = []
         if graph_refs:
             sections.append("### Functional References (Graph)\n" + "\n".join(sorted(list(set(graph_refs)))))
+        if external_refs:
+            sections.append("### External Symbol Callers (Graph)\n" + "\n".join(sorted(list(set(external_refs)))))
         if semantic_refs:
             sections.append("### Mentions & Type Usages (Semantic)\n" + "\n".join(sorted(list(set(semantic_refs)))))
         if not sections:

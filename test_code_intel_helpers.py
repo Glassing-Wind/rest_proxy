@@ -10,6 +10,7 @@ from unittest import mock
 
 FILE_DESCRIBE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/file_describe.py"
 REFERENCES_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/references.py"
+SYMBOL_GRAPH_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/symbol_graph.py"
 
 
 def load_file_describe_module():
@@ -46,6 +47,14 @@ def load_references_module():
 
     with mock.patch.dict(sys.modules, {"_helpers": helpers_mod, "neo4j": neo4j_mod}):
         spec.loader.exec_module(module)
+    return module
+
+
+def load_symbol_graph_module():
+    spec = importlib.util.spec_from_file_location("symbol_graph_under_test", SYMBOL_GRAPH_PATH)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
     return module
 
 
@@ -96,9 +105,20 @@ class CodeIntelHelperTests(unittest.TestCase):
                 return await fn(self)
 
             async def run(self, cypher, **params):
-                return FakeResult(
-                    [{"fp": "src/a.py", "sl": 12, "cn": "caller", "tpid": "repo"}]
-                )
+                if "CALLS_EXTERNAL_SYMBOL" in cypher:
+                    return FakeResult(
+                        [
+                            {
+                                "fp": "src/ext.py",
+                                "sl": 30,
+                                "cn": "use_external",
+                                "qn": "json.Unmarshal",
+                                "language": "go",
+                                "tpid": "repo",
+                            }
+                        ]
+                    )
+                return FakeResult([{"fp": "src/a.py", "sl": 12, "cn": "caller", "tpid": "repo"}])
 
         class FakeDriver:
             def session(self, database=None):
@@ -153,7 +173,34 @@ class CodeIntelHelperTests(unittest.TestCase):
                 output = asyncio.run(module.find_references_impl(["/tmp/repo"], "symbol_name"))
 
         self.assertIn("Functional References (Graph)", output)
+        self.assertIn("External Symbol Callers (Graph)", output)
         self.assertIn("Mentions & Type Usages (Semantic)", output)
+
+    def test_format_symbol_context_includes_external_calls(self):
+        module = load_symbol_graph_module()
+        output = module.format_symbol_context(
+            {
+                "kind": "Function",
+                "filepath": "src/lib.rs",
+                "start_line": 10,
+                "end_line": 30,
+                "signature": "fn do_work()",
+                "callers": [],
+                "callees": [{"name": "helper", "file": "src/helper.rs"}],
+                "external_callees": [
+                    {
+                        "name": "Unmarshal",
+                        "qualified_name": "json.Unmarshal",
+                        "language": "go",
+                    }
+                ],
+            },
+            "do_work",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("**External Calls** (1):", rendered)
+        self.assertIn("`json.Unmarshal` [go]", rendered)
 
 
 if __name__ == "__main__":

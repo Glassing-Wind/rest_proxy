@@ -12,6 +12,7 @@ SYMBOL_CONTEXT_CYPHER = """
     OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
     OPTIONAL MATCH (caller)-[:CALLS|CALLS_INFERRED]->(s)
     OPTIONAL MATCH (s)-[:CALLS|CALLS_INFERRED]->(callee)
+    OPTIONAL MATCH (s)-[:CALLS_EXTERNAL_SYMBOL]->(external_callee:ExternalSymbol)
     RETURN
       head([label IN labels(s) WHERE label <> 'Node']) AS kind,
       s.filepath    AS filepath,
@@ -22,6 +23,9 @@ SYMBOL_CONTEXT_CYPHER = """
       collect(DISTINCT {name: caller.name, file: caller.filepath,
                         line: caller.start_line})[..10] AS callers,
       collect(DISTINCT {name: callee.name, file: callee.filepath})[..10] AS callees,
+      collect(DISTINCT {name: external_callee.name,
+                        qualified_name: external_callee.qualified_name,
+                        language: external_callee.language})[..10] AS external_callees,
       count(DISTINCT caller) AS callers_in,
       count(DISTINCT callee) AS callees_out
     LIMIT 12
@@ -508,6 +512,7 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
 
     callers = [c for c in (rec["callers"] or []) if c.get("name")]
     callees = [c for c in (rec["callees"] or []) if c.get("name")]
+    external_callees = [c for c in (rec.get("external_callees") or []) if c.get("name")]
 
     if callers:
         out.append(f"**Called by** ({len(callers)}):")
@@ -518,6 +523,12 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
         out.append(f"\n**Calls** ({len(callees)}):")
         for callee in callees:
             out.append(f"  - `{callee['name']}`  in {callee.get('file', '?')}")
+    if external_callees:
+        out.append(f"\n**External Calls** ({len(external_callees)}):")
+        for callee in external_callees:
+            qualified_name = callee.get("qualified_name") or callee["name"]
+            language = callee.get("language") or "external"
+            out.append(f"  - `{qualified_name}` [{language}]")
     return out
 
 
