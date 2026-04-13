@@ -832,6 +832,12 @@ async def _coverage_lines(session, project_id: str) -> list[str]:
         p=project_id,
         op="get_app_flow_summary_coverage_api_routes",
     )
+    file_graph_result = await graph_core._execute_read(
+        session,
+        "MATCH (:File {project_id:$p})-[r:FILE_GRAPH_LINK]->() RETURN count(r) AS file_graph_links",
+        p=project_id,
+        op="get_app_flow_summary_coverage_file_graph",
+    )
     ui_files = coverage_result[0].get("ui_files") if coverage_result else 0
     js_files = coverage_result[0].get("js_files") if coverage_result else 0
     asset_links = edge_result[0].get("asset_links") if edge_result else 0
@@ -839,11 +845,13 @@ async def _coverage_lines(session, project_id: str) -> list[str]:
     service_links = svc_result[0].get("service_links") if svc_result else 0
     db_links = db_result[0].get("db_links") if db_result else 0
     api_route_links = route_result[0].get("api_route_links") if route_result else 0
+    file_graph_links = file_graph_result[0].get("file_graph_links") if file_graph_result else 0
     return [
         "Coverage: "
         f"ui_files={ui_files} js_files={js_files} "
         f"asset_links={asset_links} api_links={api_links} "
-        f"api_route_links={api_route_links} service_links={service_links} db_links={db_links}"
+        f"api_route_links={api_route_links} service_links={service_links} "
+        f"db_links={db_links} file_graph_links={file_graph_links}"
     ]
 
 

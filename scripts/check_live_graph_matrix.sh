@@ -2,7 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PYTHON_BIN="${LM_PROXY_PYTHON:-/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python3.11}"
+PYTHON_BIN="${LM_PROXY_PYTHON:-}"
+if [[ -z "$PYTHON_BIN" ]] && [[ -x "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python" ]]; then
+  PYTHON_BIN="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v python || command -v python3)"
+fi
 
 MATRIX=(
   "/Users/michaelmarler/Projects/rental"

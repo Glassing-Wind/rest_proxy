@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from graphrag_core.indexing.manifest import build_manifest
+from graphrag_core.indexing.manifest import build_manifest, suggest_indexignore_entries
 
 
 class ManifestTests(unittest.TestCase):
@@ -82,6 +82,45 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("App.xcodeproj/project.pbxproj", rel_paths)
         self.assertIn("App.xcodeproj/project.xcworkspace/contents.xcworkspacedata", rel_paths)
         self.assertIn("App/Assets.xcassets/hero.imageset/Contents.json", rel_paths)
+
+    def test_suggest_indexignore_entries_flags_egg_info_dirs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            egg_info = project_path / "demo.egg-info"
+            egg_info.mkdir(parents=True, exist_ok=True)
+            (egg_info / "PKG-INFO").write_text("metadata", encoding="utf-8")
+
+            suggestions = suggest_indexignore_entries(str(project_path))
+
+        self.assertEqual(
+            suggestions,
+            [
+                {
+                    "pattern": "demo.egg-info/**",
+                    "reason": "Generated packaging metadata directory not covered by the built-in manifest skip set.",
+                }
+            ],
+        )
+
+    def test_global_skip_defaults_exclude_packaging_and_migration_scaffolding(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            (project_path / "demo.egg-info").mkdir(parents=True, exist_ok=True)
+            (project_path / "demo.egg-info" / "PKG-INFO").write_text("metadata", encoding="utf-8")
+            (project_path / "migrations").mkdir(parents=True, exist_ok=True)
+            (project_path / "migrations" / "README").write_text("migration notes", encoding="utf-8")
+            (project_path / "migrations" / "script.py.mako").write_text("template", encoding="utf-8")
+            (project_path / "VERSION").write_text("1.2.3\n", encoding="utf-8")
+            (project_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("app.py", rel_paths)
+        self.assertNotIn("demo.egg-info/PKG-INFO", rel_paths)
+        self.assertNotIn("migrations/README", rel_paths)
+        self.assertNotIn("migrations/script.py.mako", rel_paths)
+        self.assertNotIn("VERSION", rel_paths)
 
 
 if __name__ == "__main__":

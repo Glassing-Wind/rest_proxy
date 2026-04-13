@@ -134,6 +134,10 @@ Use `add_memory(...)` proactively when you discover:
 - `graphrag-brain` is exposed through FastMCP Streamable HTTP in:
   - `/_mcp.py`
   - `/brain_server.py`
+- Supported shared-client mode today:
+  - shared HTTP daemon at `http://127.0.0.1:8001/mcp`
+  - manual watcher activation with `watch_project` / `unwatch_project`
+  - no automatic workspace inference by default
 - Streamable HTTP is now stateful so stale `Mcp-Session-Id` values fail with `404` after a restart.
 - Normal debugging path for MCP availability:
   1. check `http://127.0.0.1:8001/health`
@@ -144,3 +148,6 @@ Use `add_memory(...)` proactively when you discover:
   2. confirm `x-graphrag-boot-id` changed after restart
   3. confirm `x-graphrag-tool-fingerprint` matches the expected tool set
   4. if `x-graphrag-session-known: 0` or `/health` shows `"known_session": false`, reconnect the MCP client or start a fresh conversation
+- Protocol smoke/regression scripts:
+  1. `python scripts/check_mcp_protocol.py`
+  2. `./scripts/check_mcp_stale_session_restart.sh`

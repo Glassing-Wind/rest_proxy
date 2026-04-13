@@ -52,4 +52,4 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `trace_symbol_cross_project` | **Very High** | None. | **Value**: Invaluable for gRPC and monorepo workflows to trace impact across boundaries. |
 | `unwatch_project` | **Medium** | None. | **Tested**: Companion tool for resource management. |
 | `visualize_subgraph` | **Critical** | None. | **Tested**: Generated a Mermaid diagram for `get_project_id`. Best tool for immediate mental mapping of a symbol's neighborhood. |
-| `watch_project` | **High** | None. | **Tested**: Confirmed active watcher; ensures graph freshing as the project evolves. |
+| `watch_project` | **High** | None. | **Tested**: Explicitly pins a repo for manual background watching. |

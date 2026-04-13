@@ -69,6 +69,32 @@ class FakeMemoryStore:
         return None
 
 
+class FakeGraphResult:
+    async def data(self):
+        return []
+
+
+class FakeGraphTx:
+    async def run(self, *args, **kwargs):
+        return FakeGraphResult()
+
+
+class FakeGraphSession:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def execute_read(self, fn):
+        return await fn(FakeGraphTx())
+
+
+class FakeGraphDriver:
+    def session(self, database=None):
+        return FakeGraphSession()
+
+
 def load_module(memory_store):
     spec = importlib.util.spec_from_file_location("dev_tools_under_test", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -85,6 +111,13 @@ def load_module(memory_store):
 
     neo4j_mod = types.ModuleType("neo4j")
     neo4j_mod.unit_of_work = lambda *args, **kwargs: (lambda fn: fn)
+    graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
+
+    async def _require_driver():
+        return FakeGraphDriver()
+
+    graph_bootstrap_mod.require_driver = _require_driver
+    graph_bootstrap_mod._NEO4J_DB = "neo4j"
 
     with mock.patch.dict(
         sys.modules,
@@ -92,9 +125,11 @@ def load_module(memory_store):
             "_helpers": helpers_mod,
             "mcp.server.fastmcp": mcp_mod,
             "neo4j": neo4j_mod,
+            "graph_bootstrap": graph_bootstrap_mod,
         },
     ):
         spec.loader.exec_module(module)
+    module._graph_bootstrap_mod = graph_bootstrap_mod
     return module
 
 
@@ -110,7 +145,9 @@ class DevToolsTests(unittest.TestCase):
         def fake_subprocess_run(cmd, **kwargs):
             return types.SimpleNamespace(stdout="")
 
-        with mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run), mock.patch.dict(
+            sys.modules, {"graph_bootstrap": module._graph_bootstrap_mod}
+        ):
             output = asyncio.run(
                 mcp.tools["get_test_coverage_for"]("/tmp/repo", "src/workspace_registry.py")
             )
@@ -133,7 +170,9 @@ class DevToolsTests(unittest.TestCase):
                 return types.SimpleNamespace(stdout="tests/routes.test.ts\n")
             return types.SimpleNamespace(stdout="")
 
-        with mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run), mock.patch.dict(
+            sys.modules, {"graph_bootstrap": module._graph_bootstrap_mod}
+        ):
             output = asyncio.run(
                 mcp.tools["get_test_coverage_for"]("/tmp/repo", "src/api/routes/financeAdminRoutes.ts")
             )
@@ -171,7 +210,9 @@ class DevToolsTests(unittest.TestCase):
                 )
             return types.SimpleNamespace(stdout="")
 
-        with mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run), mock.patch.dict(
+            sys.modules, {"graph_bootstrap": module._graph_bootstrap_mod}
+        ):
             output = asyncio.run(
                 mcp.tools["get_test_coverage_for"](
                     "/tmp/repo",

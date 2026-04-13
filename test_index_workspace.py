@@ -114,6 +114,7 @@ class FakeTsPack:
         chunk_id_version="v6",
         chunk_max_size=4000,
         chunk_overlap=200,
+        _chunk_overlap=None,
     ):
         if self._payload is not None:
             return self._payload
@@ -385,7 +386,10 @@ class IndexWorkspaceTests(unittest.TestCase):
                 chunk_id_version="v6",
                 chunk_max_size=4000,
                 chunk_overlap=200,
+                _chunk_overlap=None,
             ):
+                if _chunk_overlap is not None:
+                    chunk_overlap = _chunk_overlap
                 captured.update(
                     {
                         "source": source,

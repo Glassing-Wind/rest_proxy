@@ -64,6 +64,7 @@ def _compute_tool_fingerprint() -> str:
 BOOT_FINGERPRINT: str = _compute_tool_fingerprint()
 BOOT_ID: str = f"{os.getpid()}-{uuid4().hex[:8]}"
 STARTED_AT: float = time.time()
+_LOGGED_STALE_MCP_SESSIONS: set[str] = set()
 
 
 def _resolve_session_id(scope) -> str:
@@ -246,18 +247,21 @@ class MCPRequestLoggingMiddleware:
                         break
 
                 if created_session_id:
-                    print(
-                        "[brain-server] MCP session created "
-                        f"boot={BOOT_ID} method={method} session={_short_session_id(created_session_id)}",
-                        file=sys.stderr,
-                    )
+                    if created_session_id != incoming_session_id:
+                        print(
+                            "[brain-server] MCP session created "
+                            f"boot={BOOT_ID} method={method} session={_short_session_id(created_session_id)}",
+                            file=sys.stderr,
+                        )
                 elif status == 404 and incoming_session_id:
-                    print(
-                        "[brain-server] MCP stale session rejected "
-                        f"boot={BOOT_ID} method={method} session={_short_session_id(incoming_session_id)} "
-                        "status=404",
-                        file=sys.stderr,
-                    )
+                    if incoming_session_id not in _LOGGED_STALE_MCP_SESSIONS:
+                        _LOGGED_STALE_MCP_SESSIONS.add(incoming_session_id)
+                        print(
+                            "[brain-server] MCP stale session rejected "
+                            f"boot={BOOT_ID} method={method} session={_short_session_id(incoming_session_id)} "
+                            "status=404",
+                            file=sys.stderr,
+                        )
 
             await send(message)
 
@@ -277,7 +281,7 @@ async def health(request: Request) -> JSONResponse:
     incoming_session_id = _mcp_transport_session_id(request.scope)
     response = JSONResponse({
         "server": "GraphRAG MCP Brain",
-        "standard": "Streamable HTTP (2025-03-26)",
+        "standard": "Streamable HTTP (2025-06-18)",
         "transport_path": "/mcp",
         "tools": tool_count,
         "boot_id": BOOT_ID,

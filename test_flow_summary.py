@@ -178,6 +178,35 @@ class FlowSummaryTests(unittest.TestCase):
 
         self.assertEqual("No UI → API → Service → DB paths found.", output)
 
+    def test_coverage_lines_include_file_graph_links(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_coverage_files":
+                return [{"ui_files": 2, "js_files": 3}]
+            if op == "get_app_flow_summary_coverage_assets":
+                return [{"asset_links": 4}]
+            if op == "get_app_flow_summary_coverage_api":
+                return [{"api_links": 5}]
+            if op == "get_app_flow_summary_coverage_service":
+                return [{"service_links": 6}]
+            if op == "get_app_flow_summary_coverage_db":
+                return [{"db_links": 7}]
+            if op == "get_app_flow_summary_coverage_api_routes":
+                return [{"api_route_links": 8}]
+            if op == "get_app_flow_summary_coverage_file_graph":
+                return [{"file_graph_links": 9}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            lines = asyncio.run(self.module._coverage_lines(FakeSession(), "proj123"))
+
+        self.assertEqual(
+            lines,
+            [
+                "Coverage: ui_files=2 js_files=3 asset_links=4 api_links=5 api_route_links=8 service_links=6 db_links=7 file_graph_links=9"
+            ],
+        )
+
     def test_suppress_coarse_route_service_rows_drops_file_level_service_for_multi_route_api(self):
         rows = [
             (

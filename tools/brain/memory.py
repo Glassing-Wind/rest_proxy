@@ -1,7 +1,7 @@
 """tools/memory.py — session memory tools."""
-import hashlib
 from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules
+from memory import store_durable
 
 def register(mcp: FastMCP) -> None:
 
@@ -48,6 +48,10 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             memory_store, _, _, _, _ = get_memory_modules()
+            available, reason = await store_durable.durable_memory_backend_status()
+            if not available:
+                detail = f" {reason}" if reason else ""
+                return f"Durable memory unavailable.{detail}"
             if memory_store._ENABLE_PERSISTENCE:
                 await memory_store.open_pool()
             success = await memory_store.add_durable_memory(workspace_id, text, is_global=is_global)
@@ -70,6 +74,10 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             memory_store, _, _, _, _ = get_memory_modules()
+            available, reason = await store_durable.durable_memory_backend_status()
+            if not available:
+                detail = f" {reason}" if reason else ""
+                return f"Durable memory unavailable.{detail}"
             if memory_store._ENABLE_PERSISTENCE:
                 await memory_store.open_pool()
             memories = await memory_store.list_durable_memories(

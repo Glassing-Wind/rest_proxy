@@ -61,6 +61,15 @@ Point MCP-capable clients at:
 http://localhost:8001/mcp
 ```
 
+Supported client mode today:
+
+- shared HTTP MCP daemon at `http://localhost:8001/mcp`
+- manual watcher activation via `watch_project` / `unwatch_project`
+- no automatic workspace inference by default for shared HTTP clients
+
+This is intentional. Transport sessions are not treated as trustworthy repo
+identity across mixed IDE/client setups.
+
 After restarting the daemon, refresh or reconnect the MCP client so it picks up
 the new process and current tool list.
 
@@ -82,6 +91,24 @@ The JSON bodies also include `boot_id`, `fingerprint`, `uptime_seconds`, and a
 `session` object so you can tell whether the server recognizes the incoming
 `Mcp-Session-Id`.
 
+For a protocol smoke check against the live daemon:
+
+```bash
+/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python \
+  /Users/michaelmarler/Projects/rest_proxy/scripts/check_mcp_protocol.py
+```
+
+For a restart regression that verifies stale MCP sessions are rejected after a
+daemon restart:
+
+```bash
+./scripts/check_mcp_stale_session_restart.sh
+```
+
+See also:
+
+- [docs/mcp_conformance_checklist.md](/Users/michaelmarler/Projects/rest_proxy/docs/mcp_conformance_checklist.md)
+
 ## STDIO Fallback
 
 The legacy stdio MCP path is still available as a fallback for clients that
@@ -90,7 +117,7 @@ cannot connect to the shared HTTP daemon.
 To start the stdio server directly:
 
 ```bash
-python3 mcp_server.py
+python mcp_server.py
 ```
 
 To use the supervisor wrapper:
@@ -164,6 +191,54 @@ Run the focused GraphRAG regression suite with:
 
 This covers parser-fact precision, semantic indexer helper behavior, asset-graph
 route attribution, flow-summary stability, and the integrated fixture contract.
+
+## CI Checks
+
+Run the gated local CI surface with:
+
+```bash
+./scripts/run_ci_checks.sh
+```
+
+This runs:
+
+- Ruff across the Python service and tooling surface
+- the GraphRAG regression suite
+- CI-safe service, memory, docs, and cross-project tests
+- the live `tree_sitter_language_pack` contract check in `test_ts_pack_contract.py`
+
+Baseline dependency auditing is available separately with:
+
+```bash
+./scripts/run_dependency_audit.sh
+```
+
+## Watcher Behavior
+
+Background file watching is manual by default.
+
+Use the MCP tools:
+
+- `watch_project` to pin a repo for background watching
+- `unwatch_project` to stop background watching
+
+The watcher does not automatically start just because a repo is open in an IDE.
+This avoids incorrect cross-IDE attribution when clients share the same HTTP MCP
+daemon.
+
+## Release Process
+
+Repository versioning now uses:
+
+- [VERSION](/Users/michaelmarler/Projects/rest_proxy/VERSION) as the canonical release version
+- [CHANGELOG.md](/Users/michaelmarler/Projects/rest_proxy/CHANGELOG.md) for release notes history
+- [.github/workflows/release.yaml](/Users/michaelmarler/Projects/rest_proxy/.github/workflows/release.yaml) for tag-driven GitHub releases
+
+To cut a release:
+
+1. Update `VERSION`
+2. Add the matching `## [x.y.z]` section to `CHANGELOG.md`
+3. Push tag `vX.Y.Z` or run the release workflow manually
 
 ## 📁 Architecture
 

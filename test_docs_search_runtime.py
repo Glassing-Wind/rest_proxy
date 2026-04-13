@@ -255,7 +255,8 @@ class DocsSearchHelperTests(unittest.TestCase):
             [row["source_url"] for row in selected],
             [rows[0]["source_url"], rows[2]["source_url"]],
         )
-        self.assertIsNone(trace)
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["suppression_policy"], "exact_only")
 
     def test_search_documentation_reranks_docs_by_default(self):
         class FakeCursor:

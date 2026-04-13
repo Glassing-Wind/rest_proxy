@@ -17,15 +17,15 @@
 # - Optional: create .env from .env.example if present and set credentials.
 # - Python version:      3.11+ recommended (match production runtime).
 # - Dev loop:            run one service at a time; both are standalone.
-# - Quick sanity check:  python3 -m py_compile proxy.py
+# - Quick sanity check:  python -m py_compile proxy.py
 #
 # Run the MCP server (tooling / indexing)
-# - Start MCP server:    python3 mcp_server.py
-# - Index a workspace:   python3 mcp_server.py index_workspace /abs/path/to/project
+# - Start MCP server:    python mcp_server.py
+# - Index a workspace:   python mcp_server.py index_workspace /abs/path/to/project
 #
 # Run the HTTP proxy
 # - Uvicorn entry:       uvicorn proxy:app --host 0.0.0.0 --port 8000
-# - Alt entry:           python3 proxy.py   (only if you add __main__ in future)
+# - Alt entry:           python proxy.py   (only if you add __main__ in future)
 #
 # Lint (optional; no enforced config in repo)
 # - Ruff:                ruff check .
@@ -33,12 +33,12 @@
 # - Lint subset (tool):  tools/dev.py exposes lint_project_subset for MCP use.
 #
 # Tests (script-style, not a formal test framework)
-# - Run a single script: python3 test_neo4j.py
-# - Run a single script: python3 test_tool_stream_client.py
-# - Run a single script: python3 test_native_index.py
-# - Run a single script: python3 verify_streaming.py
-# - Pattern for one test: python3 test_<name>.py  (scripts live at repo root)
-# - Single test example: python3 test_native_index.py
+# - Run a single script: python test_neo4j.py
+# - Run a single script: python test_tool_stream_client.py
+# - Run a single script: python test_native_index.py
+# - Run a single script: python verify_streaming.py
+# - Pattern for one test: python test_<name>.py  (scripts live at repo root)
+# - Single test example: python test_native_index.py
 #
 # Notes on tests
 # - These test_*.py files are executable scripts; they are not wired to pytest.
@@ -136,7 +136,7 @@
 # - Prefer stable ordering in lists/dicts returned by tools.
 
 # Testing Patterns
-# - Script tests should be runnable via python3 test_*.py.
+# - Script tests should be runnable via python test_*.py.
 # - Keep test scripts self-contained and explicit about env expectations.
 # - If adding pytest later, keep scripts compatible or add separate tests/.
 # - For new tests, document required env vars at top of file.

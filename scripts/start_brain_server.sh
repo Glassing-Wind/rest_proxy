@@ -9,7 +9,7 @@
 set -e
 
 REPO="/Users/michaelmarler/Projects/rest_proxy"
-PYTHON="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python3"
+PYTHON="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
 UVICORN="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/uvicorn"
 PORT="${BRAIN_SERVER_PORT:-8001}"
 

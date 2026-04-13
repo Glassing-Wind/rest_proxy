@@ -1,5 +1,6 @@
 """tools/docs/chunking.py — documentation chunking helpers."""
 
+import inspect
 import re
 import sys
 from typing import Dict, List
@@ -52,11 +53,13 @@ def chunk_content(
     try:
         import tree_sitter_language_pack as ts_pack
 
-        config = ts_pack.ProcessConfig(
-            fmt,
-            chunk_max_size=CHUNK_MAX_BYTES,
-            chunk_overlap=CHUNK_OVERLAP_BYTES,
-        )
+        config_kwargs = {"chunk_max_size": CHUNK_MAX_BYTES}
+        process_config_sig = inspect.signature(ts_pack.ProcessConfig)
+        if "chunk_overlap" in process_config_sig.parameters:
+            config_kwargs["chunk_overlap"] = CHUNK_OVERLAP_BYTES
+        elif "_chunk_overlap" in process_config_sig.parameters:
+            config_kwargs["_chunk_overlap"] = CHUNK_OVERLAP_BYTES
+        config = ts_pack.ProcessConfig(fmt, **config_kwargs)
         result = ts_pack.process(content, config)
         chunks = result.get("chunks", [])
         if chunks:

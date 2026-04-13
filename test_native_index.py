@@ -3,7 +3,7 @@ import time
 import os
 
 # Neo4j credentials
-URI = "bolt://localhost:7687"
+URI = "bolt://127.0.0.1:7687"
 USER = "neo4j"
 PASS = "nilBog1768@N"
 PROJECT_ID = "6f8dead37cb2"

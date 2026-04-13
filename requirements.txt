@@ -1,6 +1,6 @@
 aiofiles==25.1.0
 aiohappyeyeballs==2.6.1
-aiohttp==3.13.3
+aiohttp==3.13.4
 aiosignal==1.4.0
 aiosqlite==0.22.1
 alphashape==1.3.1
@@ -30,9 +30,9 @@ cookiecutter==2.7.1
 courlan==1.3.2
 Crawl4AI==0.8.6
 crawlee==1.6.0
-cryptography==46.0.5
+cryptography==46.0.7
 cssselect==1.4.0
-curl_cffi==0.14.0
+curl_cffi==0.15.0
 dateparser==1.3.0
 distro==1.9.0
 duckduckgo_search==8.1.1
@@ -48,7 +48,7 @@ greenlet==3.3.2
 grpcio==1.78.0
 h11==0.16.0
 h2==4.3.0
-hf-xet==1.4.2
+hf-xet==1.4.3
 hf_transfer==0.1.9
 hiredis==3.3.1
 hpack==4.1.0
@@ -57,7 +57,7 @@ htmldate==1.9.4
 httpcore==1.0.9
 httpx==0.28.1
 httpx-sse==0.4.3
-huggingface_hub==0.36.2
+huggingface_hub==1.10.1
 humanize==4.15.0
 hyperframe==6.1.0
 idna==3.11
@@ -100,7 +100,7 @@ opentelemetry-proto==1.40.0
 opentelemetry-sdk==1.40.0
 opentelemetry-semantic-conventions==0.61b0
 opentelemetry-util-http==0.61b0
-packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1769093650/work
+packaging==26.0
 parsel==1.11.0
 patchright==1.58.2
 pillow==12.1.1
@@ -119,7 +119,7 @@ pydantic==2.12.5
 pydantic-settings==2.13.1
 pydantic_core==2.41.5
 pyee==13.0.1
-Pygments==2.19.2
+Pygments==2.20.0
 PyJWT==2.12.1
 pyOpenSSL==26.0.0
 python-dateutil==2.9.0.post0
@@ -143,7 +143,7 @@ runs==1.3.0
 safetensors==0.7.0
 scikit-learn==1.8.0
 scipy==1.17.1
-sentence-transformers==3.0.1
+sentence-transformers==5.4.0
 shapely==2.1.2
 shellingham==1.5.4
 six==1.17.0
@@ -160,11 +160,11 @@ threadpoolctl==3.6.0
 tiktoken==0.12.0
 tld==0.13.2
 tldextract==5.3.1
-tokenizers==0.19.1
+tokenizers==0.22.2
 torch==2.10.0
 tqdm==4.67.3
 trafilatura==2.0.0
-transformers==4.40.0
+transformers==5.0.0rc3
 tree-sitter==0.25.2
 -e git+https://github.com/Zmaroo/tree-sitter-language-pack.git@565361eb301748287b383b46de9b14c2a4b6e69b#egg=tree_sitter_language_pack&subdirectory=crates/ts-pack-python
 tree-sitter-swift==0.0.1

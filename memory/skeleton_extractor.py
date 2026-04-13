@@ -72,7 +72,7 @@ def _format_structure(items: list, indent: int = 0) -> str:
         else:
             lines.append(f"{prefix}{decl}: ...")
 
-    return "\n".join(l for l in lines if l)
+    return "\n".join(line for line in lines if line)
 
 
 # Map ts_pack kind strings → more idiomatic keyword

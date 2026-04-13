@@ -16,7 +16,7 @@ from _runtime import resolve_python_runtime
 
 from graphrag_core.config import load_env
 from graphrag_core.indexing import watcher as index_watcher
-from graphrag_core.indexing.manifest import build_manifest
+from graphrag_core.indexing.manifest import build_manifest, load_indexignore_patterns, suggest_indexignore_entries
 from graphrag_core.indexing.registry import record_indexed_project
 from graphrag_core import neo4j as neo4j_utils
 
@@ -244,7 +244,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 "runtime_conda_env": None,
             }
 
-        neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://localhost:7687")
+        neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
         neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
         neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
         runtime = resolve_python_runtime()
@@ -470,17 +470,18 @@ async def cancel_index_job(job_id: str) -> str:
 
 async def watch_project(workspace_id: str) -> str:
     """
-    Start a background watcher for a project.
-    It will automatically trigger `index_workspace` when files change.
+    Pin a project for manual background watching across sessions.
+
+    This is the primary activation path for the watcher in the default shipped
+    configuration.
     """
     project_path = get_workspace_path(workspace_id)
     if not os.path.exists(project_path):
         return f"Error: Path does not exist: {project_path}"
     abs_path = os.path.abspath(project_path)
-    if index_watcher.is_watched(abs_path):
-        return f"Project is already being watched: {abs_path}"
-    index_watcher.add_watch(abs_path)
-    return f"Started watching project: {abs_path}. Indexing will occur automatically on changes."
+    if not index_watcher.add_watch(abs_path):
+        return f"Project already has a pinned watch: {abs_path}"
+    return f"Pinned project for background watching: {abs_path}"
 
 
 async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
@@ -837,13 +838,73 @@ async def get_indexed_projects(query: Optional[str] = None) -> str:
 
 async def unwatch_project(workspace_id: str) -> str:
     """
-    Stop watching a project.
+    Remove a project's manual pinned background watch.
     """
     project_path = get_workspace_path(workspace_id)
     abs_path = os.path.abspath(project_path)
     if index_watcher.remove_watch(abs_path):
-        return f"Stopped watching project: {abs_path}"
-    return f"Project is not currently being watched: {abs_path}"
+        return f"Removed pinned watch for project: {abs_path}"
+    return f"Project does not have a pinned watch: {abs_path}"
+
+
+async def suggest_indexignore(workspace_id: str, write: bool = False) -> str:
+    """
+    Suggest repo-specific .indexignore entries on top of the built-in manifest skip rules.
+
+    Args:
+        workspace_id: The logical workspace ID or absolute path to the project root.
+        write: When True, create or append the suggested entries to .indexignore.
+    """
+    project_path = get_workspace_path(workspace_id)
+    suggestions = suggest_indexignore_entries(project_path)
+    existing = load_indexignore_patterns(project_path)
+    indexignore_path = os.path.join(project_path, ".indexignore")
+
+    lines = [f"## .indexignore Suggestions: `{project_path}`"]
+    lines.append(
+        "- Built-in manifest skips already cover common junk such as `node_modules/`, `dist/`, `tmp/`, lockfiles, caches, and large binary assets."
+    )
+    if existing:
+        lines.append(f"- Existing custom patterns: {len(existing)}")
+    else:
+        lines.append("- Existing custom patterns: none")
+
+    if not suggestions:
+        lines.append("")
+        lines.append("No additional repo-specific `.indexignore` entries are suggested right now.")
+        if not write:
+            lines.append("A new `.indexignore` file is not needed based on the current repo layout.")
+        return "\n".join(lines)
+
+    lines.append("")
+    lines.append("Suggested additions:")
+    for item in suggestions:
+        lines.append(f"- `{item['pattern']}`")
+        lines.append(f"  reason: {item['reason']}")
+
+    if write:
+        os.makedirs(project_path, exist_ok=True)
+        existing_text = ""
+        if os.path.exists(indexignore_path):
+            with open(indexignore_path, "r", encoding="utf-8") as fh:
+                existing_text = fh.read().rstrip()
+        additions = "\n".join(item["pattern"] for item in suggestions)
+        new_parts = []
+        if existing_text:
+            new_parts.append(existing_text)
+        else:
+            new_parts.append("# Repo-specific index exclusions")
+        new_parts.append("# Added by suggest_indexignore")
+        new_parts.append(additions)
+        with open(indexignore_path, "w", encoding="utf-8") as fh:
+            fh.write("\n\n".join(part for part in new_parts if part).rstrip() + "\n")
+        lines.append("")
+        lines.append(f"Wrote suggestions to `{indexignore_path}`.")
+    else:
+        lines.append("")
+        lines.append("Run `suggest_indexignore(..., write=True)` to write these entries.")
+
+    return "\n".join(lines)
 
 
 def register(mcp: FastMCP) -> None:
@@ -853,5 +914,6 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(cancel_index_job)
     mcp.tool()(watch_project)
     mcp.tool()(unwatch_project)
+    mcp.tool()(suggest_indexignore)
     mcp.tool()(get_indexing_health)
     mcp.tool()(get_indexed_projects)

@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import sys
 import types
 import unittest
@@ -77,7 +78,9 @@ class DocsChunkingTests(unittest.TestCase):
             )
         self.assertEqual(len(chunks), 1)
         self.assertEqual(fake_ts_pack.configs[0]["chunk_max_size"], module.CHUNK_MAX_BYTES)
-        self.assertEqual(fake_ts_pack.configs[0]["chunk_overlap"], module.CHUNK_OVERLAP_BYTES)
+        process_config_sig = inspect.signature(fake_ts_pack.ProcessConfig)
+        if "chunk_overlap" in process_config_sig.parameters:
+            self.assertEqual(fake_ts_pack.configs[0]["chunk_overlap"], module.CHUNK_OVERLAP_BYTES)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ Usage:
 import os
 import sys
 import asyncio
+import inspect
 import json
 import time
 import threading
@@ -311,18 +312,28 @@ def _read_and_chunk(
     chunks: List[Dict] = []
     file_meta: dict = {}
 
+    def _build_semantic_payload_compat(source_text: str, language_name: str) -> dict:
+        payload_kwargs = {
+            "chunk_id_version": CHUNK_ID_VERSION,
+            "chunk_max_size": CHUNK_MAX_BYTES,
+        }
+        payload_sig = inspect.signature(ts_pack.build_semantic_payload)
+        if "chunk_overlap" in payload_sig.parameters:
+            payload_kwargs["chunk_overlap"] = CHUNK_OVERLAP_BYTES
+        elif "_chunk_overlap" in payload_sig.parameters:
+            payload_kwargs["_chunk_overlap"] = CHUNK_OVERLAP_BYTES
+        return ts_pack.build_semantic_payload(
+            source_text,
+            language_name,
+            rel_path,
+            project_id,
+            **payload_kwargs,
+        )
+
     # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
     if lang == "swift":
         try:
-            payload = ts_pack.build_semantic_payload(
-                source,
-                "swift",
-                rel_path,
-                project_id,
-                chunk_id_version=CHUNK_ID_VERSION,
-                chunk_max_size=CHUNK_MAX_BYTES,
-                chunk_overlap=CHUNK_OVERLAP_BYTES,
-            )
+            payload = _build_semantic_payload_compat(source, "swift")
             file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"
@@ -346,15 +357,7 @@ def _read_and_chunk(
     # ── Native ts_pack chunking ───────────────────────────────────────────────
     if lang and lang != "swift":
         try:
-            payload = ts_pack.build_semantic_payload(
-                source,
-                lang,
-                rel_path,
-                project_id,
-                chunk_id_version=CHUNK_ID_VERSION,
-                chunk_max_size=CHUNK_MAX_BYTES,
-                chunk_overlap=CHUNK_OVERLAP_BYTES,
-            )
+            payload = _build_semantic_payload_compat(source, lang)
             file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"

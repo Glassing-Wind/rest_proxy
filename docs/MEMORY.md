@@ -41,7 +41,7 @@ POST /v1/chat/completions
 |---|---|---|
 | `LM_PROXY_MEMORY_ENABLED` | `0` | Master switch – set to `1` to allow proxy memory features |
 | `LM_PROXY_MEMORY_MODE` | `stateless` | `stateless/off` disables automatic rolling memory, `assist` enables bounded recent-turn + summary help for smaller/local models, `full` also enables broader retrieval features |
-| `LM_PROXY_NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt connection URI |
+| `LM_PROXY_NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt connection URI |
 | `LM_PROXY_NEO4J_USER` | `neo4j` | Neo4j username |
 | `LM_PROXY_NEO4J_PASSWORD` | - | Neo4j password |
 | `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `0` | Enable Neo4j durable persistence |

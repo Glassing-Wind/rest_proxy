@@ -105,6 +105,23 @@ async def add_durable_memory(
         return False
 
 
+async def durable_memory_backend_status() -> tuple[bool, str | None]:
+    """
+    Return whether durable memory writes/reads are currently available and, if not,
+    a short human-readable reason.
+    """
+    try:
+        if not graph_bootstrap._NEO4J_ENABLED:
+            return False, "Neo4j-backed durable memory is disabled."
+        try:
+            await graph_bootstrap.require_driver()
+            return True, None
+        except Exception as exc:
+            return False, str(exc)
+    except Exception as exc:
+        return False, str(exc)
+
+
 async def list_durable_memories(
     session_id: str,
     include_global: bool = False,
