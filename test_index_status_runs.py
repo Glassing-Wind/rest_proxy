@@ -102,6 +102,28 @@ class IndexStatusRunsTests(unittest.TestCase):
                 "struct_index_status": "done",
                 "semantic_index_status": "done",
             },
+            "metrics": {
+                "struct": {
+                    "parse_s": 1.25,
+                    "nodes_s": 0.1,
+                    "imports_s": 0.02,
+                    "rels_s": 0.01,
+                    "calls_s": 0.4,
+                    "total_s": 1.78,
+                },
+                "semantic": {
+                    "new_chunks": 12,
+                    "skipped_chunks": 5,
+                    "parsed_files": 3,
+                    "skipped_files": 0,
+                    "total_s": 0.62,
+                },
+                "gds": {
+                    "leiden": "community written to 3 File nodes.",
+                    "betweenness": "betweenness written to 3 File nodes. (estimated_bytes_max=64, sampling_size=3)",
+                    "wcc": "1 isolated File nodes marked.",
+                },
+            },
         }
 
         with mock.patch("time.time", return_value=102.0):
@@ -111,6 +133,9 @@ class IndexStatusRunsTests(unittest.TestCase):
         self.assertIn("semantic_run: sem-1", output)
         self.assertIn("semantic_struct_run: struct-1", output)
         self.assertIn("aligned:    yes", output)
+        self.assertIn("struct_metrics: parse=1.25s", output)
+        self.assertIn("semantic_metrics: new=12 skipped=5", output)
+        self.assertIn("gds: leiden=community written to 3 File nodes.", output)
 
 
 if __name__ == "__main__":

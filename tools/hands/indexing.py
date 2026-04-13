@@ -373,6 +373,7 @@ async def get_index_status(job_id: str) -> str:
     sem_rc = job.get("sem_rc")
     logs = job.get("logs", [])
     run_summary = job.get("run_summary") or {}
+    metrics = job.get("metrics") or {}
 
     try:
         from tools.hands.project import get_last_graph_build_metric
@@ -422,6 +423,41 @@ async def get_index_status(job_id: str) -> str:
                 f"  semantic_struct_run: {semantic_struct}",
                 f"  aligned:    {'yes' if aligned else 'no'}",
             ]
+        )
+    if metrics.get("struct"):
+        struct_metrics = metrics["struct"]
+        lines.append(
+            "  struct_metrics: "
+            f"parse={struct_metrics.get('parse_s')}s "
+            f"nodes={struct_metrics.get('nodes_s')}s "
+            f"imports={struct_metrics.get('imports_s')}s "
+            f"rels={struct_metrics.get('rels_s')}s "
+            f"calls={struct_metrics.get('calls_s')}s "
+            f"total={struct_metrics.get('total_s')}s"
+        )
+    if metrics.get("semantic"):
+        sem_metrics = metrics["semantic"]
+        lines.append(
+            "  semantic_metrics: "
+            f"new={sem_metrics.get('new_chunks')} "
+            f"skipped={sem_metrics.get('skipped_chunks')} "
+            f"parsed_files={sem_metrics.get('parsed_files')} "
+            f"skipped_files={sem_metrics.get('skipped_files')} "
+            f"total={sem_metrics.get('total_s')}s"
+        )
+    if metrics.get("gds"):
+        gds = metrics["gds"]
+        lines.append(
+            "  gds: "
+            + " | ".join(
+                f"{label}={detail}"
+                for label, detail in (
+                    ("leiden", gds.get("leiden")),
+                    ("betweenness", gds.get("betweenness")),
+                    ("wcc", gds.get("wcc")),
+                )
+                if detail
+            )
         )
     if last_build:
         lines.append(

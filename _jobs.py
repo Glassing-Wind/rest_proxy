@@ -6,6 +6,7 @@ Each entry: {status, struct_rc, sem_rc, logs[], started_at, finished_at}
 """
 
 import os
+import re
 import sys
 import threading
 import asyncio
@@ -25,6 +26,52 @@ _MAX_LOG_LINES = 200  # ring-buffer size per job
 # (import graph build) back onto this loop — not create a new one —
 # because the Neo4j async driver is bound to it.
 _MAIN_LOOP = None
+
+
+_STRUCT_DONE_RE = re.compile(
+    r"\[ts-pack-index\] Done — (?P<files>\d+) files \| "
+    r"parse=(?P<parse>[0-9.]+)s nodes=(?P<nodes>[0-9.]+)s imports=(?P<imports>[0-9.]+)s "
+    r"rels=(?P<rels>[0-9.]+)s calls=(?P<calls>[0-9.]+)s total=(?P<total>[0-9.]+)s"
+)
+_SEM_DONE_RE = re.compile(
+    r"\[lm-proxy:indexer\] Done — (?P<new>\d+) new / (?P<skipped>\d+) skipped / "
+    r"(?P<files>\d+) files in (?P<total>[0-9.]+)s \(parsed=(?P<parsed>\d+) skipped_files=(?P<skipped_files>\d+)\)"
+)
+_GDS_OK_RE = re.compile(r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Done — (?P<detail>.+)")
+_GDS_SKIP_RE = re.compile(r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Skipped — (?P<detail>.+)")
+
+
+def _extract_job_metrics(logs: list[str]) -> dict[str, object]:
+    metrics: dict[str, object] = {}
+    for line in logs:
+        struct_match = _STRUCT_DONE_RE.search(line)
+        if struct_match:
+            metrics["struct"] = {
+                "files": int(struct_match.group("files")),
+                "parse_s": float(struct_match.group("parse")),
+                "nodes_s": float(struct_match.group("nodes")),
+                "imports_s": float(struct_match.group("imports")),
+                "rels_s": float(struct_match.group("rels")),
+                "calls_s": float(struct_match.group("calls")),
+                "total_s": float(struct_match.group("total")),
+            }
+            continue
+        sem_match = _SEM_DONE_RE.search(line)
+        if sem_match:
+            metrics["semantic"] = {
+                "new_chunks": int(sem_match.group("new")),
+                "skipped_chunks": int(sem_match.group("skipped")),
+                "files": int(sem_match.group("files")),
+                "parsed_files": int(sem_match.group("parsed")),
+                "skipped_files": int(sem_match.group("skipped_files")),
+                "total_s": float(sem_match.group("total")),
+            }
+            continue
+        gds_match = _GDS_OK_RE.search(line) or _GDS_SKIP_RE.search(line)
+        if gds_match:
+            gds = metrics.setdefault("gds", {})
+            gds[gds_match.group("label")] = gds_match.group("detail")
+    return metrics
 
 
 async def _execute_read(
@@ -252,6 +299,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                         ]
                     if run_summary:
                         _JOBS[job_id]["run_summary"] = run_summary
+                    _JOBS[job_id]["metrics"] = _extract_job_metrics(_JOBS[job_id].get("logs", []))
                     _JOBS[job_id]["logs"].append(f"[struct-index] {queued}")
         except Exception as e:
             graph_build_error = str(e)
