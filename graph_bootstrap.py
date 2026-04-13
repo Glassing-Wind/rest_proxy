@@ -168,6 +168,9 @@ async def init_graph_db() -> None:
                     "CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:File) REQUIRE f.id IS UNIQUE",
                     # Per-project lookup index for read-heavy queries
                     "CREATE INDEX node_project_id IF NOT EXISTS FOR (n:Node) ON (n.project_id)",
+                    "CREATE INDEX node_project_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name)",
+                    "CREATE INDEX node_project_name_filepath IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name, n.filepath)",
+                    "CREATE INDEX node_project_qualified_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.qualified_name)",
                     "CREATE INDEX file_project_id IF NOT EXISTS FOR (f:File) ON (f.project_id)",
                     # Session/Project: MERGE'd on every semantic batch — must use index
                     "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.id IS UNIQUE",
