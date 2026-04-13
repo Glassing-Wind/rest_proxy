@@ -47,6 +47,49 @@ async def _load_cargo_crate_rows(driver, neo4j_db: str, project_ids: list[str]) 
         return rows_by_pid
 
 
+async def _load_rescue_rows(
+    conn,
+    *,
+    pid: str,
+    file_paths: list[str],
+) -> list[dict]:
+    if not file_paths:
+        return []
+    async with conn.cursor() as cur:
+        await cur.execute(
+            """
+            WITH ranked AS (
+                SELECT file_path, chunk_index, content, project_id, metadata,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY file_path
+                           ORDER BY chunk_index ASC
+                       ) AS chunk_rank
+                FROM codebase_embeddings
+                WHERE project_id = %(pid)s
+                  AND file_path = ANY(%(paths)s)
+            )
+            SELECT file_path, chunk_index, content, project_id, metadata
+            FROM ranked
+            WHERE chunk_rank <= 2
+            ORDER BY file_path, chunk_index
+            """,
+            {"pid": pid, "paths": file_paths},
+        )
+        rows = await cur.fetchall()
+    return [
+        {
+            "file_path": r[0],
+            "chunk_index": r[1],
+            "content": r[2],
+            "project_id": r[3],
+            "metadata": r[4],
+            "rrf": 0.0,
+            "_definition_rescue": True,
+        }
+        for r in rows
+    ]
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -187,6 +230,7 @@ def register(mcp: FastMCP) -> None:
             multi = len(workspace_ids) > 1
 
             impl_intent = sem_helpers.implementation_query_intent(query)
+            impl_query_class = sem_helpers.implementation_query_class(query)
 
             svc = get_embedding_service()
             vecs = await svc.embed_batch_async([query])
@@ -412,16 +456,46 @@ def register(mcp: FastMCP) -> None:
                         impl_intent
                         and sem_helpers.is_low_signal_parser_data_path(r.get("file_path"))
                     )
+                    is_low_signal_binding_surface = (
+                        impl_intent
+                        and sem_helpers.is_low_signal_binding_surface_path(r.get("file_path"))
+                    )
                     doc_penalty = 0.05 if impl_intent and is_doc_like else 0.0
                     parser_data_penalty = 0.08 if is_low_signal_parser_data else 0.0
+                    binding_surface_penalty = 0.06 if is_low_signal_binding_surface else 0.0
                     r["doc_like"] = is_doc_like
                     r["low_signal_parser_data"] = is_low_signal_parser_data
+                    r["low_signal_binding_surface"] = is_low_signal_binding_surface
+                    r["implementation_symbol_hit"] = (
+                        sem_helpers.implementation_symbol_hit(r.get("_meta", {}), query)
+                        if impl_intent
+                        else 0
+                    )
+                    r["implementation_definition_hit"] = (
+                        sem_helpers.implementation_definition_hit(r.get("content", ""), query)
+                        if impl_intent
+                        else 0
+                    )
+                    r["implementation_api_entrypoint_hit"] = (
+                        sem_helpers.implementation_api_entrypoint_hit(
+                            r.get("file_path", ""),
+                            r.get("implementation_definition_hit", 0),
+                        )
+                        if impl_intent
+                        else 0
+                    )
+                    r["implementation_usage_heavy_penalty"] = (
+                        impl_query_class == "definition_oriented"
+                        and sem_helpers.is_usage_heavy_path(r.get("file_path", ""))
+                    )
                     if meta_boost > 0:
                         r["rank_score"] = base_score + (
                             r.get("meta_score", 0) * meta_boost
-                        ) - doc_penalty - parser_data_penalty
+                        ) - doc_penalty - parser_data_penalty - binding_surface_penalty
                     else:
-                        r["rank_score"] = base_score - doc_penalty - parser_data_penalty
+                        r["rank_score"] = (
+                            base_score - doc_penalty - parser_data_penalty - binding_surface_penalty
+                        )
                 all_results.sort(key=sem_helpers.implementation_rank_tuple)
             else:
                 if impl_intent:
@@ -438,16 +512,25 @@ def register(mcp: FastMCP) -> None:
                 code_results = [
                     r
                     for r in all_results
-                    if not r.get("doc_like") and not r.get("low_signal_parser_data")
+                    if not r.get("doc_like")
+                    and not r.get("low_signal_parser_data")
+                    and not r.get("low_signal_binding_surface")
                 ]
                 parser_results = [
                     r for r in all_results if r.get("low_signal_parser_data") and not r.get("doc_like")
+                ]
+                binding_results = [
+                    r
+                    for r in all_results
+                    if r.get("low_signal_binding_surface") and not r.get("doc_like")
                 ]
                 doc_results = [r for r in all_results if r.get("doc_like")]
                 if code_results:
                     all_results = code_results
                 elif parser_results:
                     all_results = parser_results
+                elif binding_results:
+                    all_results = binding_results
                 else:
                     all_results = doc_results
 
@@ -457,6 +540,73 @@ def register(mcp: FastMCP) -> None:
                 ]
                 if non_parser_candidates:
                     all_results = non_parser_candidates
+
+            if impl_intent and impl_query_class == "definition_oriented" and all_results:
+                top_probe = all_results[: min(5, len(all_results))]
+                has_definition_hit = any(
+                    int(r.get("implementation_definition_hit", 0) or 0) > 0
+                    or int(r.get("implementation_api_entrypoint_hit", 0) or 0) > 0
+                    for r in top_probe
+                )
+                if not has_definition_hit:
+                    rescue_results: list[dict] = []
+                    for pid, proj_name in pid_to_name.items():
+                        proj_root = pid_to_path.get(pid)
+                        if not proj_root:
+                            continue
+                        matches, _dbg = await search_fallbacks.run_definition_fallback_grep(
+                            proj_root,
+                            query,
+                            fallback_glob,
+                            min(fallback_max, 8),
+                        )
+                        if not matches:
+                            continue
+                        async with memory_store._pg_pool.connection() as conn:
+                            await conn.execute("BEGIN")
+                            rescue_rows = await _load_rescue_rows(conn, pid=pid, file_paths=matches)
+                        for r in rescue_rows:
+                            r_meta = sem_helpers.coerce_meta(r)
+                            r["_meta"] = r_meta
+                            r["meta_score"] = sem_helpers.meta_score(r_meta)
+                            is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
+                            is_low_signal_parser_data = sem_helpers.is_low_signal_parser_data_path(
+                                r.get("file_path")
+                            )
+                            is_low_signal_binding_surface = sem_helpers.is_low_signal_binding_surface_path(
+                                r.get("file_path")
+                            )
+                            r["doc_like"] = is_doc_like
+                            r["low_signal_parser_data"] = is_low_signal_parser_data
+                            r["low_signal_binding_surface"] = is_low_signal_binding_surface
+                            r["implementation_symbol_hit"] = sem_helpers.implementation_symbol_hit(
+                                r_meta, query
+                            )
+                            r["implementation_definition_hit"] = sem_helpers.implementation_definition_hit(
+                                r.get("content", ""), query
+                            )
+                            r["implementation_api_entrypoint_hit"] = (
+                                sem_helpers.implementation_api_entrypoint_hit(
+                                    r.get("file_path", ""),
+                                    r.get("implementation_definition_hit", 0),
+                                )
+                            )
+                            r["implementation_usage_heavy_penalty"] = (
+                                impl_query_class == "definition_oriented"
+                                and sem_helpers.is_usage_heavy_path(r.get("file_path", ""))
+                            )
+                            r["rank_score"] = float(r.get("rrf", 0.0) or 0.0) + 0.02
+                        rescue_results.extend(rescue_rows)
+                    if rescue_results:
+                        existing_keys = {
+                            (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                            for r in all_results
+                        }
+                        for r in rescue_results:
+                            key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                            if key not in existing_keys:
+                                all_results.append(r)
+                        all_results.sort(key=sem_helpers.implementation_rank_tuple)
 
             if clone_dedup:
                 try:
@@ -654,6 +804,9 @@ def register(mcp: FastMCP) -> None:
                     if isinstance(reranked, list) and reranked:
                         all_results = reranked
                 all_results = sem_helpers.dedupe_files(all_results)
+
+            if impl_intent:
+                all_results.sort(key=sem_helpers.implementation_rank_tuple)
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)
             all_results = sem_helpers.cap_per_dir(all_results, max_per_dir)

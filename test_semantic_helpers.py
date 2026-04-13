@@ -8,6 +8,7 @@ from unittest import mock
 
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic_helpers.py"
+FALLBACKS_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/fallbacks.py"
 GOLDENS_PATH = "/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json"
 
 
@@ -15,6 +16,11 @@ spec = importlib.util.spec_from_file_location("semantic_helpers_under_test", MOD
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
+
+fallbacks_spec = importlib.util.spec_from_file_location("semantic_fallbacks_under_test", FALLBACKS_PATH)
+fallbacks_module = importlib.util.module_from_spec(fallbacks_spec)
+assert fallbacks_spec.loader is not None
+fallbacks_spec.loader.exec_module(fallbacks_module)
 
 
 def load_benchmark_case(case_id: str) -> dict:
@@ -488,12 +494,59 @@ class SemanticHelperTests(unittest.TestCase):
     def test_implementation_query_intent_detects_code_seeking_queries(self):
         self.assertTrue(module.implementation_query_intent("QuickBooks accounting sync attempts and tenant credit application"))
         self.assertTrue(module.implementation_query_intent("where is the route handler for tenant credit"))
+        self.assertTrue(module.implementation_query_intent("how are Neo4j writes retried in ts-pack indexing"))
+        self.assertTrue(module.implementation_query_intent("how are Rust use imports resolved to local files in ts-pack-index"))
+        self.assertTrue(module.implementation_query_intent("how does process(source, config) work in tree-sitter-language-pack"))
+        self.assertTrue(module.implementation_query_intent("how does graph finalization build file graph links for GDS"))
+        self.assertEqual(
+            module.implementation_query_class("how does process(source, config) work in tree-sitter-language-pack"),
+            "definition_oriented",
+        )
+        self.assertEqual(
+            module.implementation_query_class("where is process defined"),
+            "definition_oriented",
+        )
+        self.assertEqual(
+            module.implementation_query_class("where is it called"),
+            "usage_oriented",
+        )
 
     def test_is_low_signal_parser_data_path_flags_grammar_payloads(self):
         self.assertTrue(module.is_low_signal_parser_data_path("node-types/ocaml/ocaml-grammar.json"))
         self.assertTrue(module.is_low_signal_parser_data_path("grammars/python/grammar.json"))
+        self.assertTrue(
+            module.is_low_signal_parser_data_path(
+                "crates/ts-pack-python/python/tree_sitter_language_pack/_semantic_payload.py"
+            )
+        )
+        self.assertTrue(
+            module.is_low_signal_parser_data_path(
+                "crates/ts-pack-python/python/tree_sitter_language_pack/__init__.pyi"
+            )
+        )
+        self.assertTrue(module.is_low_signal_parser_data_path("crates/ts-pack-node/index.d.ts"))
+        self.assertTrue(
+            module.is_low_signal_parser_data_path(
+                "crates/ts-pack-java/src/main/java/io/github/treesitter/languagepack/ImportInfo.java"
+            )
+        )
+        self.assertTrue(module.is_low_signal_parser_data_path("packages/go/v1/types.go"))
+        self.assertTrue(module.is_low_signal_parser_data_path("packages/php/src/ProcessConfig.php"))
         self.assertFalse(module.is_low_signal_parser_data_path("repo_analyzer/parser.py"))
         self.assertFalse(module.implementation_query_intent("overview of the system"))
+
+    def test_is_low_signal_binding_surface_path_flags_wrappers(self):
+        self.assertTrue(
+            module.is_low_signal_binding_surface_path(
+                "crates/ts-pack-java/src/main/java/io/github/treesitter/languagepack/TsPackRegistry.java"
+            )
+        )
+        self.assertTrue(module.is_low_signal_binding_surface_path("packages/csharp/TreeSitterLanguagePack/Models.cs"))
+        self.assertTrue(module.is_low_signal_binding_surface_path("packages/go/v1/types.go"))
+        self.assertFalse(module.is_low_signal_binding_surface_path("crates/ts-pack-core/src/lib.rs"))
+        self.assertTrue(module.is_usage_heavy_path("crates/ts-pack-cli/src/main.rs"))
+        self.assertTrue(module.is_usage_heavy_path("e2e/ruby/spec/process_spec.rb"))
+        self.assertFalse(module.is_usage_heavy_path("crates/ts-pack-core/src/lib.rs"))
 
     def test_implementation_rank_tuple_prefers_code_over_docs_and_parser_data(self):
         rows = [
@@ -504,6 +557,163 @@ class SemanticHelperTests(unittest.TestCase):
         rows.sort(key=module.implementation_rank_tuple)
         self.assertEqual(rows[0]["file_path"], "repo_analyzer/parser.py")
         self.assertEqual(rows[-1]["file_path"], "node-types/ocaml/ocaml-grammar.json")
+
+        rows = [
+            {
+                "file_path": "packages/csharp/TreeSitterLanguagePack/Models.cs",
+                "low_signal_parser_data": False,
+                "low_signal_binding_surface": True,
+                "doc_like": False,
+                "rank_score": 0.9,
+            },
+            {
+                "file_path": "crates/ts-pack-core/src/lib.rs",
+                "low_signal_parser_data": False,
+                "low_signal_binding_surface": False,
+                "doc_like": False,
+                "rank_score": 0.8,
+            },
+        ]
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+
+        rows = [
+            {
+                "file_path": "crates/ts-pack-cli/src/main.rs",
+                "low_signal_parser_data": False,
+                "low_signal_binding_surface": False,
+                "doc_like": False,
+                "implementation_usage_heavy_penalty": True,
+                "implementation_definition_hit": 0,
+                "implementation_api_entrypoint_hit": 0,
+                "implementation_symbol_hit": 1,
+                "rank_score": 0.9,
+            },
+            {
+                "file_path": "crates/ts-pack-core/src/lib.rs",
+                "low_signal_parser_data": False,
+                "low_signal_binding_surface": False,
+                "doc_like": False,
+                "implementation_usage_heavy_penalty": False,
+                "implementation_definition_hit": 1,
+                "implementation_api_entrypoint_hit": 1,
+                "implementation_symbol_hit": 1,
+                "rank_score": 0.8,
+            },
+        ]
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+
+    def test_implementation_symbol_hit_prefers_exact_file_symbols(self):
+        meta = {"file_symbols": ["process", "process_with_tree", "parse_source"]}
+        self.assertGreaterEqual(
+            module.implementation_symbol_hit(meta, "how does process(source, config) work"),
+            1,
+        )
+        self.assertEqual(module.implementation_symbol_hit(meta, "overview of supported languages"), 0)
+
+        rows = [
+            {
+                "file_path": "src/usage.rs",
+                "low_signal_parser_data": False,
+                "doc_like": False,
+                "rank_score": 0.8,
+                "implementation_symbol_hit": 0,
+            },
+            {
+                "file_path": "src/lib.rs",
+                "low_signal_parser_data": False,
+                "doc_like": False,
+                "rank_score": 0.7,
+                "implementation_symbol_hit": 1,
+            },
+        ]
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "src/lib.rs")
+
+    def test_implementation_definition_and_api_entrypoint_hits(self):
+        content = "pub fn process(source: &str, config: &ProcessConfig) -> Result<ProcessResult, Error> {"
+        self.assertGreaterEqual(
+            module.implementation_definition_hit(
+                content,
+                "how does process(source, config) work in tree-sitter-language-pack",
+            ),
+            1,
+        )
+        self.assertEqual(
+            module.implementation_api_entrypoint_hit("crates/ts-pack-core/src/lib.rs", 1),
+            1,
+        )
+        self.assertEqual(
+            module.implementation_api_entrypoint_hit("crates/ts-pack-cli/src/main.rs", 1),
+            0,
+        )
+
+    def test_definition_fallback_pattern_targets_definitions(self):
+        pattern = fallbacks_module.build_definition_fallback_pattern(["process"])
+        self.assertIn("pub\\s+fn", pattern)
+        self.assertIn("process", pattern)
+
+    def test_candidate_relevance_score_prefers_rank_score(self):
+        row = {"rrf": 0.2, "rank_score": 0.9}
+        self.assertEqual(module.candidate_relevance_score(row), 0.9)
+
+    def test_definition_entrypoint_golden_prefers_library_root_over_cli(self):
+        case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
+        rows = []
+        for result in case["results"]:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["doc_like"] = module.is_doc_like_path(row.get("file_path"))
+            row["low_signal_parser_data"] = module.is_low_signal_parser_data_path(row.get("file_path"))
+            row["low_signal_binding_surface"] = module.is_low_signal_binding_surface_path(
+                row.get("file_path")
+            )
+            row["implementation_symbol_hit"] = module.implementation_symbol_hit(
+                row["_meta"], case["query"]
+            )
+            row["implementation_definition_hit"] = module.implementation_definition_hit(
+                row.get("content", ""), case["query"]
+            )
+            row["implementation_api_entrypoint_hit"] = module.implementation_api_entrypoint_hit(
+                row.get("file_path", ""), row.get("implementation_definition_hit", 0)
+            )
+            row["implementation_usage_heavy_penalty"] = (
+                module.implementation_query_class(case["query"]) == "definition_oriented"
+                and module.is_usage_heavy_path(row.get("file_path", ""))
+            )
+            rows.append(row)
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+        self.assertNotEqual(rows[0]["file_path"], "crates/ts-pack-cli/src/main.rs")
+
+    def test_definition_lookup_golden_prefers_library_root_over_docs(self):
+        case = load_benchmark_case("code_definition_lookup_surfaces_library_root")
+        rows = []
+        for result in case["results"]:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["doc_like"] = module.is_doc_like_path(row.get("file_path"))
+            row["low_signal_parser_data"] = module.is_low_signal_parser_data_path(row.get("file_path"))
+            row["low_signal_binding_surface"] = module.is_low_signal_binding_surface_path(
+                row.get("file_path")
+            )
+            row["implementation_symbol_hit"] = module.implementation_symbol_hit(
+                row["_meta"], case["query"]
+            )
+            row["implementation_definition_hit"] = module.implementation_definition_hit(
+                row.get("content", ""), case["query"]
+            )
+            row["implementation_api_entrypoint_hit"] = module.implementation_api_entrypoint_hit(
+                row.get("file_path", ""), row.get("implementation_definition_hit", 0)
+            )
+            row["implementation_usage_heavy_penalty"] = (
+                module.implementation_query_class(case["query"]) == "definition_oriented"
+                and module.is_usage_heavy_path(row.get("file_path", ""))
+            )
+            rows.append(row)
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
 
 
 if __name__ == "__main__":

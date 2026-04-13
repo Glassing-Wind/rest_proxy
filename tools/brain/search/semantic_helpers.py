@@ -150,6 +150,17 @@ def implementation_query_intent(query: str) -> bool:
     if not text:
         return False
     strong_terms = [
+        "neo4j",
+        "gds",
+        "indexing",
+        "finalization",
+        "finalize",
+        "retried",
+        "retry",
+        "resolved",
+        "resolve",
+        "import",
+        "imports",
         "service",
         "route",
         "handler",
@@ -179,8 +190,35 @@ def implementation_query_intent(query: str) -> bool:
     ]
     if any(term in text for term in strong_terms):
         return True
+    if re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
+        return True
+    if "::" in text:
+        return True
     token_hits = re.findall(r"[a-zA-Z_]{3,}", text)
     return any(tok in {"svc", "api", "db", "route", "model", "handler"} for tok in token_hits)
+
+
+def implementation_query_class(query: str) -> str:
+    text = (query or "").strip().lower()
+    if not implementation_query_intent(text):
+        return "general"
+    if "call site" in text or "where is it called" in text or "usage" in text:
+        return "usage_oriented"
+    if (
+        "where is" in text
+        or "where does" in text
+        or "defined" in text
+        or "definition" in text
+        or "entrypoint" in text
+        or "public api" in text
+        or "api entrypoint" in text
+    ):
+        return "definition_oriented"
+    if re.search(r"\bhow does\b", text) and re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
+        return "definition_oriented"
+    if re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
+        return "definition_oriented"
+    return "implementation_search"
 
 
 def is_low_signal_parser_data_path(file_path: str | None) -> bool:
@@ -195,16 +233,169 @@ def is_low_signal_parser_data_path(file_path: str | None) -> bool:
         or norm.endswith("/grammar.json")
         or "/grammars/" in norm
         or norm.startswith("grammars/")
+        or norm.endswith("/_semantic_payload.py")
+        or norm.endswith("/__init__.pyi")
+        or norm.endswith("/index.d.ts")
+        or norm.endswith("/importinfo.java")
+        or norm.endswith("/processresult.java")
+        or norm.endswith("/processconfig.php")
+        or norm.endswith("/types.go")
     )
 
 
-def implementation_rank_tuple(result: dict) -> tuple[int, int, float, float]:
+def is_low_signal_binding_surface_path(file_path: str | None) -> bool:
+    if not file_path:
+        return False
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    return (
+        basename in {"models.cs", "types.go", "processresult.java", "processconfig.php"}
+        or basename.endswith("registry.java")
+        or "/src/main/java/" in norm
+        or "/packages/csharp/" in norm
+        or "/packages/go/" in norm
+    )
+
+
+def is_usage_heavy_path(file_path: str | None) -> bool:
+    if not file_path:
+        return False
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    return (
+        basename == "main.rs"
+        or "/tests/" in norm
+        or "/test/" in norm
+        or "/e2e/" in norm
+        or "/examples/" in norm
+        or "/spec/" in norm
+        or norm.endswith("_test.go")
+        or norm.endswith("_spec.rb")
+    )
+
+
+def implementation_rank_tuple(result: dict) -> tuple[int, int, int, int, int, int, float, float]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
+    low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
     doc_like = 1 if result.get("doc_like") else 0
+    usage_heavy = 1 if result.get("implementation_usage_heavy_penalty") else 0
+    definition_hit = int(result.get("implementation_definition_hit", 0) or 0)
+    api_entrypoint_hit = int(result.get("implementation_api_entrypoint_hit", 0) or 0)
+    symbol_hit = int(result.get("implementation_symbol_hit", 0) or 0)
     rank_score = float(result.get("rank_score", result.get("rrf", 0.0)) or 0.0)
     meta_score = float(result.get("meta_score", 0.0) or 0.0)
-    return (low_signal_parser_data, doc_like, -rank_score, -meta_score)
+    return (
+        low_signal_parser_data,
+        low_signal_binding_surface,
+        doc_like,
+        usage_heavy,
+        -definition_hit,
+        -api_entrypoint_hit,
+        -symbol_hit,
+        -rank_score,
+        -meta_score,
+    )
+
+
+def implementation_query_symbols(query: str) -> set[str]:
+    text = (query or "").strip().lower()
+    if not text:
+        return set()
+    stopwords = {
+        "how",
+        "does",
+        "work",
+        "works",
+        "what",
+        "where",
+        "when",
+        "which",
+        "into",
+        "from",
+        "with",
+        "that",
+        "this",
+        "have",
+        "uses",
+        "using",
+        "used",
+        "build",
+        "builds",
+        "local",
+        "files",
+        "file",
+        "code",
+        "tree",
+        "pack",
+        "index",
+        "ts",
+    }
+    symbols = {
+        token
+        for token in re.findall(r"[a-z_][a-z0-9_]*", text)
+        if len(token) >= 3 and token not in stopwords
+    }
+    return symbols
+
+
+def implementation_symbol_hit(meta: dict, query: str) -> int:
+    if not isinstance(meta, dict):
+        return 0
+    symbols = implementation_query_symbols(query)
+    if not symbols:
+        return 0
+    file_symbols = meta.get("file_symbols")
+    if not isinstance(file_symbols, list) or not file_symbols:
+        return 0
+    lowered = {
+        str(symbol).strip().lower()
+        for symbol in file_symbols
+        if str(symbol).strip()
+    }
+    if not lowered:
+        return 0
+    return sum(1 for symbol in symbols if symbol in lowered)
+
+
+def implementation_definition_hit(content: str | None, query: str) -> int:
+    text = (content or "").strip()
+    if not text:
+        return 0
+    symbols = implementation_query_symbols(query)
+    if not symbols:
+        return 0
+    lowered = text.lower()
+    hits = 0
+    for symbol in symbols:
+        patterns = [
+            rf"\bpub\s+fn\s+{re.escape(symbol)}\s*\(",
+            rf"\bfn\s+{re.escape(symbol)}\s*\(",
+            rf"\bdef\s+{re.escape(symbol)}\s*\(",
+            rf"\basync\s+def\s+{re.escape(symbol)}\s*\(",
+            rf"\bfunction\s+{re.escape(symbol)}\s*\(",
+            rf"\bexport\s+(?:async\s+)?function\s+{re.escape(symbol)}\s*\(",
+            rf"\b{re.escape(symbol)}\s*:\s*function\b",
+        ]
+        if any(re.search(pattern, lowered) for pattern in patterns):
+            hits += 1
+    return hits
+
+
+def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int) -> int:
+    if definition_hit <= 0 or not file_path:
+        return 0
+    norm = (file_path or "").replace("\\", "/").lower()
+    api_entrypoint_suffixes = (
+        "/src/lib.rs",
+        "/src/index.ts",
+        "/src/index.tsx",
+        "/src/index.js",
+        "/src/index.jsx",
+        "/__init__.py",
+        "/lib.rs",
+    )
+    return 1 if norm.endswith(api_entrypoint_suffixes) else 0
 
 
 def _context_payload(results: list[dict]) -> str:
@@ -323,6 +514,14 @@ def collapse_near_duplicate_results(results: list[dict], *, query: str = "", mod
 
 def _coerce_result_score(result: dict) -> float:
     for key in ("rrf", "rank_score", "score", "relevance_score"):
+        value = result.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return 0.0
+
+
+def candidate_relevance_score(result: dict) -> float:
+    for key in ("rank_score", "relevance_score", "score", "rrf"):
         value = result.get(key)
         if isinstance(value, (int, float)):
             return float(value)
@@ -495,10 +694,7 @@ def trace_diverse_results(
                 result.get("content") if isinstance(result.get("content"), str) else ""
                 for result in results
             ],
-            relevance_scores=[
-                float(result.get("rrf", 0.0)) if isinstance(result.get("rrf", 0.0), (int, float)) else 0.0
-                for result in results
-            ],
+            relevance_scores=[candidate_relevance_score(result) for result in results],
             query=query,
             mode=mode,
             contexts_json=_context_payload(results),
@@ -533,10 +729,7 @@ def trace_diverse_results(
     for result in results:
         content = result.get("content")
         texts.append(content if isinstance(content, str) else "")
-        try:
-            relevance_scores.append(float(result.get("rrf", 0.0)))
-        except (TypeError, ValueError):
-            relevance_scores.append(0.0)
+        relevance_scores.append(candidate_relevance_score(result))
 
     payload = experiments if isinstance(experiments, dict) else duplicate_experiment_flags_from_env(mode)
     try:
@@ -650,10 +843,7 @@ def rerank_diverse_results(results: list[dict], *, query: str = "", mode: str = 
                 result.get("content") if isinstance(result.get("content"), str) else ""
                 for result in results
             ],
-            relevance_scores=[
-                float(result.get("rrf", 0.0)) if isinstance(result.get("rrf", 0.0), (int, float)) else 0.0
-                for result in results
-            ],
+            relevance_scores=[candidate_relevance_score(result) for result in results],
             query=query,
             mode=mode,
             contexts_json=_context_payload(results),
@@ -683,10 +873,7 @@ def rerank_diverse_results(results: list[dict], *, query: str = "", mode: str = 
     for result in results:
         content = result.get("content")
         texts.append(content if isinstance(content, str) else "")
-        try:
-            relevance_scores.append(float(result.get("rrf", 0.0)))
-        except (TypeError, ValueError):
-            relevance_scores.append(0.0)
+        relevance_scores.append(candidate_relevance_score(result))
 
     try:
         selection = rerank(texts, relevance_scores, query or None, mode, _context_payload(results))
