@@ -133,6 +133,15 @@ def _safe_read_json(path: Path) -> dict | None:
         return None
 
 
+def _metric_status(metric_name: str, delta: float) -> str:
+    if abs(delta) < 1e-9:
+        return "flat"
+    lower_is_better = metric_name in {"topk_redundancy_rate", "false_collapse_rate", "false_separation_rate"}
+    if lower_is_better:
+        return "improved" if delta < 0.0 else "regressed"
+    return "improved" if delta > 0.0 else "regressed"
+
+
 def build_trend_summary(previous_payload: dict | None, current_payload: dict) -> dict:
     previous_summary = ((previous_payload or {}).get("enterprise_summary") or {}) if isinstance(previous_payload, dict) else {}
     current_summary = current_payload.get("enterprise_summary") or {}
@@ -141,11 +150,14 @@ def build_trend_summary(previous_payload: dict | None, current_payload: dict) ->
     curr_best = (current_summary.get("best_retrieval_config") or {}).get("metrics") or {}
 
     metric_deltas: dict[str, float] = {}
+    metric_statuses: dict[str, str] = {}
     for key in ("mrr", "ndcg", "hit_at_k", "topk_redundancy_rate", "false_collapse_rate", "false_separation_rate"):
         prev_val = prev_best.get(key)
         curr_val = curr_best.get(key)
         if isinstance(prev_val, (int, float)) and isinstance(curr_val, (int, float)):
-            metric_deltas[key] = float(curr_val) - float(prev_val)
+            delta = float(curr_val) - float(prev_val)
+            metric_deltas[key] = delta
+            metric_statuses[key] = _metric_status(key, delta)
 
     previous_alerts = previous_summary.get("retrieval_alerts") or {}
     current_alerts = current_summary.get("retrieval_alerts") or {}
@@ -157,6 +169,7 @@ def build_trend_summary(previous_payload: dict | None, current_payload: dict) ->
         "previous_best_config": (previous_summary.get("best_retrieval_config") or {}).get("name"),
         "current_best_config": (current_summary.get("best_retrieval_config") or {}).get("name"),
         "metric_deltas": metric_deltas,
+        "metric_statuses": metric_statuses,
         "previous_alert_configs": sorted(previous_alerts.keys()),
         "current_alert_configs": sorted(current_alerts.keys()),
     }

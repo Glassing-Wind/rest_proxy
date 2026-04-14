@@ -100,7 +100,12 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                 "live_graph_ok": True,
                 "best_retrieval_config": {
                     "name": "query_aware",
-                    "metrics": {"mrr": 0.9, "ndcg": 0.95, "hit_at_k": 1.0},
+                    "metrics": {
+                        "mrr": 0.9,
+                        "ndcg": 0.95,
+                        "hit_at_k": 1.0,
+                        "topk_redundancy_rate": 0.3,
+                    },
                 },
                 "retrieval_alerts": {"promoted_non_exact": ["ndcg_regressed"]},
             }
@@ -110,7 +115,12 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                 "live_graph_ok": True,
                 "best_retrieval_config": {
                     "name": "group_representatives",
-                    "metrics": {"mrr": 0.95, "ndcg": 0.97, "hit_at_k": 1.0},
+                    "metrics": {
+                        "mrr": 0.95,
+                        "ndcg": 0.97,
+                        "hit_at_k": 1.0,
+                        "topk_redundancy_rate": 0.25,
+                    },
                 },
                 "retrieval_alerts": {},
             }
@@ -120,6 +130,9 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         self.assertEqual(trend["previous_best_config"], "query_aware")
         self.assertEqual(trend["current_best_config"], "group_representatives")
         self.assertAlmostEqual(trend["metric_deltas"]["mrr"], 0.05)
+        self.assertEqual(trend["metric_statuses"]["mrr"], "improved")
+        self.assertEqual(trend["metric_statuses"]["hit_at_k"], "flat")
+        self.assertEqual(trend["metric_statuses"]["topk_redundancy_rate"], "improved")
         self.assertEqual(trend["previous_alert_configs"], ["promoted_non_exact"])
         self.assertEqual(trend["current_alert_configs"], [])
 
