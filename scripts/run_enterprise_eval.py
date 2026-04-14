@@ -142,6 +142,65 @@ def _metric_status(metric_name: str, delta: float) -> str:
     return "improved" if delta > 0.0 else "regressed"
 
 
+def _metric_regression_threshold(metric_name: str) -> float:
+    thresholds = {
+        "mrr": 0.01,
+        "ndcg": 0.01,
+        "hit_at_k": 0.001,
+        "topk_redundancy_rate": 0.02,
+        "false_collapse_rate": 0.01,
+        "false_separation_rate": 0.01,
+    }
+    return thresholds.get(metric_name, 0.01)
+
+
+def _classify_enterprise_trend(previous_summary: dict, current_summary: dict, metric_deltas: dict, metric_statuses: dict) -> dict:
+    attention_needed: list[str] = []
+    hard_failures: list[str] = []
+    warnings: list[str] = []
+
+    if current_summary and not current_summary.get("live_graph_ok", True):
+        hard_failures.append("live_graph_failed")
+
+    if current_summary.get("retrieval_alerts"):
+        hard_failures.append("retrieval_alerts_present")
+
+    if current_summary.get("retrieval_regressions"):
+        hard_failures.append("retrieval_regressions_present")
+
+    previous_best = (previous_summary.get("best_retrieval_config") or {}).get("name")
+    current_best = (current_summary.get("best_retrieval_config") or {}).get("name")
+    if previous_best and current_best and previous_best != current_best:
+        warnings.append("best_config_changed")
+
+    for metric_name, status in metric_statuses.items():
+        if status != "regressed":
+            continue
+        delta = abs(float(metric_deltas.get(metric_name, 0.0)))
+        if delta < _metric_regression_threshold(metric_name):
+            continue
+        if metric_name in {"mrr", "ndcg", "hit_at_k"}:
+            hard_failures.append(f"{metric_name}_regressed")
+        else:
+            warnings.append(f"{metric_name}_regressed")
+
+    for item in hard_failures + warnings:
+        if item not in attention_needed:
+            attention_needed.append(item)
+
+    if hard_failures:
+        overall_status = "regressed"
+    elif warnings:
+        overall_status = "warning"
+    else:
+        overall_status = "healthy"
+
+    return {
+        "overall_status": overall_status,
+        "attention_needed": attention_needed,
+    }
+
+
 def build_trend_summary(previous_payload: dict | None, current_payload: dict) -> dict:
     previous_summary = ((previous_payload or {}).get("enterprise_summary") or {}) if isinstance(previous_payload, dict) else {}
     current_summary = current_payload.get("enterprise_summary") or {}
@@ -162,6 +221,8 @@ def build_trend_summary(previous_payload: dict | None, current_payload: dict) ->
     previous_alerts = previous_summary.get("retrieval_alerts") or {}
     current_alerts = current_summary.get("retrieval_alerts") or {}
 
+    status = _classify_enterprise_trend(previous_summary, current_summary, metric_deltas, metric_statuses)
+
     return {
         "has_previous": bool(previous_summary),
         "previous_live_graph_ok": previous_summary.get("live_graph_ok"),
@@ -172,6 +233,8 @@ def build_trend_summary(previous_payload: dict | None, current_payload: dict) ->
         "metric_statuses": metric_statuses,
         "previous_alert_configs": sorted(previous_alerts.keys()),
         "current_alert_configs": sorted(current_alerts.keys()),
+        "overall_status": status["overall_status"],
+        "attention_needed": status["attention_needed"],
     }
 
 

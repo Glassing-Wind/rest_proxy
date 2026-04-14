@@ -135,6 +135,87 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         self.assertEqual(trend["metric_statuses"]["topk_redundancy_rate"], "improved")
         self.assertEqual(trend["previous_alert_configs"], ["promoted_non_exact"])
         self.assertEqual(trend["current_alert_configs"], [])
+        self.assertEqual(trend["overall_status"], "warning")
+        self.assertEqual(trend["attention_needed"], ["best_config_changed"])
+
+    def test_build_trend_summary_marks_healthy_when_no_attention_needed(self):
+        mod = _load_module()
+        previous_payload = {
+            "enterprise_summary": {
+                "live_graph_ok": True,
+                "best_retrieval_config": {
+                    "name": "group_representatives",
+                    "metrics": {
+                        "mrr": 0.95,
+                        "ndcg": 0.97,
+                        "hit_at_k": 1.0,
+                        "topk_redundancy_rate": 0.25,
+                    },
+                },
+                "retrieval_alerts": {},
+                "retrieval_regressions": [],
+            }
+        }
+        current_payload = {
+            "enterprise_summary": {
+                "live_graph_ok": True,
+                "best_retrieval_config": {
+                    "name": "group_representatives",
+                    "metrics": {
+                        "mrr": 0.951,
+                        "ndcg": 0.971,
+                        "hit_at_k": 1.0,
+                        "topk_redundancy_rate": 0.249,
+                    },
+                },
+                "retrieval_alerts": {},
+                "retrieval_regressions": [],
+            }
+        }
+        trend = mod.build_trend_summary(previous_payload, current_payload)
+        self.assertEqual(trend["overall_status"], "healthy")
+        self.assertEqual(trend["attention_needed"], [])
+
+    def test_build_trend_summary_marks_regressed_for_hard_failures(self):
+        mod = _load_module()
+        previous_payload = {
+            "enterprise_summary": {
+                "live_graph_ok": True,
+                "best_retrieval_config": {
+                    "name": "group_representatives",
+                    "metrics": {
+                        "mrr": 0.95,
+                        "ndcg": 0.97,
+                        "hit_at_k": 1.0,
+                    },
+                },
+                "retrieval_alerts": {},
+                "retrieval_regressions": [],
+            }
+        }
+        current_payload = {
+            "enterprise_summary": {
+                "live_graph_ok": False,
+                "best_retrieval_config": {
+                    "name": "group_representatives",
+                    "metrics": {
+                        "mrr": 0.92,
+                        "ndcg": 0.96,
+                        "hit_at_k": 0.95,
+                    },
+                },
+                "retrieval_alerts": {"baseline": ["ndcg_regressed"]},
+                "retrieval_regressions": [{"case_id": "x", "config": "baseline", "alerts": ["ndcg_regressed"]}],
+            }
+        }
+        trend = mod.build_trend_summary(previous_payload, current_payload)
+        self.assertEqual(trend["overall_status"], "regressed")
+        self.assertIn("live_graph_failed", trend["attention_needed"])
+        self.assertIn("retrieval_alerts_present", trend["attention_needed"])
+        self.assertIn("retrieval_regressions_present", trend["attention_needed"])
+        self.assertIn("mrr_regressed", trend["attention_needed"])
+        self.assertIn("ndcg_regressed", trend["attention_needed"])
+        self.assertIn("hit_at_k_regressed", trend["attention_needed"])
 
     def test_run_live_graph_goldens_retries_once_on_failure(self):
         mod = _load_module()
