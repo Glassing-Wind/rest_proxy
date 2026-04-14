@@ -6,12 +6,14 @@ import sys
 import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-SEARCH_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/docs/search.py"
-POLICY_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/docs/policy.py"
-CONFIG_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/docs/config.py"
+REPO_ROOT = Path(__file__).resolve().parent
+SEARCH_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "search.py"
+POLICY_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "policy.py"
+CONFIG_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "config.py"
 
 
 def load_config_module():

@@ -8,9 +8,10 @@ from pathlib import Path
 from unittest import mock
 
 
-FILE_DESCRIBE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/file_describe.py"
-REFERENCES_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/references.py"
-SYMBOL_GRAPH_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/symbol_graph.py"
+REPO_ROOT = Path(__file__).resolve().parent
+FILE_DESCRIBE_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "file_describe.py"
+REFERENCES_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "references.py"
+SYMBOL_GRAPH_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "symbol_graph.py"
 
 
 def load_file_describe_module():

@@ -5,10 +5,12 @@ import sys
 import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/_jobs.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "_jobs.py"
 
 
 class FakeConsumeResult:

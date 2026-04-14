@@ -1,9 +1,11 @@
 import json
 import subprocess
 import unittest
+from pathlib import Path
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/duplicate_eval.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "duplicate_eval.py"
 
 
 def _run_eval_in_lmproxy() -> dict:

@@ -2,11 +2,13 @@ import importlib.util
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-HELPERS_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/duplication_helpers.py"
-REPORT_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/duplication_report.py"
+REPO_ROOT = Path(__file__).resolve().parent
+HELPERS_PATH = REPO_ROOT / "tools" / "brain" / "search" / "duplication_helpers.py"
+REPORT_PATH = REPO_ROOT / "tools" / "brain" / "search" / "duplication_report.py"
 
 
 def load_report_module():

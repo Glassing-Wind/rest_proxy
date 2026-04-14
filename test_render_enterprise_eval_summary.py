@@ -1,8 +1,10 @@
 import importlib.util
 import unittest
+from pathlib import Path
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/scripts/render_enterprise_eval_summary.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "scripts" / "render_enterprise_eval_summary.py"
 
 
 def _load_module():

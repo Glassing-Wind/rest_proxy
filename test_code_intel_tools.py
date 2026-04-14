@@ -3,13 +3,15 @@ import importlib.util
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/core.py"
-HELPER_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/symbol_graph.py"
-FILE_DESCRIBE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/file_describe.py"
-REFERENCES_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/references.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "core.py"
+HELPER_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "symbol_graph.py"
+FILE_DESCRIBE_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "file_describe.py"
+REFERENCES_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "references.py"
 
 
 class FakeMCP:

@@ -3,11 +3,13 @@ import inspect
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-CHUNKING_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/docs/chunking.py"
-CONFIG_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/docs/config.py"
+REPO_ROOT = Path(__file__).resolve().parent
+CHUNKING_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "chunking.py"
+CONFIG_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "config.py"
 
 
 def load_config_module():

@@ -1,8 +1,10 @@
 import importlib.util
 import unittest
+from pathlib import Path
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/duplication_helpers.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "duplication_helpers.py"
 
 
 spec = importlib.util.spec_from_file_location("duplication_helpers_under_test", MODULE_PATH)

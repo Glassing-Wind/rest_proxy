@@ -1,10 +1,12 @@
 import importlib.util
 import os
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/embedding_service.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "embedding_service.py"
 
 
 def _load_module():

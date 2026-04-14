@@ -4,11 +4,13 @@ import json
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic.py"
-GOLDENS_PATH = "/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "semantic.py"
+GOLDENS_PATH = REPO_ROOT / "benchmarks" / "retrieval_duplicate_goldens.json"
 
 
 class FakeMCP:

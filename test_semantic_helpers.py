@@ -4,12 +4,14 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic_helpers.py"
-FALLBACKS_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/fallbacks.py"
-GOLDENS_PATH = "/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "semantic_helpers.py"
+FALLBACKS_PATH = REPO_ROOT / "tools" / "brain" / "search" / "fallbacks.py"
+GOLDENS_PATH = REPO_ROOT / "benchmarks" / "retrieval_duplicate_goldens.json"
 
 
 spec = importlib.util.spec_from_file_location("semantic_helpers_under_test", MODULE_PATH)

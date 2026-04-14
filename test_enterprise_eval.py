@@ -6,7 +6,8 @@ from unittest import mock
 from pathlib import Path
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/scripts/run_enterprise_eval.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "scripts" / "run_enterprise_eval.py"
 
 
 def _load_module():

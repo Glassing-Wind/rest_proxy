@@ -2,10 +2,12 @@ import importlib.util
 import os
 import sys
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-CONFIG_PATH = "/Users/michaelmarler/Projects/rest_proxy/proxy/config.py"
+REPO_ROOT = Path(__file__).resolve().parent
+CONFIG_PATH = REPO_ROOT / "proxy" / "config.py"
 
 
 def _load_config(env_updates: dict[str, str]):
