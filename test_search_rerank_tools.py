@@ -127,6 +127,35 @@ class SearchRerankToolTests(unittest.TestCase):
         self.assertEqual(payload["groups"][0]["members"], [0, 1])
         self.assertEqual(payload["pairs"][0]["right"], 1)
 
+    def test_trace_code_ranking_tool_returns_structural_trace(self):
+        module, sem_helpers_mod = load_semantic_module()
+        sem_helpers_mod.build_implementation_ranking_trace = mock.Mock(
+            return_value={
+                "query_class": "usage_lookup",
+                "rows": [
+                    {
+                        "file_path": "examples/python_smoke/main.py",
+                        "rank_score": 0.91,
+                        "role": "usage_callsite",
+                        "node_types": ["call_expression"],
+                        "components": {"member_usage_bonus": 0.06},
+                    }
+                ],
+            }
+        )
+        mcp = FakeMCP()
+        module.register(mcp)
+        output = asyncio.run(
+            mcp.tools["trace_code_ranking"](
+                "where is parser.parse used in tree-sitter-language-pack",
+                [{"file_path": "examples/python_smoke/main.py", "content": "tree = parser.parse(b'x')"}],
+            )
+        )
+        payload = json.loads(output)
+        self.assertEqual(payload["query_class"], "usage_lookup")
+        self.assertEqual(payload["rows"][0]["file_path"], "examples/python_smoke/main.py")
+        self.assertEqual(payload["rows"][0]["role"], "usage_callsite")
+
 
 if __name__ == "__main__":
     unittest.main()

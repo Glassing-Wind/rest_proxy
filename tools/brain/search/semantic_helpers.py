@@ -202,7 +202,20 @@ def implementation_query_class(query: str) -> str:
     text = (query or "").strip().lower()
     if not implementation_query_intent(text):
         return "general"
-    if "call site" in text or "where is it called" in text or "usage" in text:
+    if re.search(r"\b(?:where|how)\s+is\s+[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+\s+used\b", text):
+        return "usage_lookup"
+    if re.search(r"\bexamples?\s+of\s+[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+\b", text):
+        return "usage_lookup"
+    if (
+        "call site" in text
+        or "where is it called" in text
+        or re.search(r"\bwhere\s+is\s+[a-z_][a-z0-9_]*\s+called\b", text)
+        or "who calls" in text
+        or "callers of" in text
+        or "usage of" in text
+        or "usage" in text
+        or re.search(r"\b(?:where|how)\s+is\b.*\bused\b", text)
+    ):
         return "usage_lookup"
     if (
         "where is" in text
@@ -282,13 +295,39 @@ def is_usage_heavy_path(file_path: str | None) -> bool:
     )
 
 
-def implementation_rank_tuple(result: dict) -> tuple[int, int, int, int, int, int, float, float]:
+def is_low_signal_support_path(file_path: str | None) -> bool:
+    if not file_path:
+        return False
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    return (
+        norm.startswith("scripts/")
+        or "/scripts/" in norm
+        or norm.startswith("tools/")
+        or "/tools/" in norm
+        or norm.startswith(".github/")
+        or "/.github/" in norm
+        or norm.startswith("nix/")
+        or "/nix/" in norm
+        or "/vendor" in norm
+        or basename in {"justfile", "makefile"}
+    )
+
+
+def implementation_rank_tuple(
+    result: dict,
+) -> tuple[int, int, int, int, int, int, int, int, int, int, float, float]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
     low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
+    low_signal_support = 1 if result.get("low_signal_support_path") else 0
     doc_like = 1 if result.get("doc_like") else 0
     usage_heavy = 1 if result.get("implementation_usage_heavy_penalty") else 0
+    role_priority = int(result.get("implementation_role_priority", 0) or 0)
+    node_type_priority = int(result.get("implementation_node_type_priority", 0) or 0)
     definition_hit = int(result.get("implementation_definition_hit", 0) or 0)
+    signature_hit = int(result.get("implementation_exact_signature_symbol_hit", 0) or 0)
+    export_hit = int(result.get("implementation_export_hit", 0) or 0)
     api_entrypoint_hit = int(result.get("implementation_api_entrypoint_hit", 0) or 0)
     symbol_hit = int(result.get("implementation_symbol_hit", 0) or 0)
     rank_score = float(result.get("rank_score", result.get("rrf", 0.0)) or 0.0)
@@ -296,9 +335,14 @@ def implementation_rank_tuple(result: dict) -> tuple[int, int, int, int, int, in
     return (
         low_signal_parser_data,
         low_signal_binding_surface,
+        low_signal_support,
         doc_like,
         usage_heavy,
+        -role_priority,
+        -node_type_priority,
+        -signature_hit,
         -definition_hit,
+        -export_hit,
         -api_entrypoint_hit,
         -symbol_hit,
         -rank_score,
@@ -347,6 +391,17 @@ def implementation_query_symbols(query: str) -> set[str]:
     return symbols
 
 
+def implementation_query_member_exprs(query: str) -> set[str]:
+    text = (query or "").strip().lower()
+    if not text:
+        return set()
+    return {
+        expr
+        for expr in re.findall(r"\b[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+\b", text)
+        if len(expr.split(".")) >= 2
+    }
+
+
 def implementation_symbol_hit(meta: dict, query: str) -> int:
     if not isinstance(meta, dict):
         return 0
@@ -364,6 +419,16 @@ def implementation_symbol_hit(meta: dict, query: str) -> int:
     if not lowered:
         return 0
     return sum(1 for symbol in symbols if symbol in lowered)
+
+
+def implementation_exact_member_usage_hit(content: str | None, query: str) -> int:
+    text = (content or "").lower()
+    if not text:
+        return 0
+    exprs = implementation_query_member_exprs(query)
+    if not exprs:
+        return 0
+    return sum(1 for expr in exprs if expr in text)
 
 
 def implementation_definition_hit(content: str | None, query: str) -> int:
@@ -404,6 +469,453 @@ def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int
         "/lib.rs",
     )
     return 1 if norm.endswith(api_entrypoint_suffixes) else 0
+
+
+DECLARATION_NODE_TYPES = {
+    "function_definition",
+    "function_declaration",
+    "function_item",
+    "method_definition",
+    "method_declaration",
+    "method_item",
+    "impl_item",
+    "impl_block",
+    "class_definition",
+    "class_declaration",
+    "class_specifier",
+    "struct_item",
+    "struct_specifier",
+    "enum_item",
+    "enum_specifier",
+    "type_alias_declaration",
+    "module",
+    "mod_item",
+    "source_file",
+}
+
+EXPORT_NODE_TYPES = {
+    "export_statement",
+    "export_clause",
+    "export_specifier",
+    "public_item",
+}
+
+CALLSITE_NODE_TYPES = {
+    "call_expression",
+    "call",
+    "expression_statement",
+    "match_expression",
+    "await_expression",
+    "argument_list",
+}
+
+TYPE_DEFINITION_NODE_TYPES = {
+    "class_definition",
+    "class_declaration",
+    "class_specifier",
+    "struct_item",
+    "struct_specifier",
+    "enum_item",
+    "enum_specifier",
+    "type_alias_declaration",
+}
+
+MODULE_NODE_TYPES = {"module", "mod_item", "source_file"}
+
+
+def implementation_node_types(meta: dict) -> set[str]:
+    if not isinstance(meta, dict):
+        return set()
+    node_types = meta.get("node_types")
+    if not isinstance(node_types, list):
+        return set()
+    return {
+        str(node_type).strip().lower()
+        for node_type in node_types
+        if str(node_type).strip()
+    }
+
+
+def implementation_exact_signature_symbol_hit(content: str | None, query: str) -> int:
+    text = (content or "").strip()
+    if not text:
+        return 0
+    header = "\n".join(text.splitlines()[:3]).lower()
+    symbols = implementation_query_symbols(query)
+    if not symbols:
+        return 0
+    hits = 0
+    for symbol in symbols:
+        patterns = [
+            rf"\bpub\s+fn\s+{re.escape(symbol)}\s*\(",
+            rf"\bfn\s+{re.escape(symbol)}\s*\(",
+            rf"\bdef\s+{re.escape(symbol)}\s*\(",
+            rf"\basync\s+def\s+{re.escape(symbol)}\s*\(",
+            rf"\bfunction\s+{re.escape(symbol)}\s*\(",
+            rf"\bexport\s+(?:async\s+)?function\s+{re.escape(symbol)}\s*\(",
+            rf"\b{re.escape(symbol)}\s*:\s*function\b",
+        ]
+        if any(re.search(pattern, header) for pattern in patterns):
+            hits += 1
+    return hits
+
+
+def implementation_export_hit(content: str | None, file_path: str | None, meta: dict) -> int:
+    node_types = implementation_node_types(meta)
+    path = (file_path or "").replace("\\", "/").lower()
+    text = (content or "").lower()
+    score = 0
+    if node_types & EXPORT_NODE_TYPES:
+        score += 1
+    if "/src/lib.rs" in path or path.endswith("/lib.rs") or path.endswith("/__init__.py"):
+        if "pub fn " in text or "pub use " in text or "__all__" in text or "export " in text:
+            score += 1
+    if re.search(r"\bpub\s+use\b", text) or re.search(r"\bexport\s+(?:\{|\*)", text):
+        score += 1
+    return score
+
+
+def implementation_api_context_hit(meta: dict) -> int:
+    if not isinstance(meta, dict):
+        return 0
+    context_path = meta.get("context_path")
+    if not isinstance(context_path, list):
+        return 0
+    lowered = {str(part).strip().lower() for part in context_path if str(part).strip()}
+    return 1 if {"api", "public", "exports"} & lowered else 0
+
+
+def implementation_node_type_priority(meta: dict, query_class: str) -> int:
+    node_types = implementation_node_types(meta)
+    declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
+    callsite_like = bool(node_types & CALLSITE_NODE_TYPES)
+    export_like = bool(node_types & EXPORT_NODE_TYPES)
+    type_like = bool(node_types & TYPE_DEFINITION_NODE_TYPES)
+    module_like = bool(node_types & MODULE_NODE_TYPES)
+    if query_class_prefers_usage(query_class):
+        if callsite_like:
+            return 4
+        if declaration_like:
+            return 2
+        return 0
+    if query_class_prefers_definitions(query_class):
+        score = 0
+        if declaration_like:
+            score += 4
+        if export_like:
+            score += 2
+        if type_like or module_like:
+            score += 1
+        if callsite_like and not declaration_like:
+            score -= 4
+        return score
+    score = 0
+    if declaration_like:
+        score += 2
+    if callsite_like:
+        score += 1
+    return score
+
+
+def implementation_result_role(
+    file_path: str | None,
+    meta: dict,
+    *,
+    definition_hit: int,
+    export_hit: int,
+    api_entrypoint_hit: int,
+) -> str:
+    path = (file_path or "").replace("\\", "/").lower()
+    node_types = implementation_node_types(meta)
+    declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
+    callsite_like = bool(node_types & CALLSITE_NODE_TYPES)
+    api_context_hit = implementation_api_context_hit(meta)
+    if is_low_signal_binding_surface_path(file_path):
+        return "generated_surface"
+    if is_doc_like_path(file_path):
+        return "docs"
+    if is_usage_heavy_path(file_path):
+        if callsite_like and definition_hit <= 0 and export_hit <= 0:
+            if any(segment in path for segment in ("/tests/", "/test/", "/e2e/", "/examples/", "/spec/")):
+                return "test_example"
+            return "usage_callsite"
+    if declaration_like and (api_entrypoint_hit > 0 or api_context_hit > 0):
+        return "public_api_definition"
+    if declaration_like and export_hit > 0:
+        return "canonical_definition"
+    if declaration_like and definition_hit > 0:
+        return "internal_implementation"
+    if callsite_like:
+        return "usage_callsite"
+    if is_usage_heavy_path(file_path):
+        return "test_example"
+    return "internal_implementation" if declaration_like else "supporting_context"
+
+
+def implementation_role_priority(role: str, query_class: str) -> int:
+    if query_class_prefers_usage(query_class):
+        order = {
+            "usage_callsite": 6,
+            "test_example": 5,
+            "internal_implementation": 4,
+            "canonical_definition": 3,
+            "public_api_definition": 2,
+            "supporting_context": 1,
+            "generated_surface": 0,
+            "docs": 0,
+        }
+        return order.get(role, 0)
+    if query_class_prefers_definitions(query_class):
+        order = {
+            "public_api_definition": 7,
+            "canonical_definition": 6,
+            "internal_implementation": 5,
+            "supporting_context": 3,
+            "usage_callsite": 1,
+            "test_example": 0,
+            "generated_surface": 0,
+            "docs": 0,
+        }
+        return order.get(role, 0)
+    order = {
+        "internal_implementation": 5,
+        "canonical_definition": 4,
+        "public_api_definition": 4,
+        "supporting_context": 3,
+        "usage_callsite": 2,
+        "test_example": 1,
+        "generated_surface": 0,
+        "docs": 0,
+    }
+    return order.get(role, 0)
+
+
+def implementation_role_score(role: str, query_class: str) -> float:
+    if query_class_prefers_usage(query_class):
+        weights = {
+            "usage_callsite": 0.07,
+            "test_example": 0.05,
+            "internal_implementation": 0.02,
+            "canonical_definition": 0.0,
+            "public_api_definition": -0.01,
+        }
+        return weights.get(role, 0.0)
+    if query_class == "implementation_explanation":
+        weights = {
+            "public_api_definition": 0.09,
+            "canonical_definition": 0.06,
+            "internal_implementation": 0.04,
+            "supporting_context": 0.01,
+            "usage_callsite": -0.06,
+            "test_example": -0.05,
+        }
+        return weights.get(role, 0.0)
+    if query_class_prefers_definitions(query_class):
+        weights = {
+            "public_api_definition": 0.1,
+            "canonical_definition": 0.07,
+            "internal_implementation": 0.03,
+            "supporting_context": 0.0,
+            "usage_callsite": -0.07,
+            "test_example": -0.06,
+        }
+        return weights.get(role, 0.0)
+    weights = {
+        "internal_implementation": 0.04,
+        "canonical_definition": 0.03,
+        "public_api_definition": 0.02,
+        "usage_callsite": 0.0,
+        "test_example": -0.01,
+    }
+    return weights.get(role, 0.0)
+
+
+def implementation_node_type_score(meta: dict, query_class: str) -> float:
+    node_types = implementation_node_types(meta)
+    declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
+    callsite_like = bool(node_types & CALLSITE_NODE_TYPES)
+    export_like = bool(node_types & EXPORT_NODE_TYPES)
+    type_like = bool(node_types & TYPE_DEFINITION_NODE_TYPES)
+    module_like = bool(node_types & MODULE_NODE_TYPES)
+    score = 0.0
+    if query_class_prefers_usage(query_class):
+        if callsite_like:
+            score += 0.05
+        if declaration_like:
+            score -= 0.01
+        return score
+    if declaration_like:
+        score += 0.05 if query_class_prefers_definitions(query_class) else 0.03
+    if export_like:
+        score += 0.03
+    if type_like or module_like:
+        score += 0.01
+    if callsite_like and not declaration_like:
+        score -= 0.06 if query_class_prefers_definitions(query_class) else 0.01
+    return score
+
+
+def enrich_implementation_result(
+    result: dict,
+    *,
+    query: str,
+    query_class: str,
+    base_score: float,
+    meta_boost: float = 0.0,
+    base_bonus: float = 0.0,
+) -> dict:
+    meta = coerce_meta(result)
+    result["_meta"] = meta
+    result["doc_like"] = is_doc_like_path(result.get("file_path"))
+    result["low_signal_parser_data"] = is_low_signal_parser_data_path(result.get("file_path"))
+    result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(result.get("file_path"))
+    result["low_signal_support_path"] = is_low_signal_support_path(result.get("file_path"))
+    result["implementation_symbol_hit"] = implementation_symbol_hit(meta, query)
+    result["implementation_exact_member_usage_hit"] = implementation_exact_member_usage_hit(
+        result.get("content", ""),
+        query,
+    )
+    result["implementation_definition_hit"] = implementation_definition_hit(result.get("content", ""), query)
+    result["implementation_exact_signature_symbol_hit"] = implementation_exact_signature_symbol_hit(
+        result.get("content", ""),
+        query,
+    )
+    result["implementation_export_hit"] = implementation_export_hit(
+        result.get("content", ""),
+        result.get("file_path"),
+        meta,
+    )
+    result["implementation_api_context_hit"] = implementation_api_context_hit(meta)
+    result["implementation_api_entrypoint_hit"] = implementation_api_entrypoint_hit(
+        result.get("file_path", ""),
+        result.get("implementation_definition_hit", 0),
+    )
+    result["implementation_usage_heavy_penalty"] = (
+        query_class_prefers_definitions(query_class) and is_usage_heavy_path(result.get("file_path", ""))
+    )
+    result["implementation_node_type_priority"] = implementation_node_type_priority(meta, query_class)
+    result["implementation_node_type_score"] = implementation_node_type_score(meta, query_class)
+    role = implementation_result_role(
+        result.get("file_path"),
+        meta,
+        definition_hit=int(result.get("implementation_definition_hit", 0) or 0),
+        export_hit=int(result.get("implementation_export_hit", 0) or 0),
+        api_entrypoint_hit=int(result.get("implementation_api_entrypoint_hit", 0) or 0),
+    )
+    result["implementation_role"] = role
+    result["implementation_role_priority"] = implementation_role_priority(role, query_class)
+    result["implementation_role_score"] = implementation_role_score(role, query_class)
+
+    doc_penalty = 0.05 if result["doc_like"] else 0.0
+    parser_data_penalty = 0.08 if result["low_signal_parser_data"] else 0.0
+    binding_surface_penalty = 0.06 if result["low_signal_binding_surface"] else 0.0
+    if result["low_signal_support_path"]:
+        support_path_penalty = 0.05 if query_class_prefers_definitions(query_class) else 0.03
+    else:
+        support_path_penalty = 0.0
+    usage_penalty = 0.04 if result["implementation_usage_heavy_penalty"] else 0.0
+    symbol_bonus = 0.015 * min(int(result.get("implementation_symbol_hit", 0) or 0), 2)
+    member_usage_bonus = 0.0
+    if query_class_prefers_usage(query_class):
+        member_usage_bonus = 0.06 * min(int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2)
+    elif query_class == "implementation_search":
+        member_usage_bonus = 0.015 * min(int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2)
+    definition_bonus = 0.025 * min(int(result.get("implementation_definition_hit", 0) or 0), 2)
+    signature_bonus = 0.04 * min(int(result.get("implementation_exact_signature_symbol_hit", 0) or 0), 2)
+    if query_class_prefers_definitions(query_class):
+        export_bonus = 0.03 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
+        api_entrypoint_bonus = 0.03 * min(int(result.get("implementation_api_entrypoint_hit", 0) or 0), 1)
+        api_context_bonus = 0.02 * min(int(result.get("implementation_api_context_hit", 0) or 0), 1)
+    elif query_class == "implementation_search":
+        export_bonus = 0.01 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
+        api_entrypoint_bonus = 0.0
+        api_context_bonus = 0.0
+    else:
+        export_bonus = 0.0
+        api_entrypoint_bonus = 0.0
+        api_context_bonus = 0.0
+    meta_component = (float(result.get("meta_score", 0.0) or 0.0) * meta_boost) if meta_boost > 0 else 0.0
+
+    result["rank_score"] = (
+        float(base_score)
+        + float(base_bonus)
+        + meta_component
+        + float(result.get("implementation_node_type_score", 0.0) or 0.0)
+        + float(result.get("implementation_role_score", 0.0) or 0.0)
+        + symbol_bonus
+        + member_usage_bonus
+        + definition_bonus
+        + signature_bonus
+        + export_bonus
+        + api_entrypoint_bonus
+        + api_context_bonus
+        - doc_penalty
+        - parser_data_penalty
+        - binding_surface_penalty
+        - support_path_penalty
+        - usage_penalty
+    )
+    result["implementation_rank_components"] = {
+        "base_relevance": float(base_score),
+        "base_bonus": float(base_bonus),
+        "meta_component": meta_component,
+        "node_type_score": float(result.get("implementation_node_type_score", 0.0) or 0.0),
+        "role_score": float(result.get("implementation_role_score", 0.0) or 0.0),
+        "symbol_bonus": symbol_bonus,
+        "member_usage_bonus": member_usage_bonus,
+        "definition_bonus": definition_bonus,
+        "signature_bonus": signature_bonus,
+        "export_bonus": export_bonus,
+        "api_entrypoint_bonus": api_entrypoint_bonus,
+        "api_context_bonus": api_context_bonus,
+        "doc_penalty": doc_penalty,
+        "parser_data_penalty": parser_data_penalty,
+        "binding_surface_penalty": binding_surface_penalty,
+        "support_path_penalty": support_path_penalty,
+        "usage_penalty": usage_penalty,
+        "role": role,
+        "node_types": sorted(implementation_node_types(meta)),
+    }
+    return result
+
+
+def build_implementation_ranking_trace(results: list[dict], query: str) -> dict:
+    query_class = implementation_query_class(query)
+    enriched: list[dict] = []
+    for result in results:
+        row = dict(result)
+        meta = coerce_meta(row)
+        row["_meta"] = meta
+        row["meta_score"] = meta_score(meta)
+        try:
+            base_score = float(row.get("rrf", row.get("rank_score", 0.0)) or 0.0)
+        except (TypeError, ValueError):
+            base_score = 0.0
+        enrich_implementation_result(
+            row,
+            query=query,
+            query_class=query_class,
+            base_score=base_score,
+            meta_boost=0.0,
+        )
+        enriched.append(row)
+    enriched.sort(key=implementation_rank_tuple)
+    return {
+        "query_class": query_class,
+        "rows": [
+            {
+                "file_path": row.get("file_path"),
+                "base_relevance": row.get("implementation_rank_components", {}).get("base_relevance", 0.0),
+                "rank_score": row.get("rank_score", 0.0),
+                "role": row.get("implementation_role"),
+                "role_priority": row.get("implementation_role_priority"),
+                "node_types": row.get("implementation_rank_components", {}).get("node_types", []),
+                "node_type_priority": row.get("implementation_node_type_priority"),
+                "components": row.get("implementation_rank_components", {}),
+            }
+            for row in enriched
+        ],
+    }
 
 
 def _context_payload(results: list[dict]) -> str:
@@ -555,6 +1067,37 @@ def _normalize_result_items(results: list[dict]) -> list[dict]:
     return [_normalize_result_item(result, idx) for idx, result in enumerate(results)]
 
 
+def _prepare_results_for_duplicate_rerank(
+    results: list[dict],
+    *,
+    query: str = "",
+    mode: str = "code",
+) -> list[dict]:
+    prepared = _normalize_result_items(results)
+    if (mode or "code").strip().lower() != "code" or not implementation_query_intent(query):
+        return prepared
+    query_class = implementation_query_class(query)
+    for row in prepared:
+        if row.get("_implementation_rank_enriched"):
+            continue
+        meta = coerce_meta(row)
+        row["_meta"] = meta
+        row["meta_score"] = meta_score(meta)
+        try:
+            base_score = float(row.get("rank_score", row.get("rrf", 0.0)) or 0.0)
+        except (TypeError, ValueError):
+            base_score = 0.0
+        enrich_implementation_result(
+            row,
+            query=query,
+            query_class=query_class,
+            base_score=base_score,
+            meta_boost=0.0,
+        )
+        row["_implementation_rank_enriched"] = True
+    return prepared
+
+
 def _dedupe_int_list(values, *, limit: int) -> list[int]:
     output: list[int] = []
     seen: set[int] = set()
@@ -658,6 +1201,7 @@ def trace_diverse_results(
     mode: str = "code",
     experiments: dict | None = None,
 ) -> dict:
+    results = _prepare_results_for_duplicate_rerank(results, query=query, mode=mode)
     if len(results) < 2:
         keep = list(range(len(results)))
         mode_name = "docs_retrieval" if mode == "docs" else "code_retrieval"
@@ -777,6 +1321,7 @@ def trace_diverse_results(
 
 
 def analyze_near_duplicate_results(results: list[dict], *, query: str = "", mode: str = "code") -> dict:
+    results = _prepare_results_for_duplicate_rerank(results, query=query, mode=mode)
     if len(results) < 2:
         return {
             "mode": "code_retrieval",
@@ -834,6 +1379,7 @@ def analyze_near_duplicate_results(results: list[dict], *, query: str = "", mode
 
 
 def rerank_diverse_results(results: list[dict], *, query: str = "", mode: str = "code") -> dict:
+    results = _prepare_results_for_duplicate_rerank(results, query=query, mode=mode)
     if len(results) < 2:
         return {
             "mode": "code_retrieval",
@@ -912,7 +1458,7 @@ def analyze_duplicate_results_contract(
     query: str = "",
     mode: str = "code",
 ) -> dict:
-    prepared = _normalize_result_items(results)
+    prepared = _prepare_results_for_duplicate_rerank(results, query=query, mode=mode)
     analysis = analyze_near_duplicate_results(prepared, query=query, mode=mode)
     keep_indices = _dedupe_int_list(
         analysis.get("keep_indices") or list(range(len(prepared))),
@@ -939,7 +1485,7 @@ def rerank_retrieval_results_contract(
     experiments: dict | None = None,
     include_debug: bool = False,
 ) -> dict:
-    prepared = _normalize_result_items(results)
+    prepared = _prepare_results_for_duplicate_rerank(results, query=query, mode=mode)
     payload = merge_duplicate_experiments(mode, experiments)
     trace = trace_diverse_results(prepared, query=query, mode=mode, experiments=payload)
     analysis = analyze_near_duplicate_results(prepared, query=query, mode=mode)

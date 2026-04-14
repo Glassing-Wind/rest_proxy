@@ -157,6 +157,26 @@ def register(mcp: FastMCP) -> None:
             return json.dumps({"error": f"Error analyzing duplicate results: {str(e)}"}, indent=2)
 
     @mcp.tool()
+    async def trace_code_ranking(
+        query: str,
+        results: list[dict],
+    ) -> str:
+        """
+        Build a code-ranking trace for implementation-intent queries.
+
+        Args:
+            query: Retrieval query to classify and trace.
+            results: Candidate result rows to score and explain.
+        """
+        try:
+            if not isinstance(results, list):
+                return json.dumps({"error": "results must be a list of dict items."}, indent=2)
+            trace = sem_helpers.build_implementation_ranking_trace(results, query)
+            return json.dumps(trace, indent=2, sort_keys=True)
+        except Exception as e:
+            return json.dumps({"error": f"Error tracing code ranking: {str(e)}"}, indent=2)
+
+    @mcp.tool()
     async def search_codebase(
         workspace_ids: list,
         query: str,
@@ -451,50 +471,34 @@ def register(mcp: FastMCP) -> None:
                         base_score = float(base_score)
                     except (TypeError, ValueError):
                         base_score = 0.0
-                    is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
-                    is_low_signal_parser_data = (
-                        impl_intent
-                        and sem_helpers.is_low_signal_parser_data_path(r.get("file_path"))
-                    )
-                    is_low_signal_binding_surface = (
-                        impl_intent
-                        and sem_helpers.is_low_signal_binding_surface_path(r.get("file_path"))
-                    )
-                    doc_penalty = 0.05 if impl_intent and is_doc_like else 0.0
-                    parser_data_penalty = 0.08 if is_low_signal_parser_data else 0.0
-                    binding_surface_penalty = 0.06 if is_low_signal_binding_surface else 0.0
-                    r["doc_like"] = is_doc_like
-                    r["low_signal_parser_data"] = is_low_signal_parser_data
-                    r["low_signal_binding_surface"] = is_low_signal_binding_surface
-                    r["implementation_symbol_hit"] = (
-                        sem_helpers.implementation_symbol_hit(r.get("_meta", {}), query)
-                        if impl_intent
-                        else 0
-                    )
-                    r["implementation_definition_hit"] = (
-                        sem_helpers.implementation_definition_hit(r.get("content", ""), query)
-                        if impl_intent
-                        else 0
-                    )
-                    r["implementation_api_entrypoint_hit"] = (
-                        sem_helpers.implementation_api_entrypoint_hit(
-                            r.get("file_path", ""),
-                            r.get("implementation_definition_hit", 0),
+                    if impl_intent:
+                        sem_helpers.enrich_implementation_result(
+                            r,
+                            query=query,
+                            query_class=impl_query_class,
+                            base_score=base_score,
+                            meta_boost=meta_boost,
                         )
-                        if impl_intent
-                        else 0
-                    )
-                    r["implementation_usage_heavy_penalty"] = (
-                        sem_helpers.query_class_prefers_definitions(impl_query_class)
-                        and sem_helpers.is_usage_heavy_path(r.get("file_path", ""))
-                    )
-                    if meta_boost > 0:
-                        r["rank_score"] = base_score + (
-                            r.get("meta_score", 0) * meta_boost
-                        ) - doc_penalty - parser_data_penalty - binding_surface_penalty
                     else:
+                        is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
+                        is_low_signal_parser_data = sem_helpers.is_low_signal_parser_data_path(
+                            r.get("file_path")
+                        )
+                        is_low_signal_binding_surface = sem_helpers.is_low_signal_binding_surface_path(
+                            r.get("file_path")
+                        )
+                        doc_penalty = 0.05 if is_doc_like else 0.0
+                        parser_data_penalty = 0.08 if is_low_signal_parser_data else 0.0
+                        binding_surface_penalty = 0.06 if is_low_signal_binding_surface else 0.0
+                        r["doc_like"] = is_doc_like
+                        r["low_signal_parser_data"] = is_low_signal_parser_data
+                        r["low_signal_binding_surface"] = is_low_signal_binding_surface
                         r["rank_score"] = (
-                            base_score - doc_penalty - parser_data_penalty - binding_surface_penalty
+                            base_score
+                            + (r.get("meta_score", 0) * meta_boost if meta_boost > 0 else 0.0)
+                            - doc_penalty
+                            - parser_data_penalty
+                            - binding_surface_penalty
                         )
                 all_results.sort(key=sem_helpers.implementation_rank_tuple)
             else:
@@ -579,23 +583,14 @@ def register(mcp: FastMCP) -> None:
                             r["doc_like"] = is_doc_like
                             r["low_signal_parser_data"] = is_low_signal_parser_data
                             r["low_signal_binding_surface"] = is_low_signal_binding_surface
-                            r["implementation_symbol_hit"] = sem_helpers.implementation_symbol_hit(
-                                r_meta, query
+                            sem_helpers.enrich_implementation_result(
+                                r,
+                                query=query,
+                                query_class=impl_query_class,
+                                base_score=float(r.get("rrf", 0.0) or 0.0),
+                                meta_boost=0.0,
+                                base_bonus=0.02,
                             )
-                            r["implementation_definition_hit"] = sem_helpers.implementation_definition_hit(
-                                r.get("content", ""), query
-                            )
-                            r["implementation_api_entrypoint_hit"] = (
-                                sem_helpers.implementation_api_entrypoint_hit(
-                                    r.get("file_path", ""),
-                                    r.get("implementation_definition_hit", 0),
-                                )
-                            )
-                            r["implementation_usage_heavy_penalty"] = (
-                                sem_helpers.query_class_prefers_definitions(impl_query_class)
-                                and sem_helpers.is_usage_heavy_path(r.get("file_path", ""))
-                            )
-                            r["rank_score"] = float(r.get("rrf", 0.0) or 0.0) + 0.02
                         rescue_results.extend(rescue_rows)
                     if rescue_results:
                         existing_keys = {

@@ -510,6 +510,10 @@ class SemanticHelperTests(unittest.TestCase):
             module.implementation_query_class("where is it called"),
             "usage_lookup",
         )
+        self.assertEqual(
+            module.implementation_query_class("where is process called in tree-sitter-language-pack"),
+            "usage_lookup",
+        )
         self.assertEqual(module.implementation_query_class("process(source, config)"), "symbol_lookup")
         self.assertTrue(module.query_class_prefers_definitions("symbol_lookup"))
         self.assertTrue(module.query_class_prefers_definitions("api_definition_lookup"))
@@ -552,6 +556,9 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertTrue(module.is_usage_heavy_path("crates/ts-pack-cli/src/main.rs"))
         self.assertTrue(module.is_usage_heavy_path("e2e/ruby/spec/process_spec.rb"))
         self.assertFalse(module.is_usage_heavy_path("crates/ts-pack-core/src/lib.rs"))
+        self.assertTrue(module.is_low_signal_support_path("scripts/clone_vendors.py"))
+        self.assertTrue(module.is_low_signal_support_path("tools/dev.py"))
+        self.assertFalse(module.is_low_signal_support_path("crates/ts-pack-core/src/lib.rs"))
 
     def test_implementation_rank_tuple_prefers_code_over_docs_and_parser_data(self):
         rows = [
@@ -587,6 +594,7 @@ class SemanticHelperTests(unittest.TestCase):
                 "file_path": "crates/ts-pack-cli/src/main.rs",
                 "low_signal_parser_data": False,
                 "low_signal_binding_surface": False,
+                "low_signal_support_path": False,
                 "doc_like": False,
                 "implementation_usage_heavy_penalty": True,
                 "implementation_definition_hit": 0,
@@ -598,6 +606,36 @@ class SemanticHelperTests(unittest.TestCase):
                 "file_path": "crates/ts-pack-core/src/lib.rs",
                 "low_signal_parser_data": False,
                 "low_signal_binding_surface": False,
+                "low_signal_support_path": False,
+                "doc_like": False,
+                "implementation_usage_heavy_penalty": False,
+                "implementation_definition_hit": 1,
+                "implementation_api_entrypoint_hit": 1,
+                "implementation_symbol_hit": 1,
+                "rank_score": 0.8,
+            },
+        ]
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+
+        rows = [
+            {
+                "file_path": "scripts/clone_vendors.py",
+                "low_signal_parser_data": False,
+                "low_signal_binding_surface": False,
+                "low_signal_support_path": True,
+                "doc_like": False,
+                "implementation_usage_heavy_penalty": False,
+                "implementation_definition_hit": 1,
+                "implementation_api_entrypoint_hit": 0,
+                "implementation_symbol_hit": 1,
+                "rank_score": 0.95,
+            },
+            {
+                "file_path": "crates/ts-pack-core/src/lib.rs",
+                "low_signal_parser_data": False,
+                "low_signal_binding_surface": False,
+                "low_signal_support_path": False,
                 "doc_like": False,
                 "implementation_usage_heavy_penalty": False,
                 "implementation_definition_hit": 1,
@@ -654,6 +692,89 @@ class SemanticHelperTests(unittest.TestCase):
             0,
         )
 
+    def test_build_implementation_ranking_trace_surfaces_node_type_and_role(self):
+        rows = [
+            {
+                "file_path": "crates/ts-pack-cli/src/main.rs",
+                "project_id": "bench",
+                "rrf": 0.92,
+                "rank_score": 0.92,
+                "content": "Commands::Process { let result = process(&source, &config)?; }",
+                "metadata": {
+                    "file_symbols": ["main"],
+                    "context_path": ["Cli", "Process"],
+                    "node_types": ["match_expression"],
+                },
+            },
+            {
+                "file_path": "crates/ts-pack-core/src/lib.rs",
+                "project_id": "bench",
+                "rrf": 0.81,
+                "rank_score": 0.81,
+                "content": "pub fn process(source: &str, config: &ProcessConfig) -> Result<ProcessResult, Error> { REGISTRY.process(source, config) }",
+                "metadata": {
+                    "file_symbols": ["process", "process_with_tree"],
+                    "context_path": ["Core", "API"],
+                    "node_types": ["function_item"],
+                },
+            },
+        ]
+        trace = module.build_implementation_ranking_trace(
+            rows,
+            "how does process(source, config) work in tree-sitter-language-pack",
+        )
+        self.assertEqual(trace["query_class"], "implementation_explanation")
+        self.assertEqual(trace["rows"][0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+        self.assertEqual(trace["rows"][0]["role"], "public_api_definition")
+        self.assertIn("function_item", trace["rows"][0]["node_types"])
+        self.assertEqual(trace["rows"][1]["role"], "usage_callsite")
+
+    def test_duplicate_rerank_uses_node_type_aware_rank_score_for_representative_choice(self):
+        case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
+        rows = []
+        for result in case["results"]:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=case["query"],
+                query_class=module.implementation_query_class(case["query"]),
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            rows.append(row)
+        contract = module.rerank_retrieval_results_contract(
+            rows,
+            query=case["query"],
+            mode="code",
+            include_debug=True,
+        )
+        self.assertEqual(contract["selection"]["representative_indices"][0], 1)
+        self.assertEqual(contract["results"][0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+
+    def test_implementation_search_prefers_internal_implementation_over_cli_usage(self):
+        case = load_benchmark_case("code_implementation_search_prefers_internal_impl_over_wrapper")
+        rows = case["results"]
+        trace = module.build_implementation_ranking_trace(
+            rows,
+            case["query"],
+        )
+        self.assertEqual(trace["query_class"], "implementation_search")
+        self.assertEqual(trace["rows"][0]["file_path"], "crates/ts-pack-core/src/intel/mod.rs")
+        self.assertNotEqual(trace["rows"][0]["file_path"], "crates/ts-pack-cli/src/main.rs")
+
+    def test_duplicate_rerank_contract_enriches_raw_implementation_search_rows(self):
+        case = load_benchmark_case("code_implementation_search_prefers_internal_impl_over_wrapper")
+        contract = module.rerank_retrieval_results_contract(
+            case["results"],
+            query=case["query"],
+            mode="code",
+            include_debug=True,
+        )
+        self.assertEqual(contract["results"][0]["file_path"], "crates/ts-pack-core/src/intel/mod.rs")
+        self.assertNotEqual(contract["results"][0]["file_path"], "crates/ts-pack-cli/src/main.rs")
+
     def test_definition_fallback_pattern_targets_definitions(self):
         pattern = fallbacks_module.build_definition_fallback_pattern(["process"])
         self.assertIn("pub\\s+fn", pattern)
@@ -662,6 +783,68 @@ class SemanticHelperTests(unittest.TestCase):
     def test_candidate_relevance_score_prefers_rank_score(self):
         row = {"rrf": 0.2, "rank_score": 0.9}
         self.assertEqual(module.candidate_relevance_score(row), 0.9)
+
+    def test_receiver_qualified_usage_queries_classify_as_usage_lookup(self):
+        self.assertEqual(
+            module.implementation_query_class("where is parser.parse used in tree-sitter-language-pack"),
+            "usage_lookup",
+        )
+        self.assertEqual(
+            module.implementation_query_class("how is parser.parse used in tree-sitter-language-pack"),
+            "usage_lookup",
+        )
+        self.assertEqual(
+            module.implementation_query_class("examples of parser.parse in tree-sitter-language-pack"),
+            "usage_lookup",
+        )
+
+    def test_exact_member_usage_hit_detects_receiver_qualified_usage(self):
+        self.assertEqual(
+            module.implementation_exact_member_usage_hit(
+                "parser = get_parser('python')\ntree = parser.parse(b'x')\n",
+                "where is parser.parse used in tree-sitter-language-pack",
+            ),
+            1,
+        )
+        self.assertEqual(
+            module.implementation_exact_member_usage_hit(
+                "pub fn parse(source: &str) {}\n",
+                "where is parser.parse used in tree-sitter-language-pack",
+            ),
+            0,
+        )
+
+    def test_usage_lookup_prefers_exact_receiver_qualified_usage_sites(self):
+        query = "where is parser.parse used in tree-sitter-language-pack"
+        rows = [
+            {
+                "file_path": "crates/ts-pack-core/src/lib.rs",
+                "content": "pub fn get_parser(name: &str) -> Result<tree_sitter::Parser, Error> { ... }",
+                "metadata": {"node_types": ["function_item"], "file_symbols": ["get_parser"]},
+                "rrf": 0.91,
+            },
+            {
+                "file_path": "examples/python_smoke/main.py",
+                "content": "parser = get_parser(\"python\")\ntree = parser.parse(b\"def hello(): pass\")\n",
+                "metadata": {"node_types": ["call_expression", "expression_statement"], "file_symbols": []},
+                "rrf": 0.82,
+            },
+        ]
+        enriched = []
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=module.implementation_query_class(query),
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "examples/python_smoke/main.py")
 
     def test_definition_entrypoint_golden_prefers_library_root_over_cli(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")

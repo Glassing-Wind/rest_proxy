@@ -394,6 +394,43 @@
         "must_survive": [0, 2],
         "relevance_labels": {"0": 3.0, "1": 1.0, "2": 3.0}
       }
+    },
+    {
+      "id": "code_implementation_search_prefers_internal_impl_over_wrapper",
+      "mode": "code",
+      "query_class": "implementation_search",
+      "query": "find process implementation in tree-sitter-language-pack",
+      "results": [
+        {
+          "file_path": "crates/ts-pack-cli/src/main.rs",
+          "project_id": "bench",
+          "rrf": 0.92,
+          "rank_score": 0.92,
+          "content": "Commands::Process { ... let result = process(&source, &config)?; }",
+          "metadata": {"file_symbols": ["main"], "context_path": ["Cli", "Process"], "node_types": ["match_expression"]}
+        },
+        {
+          "file_path": "crates/ts-pack-core/src/lib.rs",
+          "project_id": "bench",
+          "rrf": 0.81,
+          "rank_score": 0.81,
+          "content": "pub fn process(source: &str, config: &ProcessConfig) -> Result<ProcessResult, Error> { REGISTRY.process(source, config) }",
+          "metadata": {"file_symbols": ["process", "process_with_tree"], "context_path": ["Core", "API"], "node_types": ["function_item"]}
+        },
+        {
+          "file_path": "crates/ts-pack-core/src/intel/mod.rs",
+          "project_id": "bench",
+          "rrf": 0.84,
+          "rank_score": 0.84,
+          "content": "pub fn process(source: &str, config: &ProcessConfig, registry: &LanguageRegistry) -> Result<ProcessResult, crate::Error> { ... }",
+          "metadata": {"file_symbols": ["process", "process_with_tree"], "context_path": ["Core", "Intel"], "node_types": ["function_item"]}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [2],
+        "must_survive": [1, 2],
+        "relevance_labels": {"0": 1.0, "1": 2.0, "2": 3.0}
+      }
     }
   ]
 }

@@ -202,6 +202,115 @@ class CodeIntelHelperTests(unittest.TestCase):
         self.assertIn("**External Calls** (1):", rendered)
         self.assertIn("`json.Unmarshal` [go]", rendered)
 
+    def test_pick_symbol_context_candidate_prefers_library_entrypoint(self):
+        module = load_symbol_graph_module()
+        picked = module.pick_symbol_context_candidate(
+            [
+                {
+                    "kind": "Function",
+                    "name": "process",
+                    "qualified_name": "process",
+                    "filepath": "crates/ts-pack-cli/src/main.rs",
+                    "start_line": 10,
+                    "signature": "fn process()",
+                    "callers_in": 0,
+                    "callees_out": 4,
+                },
+                {
+                    "kind": "Function",
+                    "name": "process",
+                    "qualified_name": "process",
+                    "filepath": "crates/ts-pack-core/src/lib.rs",
+                    "start_line": 200,
+                    "signature": "pub fn process(source: &str, config: &ProcessConfig)",
+                    "callers_in": 3,
+                    "callees_out": 2,
+                },
+            ],
+            symbol_name="process",
+            normalized_file_path=None,
+            normalized_signature=None,
+        )
+        self.assertEqual(picked["filepath"], "crates/ts-pack-core/src/lib.rs")
+
+    def test_symbol_context_cypher_parenthesizes_label_filter(self):
+        module = load_symbol_graph_module()
+        cypher = module.SYMBOL_CONTEXT_CYPHER
+        self.assertIn("WHERE (s:Function OR s:Class", cypher)
+        self.assertIn(")\\n      AND s.project_id = $pid".replace("\\n", "\n"), cypher)
+
+    def test_should_disambiguate_symbol_context_keeps_generic_close_scores_ambiguous(self):
+        module = load_symbol_graph_module()
+        candidates = [
+            {
+                "kind": "TypeAlias",
+                "name": "Config",
+                "qualified_name": None,
+                "filepath": "packages/plugin/src/index.ts",
+                "start_line": 10,
+                "signature": None,
+                "callers_in": 1,
+                "callees_out": 0,
+            },
+            {
+                "kind": "TypeAlias",
+                "name": "Config",
+                "qualified_name": None,
+                "filepath": "packages/opencode/src/control-plane/adaptors/worktree.ts",
+                "start_line": 12,
+                "signature": None,
+                "callers_in": 2,
+                "callees_out": 0,
+            },
+            {
+                "kind": "Class",
+                "name": "Config",
+                "qualified_name": None,
+                "filepath": "packages/sdk/js/src/gen/sdk.gen.ts",
+                "start_line": 30,
+                "signature": "class Config",
+                "callers_in": 0,
+                "callees_out": 0,
+            },
+        ]
+        self.assertTrue(
+            module.should_disambiguate_symbol_context(
+                candidates,
+                symbol_name="Config",
+                normalized_file_path=None,
+                normalized_signature=None,
+            )
+        )
+
+    def test_python_exact_call_graph_guidance_appears_when_edges_are_sparse(self):
+        module = load_symbol_graph_module()
+        output = module.format_symbol_context(
+            {
+                "kind": "Function",
+                "filepath": "pkg/parser.py",
+                "start_line": 10,
+                "end_line": 30,
+                "signature": "def parse_tree(source):",
+                "callers": [],
+                "callees": [],
+                "external_callees": [],
+            },
+            "parse_tree",
+        )
+        rendered = "\n".join(output)
+        self.assertIn("Exactness note", rendered)
+        self.assertIn("find_references", rendered)
+
+    def test_python_exact_call_graph_guidance_stays_off_when_one_side_exists(self):
+        module = load_symbol_graph_module()
+        self.assertIsNone(
+            module.exact_call_graph_guidance(
+                "pkg/parser.py",
+                has_callers=True,
+                has_callees=False,
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

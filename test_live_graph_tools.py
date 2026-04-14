@@ -20,6 +20,7 @@ import types
 
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+GRAPH_GOLDENS_PATH = os.path.join(REPO_ROOT, "benchmarks", "live_graph_goldens.json")
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
@@ -230,60 +231,31 @@ def _require_non_error(name: str, output: str) -> None:
 async def _run_known_regressions(mcp: FakeMCP, workspace_id: str) -> list[ToolRun]:
     runs: list[ToolRun] = []
     workspace_name = _workspace_basename(workspace_id)
-
-    if workspace_name == "rental":
-        type_output = await mcp.tools["get_symbol_context"](
-            workspace_id, "RouteContext", include_source_preview=False
-        )
-        _require_non_error("get_symbol_context(RouteContext)", type_output)
-        if "RouteContext" not in type_output or "src/api/routes/context.ts" not in type_output:
-            raise RuntimeError(
-                "RouteContext regression: expected rental route context type alias to resolve "
-                "through get_symbol_context."
-            )
-        runs.append(ToolRun("regression:rental_route_context", type_output))
-
-    if workspace_name == "opencode":
-        summary_output = await mcp.tools["get_symbol_exports_summary"](
-            project_path=workspace_id,
-            limit=20,
-            include_paths=[
-                "packages/sdk/js/src/client.ts",
-                "packages/sdk/js/src/v2/client.ts",
-            ],
-            symbol_prefix="Opencode",
-        )
-        _require_non_error("get_symbol_exports_summary(opencode alias)", summary_output)
-        if "OpencodeClientConfig -> Config" not in summary_output:
-            raise RuntimeError(
-                "Alias export regression: expected OpencodeClientConfig -> Config in filtered export summary."
-            )
-        runs.append(ToolRun("regression:opencode_alias_export", summary_output))
-
-    if workspace_name == "ts-export-alias-demo":
-        summary_output = await mcp.tools["get_symbol_exports_summary"](
-            project_path=workspace_id,
-            limit=20,
-        )
-        _require_non_error("get_symbol_exports_summary(ts-export-alias-demo)", summary_output)
-        if "PublicConfig -> Config" not in summary_output:
-            raise RuntimeError(
-                "Alias demo regression: expected PublicConfig -> Config in export summary."
-            )
-        runs.append(ToolRun("regression:ts_export_alias_demo", summary_output))
-
-    if workspace_name == "ts-namespace-export-demo":
-        summary_output = await mcp.tools["get_symbol_exports_summary"](
-            project_path=workspace_id,
-            limit=20,
-        )
-        _require_non_error("get_symbol_exports_summary(ts-namespace-export-demo)", summary_output)
-        for expected in ("routes.* -> buildRouter", "routes.* -> RouteConfig"):
-            if expected not in summary_output:
+    if not os.path.exists(GRAPH_GOLDENS_PATH):
+        return runs
+    with open(GRAPH_GOLDENS_PATH, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    for case in payload.get("cases") or []:
+        if case.get("workspace_name") != workspace_name:
+            continue
+        tool_name = case.get("tool")
+        if not tool_name or tool_name not in mcp.tools:
+            raise RuntimeError(f"Graph golden '{case.get('id')}' references unknown tool '{tool_name}'.")
+        params = dict(case.get("params") or {})
+        for key, value in list(params.items()):
+            if value == "$workspace_id":
+                params[key] = workspace_id
+        if tool_name in {"get_symbol_context", "get_call_chain"}:
+            output = await mcp.tools[tool_name](workspace_id, **params)
+        else:
+            output = await mcp.tools[tool_name](**params)
+        _require_non_error(f"{tool_name}({case.get('id')})", output)
+        for expected in case.get("required_substrings") or []:
+            if expected not in output:
                 raise RuntimeError(
-                    f"Namespace export regression: expected '{expected}' in export summary."
+                    f"Graph golden regression '{case.get('id')}': expected '{expected}' in {tool_name} output."
                 )
-        runs.append(ToolRun("regression:ts_namespace_export_demo", summary_output))
+        runs.append(ToolRun(f"regression:{case.get('id')}", output))
 
     return runs
 
@@ -300,7 +272,7 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
     symbol_name, symbol_file = await _pick_live_symbol(mcp, workspace_id)
 
     symbol_output = await mcp.tools["get_symbol_context"](
-        workspace_id, symbol_name, include_source_preview=False
+        workspace_id, symbol_name, include_source_preview=False, file_path=symbol_file or None
     )
     _require_non_error("get_symbol_context", symbol_output)
     if symbol_name not in symbol_output:
@@ -318,7 +290,7 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
     if type_symbol:
         type_name, type_file = type_symbol
         type_output = await mcp.tools["get_symbol_context"](
-            workspace_id, type_name, include_source_preview=False
+            workspace_id, type_name, include_source_preview=False, file_path=type_file or None
         )
         _require_non_error("get_symbol_context(type)", type_output)
         if type_name not in type_output:

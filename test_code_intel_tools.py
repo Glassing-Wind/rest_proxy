@@ -390,10 +390,12 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_get_symbol_context_prefers_repo_owned_runtime_symbol_over_generated_match(self):
         async def fake_executor(cypher, **kwargs):
-            if "MATCH (s {name: $name, project_id: $pid})" in cypher:
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
                 return [
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/sdk/js/src/v2/gen/types.gen.ts",
                         "start_line": 1,
                         "end_line": 12,
@@ -406,6 +408,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "Class",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/opencode/src/config/config.ts",
                         "start_line": 8,
                         "end_line": 60,
@@ -460,10 +464,12 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_get_symbol_context_reports_ambiguous_generic_monorepo_name(self):
         async def fake_executor(cypher, **kwargs):
-            if "MATCH (s {name: $name, project_id: $pid})" in cypher:
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
                 return [
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/sdk/js/src/v2/gen/types.gen.ts",
                         "start_line": 1,
                         "end_line": 12,
@@ -476,6 +482,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "Class",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/sdk/js/src/gen/sdk.gen.ts",
                         "start_line": 337,
                         "end_line": 371,
@@ -488,6 +496,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/plugin/src/index.ts",
                         "start_line": 38,
                         "end_line": 40,
@@ -500,6 +510,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/desktop-electron/src/main/cli.ts",
                         "start_line": 23,
                         "end_line": 29,
@@ -512,6 +524,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/opencode/src/control-plane/adaptors/worktree.ts",
                         "start_line": 11,
                         "end_line": 17,
@@ -541,6 +555,60 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("Multiple exact matches found for `Config`", output)
         self.assertIn("packages/opencode/src/control-plane/adaptors/worktree.ts", output)
+
+    def test_get_symbol_context_uses_file_path_to_disambiguate(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                self.assertEqual(kwargs.get("file_path"), "crates/ts-pack-core/src/lib.rs")
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "process",
+                        "qualified_name": "process",
+                        "filepath": "crates/ts-pack-cli/src/main.rs",
+                        "start_line": 10,
+                        "end_line": 30,
+                        "signature": "fn process()",
+                        "parent_file": "crates/ts-pack-cli/src/main.rs",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 4,
+                    },
+                    {
+                        "kind": "Function",
+                        "name": "process",
+                        "qualified_name": "process",
+                        "filepath": "crates/ts-pack-core/src/lib.rs",
+                        "start_line": 235,
+                        "end_line": 244,
+                        "signature": "pub fn process(source: &str, config: &ProcessConfig)",
+                        "parent_file": "crates/ts-pack-core/src/lib.rs",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 3,
+                        "callees_out": 2,
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/tree-sitter-language-pack",
+                        "process",
+                        include_source_preview=False,
+                        file_path="crates/ts-pack-core/src/lib.rs",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("crates/ts-pack-core/src/lib.rs", output)
+        self.assertNotIn("crates/ts-pack-cli/src/main.rs", output)
 
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):

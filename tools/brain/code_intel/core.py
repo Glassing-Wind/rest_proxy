@@ -201,7 +201,11 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_symbol_context(
-        workspace_id: str, symbol_name: str, include_source_preview: bool = True
+        workspace_id: str,
+        symbol_name: str,
+        include_source_preview: bool = True,
+        file_path: str | None = None,
+        signature: str | None = None,
     ) -> str:
         """
         Single-call deep dive into a symbol: definition location, signature,
@@ -213,6 +217,8 @@ def register(mcp: FastMCP) -> None:
         Args:
             workspace_id: Logical workspace name or absolute project path.
             symbol_name:  Name of the function, class, or struct to inspect.
+            file_path:    Optional file path to disambiguate overloaded symbols.
+            signature:    Optional signature substring to disambiguate overloaded symbols.
         """
         try:
             project_id = get_project_id(workspace_id)
@@ -221,6 +227,14 @@ def register(mcp: FastMCP) -> None:
             _, _, _, _, proxy = get_memory_modules()
 
             driver = await graph_bootstrap.require_driver()
+            normalized_file_path = symbol_graph.normalize_query_file_path(
+                workspace_id, file_path
+            )
+            normalized_signature = (
+                signature.strip() if isinstance(signature, str) else None
+            )
+            if not normalized_signature:
+                normalized_signature = None
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await _execute_read(
@@ -228,19 +242,27 @@ def register(mcp: FastMCP) -> None:
                     symbol_graph.SYMBOL_CONTEXT_CYPHER,
                     name=symbol_name,
                     pid=project_id,
+                    file_path=normalized_file_path,
+                    signature=normalized_signature,
                     op="get_symbol_context",
                 )
                 if symbol_graph.should_disambiguate_symbol_context(
                     records or [],
                     symbol_name=symbol_name,
+                    normalized_file_path=normalized_file_path,
+                    normalized_signature=normalized_signature,
                 ):
                     return symbol_graph.format_symbol_context_ambiguity(
                         records or [],
                         symbol_name=symbol_name,
+                        normalized_file_path=normalized_file_path,
+                        normalized_signature=normalized_signature,
                     )
                 rec = symbol_graph.pick_symbol_context_candidate(
                     records or [],
                     symbol_name=symbol_name,
+                    normalized_file_path=normalized_file_path,
+                    normalized_signature=normalized_signature,
                 )
 
             if not rec:
@@ -370,11 +392,19 @@ def register(mcp: FastMCP) -> None:
                     session, cypher, eid=resolved_eid, op="get_call_chain"
                 )
 
-            if not rows:
-                return (
-                    f"`{resolved_name}` resolved but no {hop_label}s within {depth} hops.\n"
-                    "Make sure the project is indexed and Swift CALLS edges are available."
-                )
+                if not rows:
+                    message = (
+                        f"`{resolved_name}` resolved but no {hop_label}s within {depth} hops.\n"
+                        "Make sure the project is indexed and Swift CALLS edges are available."
+                    )
+                    guidance = symbol_graph.exact_call_graph_guidance(
+                        resolved_filepath,
+                        has_callers=(direction == "up"),
+                        has_callees=(direction == "down"),
+                    )
+                    if guidance:
+                        message += f"\n\n{guidance}"
+                    return message
 
             return symbol_graph.format_call_chain_rows(
                 rows,

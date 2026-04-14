@@ -6,15 +6,21 @@ import os
 
 
 SYMBOL_CONTEXT_CYPHER = """
-    MATCH (s {name: $name, project_id: $pid})
-    WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:EnumCase OR s:Method
-       OR s:Protocol OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType
+    MATCH (s)
+    WHERE (s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:EnumCase OR s:Method
+       OR s:Protocol OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType)
+      AND s.project_id = $pid
+      AND (s.name = $name OR s.qualified_name = $name)
+      AND ($file_path IS NULL OR s.filepath = $file_path)
+      AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
     OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
     OPTIONAL MATCH (caller)-[:CALLS|CALLS_INFERRED]->(s)
     OPTIONAL MATCH (s)-[:CALLS|CALLS_INFERRED]->(callee)
     OPTIONAL MATCH (s)-[:CALLS_EXTERNAL_SYMBOL]->(external_callee:ExternalSymbol)
     RETURN
       head([label IN labels(s) WHERE label <> 'Node']) AS kind,
+      s.name AS name,
+      s.qualified_name AS qualified_name,
       s.filepath    AS filepath,
       s.start_line  AS start_line,
       s.end_line    AS end_line,
@@ -223,50 +229,183 @@ def _symbol_kind_rank(kind: str | None) -> int:
     }.get(kind or "", 7)
 
 
-def pick_symbol_context_candidate(candidates: list[dict], *, symbol_name: str) -> dict | None:
-    if not candidates:
-        return None
+def _symbol_role_rank(candidate: dict) -> int:
+    filepath = (candidate.get("filepath") or "").replace("\\", "/").lower()
+    signature = (candidate.get("signature") or "").strip().lower()
+    if filepath.endswith("/lib.rs") or filepath == "src/lib.rs":
+        return 0
+    if filepath.endswith("/__init__.py") or filepath == "__init__.py":
+        return 1
+    if signature.startswith("pub ") or signature.startswith("public "):
+        return 1
+    if filepath.endswith("/mod.rs") or filepath == "src/mod.rs":
+        return 2
+    if filepath.endswith("/main.rs") or "/cli/" in filepath or "/bin/" in filepath:
+        return 5
+    return 3
 
-    ranked = sorted(
-        candidates,
+
+def _symbol_context_score(candidate: dict, *, symbol_name: str) -> int:
+    filepath = (candidate.get("filepath") or "").replace("\\", "/")
+    qualified_name = candidate.get("qualified_name") or ""
+    signature = candidate.get("signature") or ""
+    score = 0
+    if qualified_name == symbol_name:
+        score += 80
+    elif qualified_name.endswith(f"::{symbol_name}") or qualified_name.endswith(f".{symbol_name}"):
+        score += 55
+    elif qualified_name and symbol_name in qualified_name:
+        score += 20
+    if signature and symbol_name in signature:
+        score += 35
+        if signature.lstrip().startswith(("pub ", "public ")):
+            score += 20
+    path_penalty = _symbol_path_penalty(filepath)
+    score -= path_penalty * 18
+    role_rank = _symbol_role_rank(candidate)
+    score -= role_rank * 10
+    if filepath.endswith("/lib.rs") or filepath == "src/lib.rs":
+        score += 18
+    if filepath.endswith("/main.rs"):
+        score -= 20
+    score += min(int(candidate.get("callers_in") or 0), 8) * 2
+    score += min(int(candidate.get("callees_out") or 0), 8)
+    score -= _symbol_kind_rank(candidate.get("kind")) * 3
+    return score
+
+
+def _symbol_context_reason_parts(candidate: dict, *, symbol_name: str) -> list[str]:
+    filepath = (candidate.get("filepath") or "").replace("\\", "/")
+    qualified_name = candidate.get("qualified_name") or ""
+    signature = candidate.get("signature") or ""
+    parts: list[str] = []
+    if qualified_name == symbol_name:
+        parts.append("exact-qualified")
+    elif qualified_name.endswith(f"::{symbol_name}") or qualified_name.endswith(f".{symbol_name}"):
+        parts.append("qualified-suffix")
+    if signature and symbol_name in signature:
+        parts.append("signature-match")
+    if signature.lstrip().startswith(("pub ", "public ")):
+        parts.append("public")
+    if filepath.endswith("/lib.rs") or filepath == "src/lib.rs":
+        parts.append("library-entrypoint")
+    if filepath.endswith("/mod.rs") or filepath == "src/mod.rs":
+        parts.append("module-root")
+    if filepath.endswith("/main.rs") or "/cli/" in filepath or "/bin/" in filepath:
+        parts.append("usage-heavy")
+    penalty = _symbol_path_penalty(filepath)
+    if penalty >= 5:
+        parts.append("generated")
+    elif penalty >= 4:
+        parts.append("test-or-example")
+    elif penalty <= 2:
+        parts.append("runtime")
+    return parts
+
+
+def rank_symbol_context_candidates(
+    candidates: list[dict],
+    *,
+    symbol_name: str,
+    normalized_file_path: str | None,
+    normalized_signature: str | None,
+) -> list[dict]:
+    ranked: list[dict] = []
+    for candidate in candidates:
+        candidate = dict(candidate)
+        filepath = candidate.get("filepath")
+        signature = candidate.get("signature") or ""
+        candidate["file_match"] = filepath == normalized_file_path if normalized_file_path else False
+        candidate["signature_match"] = bool(
+            normalized_signature and signature and normalized_signature in signature
+        )
+        candidate["symbol_context_score"] = _symbol_context_score(candidate, symbol_name=symbol_name)
+        candidate["symbol_context_reasons"] = _symbol_context_reason_parts(
+            candidate, symbol_name=symbol_name
+        )
+        ranked.append(candidate)
+
+    ranked.sort(
         key=lambda candidate: (
-            0 if candidate.get("kind") in {"Function", "Method", "Class", "Struct"} else 1,
+            0 if candidate.get("file_match") else 1,
+            0 if candidate.get("signature_match") else 1,
+            -int(candidate.get("symbol_context_score") or 0),
             _symbol_path_penalty(candidate.get("filepath")),
+            _symbol_role_rank(candidate),
             _symbol_kind_rank(candidate.get("kind")),
             -(candidate.get("callers_in") or 0),
             -(candidate.get("callees_out") or 0),
             len(candidate.get("filepath") or ""),
             candidate.get("start_line") or 0,
-        ),
+        )
+    )
+    return ranked
+
+
+def pick_symbol_context_candidate(
+    candidates: list[dict],
+    *,
+    symbol_name: str,
+    normalized_file_path: str | None = None,
+    normalized_signature: str | None = None,
+) -> dict | None:
+    if not candidates:
+        return None
+
+    ranked = rank_symbol_context_candidates(
+        candidates,
+        symbol_name=symbol_name,
+        normalized_file_path=normalized_file_path,
+        normalized_signature=normalized_signature,
     )
     return ranked[0]
 
 
-def should_disambiguate_symbol_context(candidates: list[dict], *, symbol_name: str) -> bool:
+def should_disambiguate_symbol_context(
+    candidates: list[dict],
+    *,
+    symbol_name: str,
+    normalized_file_path: str | None = None,
+    normalized_signature: str | None = None,
+) -> bool:
     normalized_name = (symbol_name or "").strip()
     if not normalized_name:
         return False
+    if normalized_file_path or normalized_signature:
+        return False
     if "." in normalized_name or "(" in normalized_name or len(normalized_name) > 18:
+        return False
+    ranked = rank_symbol_context_candidates(
+        candidates,
+        symbol_name=symbol_name,
+        normalized_file_path=normalized_file_path,
+        normalized_signature=normalized_signature,
+    )
+    if len(ranked) < 2:
         return False
     distinct_paths = {c.get("filepath") for c in candidates if c.get("filepath")}
     distinct_kinds = {c.get("kind") for c in candidates if c.get("kind")}
-    if len(distinct_paths) >= 5:
+    top_score = int(ranked[0].get("symbol_context_score") or 0)
+    second_score = int(ranked[1].get("symbol_context_score") or 0)
+    if len(distinct_paths) >= 5 and (top_score - second_score) <= 24:
         return True
-    if len(distinct_paths) >= 3 and len(distinct_kinds) >= 2:
+    if len(distinct_paths) >= 3 and len(distinct_kinds) >= 2 and (top_score - second_score) <= 16:
         return True
     return False
 
 
-def format_symbol_context_ambiguity(candidates: list[dict], *, symbol_name: str) -> str:
-    ranked = sorted(
+def format_symbol_context_ambiguity(
+    candidates: list[dict],
+    *,
+    symbol_name: str,
+    normalized_file_path: str | None = None,
+    normalized_signature: str | None = None,
+) -> str:
+    ranked = rank_symbol_context_candidates(
         candidates,
-        key=lambda candidate: (
-            _symbol_path_penalty(candidate.get("filepath")),
-            _symbol_kind_rank(candidate.get("kind")),
-            -(candidate.get("callers_in") or 0),
-            len(candidate.get("filepath") or ""),
-            candidate.get("start_line") or 0,
-        ),
+        symbol_name=symbol_name,
+        normalized_file_path=normalized_file_path,
+        normalized_signature=normalized_signature,
     )
     lines = [
         f"Multiple exact matches found for `{symbol_name}`. Be more specific or use `list_symbol_matches`.",
@@ -274,9 +413,12 @@ def format_symbol_context_ambiguity(candidates: list[dict], *, symbol_name: str)
         "Top matches:",
     ]
     for candidate in ranked[:6]:
+        reasons = ", ".join(candidate.get("symbol_context_reasons") or [])
+        score = candidate.get("symbol_context_score")
         lines.append(
             f"- [{candidate.get('kind') or 'Symbol'}] "
             f"{candidate.get('filepath') or 'unknown'}:{candidate.get('start_line') or 1}"
+            f"{f' ({reasons}; score={score})' if reasons else ''}"
         )
     return "\n".join(lines)
 
@@ -529,7 +671,32 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
             qualified_name = callee.get("qualified_name") or callee["name"]
             language = callee.get("language") or "external"
             out.append(f"  - `{qualified_name}` [{language}]")
+    guidance = exact_call_graph_guidance(
+        rec.get("filepath"),
+        has_callers=bool(callers),
+        has_callees=bool(callees),
+    )
+    if guidance:
+        out.append(f"\n{guidance}")
     return out
+
+
+def exact_call_graph_guidance(
+    filepath: str | None,
+    *,
+    has_callers: bool,
+    has_callees: bool,
+) -> str | None:
+    normalized = (filepath or "").replace("\\", "/").lower()
+    if not normalized.endswith(".py"):
+        return None
+    if has_callers or has_callees:
+        return None
+    return (
+        "**Exactness note:** This Python symbol has no exact call-graph edges right now. "
+        "Python call graph edges stay exact-only, so dynamic receiver calls may be intentionally absent here; use "
+        "`find_references` or `search_codebase` for broader navigation."
+    )
 
 
 def format_call_chain_rows(

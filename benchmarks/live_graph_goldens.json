@@ -1,0 +1,105 @@
+{
+  "cases": [
+    {
+      "id": "rental_route_context_symbol_context",
+      "workspace_name": "rental",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "RouteContext",
+        "include_source_preview": false
+      },
+      "required_substrings": [
+        "RouteContext",
+        "src/api/routes/context.ts"
+      ]
+    },
+    {
+      "id": "opencode_alias_export_summary",
+      "workspace_name": "opencode",
+      "tool": "get_symbol_exports_summary",
+      "params": {
+        "project_path": "$workspace_id",
+        "limit": 20,
+        "include_paths": [
+          "packages/sdk/js/src/client.ts",
+          "packages/sdk/js/src/v2/client.ts"
+        ],
+        "symbol_prefix": "Opencode"
+      },
+      "required_substrings": [
+        "OpencodeClientConfig -> Config"
+      ]
+    },
+    {
+      "id": "ts_export_alias_demo_summary",
+      "workspace_name": "ts-export-alias-demo",
+      "tool": "get_symbol_exports_summary",
+      "params": {
+        "project_path": "$workspace_id",
+        "limit": 20
+      },
+      "required_substrings": [
+        "PublicConfig -> Config"
+      ]
+    },
+    {
+      "id": "ts_namespace_export_demo_summary",
+      "workspace_name": "ts-namespace-export-demo",
+      "tool": "get_symbol_exports_summary",
+      "params": {
+        "project_path": "$workspace_id",
+        "limit": 20
+      },
+      "required_substrings": [
+        "routes.* -> buildRouter",
+        "routes.* -> RouteConfig"
+      ]
+    },
+    {
+      "id": "ts_pack_process_call_chain",
+      "workspace_name": "tree-sitter-language-pack",
+      "tool": "get_call_chain",
+      "params": {
+        "symbol_name": "process",
+        "depth": 1,
+        "direction": "down",
+        "file_path": "crates/ts-pack-core/src/lib.rs"
+      },
+      "required_substrings": [
+        "crates/ts-pack-core/src/registry.rs",
+        "process"
+      ]
+    },
+    {
+      "id": "rest_proxy_find_code_duplication_symbol_context",
+      "workspace_name": "rest_proxy",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "find_code_duplication",
+        "include_source_preview": false,
+        "file_path": "tools/brain/search/duplication.py"
+      },
+      "required_substrings": [
+        "tools/brain/search/duplication.py",
+        "_path_allowed",
+        "default_duplication_exclude_patterns"
+      ]
+    },
+    {
+      "id": "rest_proxy_find_code_duplication_call_chain",
+      "workspace_name": "rest_proxy",
+      "tool": "get_call_chain",
+      "params": {
+        "symbol_name": "find_code_duplication",
+        "depth": 1,
+        "direction": "down",
+        "file_path": "tools/brain/search/duplication.py"
+      },
+      "required_substrings": [
+        "tools/brain/search/core.py",
+        "_execute_read",
+        "_path_allowed"
+      ]
+    }
+  ]
+}
