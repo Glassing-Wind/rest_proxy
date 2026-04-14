@@ -45,7 +45,7 @@ jobs:
         run: python scripts/run_enterprise_eval.py --skip-graph
 
       - name: Read enterprise eval status
-        if: always()
+        if: always() && hashFiles('.runtime/enterprise_eval/latest.json') != ''
         id: enterprise-status
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
@@ -58,15 +58,15 @@ jobs:
           PY
 
       - name: Publish enterprise eval summary
-        if: always()
+        if: always() && hashFiles('.runtime/enterprise_eval/latest.json') != ''
         run: python scripts/render_enterprise_eval_summary.py .runtime/enterprise_eval/latest.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Render enterprise eval PR comment
-        if: always() && github.event_name == 'pull_request' && steps.enterprise-status.outputs.overall_status != 'healthy'
+        if: always() && github.event_name == 'pull_request' && hashFiles('.runtime/enterprise_eval/latest.json') != '' && steps.enterprise-status.outputs.overall_status != 'healthy'
         run: python scripts/render_enterprise_eval_summary.py --format comment .runtime/enterprise_eval/latest.json > .runtime/enterprise_eval/pr_comment.md
 
       - name: Update enterprise eval PR comment
-        if: always() && github.event_name == 'pull_request' && steps.enterprise-status.outputs.overall_status != 'healthy'
+        if: always() && github.event_name == 'pull_request' && hashFiles('.runtime/enterprise_eval/pr_comment.md') != '' && steps.enterprise-status.outputs.overall_status != 'healthy'
         uses: actions/github-script@v7
         with:
           script: |
@@ -99,7 +99,7 @@ jobs:
             }
 
       - name: Upload enterprise eval artifacts
-        if: always()
+        if: always() && hashFiles('.runtime/enterprise_eval/latest.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: enterprise-eval-artifacts

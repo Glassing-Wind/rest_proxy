@@ -4,19 +4,25 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import sys
 from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     from tools.brain.search import semantic_helpers as sem_helpers
 except Exception:
-    _SEM_HELPERS_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic_helpers.py"
+    _SEM_HELPERS_PATH = ROOT / "tools" / "brain" / "search" / "semantic_helpers.py"
     _spec = importlib.util.spec_from_file_location("duplicate_eval_semantic_helpers", _SEM_HELPERS_PATH)
     sem_helpers = importlib.util.module_from_spec(_spec)
     assert _spec is not None and _spec.loader is not None
     _spec.loader.exec_module(sem_helpers)
 
 
-BENCHMARK_PATH = Path("/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json")
+BENCHMARK_PATH = ROOT / "benchmarks" / "retrieval_duplicate_goldens.json"
 NDCG_REGRESSION_ALERT_DELTA = 0.05
 
 
