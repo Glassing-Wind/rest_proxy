@@ -657,6 +657,40 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertIn("parse", metadata["call_like_symbols"])
         self.assertEqual(metadata["chunk_role"], "example_usage")
 
+    def test_read_and_chunk_enriches_test_usage_role(self):
+        payload = {
+            "file_meta": {"file_symbols": ["test_parse"]},
+            "chunks": [
+                {
+                    "ref_id": "proj123:v6:e2e/python/tests/test_parsing.py:abc123",
+                    "text": "// File: e2e/python/tests/test_parsing.py\nresult = parser.parse(source, None)",
+                    "metadata": {
+                        "file": "e2e/python/tests/test_parsing.py",
+                        "project_id": "proj123",
+                        "language": "python",
+                        "symbols": ["test_parse"],
+                        "start_line": 1,
+                        "end_line": 1,
+                        "node_types": ["call_expression"],
+                    },
+                }
+            ],
+        }
+        fake_ts_pack = FakeTsPack(detected_language="python", payload=payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "test_parsing.py"
+            abs_path.write_text("result = parser.parse(source, None)", encoding="utf-8")
+
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                chunks, reason = self.module._read_and_chunk(
+                    str(abs_path), "e2e/python/tests/test_parsing.py", "proj123"
+                )
+
+        self.assertIsNone(reason)
+        metadata = chunks[0]["metadata"]
+        self.assertEqual(metadata["chunk_role"], "test_usage")
+
     def test_read_and_chunk_swift_uses_package_chunker(self):
         fake_ts_pack = FakeTsPack(
             detected_language="swift",
