@@ -2,6 +2,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -91,6 +92,60 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             self.assertIn("artifact_meta", latest_payload)
             self.assertEqual(latest_payload["artifact_meta"]["timestamp"], result["timestamp"])
             self.assertEqual(history_payload["enterprise_summary"]["live_graph_ok"], True)
+
+    def test_build_trend_summary_computes_metric_deltas_from_previous_latest(self):
+        mod = _load_module()
+        previous_payload = {
+            "enterprise_summary": {
+                "live_graph_ok": True,
+                "best_retrieval_config": {
+                    "name": "query_aware",
+                    "metrics": {"mrr": 0.9, "ndcg": 0.95, "hit_at_k": 1.0},
+                },
+                "retrieval_alerts": {"promoted_non_exact": ["ndcg_regressed"]},
+            }
+        }
+        current_payload = {
+            "enterprise_summary": {
+                "live_graph_ok": True,
+                "best_retrieval_config": {
+                    "name": "group_representatives",
+                    "metrics": {"mrr": 0.95, "ndcg": 0.97, "hit_at_k": 1.0},
+                },
+                "retrieval_alerts": {},
+            }
+        }
+        trend = mod.build_trend_summary(previous_payload, current_payload)
+        self.assertTrue(trend["has_previous"])
+        self.assertEqual(trend["previous_best_config"], "query_aware")
+        self.assertEqual(trend["current_best_config"], "group_representatives")
+        self.assertAlmostEqual(trend["metric_deltas"]["mrr"], 0.05)
+        self.assertEqual(trend["previous_alert_configs"], ["promoted_non_exact"])
+        self.assertEqual(trend["current_alert_configs"], [])
+
+    def test_run_live_graph_goldens_retries_once_on_failure(self):
+        mod = _load_module()
+
+        failure = mock.Mock(returncode=1, stdout="bad", stderr="flaky")
+        success = mock.Mock(returncode=0, stdout="ok", stderr="")
+        with mock.patch.object(mod.subprocess, "run", side_effect=[failure, success]) as run_mock:
+            result = mod.run_live_graph_goldens(["/tmp/repo"], "python")
+        self.assertTrue(result["ok"])
+        self.assertEqual(run_mock.call_count, 2)
+        self.assertEqual(result["attempts"][0]["returncode"], 1)
+        self.assertEqual(result["attempts"][1]["returncode"], 0)
+
+    def test_run_live_graph_goldens_uses_direct_fallback_validation(self):
+        mod = _load_module()
+
+        failure = mock.Mock(returncode=1, stdout="bad", stderr="flaky")
+        direct_success = mock.Mock(returncode=0)
+        with mock.patch.object(mod.subprocess, "run", side_effect=[failure, failure, direct_success]) as run_mock:
+            result = mod.run_live_graph_goldens(["/tmp/repo"], "python")
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["fallback_validated"])
+        self.assertEqual(run_mock.call_count, 3)
+        self.assertEqual(result["attempts"][-1]["mode"], "direct_stdio_fallback")
 
 
 if __name__ == "__main__":
