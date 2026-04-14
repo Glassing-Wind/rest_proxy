@@ -1,5 +1,8 @@
 import importlib.util
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 
 MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/scripts/run_enterprise_eval.py"
@@ -68,6 +71,26 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             summary["retrieval_regressions"],
             [{"case_id": "docs_case", "config": "promoted_non_exact", "alerts": ["ndcg_regressed"]}],
         )
+
+    def test_write_enterprise_artifacts_writes_latest_and_history(self):
+        mod = _load_module()
+        payload = {
+            "enterprise_summary": {"live_graph_ok": True},
+            "retrieval_eval": {"summary": {"group_representatives": {"mrr": 0.95}}},
+            "live_graph_goldens": {"ok": True, "workspaces": ["/tmp/repo"]},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = mod.write_enterprise_artifacts(payload, tmpdir)
+            latest_path = Path(result["latest_path"])
+            history_path = Path(result["history_path"])
+            self.assertTrue(latest_path.exists())
+            self.assertTrue(history_path.exists())
+            self.assertEqual(latest_path.parent, Path(tmpdir))
+            latest_payload = json.loads(latest_path.read_text())
+            history_payload = json.loads(history_path.read_text())
+            self.assertIn("artifact_meta", latest_payload)
+            self.assertEqual(latest_payload["artifact_meta"]["timestamp"], result["timestamp"])
+            self.assertEqual(history_payload["enterprise_summary"]["live_graph_ok"], True)
 
 
 if __name__ == "__main__":

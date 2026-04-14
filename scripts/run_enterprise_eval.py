@@ -8,10 +8,12 @@ import importlib.util
 import json
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ARTIFACT_DIR = ROOT / ".runtime" / "enterprise_eval"
 
 
 def _load_duplicate_eval():
@@ -92,6 +94,34 @@ def build_enterprise_summary(payload: dict) -> dict:
     }
 
 
+def _artifact_timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def write_enterprise_artifacts(payload: dict, artifact_dir: str | Path) -> dict:
+    target_dir = Path(artifact_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = _artifact_timestamp()
+    payload_with_meta = dict(payload)
+    payload_with_meta["artifact_meta"] = {
+        "written_at": datetime.now(timezone.utc).isoformat(),
+        "artifact_dir": str(target_dir),
+        "timestamp": timestamp,
+    }
+
+    latest_path = target_dir / "latest.json"
+    history_path = target_dir / f"{timestamp}.json"
+    latest_path.write_text(json.dumps(payload_with_meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    history_path.write_text(json.dumps(payload_with_meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "artifact_dir": str(target_dir),
+        "latest_path": str(latest_path),
+        "history_path": str(history_path),
+        "timestamp": timestamp,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -111,6 +141,11 @@ def main() -> int:
         action="store_true",
         help="Skip live graph goldens and run only retrieval eval.",
     )
+    parser.add_argument(
+        "--artifact-dir",
+        default=str(DEFAULT_ARTIFACT_DIR),
+        help="Directory to write latest and historical enterprise eval JSON artifacts.",
+    )
     args = parser.parse_args()
 
     retrieval = run_retrieval_eval()
@@ -124,6 +159,7 @@ def main() -> int:
         "live_graph_goldens": graph,
     }
     payload["enterprise_summary"] = build_enterprise_summary(payload)
+    payload["artifacts"] = write_enterprise_artifacts(payload, args.artifact_dir)
     print(json.dumps(payload, indent=2, sort_keys=True))
 
     retrieval_ok = True
