@@ -380,6 +380,12 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertTrue(flags["canonical_docs_mirror_suppression"])
         self.assertFalse(flags["helper_clone_suppression"])
 
+    def test_duplicate_experiment_flags_with_query_class_adds_override(self):
+        with mock.patch.dict(os.environ, {"LM_PROXY_DUPLICATE_ROLLOUT_STAGE": "stage2"}, clear=False):
+            flags = module.duplicate_experiment_flags_with_query_class("code", "usage_lookup")
+        self.assertEqual(flags["query_class_override"], "usage_lookup")
+        self.assertTrue(flags["boilerplate_variant_suppression"])
+
     def test_append_duplicate_telemetry_event_writes_ndjson(self):
         trace = {
             "selection": {"keep_indices": [0]},
@@ -780,6 +786,12 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertIn("pub\\s+fn", pattern)
         self.assertIn("process", pattern)
 
+    def test_member_usage_fallback_pattern_targets_receiver_qualified_calls(self):
+        pattern = fallbacks_module.build_member_usage_fallback_pattern(["parser.parse"])
+        self.assertIn("parser", pattern)
+        self.assertIn("parse", pattern)
+        self.assertIn("\\s*\\.\\s*", pattern)
+
     def test_candidate_relevance_score_prefers_rank_score(self):
         row = {"rrf": 0.2, "rank_score": 0.9}
         self.assertEqual(module.candidate_relevance_score(row), 0.9)
@@ -813,6 +825,26 @@ class SemanticHelperTests(unittest.TestCase):
             ),
             0,
         )
+
+    def test_exact_member_usage_hit_prefers_metadata_when_present(self):
+        self.assertEqual(
+            module.implementation_exact_member_usage_hit(
+                "",
+                "where is parser.parse used in tree-sitter-language-pack",
+                {"member_usages": ["parser.parse", "parser.reset"]},
+            ),
+            1,
+        )
+
+    def test_chunk_role_informs_usage_role(self):
+        role = module.implementation_result_role(
+            "examples/python_smoke/main.py",
+            {"chunk_role": "example_usage", "node_types": ["call_expression"]},
+            definition_hit=0,
+            export_hit=0,
+            api_entrypoint_hit=0,
+        )
+        self.assertEqual(role, "test_example")
 
     def test_usage_lookup_prefers_exact_receiver_qualified_usage_sites(self):
         query = "where is parser.parse used in tree-sitter-language-pack"
@@ -958,6 +990,17 @@ class SemanticHelperTests(unittest.TestCase):
             {"crates/ts-pack-cli/src/main.rs", "crates/ts-pack-node/src/lib.rs"},
         )
         self.assertNotEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+
+    def test_member_usage_lookup_golden_prefers_exact_receiver_usage(self):
+        case = load_benchmark_case("code_member_usage_lookup_prefers_exact_receiver_usage")
+        self.assertEqual(case["query_class"], "usage_lookup")
+        contract = module.rerank_retrieval_results_contract(
+            case["results"],
+            query=case["query"],
+            mode="code",
+        )
+        self.assertEqual(contract["results"][0]["file_path"], "examples/python_smoke/main.py")
+        self.assertNotEqual(contract["results"][0]["file_path"], "crates/ts-pack-core/src/lib.rs")
 
 
 if __name__ == "__main__":

@@ -618,6 +618,44 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(metadata["file_facts"], file_facts)
         self.assertEqual(metadata["symbols"], ["GET"])
         self.assertEqual(metadata["file_symbols"], ["GET"])
+        self.assertEqual(metadata["call_like_symbols"], ["fetch"])
+        self.assertEqual(metadata["chunk_role"], "usage")
+
+    def test_read_and_chunk_enriches_member_usage_and_example_role(self):
+        payload = {
+            "file_meta": {"file_symbols": ["run_example"]},
+            "chunks": [
+                {
+                    "ref_id": "proj123:v6:examples/python_smoke/main.py:abc123",
+                    "text": "// File: examples/python_smoke/main.py\nresult = parser.parse(source, None)",
+                    "metadata": {
+                        "file": "examples/python_smoke/main.py",
+                        "project_id": "proj123",
+                        "language": "python",
+                        "symbols": ["run_example"],
+                        "start_line": 1,
+                        "end_line": 1,
+                        "node_types": ["call_expression"],
+                    },
+                }
+            ],
+        }
+        fake_ts_pack = FakeTsPack(detected_language="python", payload=payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "main.py"
+            abs_path.write_text("result = parser.parse(source, None)", encoding="utf-8")
+
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                chunks, reason = self.module._read_and_chunk(
+                    str(abs_path), "examples/python_smoke/main.py", "proj123"
+                )
+
+        self.assertIsNone(reason)
+        metadata = chunks[0]["metadata"]
+        self.assertEqual(metadata["member_usages"], ["parser.parse"])
+        self.assertIn("parse", metadata["call_like_symbols"])
+        self.assertEqual(metadata["chunk_role"], "example_usage")
 
     def test_read_and_chunk_swift_uses_package_chunker(self):
         fake_ts_pack = FakeTsPack(

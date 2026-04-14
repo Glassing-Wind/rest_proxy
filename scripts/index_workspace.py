@@ -10,6 +10,7 @@ Usage:
 """
 
 import os
+import re
 import sys
 import asyncio
 import inspect
@@ -124,6 +125,134 @@ _EXTRACTIONS_BY_LANG = {
         },
     },
 }
+
+_DECLARATION_NODE_TYPES = {
+    "function_definition",
+    "function_declaration",
+    "function_item",
+    "method_definition",
+    "method_declaration",
+    "method_item",
+    "impl_item",
+    "impl_block",
+    "class_definition",
+    "class_declaration",
+    "class_specifier",
+    "struct_item",
+    "struct_specifier",
+    "enum_item",
+    "enum_specifier",
+    "type_alias_declaration",
+    "module",
+    "mod_item",
+    "source_file",
+}
+
+_CALLSITE_NODE_TYPES = {
+    "call_expression",
+    "call",
+    "expression_statement",
+    "match_expression",
+    "await_expression",
+    "argument_list",
+}
+
+_PATH_LIKE_CHUNK_ROLES = (
+    ("/examples/", "example_usage"),
+    ("/tests/", "test_usage"),
+    ("/test/", "test_usage"),
+    ("/e2e/", "test_usage"),
+    ("/spec/", "test_usage"),
+)
+
+_SUPPORT_PATH_SEGMENTS = ("/scripts/", "/tools/", "/.github/", "/vendor", "/nix/")
+
+
+def _chunk_content_body(text: str) -> str:
+    if not text:
+        return ""
+    lines = text.splitlines()
+    if lines and lines[0].startswith("// File: "):
+        return "\n".join(lines[1:])
+    return text
+
+
+def _extract_chunk_member_usages(text: str) -> List[str]:
+    body = _chunk_content_body(text)
+    if not body:
+        return []
+    seen: set[str] = set()
+    values: List[str] = []
+    for receiver, member in re.findall(
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        body,
+    ):
+        expr = f"{receiver}.{member}".lower()
+        if expr in seen:
+            continue
+        seen.add(expr)
+        values.append(expr)
+        if len(values) >= 24:
+            break
+    return values
+
+
+def _extract_chunk_call_like_symbols(text: str, member_usages: List[str]) -> List[str]:
+    body = _chunk_content_body(text)
+    seen = {expr.lower() for expr in member_usages}
+    values = list(member_usages)
+    for symbol in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", body):
+        normalized = symbol.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        values.append(normalized)
+        if len(values) >= 32:
+            break
+    return values
+
+
+def _infer_chunk_role(file_path: str, metadata: dict) -> str:
+    norm = (file_path or "").replace("\\", "/").lower()
+    for segment, role in _PATH_LIKE_CHUNK_ROLES:
+        if segment in norm or norm.startswith(segment.lstrip("/")):
+            return role
+    if any(segment in norm for segment in _SUPPORT_PATH_SEGMENTS) or norm.startswith("scripts/") or norm.startswith("tools/"):
+        return "script_support"
+
+    node_types = metadata.get("node_types")
+    lowered = {
+        str(node_type).strip().lower()
+        for node_type in (node_types or [])
+        if str(node_type).strip()
+    }
+    declaration_like = bool(lowered & _DECLARATION_NODE_TYPES)
+    callsite_like = bool(lowered & _CALLSITE_NODE_TYPES)
+    if declaration_like:
+        return "definition"
+    if callsite_like:
+        return "usage"
+    return "context"
+
+
+def _enrich_chunk_metadata(chunk: Dict, file_path: str) -> Dict:
+    metadata = chunk.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        chunk["metadata"] = metadata
+
+    text = str(chunk.get("text") or chunk.get("content") or "")
+    if not isinstance(metadata.get("member_usages"), list):
+        metadata["member_usages"] = _extract_chunk_member_usages(text)
+    if not isinstance(metadata.get("call_like_symbols"), list):
+        metadata["call_like_symbols"] = _extract_chunk_call_like_symbols(
+            text,
+            metadata.get("member_usages") or [],
+        )
+    chunk_role = metadata.get("chunk_role")
+    if not isinstance(chunk_role, str) or not chunk_role.strip():
+        metadata["chunk_role"] = _infer_chunk_role(file_path, metadata)
+    return chunk
 
 
 def _skip_diagnostic_files_enabled() -> bool:
@@ -379,7 +508,8 @@ def _read_and_chunk(
             overlap_lines=OVERLAP_LINES,
         )
 
-    return chunks, None
+    enriched_chunks = [_enrich_chunk_metadata(chunk, rel_path) for chunk in chunks]
+    return enriched_chunks, None
 
 
 async def chunk_file(

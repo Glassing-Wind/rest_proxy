@@ -149,6 +149,41 @@
       ]
     },
     {
+      "id": "ts_pack_search_parser_member_usage",
+      "workspace_name": "tree-sitter-language-pack",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": ["$workspace_id"],
+        "query": "where is parser.parse used in tree-sitter-language-pack",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- crates/ts-pack-core/src/parse.rs",
+        "parser.parse(source, None)",
+        "parse_string"
+      ]
+    },
+    {
       "id": "rest_proxy_find_code_duplication_symbol_context",
       "workspace_name": "rest_proxy",
       "tool": "get_symbol_context",

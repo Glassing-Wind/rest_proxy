@@ -76,6 +76,18 @@ def duplicate_experiment_flags_from_env(mode: str = "code") -> dict:
     return flags
 
 
+def duplicate_experiment_flags_with_query_class(
+    mode: str = "code",
+    query_class: str | None = None,
+) -> dict:
+    flags = duplicate_experiment_flags_from_env(mode)
+    if isinstance(query_class, str):
+        trimmed = query_class.strip()
+        if trimmed:
+            flags["query_class_override"] = trimmed
+    return flags
+
+
 def duplicate_telemetry_enabled() -> bool:
     raw = os.getenv("LM_PROXY_DUPLICATE_TELEMETRY", "1").strip().lower()
     if raw in {"0", "false", "no", "off"}:
@@ -323,6 +335,7 @@ def implementation_rank_tuple(
     low_signal_support = 1 if result.get("low_signal_support_path") else 0
     doc_like = 1 if result.get("doc_like") else 0
     usage_heavy = 1 if result.get("implementation_usage_heavy_penalty") else 0
+    member_usage_priority = int(result.get("implementation_member_usage_priority", 0) or 0)
     role_priority = int(result.get("implementation_role_priority", 0) or 0)
     node_type_priority = int(result.get("implementation_node_type_priority", 0) or 0)
     definition_hit = int(result.get("implementation_definition_hit", 0) or 0)
@@ -338,6 +351,7 @@ def implementation_rank_tuple(
         low_signal_support,
         doc_like,
         usage_heavy,
+        -member_usage_priority,
         -role_priority,
         -node_type_priority,
         -signature_hit,
@@ -421,12 +435,37 @@ def implementation_symbol_hit(meta: dict, query: str) -> int:
     return sum(1 for symbol in symbols if symbol in lowered)
 
 
-def implementation_exact_member_usage_hit(content: str | None, query: str) -> int:
-    text = (content or "").lower()
-    if not text:
-        return 0
+def implementation_member_usages(meta: dict) -> set[str]:
+    if not isinstance(meta, dict):
+        return set()
+    member_usages = meta.get("member_usages")
+    if not isinstance(member_usages, list):
+        return set()
+    return {
+        str(expr).strip().lower()
+        for expr in member_usages
+        if str(expr).strip()
+    }
+
+
+def implementation_chunk_role(meta: dict) -> str:
+    if not isinstance(meta, dict):
+        return ""
+    role = meta.get("chunk_role")
+    if not isinstance(role, str):
+        return ""
+    return role.strip().lower()
+
+
+def implementation_exact_member_usage_hit(content: str | None, query: str, meta: dict | None = None) -> int:
     exprs = implementation_query_member_exprs(query)
     if not exprs:
+        return 0
+    meta_hits = implementation_member_usages(meta or {})
+    if meta_hits:
+        return sum(1 for expr in exprs if expr in meta_hits)
+    text = (content or "").lower()
+    if not text:
         return 0
     return sum(1 for expr in exprs if expr in text)
 
@@ -630,10 +669,23 @@ def implementation_result_role(
     declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
     callsite_like = bool(node_types & CALLSITE_NODE_TYPES)
     api_context_hit = implementation_api_context_hit(meta)
+    chunk_role = implementation_chunk_role(meta)
     if is_low_signal_binding_surface_path(file_path):
         return "generated_surface"
     if is_doc_like_path(file_path):
         return "docs"
+    if chunk_role in {"example_usage", "test_usage"}:
+        return "test_example"
+    if chunk_role == "script_support":
+        return "supporting_context"
+    if chunk_role == "usage" and definition_hit <= 0 and export_hit <= 0:
+        return "usage_callsite"
+    if chunk_role == "definition" and (api_entrypoint_hit > 0 or api_context_hit > 0):
+        return "public_api_definition"
+    if chunk_role == "definition" and export_hit > 0:
+        return "canonical_definition"
+    if chunk_role == "definition" and definition_hit > 0:
+        return "internal_implementation"
     if is_usage_heavy_path(file_path):
         if callsite_like and definition_hit <= 0 and export_hit <= 0:
             if any(segment in path for segment in ("/tests/", "/test/", "/e2e/", "/examples/", "/spec/")):
@@ -774,6 +826,10 @@ def enrich_implementation_result(
     result["implementation_exact_member_usage_hit"] = implementation_exact_member_usage_hit(
         result.get("content", ""),
         query,
+        meta,
+    )
+    result["implementation_member_usage_priority"] = int(
+        result.get("implementation_exact_member_usage_hit", 0) or 0
     )
     result["implementation_definition_hit"] = implementation_definition_hit(result.get("content", ""), query)
     result["implementation_exact_signature_symbol_hit"] = implementation_exact_signature_symbol_hit(

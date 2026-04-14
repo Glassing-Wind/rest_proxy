@@ -603,6 +603,73 @@ def register(mcp: FastMCP) -> None:
                                 all_results.append(r)
                         all_results.sort(key=sem_helpers.implementation_rank_tuple)
 
+            if impl_intent and sem_helpers.query_class_prefers_usage(impl_query_class) and all_results:
+                top_probe = all_results[: min(5, len(all_results))]
+                has_member_usage_hit = any(
+                    int(r.get("implementation_exact_member_usage_hit", 0) or 0) > 0
+                    for r in top_probe
+                )
+                member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
+                if member_exprs and not has_member_usage_hit:
+                    rescue_results: list[dict] = []
+                    for pid, proj_name in pid_to_name.items():
+                        proj_root = pid_to_path.get(pid)
+                        if not proj_root:
+                            continue
+                        matches, _dbg = await search_fallbacks.run_member_usage_fallback_grep(
+                            proj_root,
+                            member_exprs,
+                            fallback_glob,
+                            min(fallback_max, 8),
+                        )
+                        if not matches:
+                            continue
+                        async with memory_store._pg_pool.connection() as conn:
+                            await conn.execute("BEGIN")
+                            rescue_rows = await _load_rescue_rows(conn, pid=pid, file_paths=matches)
+                        for r in rescue_rows:
+                            r_meta = sem_helpers.coerce_meta(r)
+                            r["_meta"] = r_meta
+                            r["meta_score"] = sem_helpers.meta_score(r_meta)
+                            r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
+                            r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
+                                r.get("file_path")
+                            )
+                            r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
+                                r.get("file_path")
+                            )
+                            sem_helpers.enrich_implementation_result(
+                                r,
+                                query=query,
+                                query_class=impl_query_class,
+                                base_score=float(r.get("rrf", 0.0) or 0.0),
+                                meta_boost=0.0,
+                                base_bonus=0.03,
+                            )
+                        rescue_results.extend(rescue_rows)
+                    if rescue_results:
+                        existing_keys = {
+                            (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                            for r in all_results
+                        }
+                        for r in rescue_results:
+                            key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                            if key not in existing_keys:
+                                all_results.append(r)
+                        all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                exact_member_hits = [
+                    r for r in all_results if int(r.get("implementation_exact_member_usage_hit", 0) or 0) > 0
+                ]
+                if member_exprs and exact_member_hits:
+                    non_exact_hits = [
+                        r
+                        for r in all_results
+                        if int(r.get("implementation_exact_member_usage_hit", 0) or 0) <= 0
+                    ]
+                    exact_member_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                    non_exact_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                    all_results = exact_member_hits + non_exact_hits
+
             if clone_dedup:
                 try:
                     import graph_bootstrap
@@ -783,7 +850,10 @@ def register(mcp: FastMCP) -> None:
                 "on",
             }
             duplicate_telemetry_enabled = sem_helpers.duplicate_telemetry_enabled()
-            duplicate_experiments = sem_helpers.duplicate_experiment_flags_from_env("code")
+            duplicate_experiments = sem_helpers.duplicate_experiment_flags_with_query_class(
+                "code",
+                impl_query_class if impl_intent else None,
+            )
             duplicate_trace: dict | None = None
 
             if dedupe_files:

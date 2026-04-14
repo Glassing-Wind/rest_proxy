@@ -396,6 +396,43 @@
       }
     },
     {
+      "id": "code_member_usage_lookup_prefers_exact_receiver_usage",
+      "mode": "code",
+      "query_class": "usage_lookup",
+      "query": "where is parser.parse used in tree-sitter-language-pack",
+      "results": [
+        {
+          "file_path": "crates/ts-pack-core/src/lib.rs",
+          "project_id": "bench",
+          "rrf": 0.91,
+          "rank_score": 0.91,
+          "content": "pub fn get_parser(name: &str) -> Result<tree_sitter::Parser, Error> { let mut parser = tree_sitter::Parser::new(); Ok(parser) }",
+          "metadata": {"file_symbols": ["get_parser"], "context_path": ["Core", "API"], "node_types": ["function_item"]}
+        },
+        {
+          "file_path": "examples/python_smoke/main.py",
+          "project_id": "bench",
+          "rrf": 0.82,
+          "rank_score": 0.82,
+          "content": "parser = get_parser(\"python\")\ntree = parser.parse(b\"def hello(): pass\")\n",
+          "metadata": {"file_symbols": [], "context_path": ["Examples", "Python"], "node_types": ["call_expression", "expression_statement"]}
+        },
+        {
+          "file_path": "e2e/python/tests/test_parsing.py",
+          "project_id": "bench",
+          "rrf": 0.80,
+          "rank_score": 0.80,
+          "content": "parser = get_parser(\"python\")\ntree = parser.parse(b\"def hello(): pass\")\nassert tree is not None\n",
+          "metadata": {"file_symbols": [], "context_path": ["E2E", "Python"], "node_types": ["call_expression", "expression_statement"]}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [1, 2],
+        "must_survive": [1, 2],
+        "relevance_labels": {"0": 1.0, "1": 3.0, "2": 2.0}
+      }
+    },
+    {
       "id": "code_implementation_search_prefers_internal_impl_over_wrapper",
       "mode": "code",
       "query_class": "implementation_search",
