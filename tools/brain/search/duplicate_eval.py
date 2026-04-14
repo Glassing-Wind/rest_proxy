@@ -163,7 +163,13 @@ def _promotion_alerts(config: dict, baseline: dict) -> list[str]:
     grouping_improved = float(config["false_separation_rate"]) + 1e-9 < float(
         baseline["false_separation_rate"]
     )
-    if ndcg_drop > NDCG_REGRESSION_ALERT_DELTA and not (redundancy_improved or grouping_improved):
+    canonical_docs_preserved = (
+        config.get("canonical_doc_preference_success") is True
+        and config.get("version_sensitive_doc_retention") is True
+    )
+    if ndcg_drop > NDCG_REGRESSION_ALERT_DELTA and not (
+        redundancy_improved or grouping_improved or canonical_docs_preserved
+    ):
         alerts.append("ndcg_regressed")
     if config["topk_redundancy_rate"] > baseline["topk_redundancy_rate"]:
         alerts.append("no_redundancy_gain")

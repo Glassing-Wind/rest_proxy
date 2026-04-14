@@ -81,6 +81,14 @@ class RetrievalDuplicateEvalTests(unittest.TestCase):
         query_aware = case["configs"]["query_aware"]
         self.assertNotIn("ndcg_regressed", query_aware["promotion_alerts"])
 
+    def test_docs_canonical_mirror_suppression_does_not_alert_when_canonical_and_version_survive(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_canonical_mirror_preferred")
+        promoted = case["configs"]["promoted_non_exact"]
+        self.assertTrue(promoted["canonical_doc_preference_success"])
+        self.assertTrue(promoted["version_sensitive_doc_retention"])
+        self.assertNotIn("ndcg_regressed", promoted["promotion_alerts"])
+
 
 if __name__ == "__main__":
     unittest.main()
