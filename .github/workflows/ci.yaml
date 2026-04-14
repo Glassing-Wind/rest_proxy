@@ -110,6 +110,19 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || vars.LM_PROXY_ENABLE_LIVE_GRAPH_SMOKE == '1'
     runs-on: ubuntu-latest
     services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lm_proxy_mem
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d lm_proxy_mem"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 20
       neo4j:
         image: neo4j:5.26
         env:
@@ -141,6 +154,7 @@ jobs:
           LM_PROXY_NEO4J_USER: neo4j
           LM_PROXY_NEO4J_PASSWORD: password
           LM_PROXY_NEO4J_DB: neo4j
+          LM_PROXY_PG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/lm_proxy_mem
         run: |
           python - <<'PY'
           import asyncio
@@ -161,6 +175,8 @@ jobs:
           LM_PROXY_NEO4J_USER: neo4j
           LM_PROXY_NEO4J_PASSWORD: password
           LM_PROXY_NEO4J_DB: neo4j
+          LM_PROXY_PG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/lm_proxy_mem
+          LM_PROXY_FAKE_EMBEDDINGS: "1"
         run: bash scripts/run_enterprise_live_graph_smoke.sh
 
       - name: Publish live graph smoke summary
@@ -171,6 +187,8 @@ jobs:
           LM_PROXY_NEO4J_USER: neo4j
           LM_PROXY_NEO4J_PASSWORD: password
           LM_PROXY_NEO4J_DB: neo4j
+          LM_PROXY_PG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/lm_proxy_mem
+          LM_PROXY_FAKE_EMBEDDINGS: "1"
         run: |
           DEFAULT_FIXTURE="${GITHUB_WORKSPACE}/tests/fixtures/enterprise_live_graph_fixture"
           WORKSPACES="${LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES:-${DEFAULT_FIXTURE}}"

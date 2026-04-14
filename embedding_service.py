@@ -16,6 +16,7 @@ Config (via env or .env):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import sys
 from typing import List
@@ -33,6 +34,13 @@ _BATCH_SIZE = int(os.getenv("LM_EMBED_BATCH_SIZE", "64"))
 _CONCURRENCY = int(os.getenv("LM_EMBED_CONCURRENCY", "4"))
 _EMBED_URL = f"{_BASE_URL}/v1/embeddings"
 _TIMEOUT = 120  # seconds per HTTP request
+_FAKE_EMBEDDINGS = os.getenv("LM_PROXY_FAKE_EMBEDDINGS", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+_FAKE_DIM = int(os.getenv("LM_PROXY_MEMORY_EMBEDDING_DIM", "768"))
 
 
 async def _post_batch(client, texts: List[str]) -> List[List[float]]:
@@ -47,6 +55,23 @@ async def _post_batch(client, texts: List[str]) -> List[List[float]]:
     # Sort by index in case LM Studio returns out of order
     items = sorted(data["data"], key=lambda x: x["index"])
     return [item["embedding"] for item in items]
+
+
+def _fake_embedding_for_text(text: str, dim: int) -> List[float]:
+    out: List[float] = []
+    counter = 0
+    seed = text.encode("utf-8", errors="ignore")
+    while len(out) < dim:
+        digest = hashlib.sha256(seed + counter.to_bytes(4, "big")).digest()
+        counter += 1
+        for idx in range(0, len(digest), 4):
+            if len(out) >= dim:
+                break
+            chunk = digest[idx : idx + 4]
+            value = int.from_bytes(chunk, "big", signed=False)
+            normalized = (value / 0xFFFFFFFF) * 2.0 - 1.0
+            out.append(normalized)
+    return out
 
 
 class EmbeddingService:
@@ -96,6 +121,8 @@ class EmbeddingService:
 
     @property
     def _device(self) -> str:
+        if _FAKE_EMBEDDINGS:
+            return f"fake({_FAKE_DIM})"
         return f"lmstudio({_MODEL})"
 
     async def embed_batch_async(
@@ -109,6 +136,8 @@ class EmbeddingService:
         _CONCURRENCY requests concurrently over the persistent client,
         returns embeddings in original order.
         """
+        if _FAKE_EMBEDDINGS:
+            return [_fake_embedding_for_text(text, _FAKE_DIM) for text in texts]
         bs = batch_size if batch_size is not None else _BATCH_SIZE
         # Split into sub-batches
         sub_batches = [texts[i : i + bs] for i in range(0, len(texts), bs)]
