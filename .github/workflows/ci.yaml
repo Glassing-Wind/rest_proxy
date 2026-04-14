@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   python:
@@ -104,3 +105,38 @@ jobs:
           name: enterprise-eval-artifacts
           path: .runtime/enterprise_eval/
           if-no-files-found: error
+
+  enterprise-live-graph-smoke:
+    if: github.event_name == 'workflow_dispatch' || vars.LM_PROXY_ENABLE_LIVE_GRAPH_SMOKE == '1'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run enterprise live graph smoke
+        env:
+          LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES: ${{ vars.LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES }}
+        run: bash scripts/run_enterprise_live_graph_smoke.sh
+
+      - name: Publish live graph smoke summary
+        if: always()
+        env:
+          LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES: ${{ vars.LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES }}
+        run: |
+          WORKSPACES="${LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES:-${GITHUB_WORKSPACE}}"
+          {
+            echo "## Enterprise Live Graph Smoke"
+            echo ""
+            echo "- Status: \`${{ job.status }}\`"
+            echo "- Workspaces: \`${WORKSPACES}\`"
+            echo "- Mode: \`incremental reindex + live graph goldens\`"
+          } >> "$GITHUB_STEP_SUMMARY"
