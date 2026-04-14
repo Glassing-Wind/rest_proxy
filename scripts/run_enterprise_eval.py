@@ -42,6 +42,56 @@ def run_live_graph_goldens(workspaces: list[str], python_bin: str) -> dict:
     }
 
 
+def _best_retrieval_config(summary: dict) -> dict:
+    best_name = ""
+    best_metrics: dict = {}
+    best_mrr = float("-inf")
+    for name, metrics in (summary or {}).items():
+        try:
+            mrr = float((metrics or {}).get("mrr", 0.0))
+        except (TypeError, ValueError):
+            mrr = 0.0
+        if mrr > best_mrr:
+            best_mrr = mrr
+            best_name = name
+            best_metrics = metrics or {}
+    return {
+        "name": best_name,
+        "metrics": best_metrics,
+    }
+
+
+def build_enterprise_summary(payload: dict) -> dict:
+    retrieval = payload.get("retrieval_eval") or {}
+    live_graph = payload.get("live_graph_goldens") or {}
+    retrieval_summary = retrieval.get("summary") or {}
+    best = _best_retrieval_config(retrieval_summary)
+
+    regressions: list[dict] = []
+    for case in retrieval.get("cases") or []:
+        case_id = case.get("id")
+        for config_name, metrics in (case.get("configs") or {}).items():
+            alerts = list((metrics or {}).get("promotion_alerts") or [])
+            if alerts:
+                regressions.append(
+                    {
+                        "case_id": case_id,
+                        "config": config_name,
+                        "alerts": alerts,
+                    }
+                )
+
+    return {
+        "live_graph_ok": bool(live_graph.get("ok", False)) if not live_graph.get("skipped") else True,
+        "live_graph_skipped": bool(live_graph.get("skipped", False)),
+        "live_graph_workspaces": list(live_graph.get("workspaces") or []),
+        "best_retrieval_config": best,
+        "retrieval_query_class_counts": retrieval.get("query_class_counts") or {},
+        "retrieval_alerts": retrieval.get("alerts") or {},
+        "retrieval_regressions": regressions,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -73,6 +123,7 @@ def main() -> int:
         "retrieval_eval": retrieval,
         "live_graph_goldens": graph,
     }
+    payload["enterprise_summary"] = build_enterprise_summary(payload)
     print(json.dumps(payload, indent=2, sort_keys=True))
 
     retrieval_ok = True
