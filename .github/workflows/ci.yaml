@@ -109,6 +109,19 @@ jobs:
   enterprise-live-graph-smoke:
     if: github.event_name == 'workflow_dispatch' || vars.LM_PROXY_ENABLE_LIVE_GRAPH_SMOKE == '1'
     runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/password
+        ports:
+          - 7687:7687
+          - 7474:7474
+        options: >-
+          --health-cmd "cypher-shell -a bolt://localhost:7687 -u neo4j -p password 'RETURN 1;' || exit 1"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -122,15 +135,42 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Wait for Neo4j
+        env:
+          LM_PROXY_NEO4J_URI: bolt://127.0.0.1:7687
+          LM_PROXY_NEO4J_USER: neo4j
+          LM_PROXY_NEO4J_PASSWORD: password
+          LM_PROXY_NEO4J_DB: neo4j
+        run: |
+          python - <<'PY'
+          import asyncio
+          import sys
+          sys.path.insert(0, ".")
+          import graph_bootstrap
+
+          async def main():
+              await graph_bootstrap.init_graph_db()
+
+          asyncio.run(main())
+          PY
+
       - name: Run enterprise live graph smoke
         env:
           LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES: ${{ vars.LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES }}
+          LM_PROXY_NEO4J_URI: bolt://127.0.0.1:7687
+          LM_PROXY_NEO4J_USER: neo4j
+          LM_PROXY_NEO4J_PASSWORD: password
+          LM_PROXY_NEO4J_DB: neo4j
         run: bash scripts/run_enterprise_live_graph_smoke.sh
 
       - name: Publish live graph smoke summary
         if: always()
         env:
           LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES: ${{ vars.LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES }}
+          LM_PROXY_NEO4J_URI: bolt://127.0.0.1:7687
+          LM_PROXY_NEO4J_USER: neo4j
+          LM_PROXY_NEO4J_PASSWORD: password
+          LM_PROXY_NEO4J_DB: neo4j
         run: |
           DEFAULT_FIXTURE="${GITHUB_WORKSPACE}/tests/fixtures/enterprise_live_graph_fixture"
           WORKSPACES="${LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES:-${DEFAULT_FIXTURE}}"
