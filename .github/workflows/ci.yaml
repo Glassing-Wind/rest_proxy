@@ -21,7 +21,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-ci.txt
 
       - name: Run gated CI checks
         run: bash scripts/run_ci_checks.sh
@@ -39,7 +39,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-ci.txt
 
       - name: Run enterprise eval
         run: python scripts/run_enterprise_eval.py --skip-graph
@@ -146,7 +146,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-ci.txt
 
       - name: Wait for Neo4j
         env:
