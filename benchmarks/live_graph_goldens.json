@@ -71,6 +71,21 @@
       ]
     },
     {
+      "id": "ts_pack_process_symbol_context_disambiguated",
+      "workspace_name": "tree-sitter-language-pack",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "process",
+        "include_source_preview": false,
+        "file_path": "crates/ts-pack-core/src/lib.rs"
+      },
+      "required_substrings": [
+        "crates/ts-pack-core/src/lib.rs",
+        "ensure_cache_registered",
+        "crates/ts-pack-core/src/registry.rs"
+      ]
+    },
+    {
       "id": "ts_pack_process_find_references",
       "workspace_name": "tree-sitter-language-pack",
       "tool": "find_references",
