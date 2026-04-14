@@ -43,6 +43,10 @@ jobs:
       - name: Run enterprise eval
         run: python scripts/run_enterprise_eval.py --skip-graph
 
+      - name: Publish enterprise eval summary
+        if: always()
+        run: python scripts/render_enterprise_eval_summary.py .runtime/enterprise_eval/latest.json >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload enterprise eval artifacts
         if: always()
         uses: actions/upload-artifact@v4
