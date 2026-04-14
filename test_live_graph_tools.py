@@ -59,11 +59,22 @@ def _workspace_basename(workspace_id: str) -> str:
     return os.path.basename(os.path.abspath(workspace_id.rstrip("/")))
 
 
+def _resolve_golden_params(value, workspace_id: str):
+    if value == "$workspace_id":
+        return workspace_id
+    if isinstance(value, list):
+        return [_resolve_golden_params(item, workspace_id) for item in value]
+    if isinstance(value, dict):
+        return {key: _resolve_golden_params(item, workspace_id) for key, item in value.items()}
+    return value
+
+
 def _build_tool_registry() -> FakeMCP:
     _install_mcp_stub()
     from tools.brain.code_intel import core as code_intel_core
     from tools.brain.graph import tools as graph_tools
     from tools.brain.search import graph_query as graph_query_tools
+    from tools.brain.search import semantic as semantic_tools
     from tools.brain.search import tools as search_tools
     from tools.hands import dev as dev_tools
 
@@ -71,6 +82,7 @@ def _build_tool_registry() -> FakeMCP:
     code_intel_core.register(mcp)
     graph_tools.register(mcp)
     graph_query_tools.register(mcp)
+    semantic_tools.register(mcp)
     search_tools.register(mcp)
     dev_tools.register(mcp)
     return mcp
@@ -241,10 +253,7 @@ async def _run_known_regressions(mcp: FakeMCP, workspace_id: str) -> list[ToolRu
         tool_name = case.get("tool")
         if not tool_name or tool_name not in mcp.tools:
             raise RuntimeError(f"Graph golden '{case.get('id')}' references unknown tool '{tool_name}'.")
-        params = dict(case.get("params") or {})
-        for key, value in list(params.items()):
-            if value == "$workspace_id":
-                params[key] = workspace_id
+        params = _resolve_golden_params(dict(case.get("params") or {}), workspace_id)
         if tool_name in {"get_symbol_context", "get_call_chain"}:
             output = await mcp.tools[tool_name](workspace_id, **params)
         else:
