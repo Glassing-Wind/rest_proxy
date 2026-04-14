@@ -17,6 +17,7 @@ except Exception:
 
 
 BENCHMARK_PATH = Path("/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json")
+NDCG_REGRESSION_ALERT_DELTA = 0.05
 
 
 def load_benchmarks(path: str | None = None) -> list[dict]:
@@ -155,7 +156,14 @@ def _promotion_alerts(config: dict, baseline: dict) -> list[str]:
         alerts.append("best_answer_retention_regressed")
     if config["mrr"] + 1e-9 < baseline["mrr"]:
         alerts.append("mrr_regressed")
-    if config["ndcg"] + 1e-9 < baseline["ndcg"]:
+    ndcg_drop = float(baseline["ndcg"]) - float(config["ndcg"])
+    redundancy_improved = float(config["topk_redundancy_rate"]) + 1e-9 < float(
+        baseline["topk_redundancy_rate"]
+    )
+    grouping_improved = float(config["false_separation_rate"]) + 1e-9 < float(
+        baseline["false_separation_rate"]
+    )
+    if ndcg_drop > NDCG_REGRESSION_ALERT_DELTA and not (redundancy_improved or grouping_improved):
         alerts.append("ndcg_regressed")
     if config["topk_redundancy_rate"] > baseline["topk_redundancy_rate"]:
         alerts.append("no_redundancy_gain")

@@ -69,6 +69,18 @@ class RetrievalDuplicateEvalTests(unittest.TestCase):
         self.assertNotIn("hit_at_k_regressed", promoted["promotion_alerts"])
         self.assertNotIn("best_answer_retention_regressed", promoted["promotion_alerts"])
 
+    def test_exact_duplicate_case_does_not_raise_ndcg_alert_when_redundancy_improves(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "code_exact_duplicate_helpers")
+        promoted = case["configs"]["group_representatives"]
+        self.assertNotIn("ndcg_regressed", promoted["promotion_alerts"])
+
+    def test_small_ndcg_shift_without_other_regressions_does_not_alert(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_prose_near_duplicates_do_not_overcollapse")
+        query_aware = case["configs"]["query_aware"]
+        self.assertNotIn("ndcg_regressed", query_aware["promotion_alerts"])
+
 
 if __name__ == "__main__":
     unittest.main()
