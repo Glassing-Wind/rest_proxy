@@ -41,6 +41,18 @@ def build_member_usage_fallback_pattern(exprs: List[str]) -> str:
     return "|".join(sorted(set(patterns)))
 
 
+def normalize_fallback_paths(paths: List[str]) -> List[str]:
+    normalized: List[str] = []
+    for path in paths:
+        p = (path or "").strip()
+        if not p:
+            continue
+        if p.startswith("./"):
+            p = p[2:]
+        normalized.append(p)
+    return normalized
+
+
 async def run_definition_fallback_grep(
     project_root: str,
     query: str,
@@ -69,6 +81,8 @@ async def run_definition_fallback_grep(
             if not root:
                 root = "."
         cmd.append(root)
+    else:
+        cmd.append(".")
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -94,7 +108,7 @@ async def run_definition_fallback_grep(
         }
 
     output = stdout.decode("utf-8", errors="ignore")
-    paths = [p.strip() for p in output.splitlines() if p.strip()]
+    paths = normalize_fallback_paths([p.strip() for p in output.splitlines() if p.strip()])
     if fallback_glob:
         paths = [p for p in paths if fnmatch.fnmatch(p, fallback_glob)]
     return paths[: max(0, fallback_max)], {"code": proc.returncode, "count": len(paths)}
@@ -125,6 +139,8 @@ async def run_member_usage_fallback_grep(
             if not root:
                 root = "."
         cmd.append(root)
+    else:
+        cmd.append(".")
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -150,7 +166,7 @@ async def run_member_usage_fallback_grep(
         }
 
     output = stdout.decode("utf-8", errors="ignore")
-    paths = [p.strip() for p in output.splitlines() if p.strip()]
+    paths = normalize_fallback_paths([p.strip() for p in output.splitlines() if p.strip()])
     if fallback_glob:
         paths = [p for p in paths if fnmatch.fnmatch(p, fallback_glob)]
     return paths[: max(0, fallback_max)], {"code": proc.returncode, "count": len(paths)}
@@ -182,6 +198,8 @@ async def run_fallback_grep(
             if not root:
                 root = "."
         cmd.append(root)
+    else:
+        cmd.append(".")
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -209,7 +227,7 @@ async def run_fallback_grep(
         }
 
     output = stdout.decode("utf-8", errors="ignore")
-    paths = [p.strip() for p in output.splitlines() if p.strip()]
+    paths = normalize_fallback_paths([p.strip() for p in output.splitlines() if p.strip()])
     if fallback_glob:
         paths = [p for p in paths if fnmatch.fnmatch(p, fallback_glob)]
 

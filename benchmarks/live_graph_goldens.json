@@ -178,9 +178,9 @@
         "exclude_paths": null
       },
       "required_substrings": [
-        "--- crates/ts-pack-core/src/parse.rs",
-        "parser.parse(source, None)",
-        "parse_string"
+        "--- examples/python_smoke/main.py",
+        "tree = parser.parse(b\"def hello(): pass\")",
+        "e2e/python/tests/test_error_handling.py"
       ]
     },
     {

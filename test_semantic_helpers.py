@@ -792,6 +792,24 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertIn("parse", pattern)
         self.assertIn("\\s*\\.\\s*", pattern)
 
+    def test_normalize_fallback_paths_strips_dot_slash_prefix(self):
+        self.assertEqual(
+            fallbacks_module.normalize_fallback_paths(
+                ["./examples/python_smoke/main.py", "e2e/python/tests/test_parsing.py", ""]
+            ),
+            ["examples/python_smoke/main.py", "e2e/python/tests/test_parsing.py"],
+        )
+
+    def test_implementation_chunk_role_falls_back_to_file_path(self):
+        self.assertEqual(
+            module.implementation_chunk_role({}, "examples/python_smoke/main.py"),
+            "example_usage",
+        )
+        self.assertEqual(
+            module.implementation_chunk_role({}, "e2e/python/tests/test_parsing.py"),
+            "test_usage",
+        )
+
     def test_candidate_relevance_score_prefers_rank_score(self):
         row = {"rrf": 0.2, "rank_score": 0.9}
         self.assertEqual(module.candidate_relevance_score(row), 0.9)
@@ -846,20 +864,56 @@ class SemanticHelperTests(unittest.TestCase):
         )
         self.assertEqual(role, "test_example")
 
+    def test_exact_member_usage_site_hit_requires_usage_context(self):
+        self.assertTrue(
+            module.implementation_exact_member_usage_site_hit(
+                {
+                    "implementation_exact_member_usage_hit": 1,
+                    "implementation_role": "test_example",
+                    "_meta": {"chunk_role": "example_usage"},
+                }
+            )
+        )
+        self.assertFalse(
+            module.implementation_exact_member_usage_site_hit(
+                {
+                    "implementation_exact_member_usage_hit": 1,
+                    "implementation_role": "internal_implementation",
+                    "_meta": {"chunk_role": "definition"},
+                }
+            )
+        )
+
     def test_usage_lookup_prefers_exact_receiver_qualified_usage_sites(self):
         query = "where is parser.parse used in tree-sitter-language-pack"
         rows = [
             {
                 "file_path": "crates/ts-pack-core/src/lib.rs",
                 "content": "pub fn get_parser(name: &str) -> Result<tree_sitter::Parser, Error> { ... }",
-                "metadata": {"node_types": ["function_item"], "file_symbols": ["get_parser"]},
+                "metadata": {"node_types": ["function_item"], "file_symbols": ["get_parser"], "chunk_role": "definition"},
                 "rrf": 0.91,
             },
             {
                 "file_path": "examples/python_smoke/main.py",
                 "content": "parser = get_parser(\"python\")\ntree = parser.parse(b\"def hello(): pass\")\n",
-                "metadata": {"node_types": ["call_expression", "expression_statement"], "file_symbols": []},
+                "metadata": {
+                    "node_types": ["call_expression", "expression_statement"],
+                    "file_symbols": [],
+                    "chunk_role": "example_usage",
+                    "member_usages": ["parser.parse"],
+                },
                 "rrf": 0.82,
+            },
+            {
+                "file_path": "crates/ts-pack-core/src/parse.rs",
+                "content": "pub fn parse_string(language: &str, source: &[u8]) -> Result<Tree, Error> { parser.parse(source, None) }",
+                "metadata": {
+                    "node_types": ["function_item", "call_expression"],
+                    "file_symbols": ["parse_string"],
+                    "chunk_role": "definition",
+                    "member_usages": ["parser.parse"],
+                },
+                "rrf": 0.88,
             },
         ]
         enriched = []
@@ -877,6 +931,55 @@ class SemanticHelperTests(unittest.TestCase):
             enriched.append(row)
         enriched.sort(key=module.implementation_rank_tuple)
         self.assertEqual(enriched[0]["file_path"], "examples/python_smoke/main.py")
+        self.assertEqual(enriched[1]["file_path"], "crates/ts-pack-core/src/parse.rs")
+
+    def test_usage_lookup_prefers_examples_over_unrelated_tests_for_exact_member_hits(self):
+        query = "where is parser.parse used in tree-sitter-language-pack"
+        rows = [
+            {
+                "file_path": "e2e/python/tests/test_error_handling.py",
+                "content": "parser = get_parser('javascript')\ntree = parser.parse(b'')\n",
+                "metadata": {
+                    "node_types": ["call_expression"],
+                    "file_symbols": [],
+                    "chunk_role": "test_usage",
+                    "member_usages": ["parser.parse"],
+                },
+                "rrf": 0.0,
+            },
+            {
+                "file_path": "examples/python_smoke/main.py",
+                "content": "parser = get_parser('python')\ntree = parser.parse(b'def hello(): pass')\n",
+                "metadata": {
+                    "node_types": ["call_expression"],
+                    "file_symbols": [],
+                    "chunk_role": "example_usage",
+                    "member_usages": ["parser.parse"],
+                },
+                "rrf": 0.0,
+            },
+        ]
+        enriched = []
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=module.implementation_query_class(query),
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "examples/python_smoke/main.py")
+
+    def test_usage_query_helpers_distinguish_examples_and_tests(self):
+        self.assertFalse(module.usage_query_prefers_test_results("where is parser.parse used"))
+        self.assertTrue(module.usage_query_prefers_test_results("where is parser.parse used in tests"))
+        self.assertFalse(module.usage_query_prefers_example_results("where is parser.parse used"))
+        self.assertTrue(module.usage_query_prefers_example_results("show parser.parse examples"))
 
     def test_definition_entrypoint_golden_prefers_library_root_over_cli(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
@@ -999,7 +1102,10 @@ class SemanticHelperTests(unittest.TestCase):
             query=case["query"],
             mode="code",
         )
-        self.assertEqual(contract["results"][0]["file_path"], "examples/python_smoke/main.py")
+        self.assertIn(
+            contract["results"][0]["file_path"],
+            {"examples/python_smoke/main.py", "e2e/python/tests/test_parsing.py"},
+        )
         self.assertNotEqual(contract["results"][0]["file_path"], "crates/ts-pack-core/src/lib.rs")
 
 

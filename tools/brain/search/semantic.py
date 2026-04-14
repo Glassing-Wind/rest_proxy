@@ -52,28 +52,54 @@ async def _load_rescue_rows(
     *,
     pid: str,
     file_paths: list[str],
+    member_exprs: list[str] | None = None,
 ) -> list[dict]:
     if not file_paths:
         return []
+    member_exprs = [
+        str(expr).strip().lower()
+        for expr in (member_exprs or [])
+        if str(expr).strip()
+    ]
     async with conn.cursor() as cur:
         await cur.execute(
             """
-            WITH ranked AS (
+            WITH scored AS (
                 SELECT file_path, chunk_index, content, project_id, metadata,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY file_path
-                           ORDER BY chunk_index ASC
-                       ) AS chunk_rank
+                       CASE
+                           WHEN cardinality(%(member_exprs)s::text[]) > 0
+                                AND EXISTS (
+                                    SELECT 1
+                                    FROM jsonb_array_elements_text(
+                                        CASE
+                                            WHEN jsonb_typeof(metadata->'member_usages') = 'array'
+                                            THEN metadata->'member_usages'
+                                            ELSE '[]'::jsonb
+                                        END
+                                    ) AS expr(value)
+                                    WHERE lower(expr.value) = ANY(%(member_exprs)s)
+                                )
+                           THEN 1
+                           ELSE 0
+                       END AS exact_member_usage_hit
                 FROM codebase_embeddings
                 WHERE project_id = %(pid)s
                   AND file_path = ANY(%(paths)s)
+            ),
+            ranked AS (
+                SELECT file_path, chunk_index, content, project_id, metadata, exact_member_usage_hit,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY file_path
+                           ORDER BY exact_member_usage_hit DESC, chunk_index ASC
+                       ) AS chunk_rank
+                FROM scored
             )
-            SELECT file_path, chunk_index, content, project_id, metadata
+            SELECT file_path, chunk_index, content, project_id, metadata, exact_member_usage_hit
             FROM ranked
             WHERE chunk_rank <= 2
-            ORDER BY file_path, chunk_index
+            ORDER BY file_path, exact_member_usage_hit DESC, chunk_index
             """,
-            {"pid": pid, "paths": file_paths},
+            {"pid": pid, "paths": file_paths, "member_exprs": member_exprs},
         )
         rows = await cur.fetchall()
     return [
@@ -83,6 +109,7 @@ async def _load_rescue_rows(
             "content": r[2],
             "project_id": r[3],
             "metadata": r[4],
+            "implementation_exact_member_usage_hit": int(r[5] or 0),
             "rrf": 0.0,
             "_definition_rescue": True,
         }
@@ -568,7 +595,12 @@ def register(mcp: FastMCP) -> None:
                             continue
                         async with memory_store._pg_pool.connection() as conn:
                             await conn.execute("BEGIN")
-                            rescue_rows = await _load_rescue_rows(conn, pid=pid, file_paths=matches)
+                            rescue_rows = await _load_rescue_rows(
+                                conn,
+                                pid=pid,
+                                file_paths=matches,
+                                member_exprs=member_exprs,
+                            )
                         for r in rescue_rows:
                             r_meta = sem_helpers.coerce_meta(r)
                             r["_meta"] = r_meta
@@ -605,12 +637,12 @@ def register(mcp: FastMCP) -> None:
 
             if impl_intent and sem_helpers.query_class_prefers_usage(impl_query_class) and all_results:
                 top_probe = all_results[: min(5, len(all_results))]
-                has_member_usage_hit = any(
-                    int(r.get("implementation_exact_member_usage_hit", 0) or 0) > 0
+                has_usage_site_member_hit = any(
+                    sem_helpers.implementation_exact_member_usage_site_hit(r)
                     for r in top_probe
                 )
                 member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
-                if member_exprs and not has_member_usage_hit:
+                if member_exprs and not has_usage_site_member_hit:
                     rescue_results: list[dict] = []
                     for pid, proj_name in pid_to_name.items():
                         proj_root = pid_to_path.get(pid)
@@ -620,13 +652,18 @@ def register(mcp: FastMCP) -> None:
                             proj_root,
                             member_exprs,
                             fallback_glob,
-                            min(fallback_max, 8),
+                            min(max(fallback_max, 32), 64),
                         )
                         if not matches:
                             continue
                         async with memory_store._pg_pool.connection() as conn:
                             await conn.execute("BEGIN")
-                            rescue_rows = await _load_rescue_rows(conn, pid=pid, file_paths=matches)
+                            rescue_rows = await _load_rescue_rows(
+                                conn,
+                                pid=pid,
+                                file_paths=matches,
+                                member_exprs=member_exprs,
+                            )
                         for r in rescue_rows:
                             r_meta = sem_helpers.coerce_meta(r)
                             r["_meta"] = r_meta
@@ -661,14 +698,46 @@ def register(mcp: FastMCP) -> None:
                     r for r in all_results if int(r.get("implementation_exact_member_usage_hit", 0) or 0) > 0
                 ]
                 if member_exprs and exact_member_hits:
+                    exact_usage_site_hits = [
+                        r for r in exact_member_hits if sem_helpers.implementation_exact_member_usage_site_hit(r)
+                    ]
+                    exact_non_site_hits = [
+                        r for r in exact_member_hits if not sem_helpers.implementation_exact_member_usage_site_hit(r)
+                    ]
+                    prefer_tests = sem_helpers.usage_query_prefers_test_results(query)
+                    prefer_examples = sem_helpers.usage_query_prefers_example_results(query)
+                    if not prefer_tests:
+                        example_hits = []
+                        test_hits = []
+                        other_hits = []
+                        for r in exact_usage_site_hits:
+                            chunk_role = sem_helpers.implementation_chunk_role(
+                                sem_helpers.coerce_meta(r),
+                                r.get("file_path"),
+                            )
+                            if chunk_role == "example_usage":
+                                example_hits.append(r)
+                            elif chunk_role == "test_usage":
+                                test_hits.append(r)
+                            else:
+                                other_hits.append(r)
+                        example_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                        other_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                        test_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                        if prefer_examples:
+                            exact_usage_site_hits = example_hits + test_hits + other_hits
+                        else:
+                            exact_usage_site_hits = example_hits + other_hits + test_hits
+                    else:
+                        exact_usage_site_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                    exact_non_site_hits.sort(key=sem_helpers.implementation_rank_tuple)
                     non_exact_hits = [
                         r
                         for r in all_results
                         if int(r.get("implementation_exact_member_usage_hit", 0) or 0) <= 0
                     ]
-                    exact_member_hits.sort(key=sem_helpers.implementation_rank_tuple)
                     non_exact_hits.sort(key=sem_helpers.implementation_rank_tuple)
-                    all_results = exact_member_hits + non_exact_hits
+                    all_results = exact_usage_site_hits + exact_non_site_hits + non_exact_hits
 
             if clone_dedup:
                 try:

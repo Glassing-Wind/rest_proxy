@@ -254,6 +254,20 @@ def query_class_prefers_usage(query_class: str) -> bool:
     return query_class == "usage_lookup"
 
 
+def usage_query_prefers_test_results(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    return any(token in text for token in (" test", " tests", "testing", "spec", "e2e", "unit test"))
+
+
+def usage_query_prefers_example_results(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    return any(token in text for token in (" example", " examples", "sample", "smoke"))
+
+
 def is_low_signal_parser_data_path(file_path: str | None) -> bool:
     if not file_path:
         return False
@@ -448,13 +462,22 @@ def implementation_member_usages(meta: dict) -> set[str]:
     }
 
 
-def implementation_chunk_role(meta: dict) -> str:
+def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
     if not isinstance(meta, dict):
-        return ""
+        meta = {}
     role = meta.get("chunk_role")
-    if not isinstance(role, str):
+    if isinstance(role, str) and role.strip():
+        return role.strip().lower()
+    path = (file_path or "").replace("\\", "/").lower()
+    if not path:
         return ""
-    return role.strip().lower()
+    if path.startswith("examples/") or "/examples/" in path:
+        return "example_usage"
+    if any(segment in path for segment in ("/tests/", "/test/", "/e2e/", "/spec/")):
+        return "test_usage"
+    if path.startswith("scripts/") or "/scripts/" in path:
+        return "script_support"
+    return ""
 
 
 def implementation_exact_member_usage_hit(content: str | None, query: str, meta: dict | None = None) -> int:
@@ -468,6 +491,16 @@ def implementation_exact_member_usage_hit(content: str | None, query: str, meta:
     if not text:
         return 0
     return sum(1 for expr in exprs if expr in text)
+
+
+def implementation_exact_member_usage_site_hit(result: dict) -> bool:
+    if int(result.get("implementation_exact_member_usage_hit", 0) or 0) <= 0:
+        return False
+    role = str(result.get("implementation_role") or "").strip().lower()
+    if role in {"usage_callsite", "test_example"}:
+        return True
+    chunk_role = implementation_chunk_role(coerce_meta(result), result.get("file_path"))
+    return chunk_role in {"usage", "example_usage", "test_usage"}
 
 
 def implementation_definition_hit(content: str | None, query: str) -> int:
@@ -669,7 +702,7 @@ def implementation_result_role(
     declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
     callsite_like = bool(node_types & CALLSITE_NODE_TYPES)
     api_context_hit = implementation_api_context_hit(meta)
-    chunk_role = implementation_chunk_role(meta)
+    chunk_role = implementation_chunk_role(meta, file_path)
     if is_low_signal_binding_surface_path(file_path):
         return "generated_surface"
     if is_doc_like_path(file_path):
@@ -707,8 +740,8 @@ def implementation_result_role(
 def implementation_role_priority(role: str, query_class: str) -> int:
     if query_class_prefers_usage(query_class):
         order = {
+            "test_example": 7,
             "usage_callsite": 6,
-            "test_example": 5,
             "internal_implementation": 4,
             "canonical_definition": 3,
             "public_api_definition": 2,
@@ -745,8 +778,8 @@ def implementation_role_priority(role: str, query_class: str) -> int:
 def implementation_role_score(role: str, query_class: str) -> float:
     if query_class_prefers_usage(query_class):
         weights = {
+            "test_example": 0.1,
             "usage_callsite": 0.07,
-            "test_example": 0.05,
             "internal_implementation": 0.02,
             "canonical_definition": 0.0,
             "public_api_definition": -0.01,
@@ -823,6 +856,8 @@ def enrich_implementation_result(
     result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(result.get("file_path"))
     result["low_signal_support_path"] = is_low_signal_support_path(result.get("file_path"))
     result["implementation_symbol_hit"] = implementation_symbol_hit(meta, query)
+    chunk_role = implementation_chunk_role(meta)
+    result["implementation_chunk_role"] = chunk_role
     result["implementation_exact_member_usage_hit"] = implementation_exact_member_usage_hit(
         result.get("content", ""),
         query,
@@ -872,8 +907,17 @@ def enrich_implementation_result(
     usage_penalty = 0.04 if result["implementation_usage_heavy_penalty"] else 0.0
     symbol_bonus = 0.015 * min(int(result.get("implementation_symbol_hit", 0) or 0), 2)
     member_usage_bonus = 0.0
+    chunk_role_bonus = 0.0
     if query_class_prefers_usage(query_class):
         member_usage_bonus = 0.06 * min(int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2)
+        exact_member_hits = int(result.get("implementation_exact_member_usage_hit", 0) or 0)
+        if exact_member_hits > 0:
+            if chunk_role == "example_usage":
+                chunk_role_bonus += 0.11
+            elif chunk_role == "test_usage":
+                chunk_role_bonus += 0.06
+            elif chunk_role == "usage":
+                chunk_role_bonus += 0.03
     elif query_class == "implementation_search":
         member_usage_bonus = 0.015 * min(int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2)
     definition_bonus = 0.025 * min(int(result.get("implementation_definition_hit", 0) or 0), 2)
@@ -900,6 +944,7 @@ def enrich_implementation_result(
         + float(result.get("implementation_role_score", 0.0) or 0.0)
         + symbol_bonus
         + member_usage_bonus
+        + chunk_role_bonus
         + definition_bonus
         + signature_bonus
         + export_bonus
@@ -919,6 +964,7 @@ def enrich_implementation_result(
         "role_score": float(result.get("implementation_role_score", 0.0) or 0.0),
         "symbol_bonus": symbol_bonus,
         "member_usage_bonus": member_usage_bonus,
+        "chunk_role_bonus": chunk_role_bonus,
         "definition_bonus": definition_bonus,
         "signature_bonus": signature_bonus,
         "export_bonus": export_bonus,
@@ -930,6 +976,7 @@ def enrich_implementation_result(
         "support_path_penalty": support_path_penalty,
         "usage_penalty": usage_penalty,
         "role": role,
+        "chunk_role": chunk_role,
         "node_types": sorted(implementation_node_types(meta)),
     }
     return result
