@@ -1,6 +1,36 @@
 {
   "cases": [
     {
+      "id": "enterprise_fixture_build_message_symbol_context",
+      "workspace_name": "enterprise_live_graph_fixture",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "build_message",
+        "include_source_preview": false,
+        "file_path": "app.py"
+      },
+      "required_substrings": [
+        "build_message",
+        "app.py",
+        "normalize_name"
+      ]
+    },
+    {
+      "id": "enterprise_fixture_build_message_call_chain",
+      "workspace_name": "enterprise_live_graph_fixture",
+      "tool": "get_call_chain",
+      "params": {
+        "symbol_name": "build_message",
+        "depth": 1,
+        "direction": "down",
+        "file_path": "app.py"
+      },
+      "required_substrings": [
+        "normalize_name",
+        "app.py"
+      ]
+    },
+    {
       "id": "rental_route_context_symbol_context",
       "workspace_name": "rental",
       "tool": "get_symbol_context",

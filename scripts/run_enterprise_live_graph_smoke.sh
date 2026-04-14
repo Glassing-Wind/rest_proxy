@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON_BIN="${LM_PROXY_PYTHON:-${PYTHON_BIN:-python}}"
+DEFAULT_FIXTURE_WORKSPACE="$ROOT_DIR/tests/fixtures/enterprise_live_graph_fixture"
 
 WORKSPACES=()
 if [[ -n "${LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES:-}" ]]; then
@@ -17,7 +18,11 @@ if [[ -n "${LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES:-}" ]]; then
 fi
 
 if [[ ${#WORKSPACES[@]} -eq 0 ]]; then
-  WORKSPACES+=("${GITHUB_WORKSPACE:-$ROOT_DIR}")
+  if [[ -d "$DEFAULT_FIXTURE_WORKSPACE" ]]; then
+    WORKSPACES+=("$DEFAULT_FIXTURE_WORKSPACE")
+  else
+    WORKSPACES+=("${GITHUB_WORKSPACE:-$ROOT_DIR}")
+  fi
 fi
 
 echo "[enterprise-live-graph] python=$PYTHON_BIN"

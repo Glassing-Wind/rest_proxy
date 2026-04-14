@@ -132,7 +132,8 @@ jobs:
         env:
           LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES: ${{ vars.LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES }}
         run: |
-          WORKSPACES="${LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES:-${GITHUB_WORKSPACE}}"
+          DEFAULT_FIXTURE="${GITHUB_WORKSPACE}/tests/fixtures/enterprise_live_graph_fixture"
+          WORKSPACES="${LM_PROXY_ENTERPRISE_LIVE_GRAPH_WORKSPACES:-${DEFAULT_FIXTURE}}"
           {
             echo "## Enterprise Live Graph Smoke"
             echo ""

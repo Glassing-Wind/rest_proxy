@@ -193,6 +193,8 @@ async def _pick_live_type_symbol(mcp: FakeMCP, workspace_id: str) -> tuple[str, 
         """,
         workspace_id=workspace_id,
     )
+    if raw == "No results found.":
+        return None
     rows = json.loads(raw)
     if not rows:
         return None
