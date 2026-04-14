@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render enterprise eval JSON artifacts into a concise Markdown summary."""
+"""Render enterprise eval JSON artifacts into concise Markdown outputs."""
 
 from __future__ import annotations
 
@@ -53,12 +53,37 @@ def render_summary(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_pr_comment(payload: dict) -> str:
+    trend = payload.get("trend_summary") or {}
+    lines = [
+        "<!-- enterprise-eval-comment -->",
+        "## Enterprise Eval Alert",
+        "",
+        f"Status: `{trend.get('overall_status', 'unknown')}`",
+        "",
+        render_summary(payload).rstrip(),
+        "",
+        "_This comment is updated automatically when enterprise eval is not healthy._",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("artifact_path", help="Path to enterprise eval JSON artifact.")
+    parser.add_argument(
+        "--format",
+        choices=("summary", "comment"),
+        default="summary",
+        help="Render a job-summary markdown block or a sticky PR comment body.",
+    )
     args = parser.parse_args()
     payload = json.loads(Path(args.artifact_path).read_text(encoding="utf-8"))
-    print(render_summary(payload), end="")
+    if args.format == "comment":
+        print(render_pr_comment(payload), end="")
+    else:
+        print(render_summary(payload), end="")
     return 0
 
 

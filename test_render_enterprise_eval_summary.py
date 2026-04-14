@@ -46,6 +46,27 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("| `mrr` | 0.9500 | 0.0100 | `improved` |", text)
         self.assertIn("- `implementation_search`: 3", text)
 
+    def test_render_pr_comment_includes_marker_and_alert_header(self):
+        mod = _load_module()
+        payload = {
+            "enterprise_summary": {
+                "live_graph_ok": False,
+                "best_retrieval_config": {"name": "baseline", "metrics": {"mrr": 0.7}},
+                "retrieval_query_class_counts": {},
+            },
+            "trend_summary": {
+                "overall_status": "regressed",
+                "attention_needed": ["mrr_regressed"],
+                "metric_deltas": {"mrr": -0.1},
+                "metric_statuses": {"mrr": "regressed"},
+            },
+        }
+        text = mod.render_pr_comment(payload)
+        self.assertIn("<!-- enterprise-eval-comment -->", text)
+        self.assertIn("## Enterprise Eval Alert", text)
+        self.assertIn("Status: `regressed`", text)
+        self.assertIn("Overall status: `regressed`", text)
+
 
 if __name__ == "__main__":
     unittest.main()
