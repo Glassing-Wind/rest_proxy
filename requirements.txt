@@ -103,7 +103,7 @@ opentelemetry-util-http==0.61b0
 packaging==26.0
 parsel==1.11.0
 patchright==1.58.2
-pillow==12.1.1
+pillow==12.2.0
 playwright==1.58.0
 playwright-stealth==2.0.2
 primp==1.1.3
