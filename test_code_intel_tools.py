@@ -791,6 +791,7 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertTrue(executed)
         query, params = executed[0]
         self.assertIn("metadata->'declared_symbols'", query)
+        self.assertIn("LIMIT 1", query)
         self.assertEqual(params[2], "SidebarView")
         self.assertEqual(params[3], 3)
 

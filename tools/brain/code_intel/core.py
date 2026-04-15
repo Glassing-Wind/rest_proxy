@@ -406,13 +406,13 @@ def register(mcp: FastMCP) -> None:
                                        END,
                                        ABS(COALESCE((metadata->>'start_line')::int, 1) - %s),
                                        chunk_index
-                                LIMIT 2
+                                LIMIT 1
                             """,
                                 (project_id, rec["filepath"], rec["name"], int(rec["start_line"] or 1)),
                             )
                             rows = await cur.fetchall()
                             if rows:
-                                src = "\n\n".join(r[0][:600] for r in rows)
+                                src = str(rows[0][0] or "")[:900]
                                 out += [f"\n**Source preview:**\n```\n{src}\n```"]
                 except Exception:
                     # 2. Try Local Filesystem (Hands fallback) - only if workspace_id is actually a local path

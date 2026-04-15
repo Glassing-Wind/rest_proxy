@@ -108,6 +108,73 @@ def _is_low_signal_semantic_path(file_path: str | None) -> bool:
     return False
 
 
+def _directory_snapshot_path_penalty(file_path: str | None) -> int:
+    norm = (file_path or "").replace("\\", "/").lower()
+    penalty = 0
+    if _is_low_signal_semantic_path(norm):
+        penalty += 100
+    if any(
+        marker in norm
+        for marker in (
+            "/generated/",
+            "/pregeneratedspm/",
+            ".pb.swift",
+            ".grpc.swift",
+            ".generated.swift",
+            ".gen.swift",
+        )
+    ):
+        penalty += 40
+    if any(marker in norm for marker in ("/tests/", "/test/", "/stories/", "/fixtures/", "/examples/")):
+        penalty += 30
+    return penalty
+
+
+def _rank_directory_snapshot_rows(
+    rows: list[dict] | None,
+    *,
+    path_key: str,
+    count_key: str,
+    limit: int,
+) -> list[dict]:
+    ranked: list[tuple[int, int, str, dict]] = []
+    seen: set[str] = set()
+    for row in rows or []:
+        path = str(row.get(path_key) or "").strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        ranked.append(
+            (
+                _directory_snapshot_path_penalty(path),
+                -int(row.get(count_key) or 0),
+                path,
+                row,
+            )
+        )
+    ranked.sort(key=lambda item: (item[0], item[1], item[2]))
+    return [item[3] for item in ranked[: max(1, limit)]]
+
+
+def _merge_directory_snapshot_rows(
+    primary: list[dict] | None,
+    extra: list[dict] | None,
+    *,
+    path_key: str,
+    count_key: str,
+) -> list[dict]:
+    merged: dict[str, dict] = {}
+    for row in (primary or []) + (extra or []):
+        path = str(row.get(path_key) or "").strip()
+        if not path:
+            continue
+        count = int(row.get(count_key) or 0)
+        existing = merged.get(path)
+        if existing is None or count > int(existing.get(count_key) or 0):
+            merged[path] = dict(row)
+    return list(merged.values())
+
+
 def _extract_swift_type_mentions(text: str, *, ignore: set[str] | None = None) -> list[str]:
     ignored = set(ignore or ())
     ignored.update(_COMMON_SWIFT_TYPE_NAMES)
@@ -342,15 +409,23 @@ def _directory_snapshot_priority_lines(
     elif has_apple_context:
         priorities.append("- inspect Apple build context next because this directory is tied to an Xcode target or scheme")
     if inbound_rows:
-        top = inbound_rows[0]
-        priorities.append(
-            f"- check inbound usage from `{top['caller']}` first because it is the strongest external consumer"
+        top = next(
+            (row for row in inbound_rows if _directory_snapshot_path_penalty(row.get("caller")) < 40),
+            None,
         )
+        if top:
+            priorities.append(
+                f"- check inbound usage from `{top['caller']}` first because it is the strongest external consumer"
+            )
     if outbound_rows:
-        top = outbound_rows[0]
-        priorities.append(
-            f"- check outbound dependency `{top['dependency']}` because files here rely on it most often"
+        top = next(
+            (row for row in outbound_rows if _directory_snapshot_path_penalty(row.get("dependency")) < 40),
+            None,
         )
+        if top:
+            priorities.append(
+                f"- check outbound dependency `{top['dependency']}` because files here rely on it most often"
+            )
     if asset_rows:
         priorities.append("- review UI or API wiring because this directory has asset or endpoint linkages")
     if repo_linked_dependencies:
@@ -756,8 +831,9 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 limit=limit,
                 op="get_directory_snapshot_inbound_file_graph_fallback",
             )
-        if not r_inbound:
-            r_inbound = await graph_core._execute_read(
+        swift_file_rows = [rec for rec in (r_files or []) if str(rec.get("fp") or "").endswith(".swift")]
+        if swift_file_rows:
+            swift_inbound = await graph_core._execute_read(
                 session,
                 _schema_cypher("""
                 MATCH (ext:__FILE__ {project_id: $p})-[:__CONTAINS__]->(caller)
@@ -768,11 +844,17 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
                 ORDER BY n_imports DESC
                 LIMIT $limit
-            """),
+                """),
                 p=project_id,
                 dir=dir_prefix,
                 limit=limit,
                 op="get_directory_snapshot_inbound_symbol_call_fallback",
+            )
+            r_inbound = _merge_directory_snapshot_rows(
+                r_inbound,
+                swift_inbound,
+                path_key="caller",
+                count_key="n_imports",
             )
         if not r_outbound:
             r_outbound = await graph_core._execute_read(
@@ -790,8 +872,8 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 limit=limit,
                 op="get_directory_snapshot_outbound_file_graph_fallback",
             )
-        if not r_outbound:
-            r_outbound = await graph_core._execute_read(
+        if swift_file_rows:
+            swift_outbound = await graph_core._execute_read(
                 session,
                 _schema_cypher("""
                 MATCH (inner:__FILE__ {project_id: $p})-[:__CONTAINS__]->(caller)
@@ -802,11 +884,17 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
                 ORDER BY n_usages DESC
                 LIMIT $limit
-            """),
+                """),
                 p=project_id,
                 dir=dir_prefix,
                 limit=limit,
                 op="get_directory_snapshot_outbound_symbol_call_fallback",
+            )
+            r_outbound = _merge_directory_snapshot_rows(
+                r_outbound,
+                swift_outbound,
+                path_key="dependency",
+                count_key="n_usages",
             )
         r_assets = await graph_core._execute_read(
             session,
@@ -939,6 +1027,19 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                         for score, fp in scored[:limit]
                     ]
 
+    r_inbound = _rank_directory_snapshot_rows(
+        r_inbound,
+        path_key="caller",
+        count_key="n_imports",
+        limit=limit,
+    )
+    r_outbound = _rank_directory_snapshot_rows(
+        r_outbound,
+        path_key="dependency",
+        count_key="n_usages",
+        limit=limit,
+    )
+
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:
         return f"No indexed files found in `{directory_path}`."
@@ -1012,14 +1113,20 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     if r_inbound:
         lines.append("\n### 📥 Consumers (External files importing from here)")
         for rec in r_inbound:
-            lines.append(f"- `{rec['caller']}` (imports {rec['n_imports']} files)")
+            suffix = " [generated/support]" if _directory_snapshot_path_penalty(rec.get("caller")) >= 40 else ""
+            lines.append(f"- `{rec['caller']}` (imports {rec['n_imports']} files){suffix}")
     else:
         lines.append("\n### 📥 Consumers: None found.")
 
     if r_outbound:
         lines.append("\n### 📤 Dependencies (External files imported by here)")
         for rec in r_outbound:
-            lines.append(f"- `{rec['dependency']}` (used by {rec['n_usages']} files)")
+            suffix = (
+                " [generated/support]"
+                if _directory_snapshot_path_penalty(rec.get("dependency")) >= 40
+                else ""
+            )
+            lines.append(f"- `{rec['dependency']}` (used by {rec['n_usages']} files){suffix}")
     else:
         lines.append("\n### 📤 Dependencies: None found.")
 

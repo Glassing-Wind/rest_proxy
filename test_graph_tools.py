@@ -386,6 +386,69 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("crate `desktop` (desktop) via `packages/desktop/src-tauri/Cargo.toml`", output)
         self.assertNotIn("crate `chrono` (chrono) via `(external crate)`", output)
 
+    def test_directory_snapshot_demotes_generated_swift_consumers_and_dependencies(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"file_count": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {
+                        "fp": "FrameCreator/Views/SidebarView.swift",
+                        "sym_count": 4,
+                        "samples": ["SidebarView", "moveSelectedReferenceUp"],
+                    }
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [
+                    {
+                        "caller": "FrameCreator/Services/Generation/DrawThingsGRPC/imageService.pb.swift",
+                        "n_imports": 142,
+                    },
+                    {"caller": "FrameCreator/Views/ContentView.swift", "n_imports": 1},
+                ]
+            if op == "get_directory_snapshot_outbound":
+                return [
+                    {
+                        "dependency": "FrameCreator/Services/Generation/DrawThingsGRPC/imageService.grpc.swift",
+                        "n_usages": 5,
+                    },
+                    {"dependency": "FrameCreator/ViewModels/EditorViewModel.swift", "n_usages": 4},
+                ]
+            if op == "get_directory_snapshot_inbound_symbol_call_fallback":
+                return [{"caller": "FrameCreator/Views/ContentView.swift", "n_imports": 1}]
+            if op == "get_directory_snapshot_outbound_symbol_call_fallback":
+                return [{"dependency": "FrameCreator/ViewModels/EditorViewModel.swift", "n_usages": 4}]
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op == "get_directory_snapshot_local_symbols":
+                return [{"name": "SidebarView"}]
+            if op == "get_directory_snapshot_external_symbols":
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["get_directory_snapshot"]("/tmp/framecreator", "FrameCreator/Views", 5)
+                )
+
+        consumers_index = output.index("### 📥 Consumers")
+        content_index = output.index("FrameCreator/Views/ContentView.swift", consumers_index)
+        generated_index = output.index(
+            "FrameCreator/Services/Generation/DrawThingsGRPC/imageService.pb.swift", consumers_index
+        )
+        self.assertLess(content_index, generated_index)
+        self.assertIn("[generated/support]", output)
+        deps_index = output.index("### 📤 Dependencies")
+        editor_index = output.index("FrameCreator/ViewModels/EditorViewModel.swift", deps_index)
+        grpc_index = output.index(
+            "FrameCreator/Services/Generation/DrawThingsGRPC/imageService.grpc.swift", deps_index
+        )
+        self.assertLess(editor_index, grpc_index)
+
     def test_repo_dependency_summary_includes_inspect_first_guidance(self):
         with mock.patch.object(
             self.module.graph_overview,
