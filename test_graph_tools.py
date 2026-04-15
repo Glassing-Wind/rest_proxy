@@ -105,6 +105,16 @@ def load_tools_module():
     graph_core_mod._summarize_batches = lambda *args, **kwargs: (0, 0, 0)
     graph_core_mod.get_last_graph_build_metric = lambda: None
 
+    dotenv_mod = types.ModuleType("dotenv")
+    dotenv_mod.load_dotenv = lambda *args, **kwargs: None
+
+    graphrag_pkg = types.ModuleType("graphrag_core")
+    graphrag_pkg.__path__ = []
+    graphrag_indexing_pkg = types.ModuleType("graphrag_core.indexing")
+    graphrag_indexing_pkg.__path__ = []
+    watcher_mod = types.ModuleType("graphrag_core.indexing.watcher")
+    watcher_mod.load_indexed_projects = lambda: {}
+
     flow_summary_mod = types.ModuleType("tools.brain.graph.flow_summary")
     flow_summary_mod.get_app_flow_summary_impl = mock.AsyncMock(return_value="No UI → API → Service → DB paths found.")
     flow_summary_mod.get_backend_flow_summary_impl = mock.AsyncMock(return_value="No API → Service → DB paths found.")
@@ -124,6 +134,27 @@ def load_tools_module():
     brain_pkg.__path__ = []
     graph_subpkg = types.ModuleType("tools.brain.graph")
     graph_subpkg.__path__ = []
+    graph_contract_mod = types.ModuleType("tools.brain.graph_contract")
+    graph_contract_mod.node_label = lambda name: {
+        "file": "File",
+        "xcode_target": "XcodeTarget",
+        "xcode_scheme": "XcodeScheme",
+        "xcode_workspace": "XcodeWorkspace",
+        "cargo_crate": "CargoCrate",
+        "cargo_workspace": "CargoWorkspace",
+    }.get(name, name)
+    graph_contract_mod.rel_type = lambda name: {
+        "bundles_file": "BUNDLES_FILE",
+        "builds_target": "BUILDS_TARGET",
+        "references_project": "REFERENCES_PROJECT",
+        "defined_in_file": "DEFINED_IN_FILE",
+        "has_package": "HAS_PACKAGE",
+        "depends_on_package": "DEPENDS_ON_PACKAGE",
+        "imports": "IMPORTS",
+        "asset_links": "ASSET_LINKS",
+        "calls_api": "CALLS_API",
+        "contains": "CONTAINS",
+    }.get(name, name.upper())
     mcp_mod = types.ModuleType("mcp.server.fastmcp")
     mcp_mod.FastMCP = FakeMCP
 
@@ -132,9 +163,14 @@ def load_tools_module():
         {
             "_helpers": helpers_mod,
             "graph_bootstrap": graph_bootstrap_mod,
+            "dotenv": dotenv_mod,
+            "graphrag_core": graphrag_pkg,
+            "graphrag_core.indexing": graphrag_indexing_pkg,
+            "graphrag_core.indexing.watcher": watcher_mod,
             "mcp.server.fastmcp": mcp_mod,
             "tools": graph_pkg,
             "tools.brain": brain_pkg,
+            "tools.brain.graph_contract": graph_contract_mod,
             "tools.brain.graph": graph_subpkg,
             "tools.brain.graph.core": graph_core_mod,
             "tools.brain.graph.flow_summary": flow_summary_mod,
@@ -196,6 +232,8 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("Apple Build Context", output)
         self.assertIn("target `App` bundles 4 file(s)", output)
         self.assertIn("scheme `App` builds App", output)
+        self.assertIn("Use this to land in one directory", output)
+        self.assertIn("Recommended Inspection Order", output)
 
     def test_directory_snapshot_includes_cargo_context(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -203,7 +241,7 @@ class GraphToolsTests(unittest.TestCase):
             if op == "apple_context_presence":
                 return [{"n": 0}]
             if op == "cargo_context_presence":
-                return [{"n": 1}]
+                return [{"file_count": 1}]
             if op == "get_directory_snapshot_files":
                 return [{"fp": "crates/api/src/lib.rs", "sym_count": 5, "samples": ["run", "serve"]}]
             if op == "get_directory_snapshot_inbound":
@@ -241,6 +279,45 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("workspace `Cargo.toml` includes api, core", output)
         self.assertIn("crate `api` depends on core, serde", output)
         self.assertIn("local crate `api` is used by cli, admin", output)
+        self.assertIn("Recommended Inspection Order", output)
+
+    def test_repo_dependency_summary_includes_inspect_first_guidance(self):
+        with mock.patch.object(
+            self.module.graph_overview,
+            "_parse_repo_linked_dependencies",
+            return_value=[
+                {
+                    "package": "repoanalyzer",
+                    "repo_name": "RepoAnalyzer",
+                    "repo_url": "https://example.com/repoanalyzer.git",
+                    "rev": "abc123",
+                    "subdirectory": "python",
+                },
+                {
+                    "package": "thinlib",
+                    "repo_name": "thinlib",
+                    "repo_url": "https://example.com/thinlib.git",
+                    "rev": "",
+                    "subdirectory": "",
+                },
+            ],
+        ), mock.patch.object(
+            self.module.graph_overview,
+            "_load_indexed_project_paths",
+            return_value={"RepoAnalyzer": "/tmp/RepoAnalyzer"},
+        ), mock.patch.object(
+            self.module.graph_overview,
+            "_find_repo_link_evidence",
+            side_effect=lambda project_path, package, limit=8: ["src/app.py", "src/index.py"]
+            if package == "repoanalyzer"
+            else ["src/thin.py"],
+        ):
+            output = asyncio.run(self.mcp.tools["get_repo_dependency_summary"]("/tmp/framecreator"))
+
+        self.assertIn("Use this to spot cross-repo integration boundaries", output)
+        self.assertIn("## Inspect First", output)
+        self.assertIn("`repoanalyzer` from `RepoAnalyzer`", output)
+        self.assertIn("indexed sibling repo", output)
 
     def test_project_overview_includes_apple_build_context(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -292,7 +369,7 @@ class GraphToolsTests(unittest.TestCase):
             if op == "apple_context_presence":
                 return [{"n": 0}]
             if op == "cargo_context_presence":
-                return [{"n": 1}]
+                return [{"file_count": 1}]
             if op == "cargo_context_schema_labels":
                 return [{"labels": ["CargoCrate", "CargoWorkspace"]}]
             if op == "cargo_context_schema_relationship_types":

@@ -139,6 +139,8 @@ class SearchSummaryTests(unittest.TestCase):
             )
 
         self.assertIn("Sources/App/View.swift", output)
+        self.assertIn("Use this to decide which files pull the widest symbol surface", output)
+        self.assertIn("## Inspect First", output)
         implicit_queries = {
             op: query
             for op, query in captured_queries
@@ -179,6 +181,8 @@ class SearchSummaryTests(unittest.TestCase):
             )
 
         self.assertIn("Source: heuristic public-surface inference", output)
+        self.assertIn("Use this to find the main public surfaces", output)
+        self.assertIn("## Inspect First", output)
         self.assertIn("Router", output)
         self.assertIn("PublicService", output)
         self.assertNotIn("_private_helper", output)
@@ -253,6 +257,7 @@ class SearchSummaryTests(unittest.TestCase):
 
         self.assertLess(output.find("WorkspaceRegistry"), output.find("register"))
         self.assertIn("imported by 5 file(s)", output)
+        self.assertIn("start with `WorkspaceRegistry` because it has the strongest downstream import surface", output)
 
     def test_symbol_exports_summary_surfaces_alias_exports(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -333,6 +338,7 @@ class SearchSummaryTests(unittest.TestCase):
 
         self.assertIn("OpencodeClientConfig -> Config", output)
         self.assertIn("packages/sdk/js/src/client.ts", output)
+        self.assertIn("## Inspect First", output)
 
 
 if __name__ == "__main__":

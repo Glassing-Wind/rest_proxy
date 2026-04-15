@@ -269,6 +269,72 @@ def _summarize_repo_linked_dependencies_for_directory(
     return lines
 
 
+def _directory_snapshot_priority_lines(
+    file_rows: list[dict],
+    inbound_rows: list[dict],
+    outbound_rows: list[dict],
+    asset_rows: list[dict],
+    has_apple_context: bool,
+    has_cargo_context: bool,
+    repo_linked_dependencies: list[str],
+) -> list[str]:
+    priorities: list[str] = []
+    if file_rows:
+        top = file_rows[0]
+        priorities.append(
+            f"- start with `{top['fp']}` because it has the densest local symbol surface ({top['sym_count']} symbols)"
+        )
+    if has_cargo_context:
+        priorities.append("- inspect Cargo context next because this directory sits on a crate or workspace boundary")
+    elif has_apple_context:
+        priorities.append("- inspect Apple build context next because this directory is tied to an Xcode target or scheme")
+    if inbound_rows:
+        top = inbound_rows[0]
+        priorities.append(
+            f"- check inbound usage from `{top['caller']}` first because it is the strongest external consumer"
+        )
+    if outbound_rows:
+        top = outbound_rows[0]
+        priorities.append(
+            f"- check outbound dependency `{top['dependency']}` because files here rely on it most often"
+        )
+    if asset_rows:
+        priorities.append("- review UI or API wiring because this directory has asset or endpoint linkages")
+    if repo_linked_dependencies:
+        priorities.append("- review repo-linked dependencies here because this directory crosses repo boundaries")
+    return priorities[:4]
+
+
+def _repo_dependency_priority_lines(
+    linked: list[dict[str, str]],
+    indexed_paths: dict[str, str],
+    project_path: str,
+) -> list[str]:
+    ranked: list[tuple[int, str]] = []
+    for dep in linked:
+        package = dep.get("package") or "(unknown)"
+        repo_name = dep.get("repo_name") or package
+        repo_path = indexed_paths.get(repo_name, "")
+        evidence = _find_repo_link_evidence(project_path, package, limit=8)
+        score = len(evidence) * 10
+        reasons: list[str] = []
+        if evidence:
+            reasons.append(f"{len(evidence)} importer(s)")
+        if repo_path:
+            score += 5
+            reasons.append("indexed sibling repo")
+        if dep.get("subdirectory"):
+            score += 1
+            reasons.append("subdirectory binding")
+        if dep.get("rev"):
+            score += 1
+            reasons.append("pinned revision")
+        if not reasons:
+            reasons.append("declared repo-linked package")
+        ranked.append((score, f"- `{package}` from `{repo_name}`: {', '.join(reasons)}"))
+    return [line for _, line in sorted(ranked, key=lambda item: (-item[0], item[1]))[:4]]
+
+
 async def has_apple_build_context(session, project_id: str) -> bool:
     rows = await graph_core._execute_read(
         session,
@@ -627,6 +693,22 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:
         return f"No indexed files found in `{directory_path}`."
+    lines.append("")
+    lines.append("Use this to land in one directory and decide what to inspect first.")
+
+    priority_lines = _directory_snapshot_priority_lines(
+        r_files,
+        r_inbound,
+        r_outbound,
+        r_assets,
+        bool(r_apple_targets or r_apple_schemes),
+        bool(r_cargo_crates or r_cargo_workspaces or r_cargo_dependencies or r_cargo_dep_out or r_cargo_dep_in),
+        repo_linked_dependencies,
+    )
+    if priority_lines:
+        lines.append("")
+        lines.append("### Recommended Inspection Order")
+        lines.extend(priority_lines)
 
     lines.append("\n### 🏆 Top Files (by symbol density)")
     for rec in r_files:
@@ -850,6 +932,13 @@ async def get_repo_dependency_summary_impl(*, workspace_id: str) -> str:
 
     indexed_paths = _load_indexed_project_paths()
     lines = [f"# Repo Dependency Summary: `{os.path.basename(project_path.rstrip(os.sep))}`"]
+    lines.append("")
+    lines.append("Use this to spot cross-repo integration boundaries and likely breakage points first.")
+    priority_lines = _repo_dependency_priority_lines(linked, indexed_paths, project_path)
+    if priority_lines:
+        lines.append("")
+        lines.append("## Inspect First")
+        lines.extend(priority_lines)
     for dep in linked:
         package = dep.get("package") or "(unknown)"
         repo_name = dep.get("repo_name") or package

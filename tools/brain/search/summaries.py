@@ -59,6 +59,44 @@ def _extract_explicit_export_aliases(file_path: str, *, symbol_prefix: str = "")
     return out
 
 
+def _import_focus_lines(exp_files: list[tuple[str, int, list[str]]], imp_files: list[tuple[str, int, list[str]]]) -> list[str]:
+    lines: list[str] = []
+    if exp_files:
+        file, count, symbols = exp_files[0]
+        sample = ", ".join(symbols[:3])
+        lines.append(f"- start with `{file}` because it pulls the widest explicit symbol surface ({count}: {sample})")
+    if imp_files:
+        file, count, symbols = imp_files[0]
+        sample = ", ".join(symbols[:3])
+        lines.append(f"- inspect `{file}` next because it relies on the strongest implicit import surface ({count}: {sample})")
+    return lines[:3]
+
+
+def _export_focus_lines(
+    top_symbols: list[tuple],
+    top_files: list[tuple[str, int, list[str]]],
+    export_mode: str,
+) -> list[str]:
+    lines: list[str] = []
+    if top_symbols:
+        item = top_symbols[0]
+        if len(item) == 5:
+            name, target_name, alias_edges, _exporters, importers = item
+            rendered = f"{name} -> {target_name}" if alias_edges and name != target_name else str(name)
+            lines.append(
+                f"- start with `{rendered}` because it has the strongest downstream import surface ({importers} importer(s))"
+            )
+        else:
+            name, count = item
+            lines.append(f"- start with `{name}` because it is the strongest public export signal ({count})")
+    if top_files:
+        file, count, symbols = top_files[0]
+        sample = ", ".join(symbols[:3])
+        detail = "public-surface" if export_mode == "heuristic" else "export"
+        lines.append(f"- inspect `{file}` next because it concentrates the widest {detail} surface ({count}: {sample})")
+    return lines[:3]
+
+
 async def get_symbol_imports_overview_impl(
     *,
     driver,
@@ -156,6 +194,13 @@ async def get_symbol_imports_overview_impl(
         return "No symbol import edges found."
 
     lines = [f"# Symbol import overview: {project_path.split('/')[-1]}", ""]
+    lines.append("Use this to decide which files pull the widest symbol surface and where import coupling is concentrated.")
+    focus_lines = _import_focus_lines(exp_files, imp_files)
+    if focus_lines:
+        lines.append("")
+        lines.append("## Inspect First")
+        lines.extend(focus_lines)
+    lines.append("")
     lines.append("## Counts")
     lines.append(f"IMPORTS_SYMBOL: {exp_count}")
     if include_implicit:
@@ -459,6 +504,7 @@ async def get_symbol_exports_summary_impl(
         )
 
     lines = [f"# Symbol export summary: {project_path.split('/')[-1]}", ""]
+    lines.append("Use this to find the main public surfaces and decide which exported symbols or files matter first.")
     if export_mode == "graph":
         lines.append(f"Source: EXPORTS_SYMBOL edges ({export_edges})")
     else:
@@ -467,6 +513,11 @@ async def get_symbol_exports_summary_impl(
             "(visibility metadata, or Python non-underscore naming when visibility is absent)"
         )
     lines.append("")
+    focus_lines = _export_focus_lines(top_symbols, top_files, export_mode)
+    if focus_lines:
+        lines.append("## Inspect First")
+        lines.extend(focus_lines)
+        lines.append("")
     if top_symbols:
         lines.append("## Top exported symbols")
         for item in top_symbols:
