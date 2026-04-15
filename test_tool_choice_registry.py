@@ -101,7 +101,7 @@ class ToolChoiceRegistryTests(unittest.TestCase):
 
         missing = []
         for case in payload["cases"]:
-            for key in ("preferred_tools", "acceptable_fallbacks", "avoid_as_primary"):
+            for key in ("preferred_tools", "acceptable_fallbacks"):
                 for tool_name in case.get(key, []):
                     if tool_name not in registered:
                         missing.append((case["id"], key, tool_name))

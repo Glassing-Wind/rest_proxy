@@ -82,7 +82,7 @@ class GraphQueryToolTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
         self.mcp = FakeMCP()
-        self.module.register(self.mcp)
+        self.module.register(self.mcp, include_admin=True)
         self.graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
 
         async def _require_driver():

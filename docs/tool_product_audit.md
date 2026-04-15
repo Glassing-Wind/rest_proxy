@@ -73,6 +73,7 @@ These are still worth improving because they do not yet feel like obvious defaul
   - Good fallback, but for real work `get_symbol_context`, `list_symbol_matches`, and `search_codebase` are usually better.
 - `query_graph`
   - Necessary escape hatch, not a first-class product tool.
+  - Admin/debug only and no longer part of the default registered tool surface.
 
 ## Admin / Debug / Escape-Hatch Tools
 

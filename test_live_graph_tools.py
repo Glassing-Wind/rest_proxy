@@ -81,7 +81,7 @@ def _build_tool_registry() -> FakeMCP:
     mcp = FakeMCP()
     code_intel_core.register(mcp)
     graph_tools.register(mcp)
-    graph_query_tools.register(mcp)
+    graph_query_tools.register(mcp, include_admin=True)
     semantic_tools.register(mcp)
     search_tools.register(mcp)
     dev_tools.register(mcp)
