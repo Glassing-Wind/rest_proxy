@@ -8,18 +8,59 @@ import re
 from collections import defaultdict
 
 from _helpers import get_project_id, get_workspace_path
+from tools.brain.graph_contract import node_label, rel_type
 from tools.brain.graph import core as graph_core
 from tools.brain.graph import flow_summary_apple
 
-_APP_FLOW_QUERY = """
+FILE_LABEL = node_label("file")
+MODEL_LABEL = node_label("model")
+EXTERNAL_API_LABEL = node_label("external_api")
+API_ROUTE_LABEL = node_label("api_route")
+CARGO_CRATE_LABEL = node_label("cargo_crate")
+REL_ASSET_LINKS = rel_type("asset_links")
+REL_CALLS_API_ROUTE = rel_type("calls_api_route")
+REL_HANDLED_BY = rel_type("handled_by")
+REL_CALLS_SERVICE = rel_type("calls_service")
+REL_CALLS_DB_MODEL = rel_type("calls_db_model")
+REL_CALLS_DB = rel_type("calls_db")
+REL_CALLS_API_EXTERNAL = rel_type("calls_api_external")
+REL_CALLS_API = rel_type("calls_api")
+REL_IMPORTS = rel_type("imports")
+REL_DEFINED_IN_FILE = rel_type("defined_in_file")
+
+
+def _schema_cypher(text: str) -> str:
+    replacements = {
+        "__FILE__": FILE_LABEL,
+        "__MODEL__": MODEL_LABEL,
+        "__EXTERNAL_API__": EXTERNAL_API_LABEL,
+        "__API_ROUTE__": API_ROUTE_LABEL,
+        "__CARGO_CRATE__": CARGO_CRATE_LABEL,
+        "__ASSET_LINKS__": REL_ASSET_LINKS,
+        "__CALLS_API_ROUTE__": REL_CALLS_API_ROUTE,
+        "__HANDLED_BY__": REL_HANDLED_BY,
+        "__CALLS_SERVICE__": REL_CALLS_SERVICE,
+        "__CALLS_DB_MODEL__": REL_CALLS_DB_MODEL,
+        "__CALLS_DB__": REL_CALLS_DB,
+        "__CALLS_API_EXTERNAL__": REL_CALLS_API_EXTERNAL,
+        "__CALLS_API__": REL_CALLS_API,
+        "__IMPORTS__": REL_IMPORTS,
+        "__DEFINED_IN_FILE__": REL_DEFINED_IN_FILE,
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
+_APP_FLOW_QUERY = _schema_cypher("""
 CALL () {
-    MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
-    MATCH (js)-[:CALLS_API_ROUTE]->(route:ApiRoute {project_id:$p})
-    OPTIONAL MATCH (route)-[:HANDLED_BY]->(api:File {project_id:$p})
-    OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-    OPTIONAL MATCH (js)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+    MATCH (ui:__FILE__ {project_id:$p})-[:__ASSET_LINKS__]->(js:__FILE__ {project_id:$p})
+    MATCH (js)-[:__CALLS_API_ROUTE__]->(route:__API_ROUTE__ {project_id:$p})
+    OPTIONAL MATCH (route)-[:__HANDLED_BY__]->(api:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (api)-[:__CALLS_SERVICE__]->(svc:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
+    OPTIONAL MATCH (js)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
     WHERE $include_tests OR (
         NOT ui.filepath STARTS WITH 'tests/'
         AND NOT ui.filepath CONTAINS '/tests/'
@@ -39,15 +80,15 @@ CALL () {
        schema.filepath AS schema,
        ext.url AS external
     UNION
-    MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
+    MATCH (ui:__FILE__ {project_id:$p})-[:__ASSET_LINKS__]->(js:__FILE__ {project_id:$p})
     WHERE NOT EXISTS {
-        MATCH (js)-[:CALLS_API_ROUTE]->(:ApiRoute {project_id:$p})
+        MATCH (js)-[:__CALLS_API_ROUTE__]->(:__API_ROUTE__ {project_id:$p})
     }
-    MATCH (js)-[:CALLS_API]->(api:File {project_id:$p})
-    OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-    OPTIONAL MATCH (js)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+    MATCH (js)-[:__CALLS_API__]->(api:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (api)-[:__CALLS_SERVICE__]->(svc:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
+    OPTIONAL MATCH (js)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
     WHERE $include_tests OR (
         NOT ui.filepath STARTS WITH 'tests/'
         AND NOT ui.filepath CONTAINS '/tests/'
@@ -67,12 +108,12 @@ CALL () {
        schema.filepath AS schema,
        ext.url AS external
     UNION
-    MATCH (ui:File {project_id:$p})-[:CALLS_API_ROUTE]->(route:ApiRoute {project_id:$p})
-    OPTIONAL MATCH (route)-[:HANDLED_BY]->(api:File {project_id:$p})
-    OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-    OPTIONAL MATCH (ui)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+    MATCH (ui:__FILE__ {project_id:$p})-[:__CALLS_API_ROUTE__]->(route:__API_ROUTE__ {project_id:$p})
+    OPTIONAL MATCH (route)-[:__HANDLED_BY__]->(api:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (api)-[:__CALLS_SERVICE__]->(svc:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
+    OPTIONAL MATCH (ui)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
     WHERE $include_tests OR (
         NOT ui.filepath STARTS WITH 'tests/'
         AND NOT ui.filepath CONTAINS '/tests/'
@@ -88,9 +129,9 @@ CALL () {
        schema.filepath AS schema,
        ext.url AS external
     UNION
-    MATCH (ui:File {project_id:$p})
+    MATCH (ui:__FILE__ {project_id:$p})
     WHERE NOT EXISTS {
-        MATCH (ui)-[:CALLS_API_ROUTE]->(:ApiRoute {project_id:$p})
+        MATCH (ui)-[:__CALLS_API_ROUTE__]->(:__API_ROUTE__ {project_id:$p})
     }
       AND ($include_tests OR (
         NOT ui.filepath STARTS WITH 'tests/'
@@ -98,11 +139,11 @@ CALL () {
         AND NOT ui.filepath CONTAINS '__tests__'
         AND NOT ui.filepath CONTAINS '.test.'
       ))
-    MATCH (ui)-[:CALLS_API]->(api:File {project_id:$p})
-    OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-    OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-    OPTIONAL MATCH (ui)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+    MATCH (ui)-[:__CALLS_API__]->(api:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (api)-[:__CALLS_SERVICE__]->(svc:__FILE__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
+    OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
+    OPTIONAL MATCH (ui)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
     RETURN ui.filepath AS ui,
        ui.filepath AS js,
        NULL AS route,
@@ -115,15 +156,15 @@ CALL () {
 RETURN ui, js, route, api, svc, model, schema, external
 ORDER BY ui, js, route, api, svc, model, schema, external
 LIMIT $limit
-"""
+""")
 
 
-_BACKEND_FLOW_QUERY = """
-MATCH (api:File {project_id:$p})
-OPTIONAL MATCH (api)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(model:Model {project_id:$p})
-OPTIONAL MATCH (svc)-[:CALLS_DB]->(schema:File {project_id:$p, filepath:'prisma/schema.prisma'})
-OPTIONAL MATCH (api)-[:CALLS_API_EXTERNAL]->(ext:ExternalAPI {project_id:$p})
+_BACKEND_FLOW_QUERY = _schema_cypher("""
+MATCH (api:__FILE__ {project_id:$p})
+OPTIONAL MATCH (api)-[:__CALLS_SERVICE__]->(svc:__FILE__ {project_id:$p})
+OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
+OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
+OPTIONAL MATCH (api)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
 WHERE (svc IS NOT NULL OR model IS NOT NULL OR schema IS NOT NULL OR ext IS NOT NULL)
   AND ($include_tests OR (
     NOT api.filepath STARTS WITH 'tests/'
@@ -144,17 +185,17 @@ RETURN api.filepath AS api,
    ext.url AS external
 ORDER BY api, svc, model, schema, external
 LIMIT $limit
-"""
+""")
 
-_BACKEND_FLOW_FALLBACK_QUERY = """
-MATCH (entry:File {project_id:$p})
-OPTIONAL MATCH (entry)-[:CALLS_SERVICE]->(svc:File {project_id:$p})
-OPTIONAL MATCH (entry)-[:CALLS_DB_MODEL]->(direct_model:Model {project_id:$p})
-OPTIONAL MATCH (entry)-[:CALLS_DB]->(direct_schema:File {project_id:$p})
-OPTIONAL MATCH (entry)-[:CALLS_API_EXTERNAL]->(direct_ext:ExternalAPI {project_id:$p})
-OPTIONAL MATCH (svc)-[:CALLS_DB_MODEL]->(svc_model:Model {project_id:$p})
-OPTIONAL MATCH (svc)-[:CALLS_DB]->(svc_schema:File {project_id:$p})
-OPTIONAL MATCH (svc)-[:CALLS_API_EXTERNAL]->(svc_ext:ExternalAPI {project_id:$p})
+_BACKEND_FLOW_FALLBACK_QUERY = _schema_cypher("""
+MATCH (entry:__FILE__ {project_id:$p})
+OPTIONAL MATCH (entry)-[:__CALLS_SERVICE__]->(svc:__FILE__ {project_id:$p})
+OPTIONAL MATCH (entry)-[:__CALLS_DB_MODEL__]->(direct_model:__MODEL__ {project_id:$p})
+OPTIONAL MATCH (entry)-[:__CALLS_DB__]->(direct_schema:__FILE__ {project_id:$p})
+OPTIONAL MATCH (entry)-[:__CALLS_API_EXTERNAL__]->(direct_ext:__EXTERNAL_API__ {project_id:$p})
+OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(svc_model:__MODEL__ {project_id:$p})
+OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(svc_schema:__FILE__ {project_id:$p})
+OPTIONAL MATCH (svc)-[:__CALLS_API_EXTERNAL__]->(svc_ext:__EXTERNAL_API__ {project_id:$p})
 WHERE (
     direct_model IS NOT NULL
     OR direct_schema IS NOT NULL
@@ -183,17 +224,17 @@ RETURN entry.filepath AS api,
    coalesce(svc_ext.url, direct_ext.url) AS external
 ORDER BY api, svc, model, schema, external
 LIMIT $limit
-"""
+""")
 
-_BACKEND_ROUTE_QUERY = """
-MATCH (route:ApiRoute {project_id:$p})-[:HANDLED_BY]->(api:File {project_id:$p})
+_BACKEND_ROUTE_QUERY = _schema_cypher("""
+MATCH (route:__API_ROUTE__ {project_id:$p})-[:__HANDLED_BY__]->(api:__FILE__ {project_id:$p})
 RETURN api.filepath AS api,
        collect(distinct (coalesce(route.method, 'ANY') + ' ' + route.path)) AS routes
 ORDER BY api
-"""
+""")
 
-_BACKEND_IMPORT_FALLBACK_QUERY = """
-MATCH (api:File {project_id:$p})-[:IMPORTS]->(dep:File {project_id:$p})
+_BACKEND_IMPORT_FALLBACK_QUERY = _schema_cypher("""
+MATCH (api:__FILE__ {project_id:$p})-[:__IMPORTS__]->(dep:__FILE__ {project_id:$p})
 WHERE (
     api.filepath CONTAINS '/api/'
     OR api.filepath CONTAINS '/routes/'
@@ -202,7 +243,7 @@ WHERE (
 )
 RETURN api.filepath AS api, dep.filepath AS dep
 ORDER BY api, dep
-"""
+""")
 
 
 async def _load_cargo_crate_roots(session, project_id: str):
@@ -215,17 +256,17 @@ async def _load_cargo_crate_roots(session, project_id: str):
         op="backend_flow_cargo_schema_labels",
     )
     labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
-    if "CargoCrate" not in labels:
+    if CARGO_CRATE_LABEL not in labels:
         return []
     return await graph_core._execute_read(
         session,
-        """
-        MATCH (c:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (c:__CARGO_CRATE__ {project_id:$p})-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {project_id:$p})
         RETURN c.name AS crate,
                c.crate_name AS crate_name,
                mf.filepath AS manifest_path
         ORDER BY size(mf.filepath) DESC, c.name
-        """,
+        """),
         p=project_id,
         op="backend_flow_cargo_crates",
     )
@@ -550,11 +591,11 @@ async def _resolve_entry_files(session, project_id: str, entry_files, entry_glob
         return entry_files
     ui_result = await graph_core._execute_read(
         session,
-        """
-        MATCH (f:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (f:__FILE__ {project_id:$p})
         WHERE f.filepath ENDS WITH '.html' OR f.filepath ENDS WITH '.astro'
         RETURN f.filepath AS ui
-        """,
+        """),
         p=project_id,
         op="get_app_flow_summary_entry_glob",
     )
@@ -653,11 +694,11 @@ def _collapse_ambiguous_app_rows(raw_rows):
 async def _load_api_route_counts(session, project_id: str) -> dict[str, int]:
     rows = await graph_core._execute_read(
         session,
-        """
-        MATCH (route:ApiRoute {project_id:$p})-[:HANDLED_BY]->(api:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (route:__API_ROUTE__ {project_id:$p})-[:__HANDLED_BY__]->(api:__FILE__ {project_id:$p})
         RETURN api.filepath AS api, count(route) AS route_count
         ORDER BY api
-        """,
+        """),
         p=project_id,
         op="get_app_flow_summary_api_route_counts",
     )
@@ -701,14 +742,14 @@ def _extract_literal_api_paths(source_text: str) -> list[str]:
 async def _load_route_catalog(session, project_id: str):
     result = await graph_core._execute_read(
         session,
-        """
-        MATCH (route:ApiRoute {project_id:$p})
-        OPTIONAL MATCH (route)-[:HANDLED_BY]->(api:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (route:__API_ROUTE__ {project_id:$p})
+        OPTIONAL MATCH (route)-[:__HANDLED_BY__]->(api:__FILE__ {project_id:$p})
         RETURN route.path AS path,
                route.method AS method,
                api.filepath AS api
         ORDER BY path, method, api
-        """,
+        """),
         p=project_id,
         op="get_app_flow_summary_route_catalog",
     )
@@ -727,15 +768,15 @@ async def _load_route_catalog(session, project_id: str):
 async def _load_asset_js_pairs(session, project_id: str):
     result = await graph_core._execute_read(
         session,
-        """
-        MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (ui:__FILE__ {project_id:$p})-[:__ASSET_LINKS__]->(js:__FILE__ {project_id:$p})
         WHERE js.filepath ENDS WITH '.js'
            OR js.filepath ENDS WITH '.ts'
            OR js.filepath ENDS WITH '.tsx'
            OR js.filepath ENDS WITH '.jsx'
         RETURN ui.filepath AS ui, js.filepath AS js
         ORDER BY ui, js
-        """,
+        """),
         p=project_id,
         op="get_app_flow_summary_asset_pairs",
     )
@@ -792,43 +833,43 @@ async def _build_app_flow_literal_fallback(session, project_id: str, workspace_i
 async def _coverage_lines(session, project_id: str) -> list[str]:
     coverage_result = await graph_core._execute_read(
         session,
-        """
-        MATCH (f:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (f:__FILE__ {project_id:$p})
         WITH collect(f) AS files
         RETURN
           size([f IN files WHERE f.filepath ENDS WITH '.html' OR f.filepath ENDS WITH '.astro']) AS ui_files,
           size([f IN files WHERE f.filepath ENDS WITH '.js' OR f.filepath ENDS WITH '.ts' OR f.filepath ENDS WITH '.tsx']) AS js_files
-        """,
+        """),
         p=project_id,
         op="get_app_flow_summary_coverage_files",
     )
     edge_result = await graph_core._execute_read(
         session,
-        "MATCH (:File {project_id:$p})-[r:ASSET_LINKS]->() RETURN count(r) AS asset_links",
+        _schema_cypher("MATCH (:__FILE__ {project_id:$p})-[r:__ASSET_LINKS__]->() RETURN count(r) AS asset_links"),
         p=project_id,
         op="get_app_flow_summary_coverage_assets",
     )
     api_result = await graph_core._execute_read(
         session,
-        "MATCH (:File {project_id:$p})-[r:CALLS_API]->() RETURN count(r) AS api_links",
+        _schema_cypher("MATCH (:__FILE__ {project_id:$p})-[r:__CALLS_API__]->() RETURN count(r) AS api_links"),
         p=project_id,
         op="get_app_flow_summary_coverage_api",
     )
     svc_result = await graph_core._execute_read(
         session,
-        "MATCH (:File {project_id:$p})-[r:CALLS_SERVICE]->() RETURN count(r) AS service_links",
+        _schema_cypher("MATCH (:__FILE__ {project_id:$p})-[r:__CALLS_SERVICE__]->() RETURN count(r) AS service_links"),
         p=project_id,
         op="get_app_flow_summary_coverage_service",
     )
     db_result = await graph_core._execute_read(
         session,
-        "MATCH (:File {project_id:$p})-[r:CALLS_DB]->() RETURN count(r) AS db_links",
+        _schema_cypher("MATCH (:__FILE__ {project_id:$p})-[r:__CALLS_DB__]->() RETURN count(r) AS db_links"),
         p=project_id,
         op="get_app_flow_summary_coverage_db",
     )
     route_result = await graph_core._execute_read(
         session,
-        "MATCH (:File {project_id:$p})-[r:CALLS_API_ROUTE]->() RETURN count(r) AS api_route_links",
+        _schema_cypher("MATCH (:__FILE__ {project_id:$p})-[r:__CALLS_API_ROUTE__]->() RETURN count(r) AS api_route_links"),
         p=project_id,
         op="get_app_flow_summary_coverage_api_routes",
     )
@@ -939,12 +980,12 @@ async def get_app_flow_summary_impl(
             for ui_path in ui_candidates:
                 api_calls_result = await graph_core._execute_read(
                     session,
-                    """
-                    MATCH (ui:File {project_id:$p})-[:ASSET_LINKS]->(js:File {project_id:$p})
-                    MATCH (js)-[:CALLS_API_ROUTE]->(route:ApiRoute {project_id:$p})
+                    _schema_cypher("""
+                    MATCH (ui:__FILE__ {project_id:$p})-[:__ASSET_LINKS__]->(js:__FILE__ {project_id:$p})
+                    MATCH (js)-[:__CALLS_API_ROUTE__]->(route:__API_ROUTE__ {project_id:$p})
                     WHERE ui.filepath = $ui_path
                     RETURN collect(distinct (coalesce(route.method, 'ANY') + ' ' + route.path)) AS routes
-                    """,
+                    """),
                     p=project_id,
                     ui_path=ui_path,
                     op="get_app_flow_summary_api_routes",

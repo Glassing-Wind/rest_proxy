@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from graphrag_core.indexing import watcher as index_watcher
+from tools.brain.graph_contract import node_label, rel_type
 from tools.brain.graph import core as graph_core
 from .core import _SYMBOL_FILTER_CYPHER
 
@@ -22,6 +23,47 @@ _SKIP_DIR_NAMES = {
     "dist",
     ".runtime",
 }
+
+FILE_LABEL = node_label("file")
+XCODE_TARGET_LABEL = node_label("xcode_target")
+XCODE_SCHEME_LABEL = node_label("xcode_scheme")
+XCODE_WORKSPACE_LABEL = node_label("xcode_workspace")
+CARGO_CRATE_LABEL = node_label("cargo_crate")
+CARGO_WORKSPACE_LABEL = node_label("cargo_workspace")
+REL_BUNDLES_FILE = rel_type("bundles_file")
+REL_BUILDS_TARGET = rel_type("builds_target")
+REL_REFERENCES_PROJECT = rel_type("references_project")
+REL_DEFINED_IN_FILE = rel_type("defined_in_file")
+REL_HAS_PACKAGE = rel_type("has_package")
+REL_DEPENDS_ON_PACKAGE = rel_type("depends_on_package")
+REL_IMPORTS = rel_type("imports")
+REL_ASSET_LINKS = rel_type("asset_links")
+REL_CALLS_API = rel_type("calls_api")
+REL_CONTAINS = rel_type("contains")
+
+
+def _schema_cypher(text: str) -> str:
+    replacements = {
+        "__FILE__": FILE_LABEL,
+        "__XCODE_TARGET__": XCODE_TARGET_LABEL,
+        "__XCODE_SCHEME__": XCODE_SCHEME_LABEL,
+        "__XCODE_WORKSPACE__": XCODE_WORKSPACE_LABEL,
+        "__CARGO_CRATE__": CARGO_CRATE_LABEL,
+        "__CARGO_WORKSPACE__": CARGO_WORKSPACE_LABEL,
+        "__BUNDLES_FILE__": REL_BUNDLES_FILE,
+        "__BUILDS_TARGET__": REL_BUILDS_TARGET,
+        "__REFERENCES_PROJECT__": REL_REFERENCES_PROJECT,
+        "__DEFINED_IN_FILE__": REL_DEFINED_IN_FILE,
+        "__HAS_PACKAGE__": REL_HAS_PACKAGE,
+        "__DEPENDS_ON_PACKAGE__": REL_DEPENDS_ON_PACKAGE,
+        "__IMPORTS__": REL_IMPORTS,
+        "__ASSET_LINKS__": REL_ASSET_LINKS,
+        "__CALLS_API__": REL_CALLS_API,
+        "__CONTAINS__": REL_CONTAINS,
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
 
 
 def _importance_penalty(filepath: str | None) -> float:
@@ -226,8 +268,8 @@ def _summarize_repo_linked_dependencies_for_directory(
 async def has_apple_build_context(session, project_id: str) -> bool:
     rows = await graph_core._execute_read(
         session,
-        """
-        MATCH (f:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (f:__FILE__ {project_id:$p})
         WHERE f.filepath ENDS WITH '.xcodeproj/project.pbxproj'
            OR f.filepath ENDS WITH '.xcworkspace/contents.xcworkspacedata'
            OR f.filepath ENDS WITH '.xcscheme'
@@ -235,7 +277,7 @@ async def has_apple_build_context(session, project_id: str) -> bool:
            OR f.filepath ENDS WITH '.xib'
            OR f.filepath CONTAINS '.xcassets/'
         RETURN count(f) AS n
-        """,
+        """),
         p=project_id,
         op="apple_context_presence",
     )
@@ -245,11 +287,11 @@ async def has_apple_build_context(session, project_id: str) -> bool:
 async def has_cargo_build_context(session, project_id: str) -> bool:
     rows = await graph_core._execute_read(
         session,
-        """
-        MATCH (f:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (f:__FILE__ {project_id:$p})
         WHERE f.filepath ENDS WITH 'Cargo.toml'
         RETURN count(f) AS n
-        """,
+        """),
         p=project_id,
         op="cargo_context_presence",
     )
@@ -259,14 +301,14 @@ async def has_cargo_build_context(session, project_id: str) -> bool:
 async def load_apple_build_context(session, project_id: str, dir_prefix: str = "", limit: int = 5):
     targets = await graph_core._execute_read(
         session,
-        """
-        MATCH (t:XcodeTarget {project_id:$p})
-        OPTIONAL MATCH (t)-[:BUNDLES_FILE]->(f:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (t:__XCODE_TARGET__ {project_id:$p})
+        OPTIONAL MATCH (t)-[:__BUNDLES_FILE__]->(f:__FILE__ {project_id:$p})
         WHERE $dir = '' OR f.filepath STARTS WITH $dir
         RETURN t.name AS target, t.project_file AS project_file, count(DISTINCT f) AS bundled_files
         ORDER BY bundled_files DESC, target
         LIMIT $limit
-        """,
+        """),
         p=project_id,
         dir=dir_prefix,
         limit=limit,
@@ -274,12 +316,12 @@ async def load_apple_build_context(session, project_id: str, dir_prefix: str = "
     )
     schemes = await graph_core._execute_read(
         session,
-        """
-        MATCH (s:XcodeScheme {project_id:$p})-[:BUILDS_TARGET]->(t:XcodeTarget {project_id:$p})
+        _schema_cypher("""
+        MATCH (s:__XCODE_SCHEME__ {project_id:$p})-[:__BUILDS_TARGET__]->(t:__XCODE_TARGET__ {project_id:$p})
         RETURN s.name AS scheme, collect(DISTINCT t.name)[..10] AS targets
         ORDER BY scheme
         LIMIT $limit
-        """,
+        """),
         p=project_id,
         limit=limit,
         op="apple_context_schemes",
@@ -302,15 +344,15 @@ async def load_apple_build_context(session, project_id: str, dir_prefix: str = "
     )
     labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
     rels = set(schema_rels[0].get("rels") or []) if schema_rels else set()
-    if "XcodeWorkspace" in labels and "REFERENCES_PROJECT" in rels:
+    if XCODE_WORKSPACE_LABEL in labels and REL_REFERENCES_PROJECT in rels:
         workspaces = await graph_core._execute_read(
             session,
-            """
-            MATCH (w:XcodeWorkspace {project_id:$p})-[:REFERENCES_PROJECT]->(f:File {project_id:$p})
+            _schema_cypher("""
+            MATCH (w:__XCODE_WORKSPACE__ {project_id:$p})-[:__REFERENCES_PROJECT__]->(f:__FILE__ {project_id:$p})
             RETURN w.filepath AS workspace, collect(DISTINCT f.filepath)[..10] AS projects
             ORDER BY workspace
             LIMIT $limit
-            """,
+            """),
             p=project_id,
             limit=limit,
             op="apple_context_workspaces",
@@ -339,13 +381,13 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
     )
     labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
     rels = set(schema_rels[0].get("rels") or []) if schema_rels else set()
-    if "CargoCrate" not in labels:
+    if CARGO_CRATE_LABEL not in labels:
         return [], [], []
 
     crates = await graph_core._execute_read(
         session,
-        """
-        MATCH (c:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (c:__CARGO_CRATE__ {project_id:$p})-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {project_id:$p})
         WHERE $dir = ''
            OR mf.filepath STARTS WITH $dir
            OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', '')
@@ -355,22 +397,22 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
                count(DISTINCT mf) AS manifest_files
         ORDER BY crate
         LIMIT $limit
-        """,
+        """),
         p=project_id,
         dir=dir_prefix,
         limit=limit,
         op="cargo_context_crates",
     )
 
-    if "CargoWorkspace" in labels and "HAS_PACKAGE" in rels:
+    if CARGO_WORKSPACE_LABEL in labels and REL_HAS_PACKAGE in rels:
         workspaces = await graph_core._execute_read(
             session,
-            """
-            MATCH (w:CargoWorkspace {project_id:$p})-[:HAS_PACKAGE]->(c:CargoCrate {project_id:$p})
+            _schema_cypher("""
+            MATCH (w:__CARGO_WORKSPACE__ {project_id:$p})-[:__HAS_PACKAGE__]->(c:__CARGO_CRATE__ {project_id:$p})
             RETURN w.filepath AS workspace, collect(DISTINCT c.name)[..10] AS crates
             ORDER BY workspace
             LIMIT $limit
-            """,
+            """),
             p=project_id,
             limit=limit,
             op="cargo_context_workspaces",
@@ -378,19 +420,19 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
     else:
         workspaces = []
 
-    if "DEPENDS_ON_PACKAGE" in rels:
+    if REL_DEPENDS_ON_PACKAGE in rels:
         dependencies = await graph_core._execute_read(
             session,
-            """
-            MATCH (src:CargoCrate {project_id:$p})-[r:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$p})
-            MATCH (src)-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+            _schema_cypher("""
+            MATCH (src:__CARGO_CRATE__ {project_id:$p})-[r:__DEPENDS_ON_PACKAGE__]->(tgt:__CARGO_CRATE__ {project_id:$p})
+            MATCH (src)-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {project_id:$p})
             WHERE $dir = ''
                OR mf.filepath STARTS WITH $dir
                OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', '')
             RETURN src.name AS crate, collect(DISTINCT tgt.name)[..10] AS deps
             ORDER BY crate
             LIMIT $limit
-            """,
+            """),
             p=project_id,
             dir=dir_prefix,
             limit=limit,
@@ -421,20 +463,20 @@ async def load_cargo_directory_dependencies(session, project_id: str, dir_prefix
     )
     labels = set(schema_labels[0].get("labels") or []) if schema_labels else set()
     rels = set(schema_rels[0].get("rels") or []) if schema_rels else set()
-    if "CargoCrate" not in labels or "DEPENDS_ON_PACKAGE" not in rels:
+    if CARGO_CRATE_LABEL not in labels or REL_DEPENDS_ON_PACKAGE not in rels:
         return [], []
 
     outbound = await graph_core._execute_read(
         session,
-        """
-        MATCH (src:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (src:__CARGO_CRATE__ {project_id:$p})-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {project_id:$p})
         WHERE $dir <> ''
           AND (mf.filepath STARTS WITH $dir OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', ''))
-        MATCH (src)-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$p})
+        MATCH (src)-[:__DEPENDS_ON_PACKAGE__]->(tgt:__CARGO_CRATE__ {project_id:$p})
         RETURN src.name AS crate, collect(DISTINCT tgt.name)[..10] AS deps
         ORDER BY crate
         LIMIT $limit
-        """,
+        """),
         p=project_id,
         dir=dir_prefix,
         limit=limit,
@@ -442,15 +484,15 @@ async def load_cargo_directory_dependencies(session, project_id: str, dir_prefix
     )
     inbound = await graph_core._execute_read(
         session,
-        """
-        MATCH (tgt:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
+        _schema_cypher("""
+        MATCH (tgt:__CARGO_CRATE__ {project_id:$p})-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {project_id:$p})
         WHERE $dir <> ''
           AND (mf.filepath STARTS WITH $dir OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', ''))
-        MATCH (src:CargoCrate {project_id:$p})-[:DEPENDS_ON_PACKAGE]->(tgt)
+        MATCH (src:__CARGO_CRATE__ {project_id:$p})-[:__DEPENDS_ON_PACKAGE__]->(tgt)
         RETURN tgt.name AS crate, collect(DISTINCT src.name)[..10] AS dependents
         ORDER BY crate
         LIMIT $limit
-        """,
+        """),
         p=project_id,
         dir=dir_prefix,
         limit=limit,
@@ -473,16 +515,16 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     async with driver.session(database=neo4j_db) as session:
         r_files = await graph_core._execute_read(
             session,
-            """
-            MATCH (f:File {{project_id: $p}})
+            _schema_cypher("""
+            MATCH (f:__FILE__ {{project_id: $p}})
             WHERE f.filepath STARTS WITH $dir
-            OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+            OPTIONAL MATCH (f)-[:__CONTAINS__]->(s)
             WHERE {filters}
             WITH f.filepath AS fp, count(s) AS sym_count, collect(s.name)[..3] AS samples
             ORDER BY sym_count DESC
             RETURN fp, sym_count, samples
             LIMIT $limit
-        """.format(filters=_SYMBOL_FILTER_CYPHER),
+        """).format(filters=_SYMBOL_FILTER_CYPHER),
             p=project_id,
             dir=dir_prefix,
             limit=limit,
@@ -490,14 +532,14 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         )
         r_inbound = await graph_core._execute_read(
             session,
-            """
-            MATCH (ext:File {project_id: $p})-[:IMPORTS]->(inner:File {project_id: $p})
+            _schema_cypher("""
+            MATCH (ext:__FILE__ {project_id: $p})-[:__IMPORTS__]->(inner:__FILE__ {project_id: $p})
             WHERE inner.filepath STARTS WITH $dir
               AND NOT ext.filepath STARTS WITH $dir
             RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
             ORDER BY n_imports DESC
             LIMIT $limit
-        """,
+        """),
             p=project_id,
             dir=dir_prefix,
             limit=limit,
@@ -505,14 +547,14 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         )
         r_outbound = await graph_core._execute_read(
             session,
-            """
-            MATCH (inner:File {project_id: $p})-[:IMPORTS]->(ext:File {project_id: $p})
+            _schema_cypher("""
+            MATCH (inner:__FILE__ {project_id: $p})-[:__IMPORTS__]->(ext:__FILE__ {project_id: $p})
             WHERE inner.filepath STARTS WITH $dir
               AND NOT ext.filepath STARTS WITH $dir
             RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
             ORDER BY n_usages DESC
             LIMIT $limit
-        """,
+        """),
             p=project_id,
             dir=dir_prefix,
             limit=limit,
@@ -520,14 +562,14 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         )
         r_assets = await graph_core._execute_read(
             session,
-            """
-            MATCH (f:File {project_id: $p})
+            _schema_cypher("""
+            MATCH (f:__FILE__ {project_id: $p})
             WHERE f.filepath STARTS WITH $dir
-            MATCH (f)-[r:ASSET_LINKS|CALLS_API]->(target:File {project_id: $p})
+            MATCH (f)-[r:__ASSET_LINKS__|__CALLS_API__]->(target:__FILE__ {project_id: $p})
             RETURN f.filepath AS source, type(r) AS rel, target.filepath AS target
             ORDER BY source, rel
             LIMIT $limit
-        """,
+        """),
             p=project_id,
             dir=dir_prefix,
             limit=limit * 3,
@@ -565,9 +607,9 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             source = rec["source"]
             target = rec["target"]
             rel = rec["rel"]
-            if rel == "ASSET_LINKS":
+            if rel == REL_ASSET_LINKS:
                 lines.append(f"- `{source}` -> 📦 `{target}` (Asset/Style)")
-            elif rel == "CALLS_API":
+            elif rel == REL_CALLS_API:
                 lines.append(f"- `{source}` -> 🔌 `{target}` (API Endpoint)")
 
     if r_apple_targets or r_apple_schemes:
@@ -629,7 +671,7 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
     async with driver.session(database=neo4j_db) as session:
         r = await graph_core._execute_read(
             session,
-            "MATCH (f:File {project_id:$p}) RETURN count(f) AS files",
+            _schema_cypher("MATCH (f:__FILE__ {project_id:$p}) RETURN count(f) AS files"),
             p=project_id,
             op="get_project_overview_file_count",
         )
@@ -645,16 +687,16 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
 
         r3 = await graph_core._execute_read(
             session,
-            """
-            MATCH (f:File {{project_id: $p}})
+            _schema_cypher("""
+            MATCH (f:__FILE__ {{project_id: $p}})
             WITH f, CASE WHEN f.filepath CONTAINS '/'
                  THEN split(f.filepath, '/')[0] ELSE '(root)' END AS top_dir
-            OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+            OPTIONAL MATCH (f)-[:__CONTAINS__]->(s)
             WHERE {filters}
             WITH top_dir, count(DISTINCT s) AS syms, count(DISTINCT f) AS files
             ORDER BY syms DESC LIMIT 6
             RETURN top_dir, files, syms
-        """.format(filters=_SYMBOL_FILTER_CYPHER),
+        """).format(filters=_SYMBOL_FILTER_CYPHER),
             p=project_id,
             op="get_project_overview_dirs",
         )
@@ -662,15 +704,15 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
 
         r4 = await graph_core._execute_read(
             session,
-            """
-            MATCH (f:File {{project_id: $p}})-[:CONTAINS]->(s)
+            _schema_cypher("""
+            MATCH (f:__FILE__ {{project_id: $p}})-[:__CONTAINS__]->(s)
             WHERE ({filters})
               AND NOT f.filepath CONTAINS 'test'
               AND NOT f.filepath CONTAINS 'spec'
             WITH f.filepath AS fp, count(s) AS n, collect(DISTINCT s.name)[..3] AS ex
             ORDER BY n DESC LIMIT 20
             RETURN fp, n, ex
-        """.format(filters=_SYMBOL_FILTER_CYPHER),
+        """).format(filters=_SYMBOL_FILTER_CYPHER),
             p=project_id,
             op="get_project_overview_key_files",
         )
