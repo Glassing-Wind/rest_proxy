@@ -712,6 +712,88 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crates/ts-pack-core/src/lib.rs", output)
         self.assertNotIn("crates/ts-pack-cli/src/main.rs", output)
 
+    def test_get_symbol_context_source_preview_prefers_definition_chunk(self):
+        executed: list[tuple[str, tuple[object, ...]]] = []
+
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Struct",
+                        "name": "SidebarView",
+                        "qualified_name": None,
+                        "filepath": "FrameCreator/Views/SidebarView.swift",
+                        "start_line": 3,
+                        "end_line": 9,
+                        "signature": "struct SidebarView: View",
+                        "parent_file": "FrameCreator/Views/SidebarView.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 1,
+                        "callees_out": 1,
+                    }
+                ]
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                executed.append((query, params))
+
+            async def fetchall(self):
+                return [("struct SidebarView: View {\n    var body: some View { Text(\"Sidebar\") }\n}",)]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            open_pool=mock.AsyncMock(),
+            _pg_pool=_FakePool(),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_symbol_context"](
+                            "/tmp/FrameCreator",
+                            "SidebarView",
+                            include_source_preview=True,
+                            file_path="FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("struct SidebarView: View", output)
+        self.assertTrue(executed)
+        query, params = executed[0]
+        self.assertIn("metadata->'declared_symbols'", query)
+        self.assertEqual(params[2], "SidebarView")
+        self.assertEqual(params[3], 3)
+
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:

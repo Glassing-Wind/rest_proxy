@@ -309,9 +309,30 @@ def register(mcp: FastMCP) -> None:
                                 """
                                 SELECT content FROM codebase_embeddings
                                 WHERE  project_id = %s AND file_path = %s
-                                ORDER  BY chunk_index LIMIT 2
+                                ORDER  BY
+                                       CASE
+                                           WHEN EXISTS (
+                                               SELECT 1
+                                               FROM jsonb_array_elements_text(
+                                                   CASE
+                                                       WHEN jsonb_typeof(metadata->'declared_symbols') = 'array'
+                                                       THEN metadata->'declared_symbols'
+                                                       ELSE '[]'::jsonb
+                                                   END
+                                               ) AS sym(value)
+                                               WHERE lower(sym.value) = lower(%s)
+                                           ) THEN 0
+                                           ELSE 1
+                                       END,
+                                       CASE
+                                           WHEN metadata->>'chunk_role' = 'definition' THEN 0
+                                           ELSE 1
+                                       END,
+                                       ABS(COALESCE((metadata->>'start_line')::int, 1) - %s),
+                                       chunk_index
+                                LIMIT 2
                             """,
-                                (project_id, rec["filepath"]),
+                                (project_id, rec["filepath"], rec["name"], int(rec["start_line"] or 1)),
                             )
                             rows = await cur.fetchall()
                             if rows:

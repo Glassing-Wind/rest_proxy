@@ -6,13 +6,15 @@
       "tool": "get_symbol_context",
       "params": {
         "symbol_name": "SidebarView",
-        "include_source_preview": false,
+        "include_source_preview": true,
         "file_path": "FrameCreator/Views/SidebarView.swift"
       },
       "required_substrings": [
         "FrameCreator/Views/SidebarView.swift",
         "SidebarView",
-        "ContentView.swift"
+        "ContentView.swift",
+        "Source preview",
+        "struct SidebarView: View"
       ]
     },
     {
@@ -62,6 +64,23 @@
       "required_substrings": [
         "--- Apps/DrawThingsCLI/DrawThingsCLI.swift",
         "@main",
+        "struct DrawThingsCLI: ParsableCommand"
+      ]
+    },
+    {
+      "id": "drawthings_cli_symbol_context",
+      "workspace_name": "draw-things-community",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "DrawThingsCLI",
+        "include_source_preview": true,
+        "file_path": "Apps/DrawThingsCLI/DrawThingsCLI.swift"
+      },
+      "required_substrings": [
+        "Apps/DrawThingsCLI/DrawThingsCLI.swift",
+        "DrawThingsCLI",
+        "Struct",
+        "Source preview",
         "struct DrawThingsCLI: ParsableCommand"
       ]
     },

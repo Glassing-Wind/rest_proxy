@@ -149,6 +149,7 @@ Use `add_memory(...)` proactively when you discover:
 - Semantic chunk metadata is producer-owned by `tree-sitter-language-pack`.
   - `rest_proxy` validates the shared semantic chunk contract during indexing.
   - Missing required producer fields should fail indexing loudly instead of being backfilled in Python.
+  - If producer metadata changes without changing chunk text, do a full `rebuild` for affected repos; incremental indexing can keep old semantic rows because chunk ids stay stable.
 - For custom Codex desktop Streamable HTTP MCP config, a minimal hand-edited `~/.codex/config.toml` entry is more reliable than the current UI save flow when the UI hits null-serialization bugs.
 
 ## Debugging Bad Graph Edges
