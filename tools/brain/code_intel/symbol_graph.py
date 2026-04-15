@@ -692,7 +692,7 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
     if rec["signature"]:
         out.append(f"**Signature:** `{rec['signature']}`\n")
 
-    callers = [c for c in (rec["callers"] or []) if c.get("name")]
+    callers = _dedupe_symbol_context_callers(rec["callers"] or [])
     callees = [c for c in (rec["callees"] or []) if c.get("name")]
     external_callees = [c for c in (rec.get("external_callees") or []) if c.get("name")]
 
@@ -719,6 +719,36 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
     if guidance:
         out.append(f"\n{guidance}")
     return out
+
+
+def _dedupe_symbol_context_callers(callers: list[dict]) -> list[dict]:
+    filtered = [dict(caller) for caller in callers if caller.get("name")]
+    if not filtered:
+        return []
+
+    symbol_backed_files = {
+        str(caller.get("file") or "")
+        for caller in filtered
+        if caller.get("file")
+        and caller.get("name")
+        and caller.get("name") != os.path.basename(str(caller.get("file") or ""))
+    }
+    if not symbol_backed_files:
+        return filtered
+
+    deduped: list[dict] = []
+    seen: set[tuple[str, str, int | None]] = set()
+    for caller in filtered:
+        caller_file = str(caller.get("file") or "")
+        caller_name = str(caller.get("name") or "")
+        if caller_file in symbol_backed_files and caller_name == os.path.basename(caller_file):
+            continue
+        key = (caller_name, caller_file, caller.get("line"))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(caller)
+    return deduped
 
 
 def exact_call_graph_guidance(

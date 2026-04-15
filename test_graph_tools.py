@@ -449,6 +449,40 @@ class GraphToolsTests(unittest.TestCase):
         )
         self.assertLess(editor_index, grpc_index)
 
+    def test_directory_snapshot_prefers_symbol_call_signal_over_import_volume(self):
+        merged = self.module.graph_overview._merge_directory_snapshot_rows(
+            [
+                {
+                    "caller": "FrameCreator/Services/Generation/DrawThingsGRPC/imageService.pb.swift",
+                    "n_imports": 142,
+                    "signal": "import",
+                },
+                {
+                    "caller": "FrameCreator/Views/ContentView.swift",
+                    "n_imports": 1,
+                    "signal": "import",
+                },
+            ],
+            [
+                {
+                    "caller": "FrameCreator/Views/ContentView.swift",
+                    "n_imports": 1,
+                    "signal": "symbol_call",
+                }
+            ],
+            path_key="caller",
+            count_key="n_imports",
+        )
+        ranked = self.module.graph_overview._rank_directory_snapshot_rows(
+            merged,
+            path_key="caller",
+            count_key="n_imports",
+            limit=5,
+        )
+
+        self.assertEqual(ranked[0]["caller"], "FrameCreator/Views/ContentView.swift")
+        self.assertEqual(ranked[0]["signal"], "symbol_call")
+
     def test_repo_dependency_summary_includes_inspect_first_guidance(self):
         with mock.patch.object(
             self.module.graph_overview,

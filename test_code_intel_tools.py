@@ -1072,6 +1072,36 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("FrameCreator/Views/ContentView.swift", output)
         self.assertTrue(executed)
 
+    def test_symbol_context_dedupes_file_level_swift_caller_when_symbol_caller_exists(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Struct",
+                "filepath": "FrameCreator/Views/SidebarView.swift",
+                "start_line": 3,
+                "end_line": 20,
+                "signature": "struct SidebarView: View",
+                "callers": [
+                    {
+                        "name": "ContentView.swift",
+                        "file": "FrameCreator/Views/ContentView.swift",
+                        "line": None,
+                    },
+                    {
+                        "name": "ContentView",
+                        "file": "FrameCreator/Views/ContentView.swift",
+                        "line": 4,
+                    },
+                ],
+                "callees": [],
+                "external_callees": [],
+            },
+            "SidebarView",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("`ContentView`:4", rendered)
+        self.assertNotIn("`ContentView.swift`", rendered)
+
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):
             if "f.pagerank IS NOT NULL" in cypher:

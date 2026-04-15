@@ -266,6 +266,11 @@ async def _run_known_regressions(mcp: FakeMCP, workspace_id: str) -> list[ToolRu
                 raise RuntimeError(
                     f"Graph golden regression '{case.get('id')}': expected '{expected}' in {tool_name} output."
                 )
+        for forbidden in case.get("forbidden_substrings") or []:
+            if forbidden in output:
+                raise RuntimeError(
+                    f"Graph golden regression '{case.get('id')}': unexpected '{forbidden}' in {tool_name} output."
+                )
         runs.append(ToolRun(f"regression:{case.get('id')}", output))
 
     return runs

@@ -37,6 +37,8 @@ REL_DEFINED_IN_FILE = rel_type("defined_in_file")
 REL_HAS_PACKAGE = rel_type("has_package")
 REL_DEPENDS_ON_PACKAGE = rel_type("depends_on_package")
 REL_IMPORTS = rel_type("imports")
+REL_CALLS = rel_type("calls")
+REL_CALLS_INFERRED = rel_type("calls_inferred")
 REL_CALLS_FILE = rel_type("calls_file")
 REL_ASSET_LINKS = rel_type("asset_links")
 REL_CALLS_API = rel_type("calls_api")
@@ -82,6 +84,8 @@ def _schema_cypher(text: str) -> str:
         "__HAS_PACKAGE__": REL_HAS_PACKAGE,
         "__DEPENDS_ON_PACKAGE__": REL_DEPENDS_ON_PACKAGE,
         "__IMPORTS__": REL_IMPORTS,
+        "__CALLS__": REL_CALLS,
+        "__CALLS_INFERRED__": REL_CALLS_INFERRED,
         "__CALLS_FILE__": REL_CALLS_FILE,
         "__ASSET_LINKS__": REL_ASSET_LINKS,
         "__CALLS_API__": REL_CALLS_API,
@@ -130,6 +134,15 @@ def _directory_snapshot_path_penalty(file_path: str | None) -> int:
     return penalty
 
 
+def _directory_snapshot_signal_rank(signal: str | None) -> int:
+    return {
+        "symbol_call": 0,
+        "file_graph": 1,
+        "semantic": 2,
+        "import": 3,
+    }.get(str(signal or "").strip().lower(), 4)
+
+
 def _rank_directory_snapshot_rows(
     rows: list[dict] | None,
     *,
@@ -137,7 +150,7 @@ def _rank_directory_snapshot_rows(
     count_key: str,
     limit: int,
 ) -> list[dict]:
-    ranked: list[tuple[int, int, str, dict]] = []
+    ranked: list[tuple[int, int, int, str, dict]] = []
     seen: set[str] = set()
     for row in rows or []:
         path = str(row.get(path_key) or "").strip()
@@ -147,13 +160,14 @@ def _rank_directory_snapshot_rows(
         ranked.append(
             (
                 _directory_snapshot_path_penalty(path),
+                _directory_snapshot_signal_rank(row.get("signal")),
                 -int(row.get(count_key) or 0),
                 path,
                 row,
             )
         )
-    ranked.sort(key=lambda item: (item[0], item[1], item[2]))
-    return [item[3] for item in ranked[: max(1, limit)]]
+    ranked.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+    return [item[4] for item in ranked[: max(1, limit)]]
 
 
 def _merge_directory_snapshot_rows(
@@ -170,7 +184,14 @@ def _merge_directory_snapshot_rows(
             continue
         count = int(row.get(count_key) or 0)
         existing = merged.get(path)
-        if existing is None or count > int(existing.get(count_key) or 0):
+        if existing is None:
+            merged[path] = dict(row)
+            continue
+        existing_rank = _directory_snapshot_signal_rank(existing.get("signal"))
+        incoming_rank = _directory_snapshot_signal_rank(row.get("signal"))
+        if incoming_rank < existing_rank or (
+            incoming_rank == existing_rank and count > int(existing.get(count_key) or 0)
+        ):
             merged[path] = dict(row)
     return list(merged.values())
 
@@ -815,6 +836,8 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             limit=limit,
             op="get_directory_snapshot_outbound",
         )
+        r_inbound = [{**rec, "signal": "import"} for rec in (r_inbound or [])]
+        r_outbound = [{**rec, "signal": "import"} for rec in (r_outbound or [])]
         if not r_inbound:
             r_inbound = await graph_core._execute_read(
                 session,
@@ -831,6 +854,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 limit=limit,
                 op="get_directory_snapshot_inbound_file_graph_fallback",
             )
+            r_inbound = [{**rec, "signal": "file_graph"} for rec in (r_inbound or [])]
         swift_file_rows = [rec for rec in (r_files or []) if str(rec.get("fp") or "").endswith(".swift")]
         if swift_file_rows:
             swift_inbound = await graph_core._execute_read(
@@ -850,6 +874,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 limit=limit,
                 op="get_directory_snapshot_inbound_symbol_call_fallback",
             )
+            swift_inbound = [{**rec, "signal": "symbol_call"} for rec in (swift_inbound or [])]
             r_inbound = _merge_directory_snapshot_rows(
                 r_inbound,
                 swift_inbound,
@@ -872,6 +897,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 limit=limit,
                 op="get_directory_snapshot_outbound_file_graph_fallback",
             )
+            r_outbound = [{**rec, "signal": "file_graph"} for rec in (r_outbound or [])]
         if swift_file_rows:
             swift_outbound = await graph_core._execute_read(
                 session,
@@ -890,6 +916,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 limit=limit,
                 op="get_directory_snapshot_outbound_symbol_call_fallback",
             )
+            swift_outbound = [{**rec, "signal": "symbol_call"} for rec in (swift_outbound or [])]
             r_outbound = _merge_directory_snapshot_rows(
                 r_outbound,
                 swift_outbound,
@@ -985,7 +1012,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                     )
                     rows = await cur.fetchall()
                     r_inbound = [
-                        {"caller": fp, "n_imports": hits}
+                        {"caller": fp, "n_imports": hits, "signal": "semantic"}
                         for fp, hits in rows
                         if not _is_low_signal_semantic_path(fp)
                     ]
@@ -1023,7 +1050,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                             scored.append((len(overlap), fp))
                     scored.sort(key=lambda item: (-item[0], item[1]))
                     r_outbound = [
-                        {"dependency": fp, "n_usages": score}
+                        {"dependency": fp, "n_usages": score, "signal": "semantic"}
                         for score, fp in scored[:limit]
                     ]
 

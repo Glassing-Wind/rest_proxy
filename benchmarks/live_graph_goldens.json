@@ -15,6 +15,9 @@
         "ContentView.swift",
         "Source preview",
         "struct SidebarView: View"
+      ],
+      "forbidden_substrings": [
+        "`ContentView.swift`"
       ]
     },
     {
@@ -37,7 +40,9 @@
       "workspace_name": "draw-things-community",
       "tool": "search_codebase",
       "params": {
-        "workspace_ids": ["$workspace_id"],
+        "workspace_ids": [
+          "$workspace_id"
+        ],
         "query": "where is DrawThingsCLI entrypoint defined",
         "k": 5,
         "include_metadata": false,
@@ -149,7 +154,9 @@
       "workspace_name": "opencode",
       "tool": "search_codebase",
       "params": {
-        "workspace_ids": ["$workspace_id"],
+        "workspace_ids": [
+          "$workspace_id"
+        ],
         "query": "where is packages/desktop/src-tauri main entrypoint defined",
         "k": 5,
         "include_metadata": false,
@@ -267,7 +274,9 @@
       "workspace_name": "tree-sitter-language-pack",
       "tool": "search_codebase",
       "params": {
-        "workspace_ids": ["$workspace_id"],
+        "workspace_ids": [
+          "$workspace_id"
+        ],
         "query": "how are Neo4j writes retried in ts-pack indexing",
         "k": 5,
         "include_metadata": false,
@@ -302,7 +311,9 @@
       "workspace_name": "tree-sitter-language-pack",
       "tool": "search_codebase",
       "params": {
-        "workspace_ids": ["$workspace_id"],
+        "workspace_ids": [
+          "$workspace_id"
+        ],
         "query": "where is parser.parse used in tree-sitter-language-pack",
         "k": 5,
         "include_metadata": false,
@@ -362,6 +373,51 @@
         "tools/brain/search/core.py",
         "_execute_read",
         "_path_allowed"
+      ]
+    },
+    {
+      "id": "framecreator_sidebar_references",
+      "workspace_name": "FrameCreator",
+      "tool": "find_references",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "symbol_name": "SidebarView"
+      },
+      "required_substrings": [
+        "Functional References (Graph)",
+        "FrameCreator/Views/ContentView.swift",
+        "ContentView",
+        "SidebarView(viewModel: viewModel)"
+      ]
+    },
+    {
+      "id": "framecreator_sidebar_call_chain_up",
+      "workspace_name": "FrameCreator",
+      "tool": "get_call_chain",
+      "params": {
+        "symbol_name": "SidebarView",
+        "file_path": "FrameCreator/Views/SidebarView.swift",
+        "direction": "up",
+        "depth": 2
+      },
+      "required_substrings": [
+        "Call chain: `SidebarView`",
+        "`ContentView`  (FrameCreator/Views/ContentView.swift)"
+      ]
+    },
+    {
+      "id": "drawthings_cli_directory_snapshot",
+      "workspace_name": "draw-things-community",
+      "tool": "get_directory_snapshot",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "directory_path": "Apps/DrawThingsCLI",
+        "limit": 5
+      },
+      "required_substrings": [
+        "Apps/DrawThingsCLI/DrawThingsCLI.swift",
+        "Libraries/Trainer/Sources/LoRATrainer.swift",
+        "[generated/support]"
       ]
     }
   ]
