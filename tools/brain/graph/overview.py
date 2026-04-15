@@ -66,6 +66,10 @@ def _schema_cypher(text: str) -> str:
     return text
 
 
+def _file_path_expr(alias: str = "f") -> str:
+    return f"coalesce({alias}.filepath, {alias}.file_path)"
+
+
 def _importance_penalty(filepath: str | None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
@@ -268,14 +272,14 @@ def _summarize_repo_linked_dependencies_for_directory(
 async def has_apple_build_context(session, project_id: str) -> bool:
     rows = await graph_core._execute_read(
         session,
-        _schema_cypher("""
-        MATCH (f:__FILE__ {project_id:$p})
-        WHERE f.filepath ENDS WITH '.xcodeproj/project.pbxproj'
-           OR f.filepath ENDS WITH '.xcworkspace/contents.xcworkspacedata'
-           OR f.filepath ENDS WITH '.xcscheme'
-           OR f.filepath ENDS WITH '.storyboard'
-           OR f.filepath ENDS WITH '.xib'
-           OR f.filepath CONTAINS '.xcassets/'
+        _schema_cypher(f"""
+        MATCH (f:__FILE__ {{project_id:$p}})
+        WHERE {_file_path_expr('f')} ENDS WITH '.xcodeproj/project.pbxproj'
+           OR {_file_path_expr('f')} ENDS WITH '.xcworkspace/contents.xcworkspacedata'
+           OR {_file_path_expr('f')} ENDS WITH '.xcscheme'
+           OR {_file_path_expr('f')} ENDS WITH '.storyboard'
+           OR {_file_path_expr('f')} ENDS WITH '.xib'
+           OR {_file_path_expr('f')} CONTAINS '.xcassets/'
         RETURN count(f) AS n
         """),
         p=project_id,
@@ -289,13 +293,25 @@ async def has_cargo_build_context(session, project_id: str) -> bool:
         session,
         _schema_cypher("""
         MATCH (f:__FILE__ {project_id:$p})
-        WHERE f.filepath ENDS WITH 'Cargo.toml'
-        RETURN count(f) AS n
+        WHERE coalesce(f.filepath, f.file_path) ENDS WITH 'Cargo.toml'
+        RETURN count(f) AS file_count
         """),
         p=project_id,
         op="cargo_context_presence",
     )
-    return bool(rows and rows[0].get("n"))
+    file_count = int((rows or [{}])[0].get("file_count") or 0)
+    if file_count > 0:
+        return True
+    crate_rows = await graph_core._execute_read(
+        session,
+        _schema_cypher("""
+        MATCH (c:__CARGO_CRATE__ {project_id:$p})
+        RETURN count(c) AS crate_count
+        """),
+        p=project_id,
+        op="cargo_context_presence_crates",
+    )
+    return bool(crate_rows and crate_rows[0].get("crate_count"))
 
 
 async def load_apple_build_context(session, project_id: str, dir_prefix: str = "", limit: int = 5):
@@ -386,14 +402,14 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
 
     crates = await graph_core._execute_read(
         session,
-        _schema_cypher("""
-        MATCH (c:__CARGO_CRATE__ {project_id:$p})-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {project_id:$p})
+        _schema_cypher(f"""
+        MATCH (c:__CARGO_CRATE__ {{project_id:$p}})-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {{project_id:$p}})
         WHERE $dir = ''
-           OR mf.filepath STARTS WITH $dir
-           OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', '')
+           OR {_file_path_expr('mf')} STARTS WITH $dir
+           OR $dir STARTS WITH replace({_file_path_expr('mf')}, 'Cargo.toml', '')
         RETURN c.name AS crate,
                c.crate_name AS crate_name,
-               mf.filepath AS manifest_path,
+               {_file_path_expr('mf')} AS manifest_path,
                count(DISTINCT mf) AS manifest_files
         ORDER BY crate
         LIMIT $limit
@@ -403,6 +419,22 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
         limit=limit,
         op="cargo_context_crates",
     )
+    if not crates:
+        crates = await graph_core._execute_read(
+            session,
+            _schema_cypher("""
+            MATCH (c:__CARGO_CRATE__ {project_id:$p})
+            RETURN c.name AS crate,
+                   c.crate_name AS crate_name,
+                   coalesce(c.manifest_path, '') AS manifest_path,
+                   0 AS manifest_files
+            ORDER BY crate
+            LIMIT $limit
+            """),
+            p=project_id,
+            limit=limit,
+            op="cargo_context_crates_fallback",
+        )
 
     if CARGO_WORKSPACE_LABEL in labels and REL_HAS_PACKAGE in rels:
         workspaces = await graph_core._execute_read(
@@ -423,12 +455,12 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
     if REL_DEPENDS_ON_PACKAGE in rels:
         dependencies = await graph_core._execute_read(
             session,
-            _schema_cypher("""
-            MATCH (src:__CARGO_CRATE__ {project_id:$p})-[r:__DEPENDS_ON_PACKAGE__]->(tgt:__CARGO_CRATE__ {project_id:$p})
-            MATCH (src)-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {project_id:$p})
+            _schema_cypher(f"""
+            MATCH (src:__CARGO_CRATE__ {{project_id:$p}})-[r:__DEPENDS_ON_PACKAGE__]->(tgt:__CARGO_CRATE__ {{project_id:$p}})
+            MATCH (src)-[:__DEFINED_IN_FILE__]->(mf:__FILE__ {{project_id:$p}})
             WHERE $dir = ''
-               OR mf.filepath STARTS WITH $dir
-               OR $dir STARTS WITH replace(mf.filepath, 'Cargo.toml', '')
+               OR {_file_path_expr('mf')} STARTS WITH $dir
+               OR $dir STARTS WITH replace({_file_path_expr('mf')}, 'Cargo.toml', '')
             RETURN src.name AS crate, collect(DISTINCT tgt.name)[..10] AS deps
             ORDER BY crate
             LIMIT $limit
