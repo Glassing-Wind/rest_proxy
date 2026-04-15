@@ -501,6 +501,35 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
             limit=limit,
             op="cargo_context_crates_fallback",
         )
+    if dir_prefix:
+        local_crates = [
+            rec
+            for rec in crates
+            if (rec.get("manifest_path") or "").strip()
+            and (rec.get("manifest_files") or 0)
+        ]
+        if local_crates:
+            crates = local_crates
+        elif crates:
+            local_by_manifest = await graph_core._execute_read(
+                session,
+                _schema_cypher("""
+                MATCH (c:__CARGO_CRATE__ {project_id:$p})
+                WHERE coalesce(c.manifest_path, '') STARTS WITH $dir
+                RETURN c.name AS crate,
+                       c.crate_name AS crate_name,
+                       coalesce(c.manifest_path, '') AS manifest_path,
+                       CASE WHEN coalesce(c.manifest_path, '') = '' THEN 0 ELSE 1 END AS manifest_files
+                ORDER BY crate
+                LIMIT $limit
+                """),
+                p=project_id,
+                dir=dir_prefix,
+                limit=limit,
+                op="cargo_context_crates_manifest_fallback",
+            )
+            if local_by_manifest:
+                crates = local_by_manifest
 
     if CARGO_WORKSPACE_LABEL in labels and REL_HAS_PACKAGE in rels:
         workspaces = await graph_core._execute_read(

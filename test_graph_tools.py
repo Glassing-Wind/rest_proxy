@@ -281,6 +281,57 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("local crate `api` is used by cli, admin", output)
         self.assertIn("Recommended Inspection Order", output)
 
+    def test_directory_snapshot_filters_external_cargo_crates_when_local_manifest_exists(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"file_count": 1}]
+            if op == "get_directory_snapshot_files":
+                return [{"fp": "packages/desktop/src-tauri/src/lib.rs", "sym_count": 29, "samples": ["await_initialization"]}]
+            if op == "get_directory_snapshot_inbound":
+                return []
+            if op == "get_directory_snapshot_outbound":
+                return []
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op == "cargo_context_schema_labels":
+                return [{"labels": ["CargoCrate", "CargoWorkspace"]}]
+            if op == "cargo_context_schema_relationship_types":
+                return [{"rels": ["HAS_PACKAGE", "DEPENDS_ON_PACKAGE"]}]
+            if op == "cargo_context_crates":
+                return [
+                    {"crate": "chrono", "crate_name": "chrono", "manifest_path": "", "manifest_files": 0},
+                ]
+            if op == "cargo_context_crates_manifest_fallback":
+                return [
+                    {
+                        "crate": "desktop",
+                        "crate_name": "desktop",
+                        "manifest_path": "packages/desktop/src-tauri/Cargo.toml",
+                        "manifest_files": 1,
+                    }
+                ]
+            if op == "cargo_context_workspaces":
+                return [{"workspace": "Cargo.toml", "crates": ["desktop"]}]
+            if op == "cargo_context_dependencies":
+                return [{"crate": "desktop", "deps": ["chrono"]}]
+            if op == "cargo_directory_schema_labels":
+                return [{"labels": []}]
+            if op == "cargo_directory_schema_relationship_types":
+                return [{"rels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["get_directory_snapshot"]("/tmp/opencode", "packages/desktop/src-tauri", 5)
+                )
+
+        self.assertIn("crate `desktop` (desktop) via `packages/desktop/src-tauri/Cargo.toml`", output)
+        self.assertNotIn("crate `chrono` (chrono) via `(external crate)`", output)
+
     def test_repo_dependency_summary_includes_inspect_first_guidance(self):
         with mock.patch.object(
             self.module.graph_overview,

@@ -1176,7 +1176,8 @@ def register(mcp: FastMCP) -> None:
                     if first_boundary:
                         focus_lines.append(f"- then inspect {first_boundary[2:]}")
                 if related:
-                    focus_lines.append(f"- then inspect {related[0][2:]}")
+                    prefix = "- then inspect" if focus_lines else "- start with"
+                    focus_lines.append(f"{prefix} {related[0][2:]}")
                 if focus_lines:
                     output.extend(["", "Inspect First:", *focus_lines[:3]])
                 output.extend(cargo_related)

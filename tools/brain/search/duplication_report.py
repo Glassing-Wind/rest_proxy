@@ -98,6 +98,10 @@ def append_winnow_pairs(
             file_key = row_a.get("file_path") or ""
             if not same_file_allowed(file_key, row_a.get("content") or "", same_file_counts):
                 continue
+        if dup_helpers.is_low_signal_preview(row_a.get("content") or "") and dup_helpers.is_low_signal_preview(
+            row_b.get("content") or ""
+        ):
+            continue
         meta_a = row_a.get("metadata") or {}
         meta_b = row_b.get("metadata") or {}
         a_start = meta_a.get("start_line")

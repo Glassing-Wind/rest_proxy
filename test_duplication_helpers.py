@@ -114,6 +114,17 @@ class DuplicationHelperTests(unittest.TestCase):
         )
         self.assertEqual([rec["name"] for rec in filtered], ["buildRouter"])
 
+    def test_is_low_signal_preview_flags_file_headers(self):
+        self.assertFalse(module.is_low_signal_preview("// File: src/a.ts\nfunction x() {}"))
+        self.assertTrue(module.is_low_signal_preview('"""module docstring'))
+        self.assertFalse(module.is_low_signal_preview("fn real_logic() {"))
+
+    def test_preview_line_skips_synthetic_file_headers(self):
+        self.assertEqual(
+            module.preview_line("// File: src/a.ts\nfunction x() {}\n"),
+            "function x() {}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

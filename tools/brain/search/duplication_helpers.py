@@ -233,4 +233,23 @@ def is_code_file(file_path: str, metadata: dict | None) -> bool:
 
 
 def preview_line(text: str, limit: int = 200) -> str:
-    return (text or "").strip().splitlines()[0][:limit] if text else ""
+    if not text:
+        return ""
+    for line in (text or "").strip().splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("// File: ") or stripped.startswith("# File: "):
+            continue
+        return stripped[:limit]
+    lines = (text or "").strip().splitlines()
+    return lines[0][:limit] if lines else ""
+
+
+def is_low_signal_preview(text: str) -> bool:
+    preview = preview_line(text).strip()
+    if not preview:
+        return True
+    if preview.startswith('"""') or preview.startswith("'''"):
+        return True
+    return False

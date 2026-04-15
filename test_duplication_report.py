@@ -94,6 +94,28 @@ class DuplicationReportTests(unittest.TestCase):
         self.assertIn("buildRouter", output)
         self.assertIn("src/a.ts", output)
 
+    def test_append_winnow_pairs_uses_substantive_preview_after_file_header(self):
+        lines = []
+        self.module.append_winnow_pairs(
+            lines,
+            title="Cross-file",
+            pairs=[
+                (
+                    {"file_path": "src/a.ts", "content": "// File: src/a.ts\nfunction a() {}", "metadata": {"start_line": 1}},
+                    {"file_path": "src/b.ts", "content": "// File: src/b.ts\nfunction b() {}", "metadata": {"start_line": 1}},
+                    1.0,
+                    1.0,
+                )
+            ],
+            max_pairs=5,
+            same_file_allowed=lambda *args, **kwargs: True,
+        )
+        output = "\n".join(lines)
+        self.assertIn("Cross-file (1)", output)
+        self.assertIn("src/a.ts:1 ↔ src/b.ts:1", output)
+        self.assertIn("A: function a() {}", output)
+        self.assertIn("B: function b() {}", output)
+
 
 if __name__ == "__main__":
     unittest.main()
