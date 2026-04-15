@@ -44,20 +44,38 @@ class TsPackContractTests(unittest.TestCase):
 
     def test_semantic_payload_and_line_window_contract(self):
         source = "def alpha():\n    return 1\n\n\ndef beta():\n    return alpha()\n"
+        payload_kwargs = {
+            "chunk_id_version": "v1",
+            "chunk_max_size": 256,
+        }
+        payload_sig = inspect.signature(ts_pack.build_semantic_payload)
+        if "chunk_overlap" in payload_sig.parameters:
+            payload_kwargs["chunk_overlap"] = 32
+        elif "_chunk_overlap" in payload_sig.parameters:
+            payload_kwargs["_chunk_overlap"] = 32
+
         payload = ts_pack.build_semantic_payload(
             source,
             "python",
             "src/sample.py",
             "proj123",
-            chunk_id_version="v1",
-            chunk_max_size=256,
-            _chunk_overlap=32,
+            **payload_kwargs,
         )
 
         self.assertIsInstance(payload, dict)
         self.assertIn("chunks", payload)
         self.assertIn("file_meta", payload)
         self.assertIsInstance(payload["chunks"], list)
+        self.assertGreaterEqual(len(payload["chunks"]), 1)
+        required_fields = {
+            "member_usages",
+            "call_like_symbols",
+            "declared_symbols",
+            "contains_definition",
+            "contains_entrypoint",
+            "chunk_role",
+        }
+        self.assertTrue(required_fields.issubset((payload["chunks"][0].get("metadata") or {}).keys()))
 
         fallback_chunks = ts_pack.build_line_window_chunks(
             source,
@@ -72,6 +90,7 @@ class TsPackContractTests(unittest.TestCase):
         self.assertIsInstance(fallback_chunks, list)
         self.assertGreaterEqual(len(fallback_chunks), 1)
         self.assertIn("metadata", fallback_chunks[0])
+        self.assertTrue(required_fields.issubset((fallback_chunks[0].get("metadata") or {}).keys()))
 
     def test_swift_and_embedding_helpers_have_expected_parameters(self):
         swift_sig = inspect.signature(ts_pack.build_swift_chunks)
