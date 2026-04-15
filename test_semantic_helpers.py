@@ -842,6 +842,54 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertIn("function_item", trace["rows"][0]["node_types"])
         self.assertEqual(trace["rows"][1]["role"], "usage_callsite")
 
+    def test_definition_lookup_prefers_true_definition_over_reexport_surface(self):
+        query = "where is process_repository_indexing defined"
+        rows = [
+            {
+                "file_path": "indexer/__init__.py",
+                "content": "from .unified_indexer import (\n    UnifiedIndexer,\n    process_repository_indexing,\n)\n",
+                "metadata": {
+                    "node_types": ["module", "import_from_statement"],
+                    "file_symbols": ["process_repository_indexing"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.2144,
+            },
+            {
+                "file_path": "indexer/unified_indexer.py",
+                "content": (
+                    "@handle_async_errors()\n"
+                    "async def process_repository_indexing(repo_path: str, repo_id: int) -> None:\n"
+                    "    pass\n"
+                ),
+                "metadata": {
+                    "node_types": ["function_definition"],
+                    "file_symbols": ["process_repository_indexing"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.1773,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        self.assertEqual(query_class, "api_definition_lookup")
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "indexer/unified_indexer.py")
+        self.assertEqual(enriched[0]["implementation_reexport_surface_hit"], 0)
+        self.assertEqual(enriched[1]["implementation_reexport_surface_hit"], 1)
+
     def test_duplicate_rerank_uses_node_type_aware_rank_score_for_representative_choice(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
         rows = []

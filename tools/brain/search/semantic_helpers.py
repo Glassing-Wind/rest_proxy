@@ -383,7 +383,7 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
 
 def implementation_rank_tuple(
     result: dict,
-) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
+) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
     low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
@@ -395,6 +395,7 @@ def implementation_rank_tuple(
     runtime_main_priority = int(result.get("implementation_runtime_main_entrypoint_hit", 0) or 0)
     role_priority = int(result.get("implementation_role_priority", 0) or 0)
     node_type_priority = int(result.get("implementation_node_type_priority", 0) or 0)
+    reexport_surface = int(result.get("implementation_reexport_surface_hit", 0) or 0)
     definition_hit = int(result.get("implementation_definition_hit", 0) or 0)
     signature_hit = int(result.get("implementation_exact_signature_symbol_hit", 0) or 0)
     export_hit = int(result.get("implementation_export_hit", 0) or 0)
@@ -413,6 +414,7 @@ def implementation_rank_tuple(
         -runtime_main_priority,
         -role_priority,
         -node_type_priority,
+        reexport_surface,
         -signature_hit,
         -definition_hit,
         -export_hit,
@@ -743,6 +745,36 @@ def implementation_export_hit(content: str | None, file_path: str | None, meta: 
     return score
 
 
+def implementation_reexport_surface_hit(
+    content: str | None,
+    file_path: str | None,
+    meta: dict,
+    *,
+    definition_hit: int,
+    signature_hit: int,
+) -> int:
+    if definition_hit > 0 or signature_hit > 0:
+        return 0
+    path = (file_path or "").replace("\\", "/").lower()
+    text = (content or "").lower()
+    node_types = implementation_node_types(meta)
+    reexport_like = any(
+        (
+            re.search(r"\bfrom\s+\.", text),
+            re.search(r"\bpub\s+use\b", text),
+            re.search(r"\b__all__\b", text),
+            re.search(r"\bexport\s+(?:\{|\*)", text),
+        )
+    )
+    if not reexport_like:
+        return 0
+    if path.endswith("/__init__.py") or path.endswith("/__init__.pyi") or path.endswith("/lib.rs"):
+        return 1
+    if node_types & EXPORT_NODE_TYPES:
+        return 1
+    return 0
+
+
 def implementation_api_context_hit(meta: dict) -> int:
     if not isinstance(meta, dict):
         return 0
@@ -976,6 +1008,13 @@ def enrich_implementation_result(
         result.get("file_path"),
         meta,
     )
+    result["implementation_reexport_surface_hit"] = implementation_reexport_surface_hit(
+        result.get("content", ""),
+        result.get("file_path"),
+        meta,
+        definition_hit=int(result.get("implementation_definition_hit", 0) or 0),
+        signature_hit=int(result.get("implementation_exact_signature_symbol_hit", 0) or 0),
+    )
     result["implementation_api_context_hit"] = implementation_api_context_hit(meta)
     result["implementation_api_entrypoint_hit"] = implementation_api_entrypoint_hit(
         result.get("file_path", ""),
@@ -997,6 +1036,12 @@ def enrich_implementation_result(
         export_hit=int(result.get("implementation_export_hit", 0) or 0),
         api_entrypoint_hit=int(result.get("implementation_api_entrypoint_hit", 0) or 0),
     )
+    if (
+        query_class in {"api_definition_lookup", "symbol_lookup"}
+        and int(result.get("implementation_reexport_surface_hit", 0) or 0) > 0
+        and role in {"public_api_definition", "canonical_definition", "internal_implementation"}
+    ):
+        role = "supporting_context"
     result["implementation_role"] = role
     result["implementation_role_priority"] = implementation_role_priority(role, query_class)
     result["implementation_role_score"] = implementation_role_score(role, query_class)
@@ -1046,14 +1091,17 @@ def enrich_implementation_result(
         export_bonus = 0.03 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
         api_entrypoint_bonus = 0.03 * min(int(result.get("implementation_api_entrypoint_hit", 0) or 0), 1)
         api_context_bonus = 0.02 * min(int(result.get("implementation_api_context_hit", 0) or 0), 1)
+        reexport_surface_penalty = 0.07 * min(int(result.get("implementation_reexport_surface_hit", 0) or 0), 1)
     elif query_class == "implementation_search":
         export_bonus = 0.01 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
         api_entrypoint_bonus = 0.0
         api_context_bonus = 0.0
+        reexport_surface_penalty = 0.0
     else:
         export_bonus = 0.0
         api_entrypoint_bonus = 0.0
         api_context_bonus = 0.0
+        reexport_surface_penalty = 0.0
     meta_component = (float(result.get("meta_score", 0.0) or 0.0) * meta_boost) if meta_boost > 0 else 0.0
 
     result["rank_score"] = (
@@ -1077,6 +1125,7 @@ def enrich_implementation_result(
         - binding_surface_penalty
         - support_path_penalty
         - library_entrypoint_penalty
+        - reexport_surface_penalty
         - usage_penalty
     )
     result["implementation_rank_components"] = {
@@ -1095,6 +1144,7 @@ def enrich_implementation_result(
         "export_bonus": export_bonus,
         "api_entrypoint_bonus": api_entrypoint_bonus,
         "api_context_bonus": api_context_bonus,
+        "reexport_surface_penalty": reexport_surface_penalty,
         "doc_penalty": doc_penalty,
         "parser_data_penalty": parser_data_penalty,
         "binding_surface_penalty": binding_surface_penalty,
