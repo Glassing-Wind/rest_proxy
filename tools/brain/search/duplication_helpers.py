@@ -110,6 +110,8 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "data",
     "name",
     "value",
+    "main",
+    "optional",
     "py",
     "tool",
     "tools",
@@ -471,6 +473,8 @@ def duplicate_candidate_details(
     elif score >= 0.85:
         reasons.append("high duplicate score")
 
+    path_overlap_actionable = bool(path_overlap) and score >= 0.95
+
     return {
         "candidate_score": candidate_score,
         "reasons": reasons,
@@ -481,6 +485,7 @@ def duplicate_candidate_details(
         "preview_equal": preview_equal,
         "actionable": bool(
             preview_equal
-            or ((identifiers or path_overlap) and not (low_signal_a and low_signal_b))
+            or (identifiers and not (low_signal_a and low_signal_b))
+            or (path_overlap_actionable and not (low_signal_a and low_signal_b))
         ),
     }

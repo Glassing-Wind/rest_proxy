@@ -206,6 +206,21 @@ class DuplicationHelperTests(unittest.TestCase):
         self.assertFalse(details["actionable"])
         self.assertNotIn("same lead statement", details["reasons"])
 
+    def test_duplicate_candidate_details_does_not_use_path_overlap_alone_unless_score_is_extreme(self):
+        details = module.duplicate_candidate_details(
+            {
+                "file_path": "tools/brain/search/semantic.py",
+                "content": "async def _load_path_hint_rows(query):",
+            },
+            {
+                "file_path": "tools/brain/search/semantic_helpers.py",
+                "content": "def implementation_path_hint_hit(file_path, query=None):",
+            },
+            score=0.88,
+            struct_score=1.0,
+        )
+        self.assertFalse(details["actionable"])
+
 
 if __name__ == "__main__":
     unittest.main()
