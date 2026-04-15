@@ -72,6 +72,10 @@ class DuplicationHelperTests(unittest.TestCase):
             module.default_duplication_exclude_patterns([]),
         )
         self.assertIn(
+            "**/test_*.py",
+            module.default_duplication_exclude_patterns([]),
+        )
+        self.assertIn(
             "docs/node_types/**",
             module.default_duplication_exclude_patterns([]),
         )
@@ -102,6 +106,33 @@ class DuplicationHelperTests(unittest.TestCase):
             module.keep_default_winnow_pair(low_signal, include_patterns=["src/**/*.py"])
         )
 
+    def test_keep_default_winnow_pair_suppresses_structural_false_positive_without_identifier_overlap(self):
+        pair = (
+            {"file_path": "tools/brain/graph/overview.py", "content": "def summarize_repo_links(project_path: str) -> list[str]:"},
+            {"file_path": "memory/summary.py", "content": "def normalize_summary_dict(data: Any) -> Dict[str, List[str]]:"},
+            1.0,
+            1.0,
+        )
+        self.assertFalse(module.keep_default_winnow_pair(pair, include_patterns=[]))
+
+    def test_keep_default_winnow_pair_keeps_similar_preview_identifiers(self):
+        pair = (
+            {"file_path": "src/repo_links.py", "content": "def summarize_repo_links(project_path: str) -> list[str]:"},
+            {"file_path": "src/repo_links_copy.py", "content": "def summarize_repo_links(project_path: str) -> list[str]:"},
+            1.0,
+            1.0,
+        )
+        self.assertTrue(module.keep_default_winnow_pair(pair, include_patterns=[]))
+
+    def test_keep_default_winnow_pair_suppresses_import_only_pairs(self):
+        pair = (
+            {"file_path": "test_a.py", "content": "import asyncio\nimport unittest"},
+            {"file_path": "test_b.py", "content": "import asyncio\nimport unittest"},
+            1.0,
+            1.0,
+        )
+        self.assertFalse(module.keep_default_winnow_pair(pair, include_patterns=[]))
+
     def test_filter_duplicate_symbol_name_records_skips_common_noise_by_default(self):
         records = [
             {"name": "__init__", "count": 3, "files": ["a.py", "b.py"]},
@@ -124,6 +155,22 @@ class DuplicationHelperTests(unittest.TestCase):
             module.preview_line("// File: src/a.ts\nfunction x() {}\n"),
             "function x() {}",
         )
+
+    def test_preview_identifiers_and_path_overlap_extract_useful_signal(self):
+        self.assertIn("summarize_repo_links", module.preview_identifiers("def summarize_repo_links(project_path):"))
+        self.assertIn("client", module.path_token_overlap("src/client_api.py", "tests/client_api_copy.py"))
+
+    def test_has_actionable_duplicate_signal_requires_identifier_or_path_overlap(self):
+        actionable = module.has_actionable_duplicate_signal(
+            {"file_path": "src/client_api.py", "content": "def normalize_client_name(value):"},
+            {"file_path": "src/client_api_copy.py", "content": "def normalize_client_title(value):"},
+        )
+        structural_only = module.has_actionable_duplicate_signal(
+            {"file_path": "a.py", "content": "def summarize_repo_links(project_path: str) -> list[str]:"},
+            {"file_path": "b.py", "content": "def normalize_summary_dict(data: Any) -> Dict[str, List[str]]:"},
+        )
+        self.assertTrue(actionable)
+        self.assertFalse(structural_only)
 
 
 if __name__ == "__main__":

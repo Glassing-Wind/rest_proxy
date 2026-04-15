@@ -543,18 +543,29 @@ def register(mcp: FastMCP) -> None:
                     lines.append(
                         "\nWinnowed duplicates (multi-scale fingerprints + token fallback)"
                     )
-                    cross_pairs = [
+                    actionable_pairs = [
                         p
                         for p in winnow_pairs
+                        if dup_helpers.has_actionable_duplicate_signal(p[0], p[1])
+                    ]
+                    if not actionable_pairs:
+                        lines.append(
+                            "No high-confidence actionable duplicate chunks found. "
+                            "Broad structural matches were omitted."
+                        )
+                        actionable_pairs = []
+                    cross_pairs = [
+                        p
+                        for p in actionable_pairs
                         if p[0]["file_path"] != p[1]["file_path"]
                     ]
                     same_pairs = [
                         p
-                        for p in winnow_pairs
+                        for p in actionable_pairs
                         if p[0]["file_path"] == p[1]["file_path"]
                     ]
 
-                    if cross_file_only:
+                    if actionable_pairs and cross_file_only:
                         dup_report.append_winnow_pairs(
                             lines,
                             title="Cross-file",
@@ -562,7 +573,7 @@ def register(mcp: FastMCP) -> None:
                             max_pairs=max_pairs,
                             same_file_allowed=_same_file_allowed,
                         )
-                    else:
+                    elif actionable_pairs:
                         if prefer_cross_file:
                             dup_report.append_winnow_pairs(
                                 lines,

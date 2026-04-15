@@ -11,8 +11,15 @@ import re
 TOKEN_PATTERN = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]"
 )
+IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS = [
+    "tests/**",
+    "**/tests/**",
+    "test_*.py",
+    "**/test_*.py",
+    "**/*.spec.*",
+    "**/*.test.*",
     "docs/node_types/**",
     "**/docs/node_types/**",
     "node_modules/**",
@@ -46,6 +53,63 @@ DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST = {
     "tool",
     "register",
     "_tx",
+}
+
+PREVIEW_IDENTIFIER_BLOCKLIST = {
+    "def",
+    "async",
+    "fn",
+    "pub",
+    "class",
+    "struct",
+    "trait",
+    "enum",
+    "protocol",
+    "extension",
+    "return",
+    "import",
+    "from",
+    "as",
+    "let",
+    "var",
+    "const",
+    "true",
+    "false",
+    "none",
+    "some",
+    "self",
+    "super",
+    "crate",
+    "mod",
+    "where",
+    "await",
+    "list",
+    "dict",
+    "str",
+    "int",
+    "bool",
+    "any",
+    "option",
+    "result",
+    "session",
+    "project_id",
+    "workspace_id",
+    "limit",
+    "driver",
+    "neo4j_db",
+    "query",
+    "record",
+    "records",
+    "row",
+    "rows",
+    "file",
+    "filepath",
+    "path",
+    "text",
+    "content",
+    "data",
+    "name",
+    "value",
 }
 
 
@@ -87,8 +151,22 @@ def keep_default_winnow_pair(
     *,
     include_patterns: list[str],
 ) -> bool:
-    _row_a, _row_b, score, struct_score = pair
+    row_a, row_b, score, struct_score = pair
     if score <= 0.50 and struct_score <= 0.0:
+        return False
+    preview_a = preview_line(row_a.get("content") or "")
+    preview_b = preview_line(row_b.get("content") or "")
+    if _is_import_only_preview(preview_a) and _is_import_only_preview(preview_b):
+        return False
+    identifiers_a = preview_identifiers(row_a.get("content") or "")
+    identifiers_b = preview_identifiers(row_b.get("content") or "")
+    path_overlap = path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or "")
+    if (
+        score >= 0.90
+        and struct_score >= 0.90
+        and not (identifiers_a & identifiers_b)
+        and not path_overlap
+    ):
         return False
     return True
 
@@ -251,5 +329,66 @@ def is_low_signal_preview(text: str) -> bool:
     if not preview:
         return True
     if preview.startswith('"""') or preview.startswith("'''"):
+        return True
+    return False
+
+
+def preview_identifiers(text: str) -> set[str]:
+    preview = preview_line(text)
+    if not preview:
+        return set()
+    return {
+        token.lower()
+        for token in IDENTIFIER_PATTERN.findall(preview)
+        if len(token) > 1 and token.lower() not in PREVIEW_IDENTIFIER_BLOCKLIST
+    }
+
+
+def path_token_overlap(path_a: str, path_b: str) -> set[str]:
+    path_stopwords = {
+        "test",
+        "spec",
+        "index",
+        "main",
+        "lib",
+        "flow",
+        "summary",
+        "helper",
+        "helpers",
+        "core",
+        "graph",
+        "search",
+        "code",
+        "intel",
+        "apple",
+        "report",
+        "tools",
+        "brain",
+        "memory",
+        "store",
+        "util",
+        "utility",
+    }
+
+    def _tokens(path: str) -> set[str]:
+        stem = os.path.splitext(os.path.basename(path or ""))[0]
+        return {
+            token.lower()
+            for token in re.split(r"[_\-.]+", stem)
+            if len(token) > 2 and token.lower() not in path_stopwords
+        }
+
+    return _tokens(path_a) & _tokens(path_b)
+
+
+def _is_import_only_preview(preview: str) -> bool:
+    stripped = (preview or "").strip()
+    return stripped.startswith("import ") or stripped.startswith("from ")
+
+
+def has_actionable_duplicate_signal(row_a: dict, row_b: dict) -> bool:
+    if preview_identifiers(row_a.get("content") or "") & preview_identifiers(row_b.get("content") or ""):
+        return True
+    if path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or ""):
         return True
     return False

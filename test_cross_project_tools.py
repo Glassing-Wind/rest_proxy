@@ -39,6 +39,7 @@ class FakeDriver:
 class FakeCursor:
     def __init__(self, rows):
         self.rows = list(rows)
+        self.last_params = None
 
     async def __aenter__(self):
         return self
@@ -47,6 +48,7 @@ class FakeCursor:
         return False
 
     async def execute(self, query, params):
+        self.last_params = params
         return None
 
     async def fetchall(self):
@@ -187,6 +189,45 @@ class CrossProjectToolTests(unittest.TestCase):
         self.assertIn("Kind:      ExportAlias", output)
         self.assertIn("packages/sdk/js/src/client.ts", output)
         self.assertNotIn("not found in Neo4j", output)
+
+    def test_trace_symbol_cross_project_prefers_real_definition_over_stub(self):
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "trace_symbol_definition":
+                return [
+                    {
+                        "kind": "Function",
+                        "filepath": "crates/ts-pack-python/python/tree_sitter_language_pack/__init__.pyi",
+                        "start_line": 478,
+                        "end_line": 487,
+                        "signature": "build_semantic_payload(...)",
+                    },
+                    {
+                        "kind": "Function",
+                        "filepath": "crates/ts-pack-python/python/tree_sitter_language_pack/_semantic_payload.py",
+                        "start_line": 1137,
+                        "end_line": 1180,
+                        "signature": "build_semantic_payload(...)",
+                    },
+                ]
+            if op == "trace_symbol_alias_definition":
+                return []
+            if op == "trace_symbol_graph_usages":
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["trace_symbol_cross_project"](
+                        "build_semantic_payload",
+                        "src",
+                        "tgt",
+                    )
+                )
+
+        self.assertIn("_semantic_payload.py", output)
+        self.assertNotIn("__init__.pyi  L478", output)
 
 
 if __name__ == "__main__":

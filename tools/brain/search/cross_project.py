@@ -6,6 +6,29 @@ from _helpers import get_memory_modules, get_project_id
 from tools.brain.search import core as search_core
 
 
+_STUB_SUFFIXES = (".pyi", ".d.ts", ".d.cts", ".d.mts")
+
+
+def _definition_rank(record: dict) -> tuple[int, int, str]:
+    filepath = str(record.get("filepath") or "")
+    kind = str(record.get("kind") or "")
+    score = 0
+    if filepath.endswith(_STUB_SUFFIXES):
+        score -= 50
+    elif filepath.endswith((".py", ".rs", ".ts", ".tsx", ".js", ".jsx", ".go", ".swift")):
+        score += 20
+    if kind == "ExportAlias":
+        score -= 10
+    if "/tests/" in filepath or filepath.startswith("tests/"):
+        score -= 15
+    if "__init__.pyi" in filepath:
+        score -= 15
+    if "__init__.py" in filepath:
+        score -= 5
+    start_line = int(record.get("start_line") or 0)
+    return score, -start_line, filepath
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -66,39 +89,37 @@ def register(mcp: FastMCP) -> None:
                            s.start_line  AS start_line,
                            s.end_line    AS end_line,
                            s.signature   AS signature
-                    LIMIT 1
+                    LIMIT 12
                 """,
                     name=symbol_name,
                     pid=src_id,
                     op="trace_symbol_definition",
                 )
-                if records:
-                    definition = dict(records[0])
-                else:
-                    alias_records = await search_core._execute_read(
-                        session,
-                        """
-                        MATCH (f:File {project_id: $pid})-[alias:EXPORTS_SYMBOL_AS]->(target)
-                        WHERE alias.name = $name
-                        OPTIONAL MATCH (f)-[:EXPORTS_SYMBOL]->(target)
-                        RETURN 'ExportAlias' AS kind,
-                               f.filepath AS filepath,
-                               alias.line AS start_line,
-                               alias.line AS end_line,
-                               coalesce(target.signature, target.name) AS signature,
-                               target.name AS target_name
-                        ORDER BY f.filepath ASC
-                        LIMIT 1
-                    """,
-                        name=symbol_name,
-                        pid=src_id,
-                        op="trace_symbol_alias_definition",
-                    )
-                    if alias_records:
-                        definition = dict(alias_records[0])
-                        target_name = definition.get("target_name")
-                        if isinstance(target_name, str) and target_name and target_name != symbol_name:
-                            resolved_names.append(target_name)
+                alias_records = await search_core._execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id: $pid})-[alias:EXPORTS_SYMBOL_AS]->(target)
+                    WHERE alias.name = $name
+                    OPTIONAL MATCH (f)-[:EXPORTS_SYMBOL]->(target)
+                    RETURN 'ExportAlias' AS kind,
+                           f.filepath AS filepath,
+                           alias.line AS start_line,
+                           alias.line AS end_line,
+                           coalesce(target.signature, target.name) AS signature,
+                           target.name AS target_name
+                    ORDER BY f.filepath ASC
+                    LIMIT 12
+                """,
+                    name=symbol_name,
+                    pid=src_id,
+                    op="trace_symbol_alias_definition",
+                )
+                candidates = [dict(rec) for rec in records] + [dict(rec) for rec in alias_records]
+                if candidates:
+                    definition = max(candidates, key=_definition_rank)
+                    target_name = definition.get("target_name")
+                    if isinstance(target_name, str) and target_name and target_name != symbol_name:
+                        resolved_names.append(target_name)
 
             # ── 2. Call-graph usages in target project ────────────────────────
             graph_usages: list[str] = []
@@ -147,7 +168,17 @@ def register(mcp: FastMCP) -> None:
                     async with conn.cursor() as cur:
                         await cur.execute(
                             """
-                            WITH sem AS (
+                            WITH exact AS (
+                                SELECT file_path, chunk_index, content, 1000.0 AS rrf
+                                FROM codebase_embeddings
+                                WHERE project_id = %(pid)s
+                                  AND (
+                                    content ILIKE %(ilike)s
+                                    OR (%(ilike_alt)s <> '' AND content ILIKE %(ilike_alt)s)
+                                  )
+                                LIMIT 20
+                            ),
+                            sem AS (
                                 SELECT file_path, chunk_index, content,
                                        ROW_NUMBER() OVER (
                                            ORDER BY embedding <=> %(vec)s::vector
@@ -170,6 +201,8 @@ def register(mcp: FastMCP) -> None:
                                   )
                                 LIMIT 40
                             )
+                            SELECT file_path, chunk_index, content, rrf FROM exact
+                            UNION ALL
                             SELECT s.file_path, s.chunk_index, s.content,
                                    (1.0/(60+s.sem_rank) + COALESCE(1.0/(60+k.kw_rank), 0.0)) AS rrf
                             FROM sem s LEFT JOIN kw k
@@ -178,7 +211,7 @@ def register(mcp: FastMCP) -> None:
                                 s.content ILIKE %(ilike)s
                                 OR (%(ilike_alt)s <> '' AND s.content ILIKE %(ilike_alt)s)
                             )
-                            ORDER BY rrf DESC LIMIT 5
+                            ORDER BY rrf DESC LIMIT 12
                         """,
                             {
                                 "vec": vec_str,
@@ -190,7 +223,18 @@ def register(mcp: FastMCP) -> None:
                                 ),
                             },
                         )
-                        return await cur.fetchall()
+                        rows = await cur.fetchall()
+                        deduped = []
+                        seen = set()
+                        for row in rows:
+                            key = (row[0], row[1])
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            deduped.append(row)
+                            if len(deduped) >= 5:
+                                break
+                        return deduped
 
             async def _fetch_src_preview():
                 if not definition.get("filepath"):
