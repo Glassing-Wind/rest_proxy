@@ -418,6 +418,90 @@ def register(mcp: FastMCP) -> None:
             return f"Error tracing call chain: {str(e)}"
 
     @mcp.tool()
+    async def trace_graph_provenance(
+        workspace_id: str,
+        symbol_filter: str | None = None,
+        file_filter: str | None = None,
+    ) -> str:
+        """
+        Trace finalize-stage graph provenance samples for a project.
+
+        Uses the ts-pack producer-side provenance report to explain where
+        file-to-file graph links and file-derived call links came from.
+
+        Args:
+            workspace_id: Logical workspace name or absolute project path.
+            symbol_filter: Optional callee/symbol substring filter.
+            file_filter: Optional file-path substring filter.
+        """
+        try:
+            project_id = get_project_id(workspace_id)
+            import graph_bootstrap
+            import tree_sitter_language_pack as ts_pack
+
+            symbol_filter_value = (
+                symbol_filter.strip() if isinstance(symbol_filter, str) and symbol_filter.strip() else None
+            )
+            file_filter_value = (
+                file_filter.strip() if isinstance(file_filter, str) and file_filter.strip() else None
+            )
+            report = ts_pack.trace_graph_provenance(
+                project_id,
+                graph_bootstrap._NEO4J_URI,
+                graph_bootstrap._NEO4J_USER,
+                graph_bootstrap._NEO4J_PASSWORD,
+                graph_bootstrap._NEO4J_DB,
+                symbol_filter=symbol_filter_value,
+                file_filter=file_filter_value,
+            )
+            if not isinstance(report, dict):
+                return f"Unexpected provenance report type: {type(report).__name__}"
+            finalize = report.get("finalize") or {}
+            call_samples = finalize.get("calls_file_samples") or []
+            link_samples = finalize.get("file_graph_link_samples") or []
+
+            if not call_samples and not link_samples:
+                return (
+                    f"No provenance samples matched for `{workspace_id}`."
+                    + (f"\nSymbol filter: `{symbol_filter_value}`" if symbol_filter_value else "")
+                    + (f"\nFile filter: `{file_filter_value}`" if file_filter_value else "")
+                )
+
+            lines = [f"# Graph Provenance: {os.path.basename(workspace_id.rstrip('/'))}", ""]
+            lines.append(f"Project ID: `{report.get('project_id') or project_id}`")
+            if symbol_filter_value:
+                lines.append(f"Symbol filter: `{symbol_filter_value}`")
+            if file_filter_value:
+                lines.append(f"File filter: `{file_filter_value}`")
+            lines.append("")
+
+            if call_samples:
+                lines.append("## CALLS_FILE Samples")
+                for sample in call_samples[:20]:
+                    src = sample.get("src") or "?"
+                    dst = sample.get("dst") or "?"
+                    caller = sample.get("caller") or "?"
+                    callee = sample.get("callee") or "?"
+                    via = sample.get("via") or "CALLS"
+                    lines.append(f"- `{src}` -> `{dst}` via `{caller} -> {callee}` [{via}]")
+                lines.append("")
+
+            if link_samples:
+                lines.append("## File Graph Link Samples")
+                for sample in link_samples[:20]:
+                    src = sample.get("src") or "?"
+                    dst = sample.get("dst") or "?"
+                    rel = sample.get("source_rel") or "UNKNOWN"
+                    route = sample.get("route") or ""
+                    method = sample.get("method") or ""
+                    suffix = f" route={method} {route}".strip() if (route or method) else ""
+                    lines.append(f"- `{src}` -> `{dst}` [{rel}]{(' ' + suffix) if suffix else ''}")
+
+            return "\n".join(lines).rstrip()
+        except Exception as e:
+            return f"Error tracing graph provenance: {str(e)}"
+
+    @mcp.tool()
     async def list_symbol_matches(
         project_path: str, query: str, limit: int = 30, kinds: list | None = None
     ) -> str:

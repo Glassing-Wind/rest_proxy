@@ -140,6 +140,10 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.graph_bootstrap_mod.require_driver = _require_driver
         self.graph_bootstrap_mod._NEO4J_DB = "neo4j"
+        self.graph_bootstrap_mod._NEO4J_URI = "bolt://127.0.0.1:7687"
+        self.graph_bootstrap_mod._NEO4J_USER = "neo4j"
+        self.graph_bootstrap_mod._NEO4J_PASSWORD = "password"
+        self.module.normalize_ts_pack_result = lambda value: value
 
     def test_get_call_chain_prefers_backend_candidate_and_filters_public_noise(self):
         async def fake_executor(cypher, **kwargs):
@@ -284,6 +288,58 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("DrawThingsCLI.swift", output)
         self.assertNotIn("config_data_model_generated.swift", output)
+
+    def test_trace_graph_provenance_formats_finalize_samples(self):
+        ts_pack_mod = types.ModuleType("tree_sitter_language_pack")
+        ts_pack_mod.trace_graph_provenance = lambda *args, **kwargs: {
+            "project_id": "proj123",
+            "finalize": {
+                "calls_file_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "dst": "src/services/lease.py",
+                        "caller": "build_router",
+                        "callee": "load_lease",
+                        "via": "CALLS",
+                    }
+                ],
+                "file_graph_link_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "dst": "src/services/lease.py",
+                        "source_rel": "CALLS_FILE",
+                    }
+                ],
+            },
+        }
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "tree_sitter_language_pack": ts_pack_mod,
+            },
+        ):
+            output = asyncio.run(
+                self.mcp.tools["trace_graph_provenance"](
+                    "/tmp/rental",
+                    symbol_filter="load_lease",
+                    file_filter="src/api",
+                )
+            )
+
+        self.assertIn("# Graph Provenance: rental", output)
+        self.assertIn("Project ID: `proj123`", output)
+        self.assertIn("Symbol filter: `load_lease`", output)
+        self.assertIn("File filter: `src/api`", output)
+        self.assertIn(
+            "`src/api/routes.py` -> `src/services/lease.py` via `build_router -> load_lease` [CALLS]",
+            output,
+        )
+        self.assertIn(
+            "`src/api/routes.py` -> `src/services/lease.py` [CALLS_FILE]",
+            output,
+        )
 
     def test_visualize_subgraph_filters_wrapper_and_test_neighbors_for_monorepo_runtime_symbol(self):
         async def fake_executor(cypher, **kwargs):
