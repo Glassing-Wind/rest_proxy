@@ -29,6 +29,56 @@ def _definition_rank(record: dict) -> tuple[int, int, str]:
     return score, -start_line, filepath
 
 
+def _is_test_like_path(file_path: str) -> bool:
+    normalized = (file_path or "").lower()
+    return (
+        normalized.startswith("tests/")
+        or "/tests/" in normalized
+        or "__tests__" in normalized
+        or normalized.startswith("test_")
+        or "/test_" in normalized
+        or normalized.endswith("_test.py")
+        or normalized.endswith("_test.rs")
+        or normalized.endswith("_spec.rb")
+        or ".test." in normalized
+        or ".spec." in normalized
+    )
+
+
+def _semantic_usage_rank(record: dict) -> tuple[int, float, str, int]:
+    filepath = str(record.get("file_path") or "")
+    content = str(record.get("content") or "")
+    score = 0
+    if filepath.endswith(_STUB_SUFFIXES):
+        score -= 40
+    elif filepath.endswith((".py", ".rs", ".ts", ".tsx", ".js", ".jsx", ".go", ".swift")):
+        score += 20
+    if _is_test_like_path(filepath):
+        score -= 35
+    if "/scripts/" in filepath or filepath.startswith("scripts/"):
+        score += 8
+    if "/src/" in filepath or filepath.startswith("src/"):
+        score += 10
+    if "/tools/" in filepath or filepath.startswith("tools/"):
+        score += 4
+    if "def " in content or "fn " in content or "function " in content or "class " in content:
+        score += 3
+    rrf = float(record.get("rrf") or 0.0)
+    chunk_index = int(record.get("chunk_index") or 0)
+    return score, rrf, filepath, -chunk_index
+
+
+def _render_semantic_hit(record: dict) -> str:
+    fp = str(record.get("file_path") or "?")
+    idx = record.get("chunk_index")
+    content = str(record.get("content") or "")
+    rrf = float(record.get("rrf") or 0.0)
+    return (
+        f"  [chunk {idx}]  {fp}  (score: {rrf:.4f})\n"
+        f"    {content[:200].strip().replace(chr(10), ' ')}…"
+    )
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -154,7 +204,7 @@ def register(mcp: FastMCP) -> None:
                     )
 
             # ── 3. Semantic text hits in target project ───────────────────────
-            sem_usages: list[str] = []
+            sem_usage_records: list[dict] = []
             await memory_store.open_pool()
 
             svc = get_embedding_service()
@@ -255,11 +305,34 @@ def register(mcp: FastMCP) -> None:
                 _fetch_semantic(), _fetch_src_preview()
             )
 
-            for fp, idx, content, rrf in sem_rows:
-                sem_usages.append(
-                    f"  [chunk {idx}]  {fp}  (score: {rrf:.4f})\n"
-                    f"    {content[:200].strip().replace(chr(10), ' ')}…"
-                )
+            seen_files: set[str] = set()
+            sorted_semantic_rows = sorted(
+                (
+                    {
+                        "file_path": fp,
+                        "chunk_index": idx,
+                        "content": content,
+                        "rrf": rrf,
+                    }
+                    for fp, idx, content, rrf in sem_rows
+                ),
+                key=_semantic_usage_rank,
+                reverse=True,
+            )
+            for row in sorted_semantic_rows:
+                fp = str(row.get("file_path") or "")
+                if fp in seen_files:
+                    continue
+                seen_files.add(fp)
+                sem_usage_records.append(dict(row))
+                if len(sem_usage_records) >= 5:
+                    break
+            implementation_hits = [
+                record for record in sem_usage_records if not _is_test_like_path(str(record.get("file_path") or ""))
+            ]
+            supporting_hits = [
+                record for record in sem_usage_records if _is_test_like_path(str(record.get("file_path") or ""))
+            ]
 
             # ── 4. Assemble output ────────────────────────────────────────────
             lines = [
@@ -288,19 +361,47 @@ def register(mcp: FastMCP) -> None:
 
             lines += ["", f"### Usages  [{tgt_name}]"]
 
+            if graph_usages or sem_usage_records:
+                lines.append("Use this to decide where the target project most concretely depends on the source symbol.")
+                if graph_usages:
+                    lines.append("")
+                    lines.append("Inspect First")
+                    lines.append(f"- start with `{graph_usages[0].strip()}` because it is the strongest structural consumer")
+                elif implementation_hits:
+                    best_hit = implementation_hits[0]
+                    lines.append("")
+                    lines.append("Inspect First")
+                    lines.append(
+                        f"- start with `{best_hit['file_path']}` because it is the strongest implementation-side consumer evidence"
+                    )
+                elif supporting_hits:
+                    best_hit = supporting_hits[0]
+                    lines.append("")
+                    lines.append("Inspect First")
+                    lines.append(
+                        f"- start with `{best_hit['file_path']}` because only test/support references were found in the target project"
+                    )
+
             if graph_usages:
                 lines.append(f"**Call-graph hits** ({len(graph_usages)}):")
                 lines.extend(graph_usages)
             else:
                 lines.append("  No direct call-graph edges found.")
 
-            if sem_usages:
-                lines += ["", f"**Semantic text hits** ({len(sem_usages)}):"]
-                lines.extend(sem_usages)
-            else:
-                lines.append("  No semantic text hits found.")
+            if implementation_hits:
+                lines += ["", f"**Implementation / consumer text hits** ({len(implementation_hits)}):"]
+                lines.extend(_render_semantic_hit(record) for record in implementation_hits)
+            elif supporting_hits:
+                lines += ["", "No implementation-side consumer text hits found."]
 
-            if not graph_usages and not sem_usages:
+            if supporting_hits:
+                lines += ["", f"**Test / supporting text hits** ({len(supporting_hits)}):"]
+                lines.extend(_render_semantic_hit(record) for record in supporting_hits)
+            else:
+                if not implementation_hits:
+                    lines.append("  No semantic text hits found.")
+
+            if not graph_usages and not sem_usage_records:
                 lines += [
                     "",
                     f"💡 `{symbol_name}` appears to be defined in [{src_name}] but not yet referenced in [{tgt_name}].",
