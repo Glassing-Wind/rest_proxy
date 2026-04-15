@@ -37,9 +37,11 @@ REL_DEFINED_IN_FILE = rel_type("defined_in_file")
 REL_HAS_PACKAGE = rel_type("has_package")
 REL_DEPENDS_ON_PACKAGE = rel_type("depends_on_package")
 REL_IMPORTS = rel_type("imports")
+REL_CALLS_FILE = rel_type("calls_file")
 REL_ASSET_LINKS = rel_type("asset_links")
 REL_CALLS_API = rel_type("calls_api")
 REL_CONTAINS = rel_type("contains")
+REL_FILE_GRAPH_LINK = rel_type("file_graph_link")
 
 
 def _schema_cypher(text: str) -> str:
@@ -687,6 +689,74 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             limit=limit,
             op="get_directory_snapshot_outbound",
         )
+        if not r_inbound:
+            r_inbound = await graph_core._execute_read(
+                session,
+                _schema_cypher("""
+                MATCH (ext:__FILE__ {project_id: $p})-[r:__CALLS_FILE__|__FILE_GRAPH_LINK__]->(inner:__FILE__ {project_id: $p})
+                WHERE inner.filepath STARTS WITH $dir
+                  AND NOT ext.filepath STARTS WITH $dir
+                RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
+                ORDER BY n_imports DESC
+                LIMIT $limit
+            """),
+                p=project_id,
+                dir=dir_prefix,
+                limit=limit,
+                op="get_directory_snapshot_inbound_file_graph_fallback",
+            )
+        if not r_inbound:
+            r_inbound = await graph_core._execute_read(
+                session,
+                _schema_cypher("""
+                MATCH (ext:__FILE__ {project_id: $p})-[:__CONTAINS__]->(caller)
+                MATCH (caller)-[:__CALLS__|__CALLS_INFERRED__]->(callee)
+                MATCH (inner:__FILE__ {project_id: $p})-[:__CONTAINS__]->(callee)
+                WHERE inner.filepath STARTS WITH $dir
+                  AND NOT ext.filepath STARTS WITH $dir
+                RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
+                ORDER BY n_imports DESC
+                LIMIT $limit
+            """),
+                p=project_id,
+                dir=dir_prefix,
+                limit=limit,
+                op="get_directory_snapshot_inbound_symbol_call_fallback",
+            )
+        if not r_outbound:
+            r_outbound = await graph_core._execute_read(
+                session,
+                _schema_cypher("""
+                MATCH (inner:__FILE__ {project_id: $p})-[r:__CALLS_FILE__|__FILE_GRAPH_LINK__]->(ext:__FILE__ {project_id: $p})
+                WHERE inner.filepath STARTS WITH $dir
+                  AND NOT ext.filepath STARTS WITH $dir
+                RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
+                ORDER BY n_usages DESC
+                LIMIT $limit
+            """),
+                p=project_id,
+                dir=dir_prefix,
+                limit=limit,
+                op="get_directory_snapshot_outbound_file_graph_fallback",
+            )
+        if not r_outbound:
+            r_outbound = await graph_core._execute_read(
+                session,
+                _schema_cypher("""
+                MATCH (inner:__FILE__ {project_id: $p})-[:__CONTAINS__]->(caller)
+                MATCH (caller)-[:__CALLS__|__CALLS_INFERRED__]->(callee)
+                MATCH (ext:__FILE__ {project_id: $p})-[:__CONTAINS__]->(callee)
+                WHERE inner.filepath STARTS WITH $dir
+                  AND NOT ext.filepath STARTS WITH $dir
+                RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
+                ORDER BY n_usages DESC
+                LIMIT $limit
+            """),
+                p=project_id,
+                dir=dir_prefix,
+                limit=limit,
+                op="get_directory_snapshot_outbound_symbol_call_fallback",
+            )
         r_assets = await graph_core._execute_read(
             session,
             _schema_cypher("""

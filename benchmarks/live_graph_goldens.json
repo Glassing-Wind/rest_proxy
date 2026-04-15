@@ -1,6 +1,71 @@
 {
   "cases": [
     {
+      "id": "framecreator_sidebar_symbol_context",
+      "workspace_name": "FrameCreator",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "SidebarView",
+        "include_source_preview": false,
+        "file_path": "FrameCreator/Views/SidebarView.swift"
+      },
+      "required_substrings": [
+        "FrameCreator/Views/SidebarView.swift",
+        "SidebarView",
+        "ContentView.swift"
+      ]
+    },
+    {
+      "id": "framecreator_views_directory_snapshot",
+      "workspace_name": "FrameCreator",
+      "tool": "get_directory_snapshot",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "directory_path": "FrameCreator/Views",
+        "limit": 6
+      },
+      "required_substrings": [
+        "Apple Build Context",
+        "FrameCreator/Views/SidebarView.swift",
+        "FrameCreator/Views/ContentView.swift"
+      ]
+    },
+    {
+      "id": "drawthings_cli_entrypoint_search",
+      "workspace_name": "draw-things-community",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": ["$workspace_id"],
+        "query": "where is DrawThingsCLI entrypoint defined",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- Apps/DrawThingsCLI/DrawThingsCLI.swift",
+        "@main",
+        "struct DrawThingsCLI: ParsableCommand"
+      ]
+    },
+    {
       "id": "enterprise_fixture_build_message_symbol_context",
       "workspace_name": "enterprise_live_graph_fixture",
       "tool": "get_symbol_context",

@@ -235,6 +235,55 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("Use this to land in one directory", output)
         self.assertIn("Recommended Inspection Order", output)
 
+    def test_directory_snapshot_falls_back_to_file_graph_for_swift_coupling(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 1}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {"fp": "FrameCreator/Views/SidebarView.swift", "sym_count": 2, "samples": ["SidebarView", "SidebarView"]},
+                    {"fp": "FrameCreator/Views/CanvasView.swift", "sym_count": 5, "samples": ["CanvasView", "CheckerboardBackground"]},
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return []
+            if op == "get_directory_snapshot_outbound":
+                return []
+            if op == "get_directory_snapshot_inbound_file_graph_fallback":
+                return []
+            if op == "get_directory_snapshot_outbound_file_graph_fallback":
+                return []
+            if op == "get_directory_snapshot_inbound_symbol_call_fallback":
+                return [{"caller": "FrameCreator/Views/ContentView.swift", "n_imports": 1}]
+            if op == "get_directory_snapshot_outbound_symbol_call_fallback":
+                return [{"dependency": "FrameCreator/ViewModels/EditorViewModel.swift", "n_usages": 1}]
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op == "apple_context_targets":
+                return [{"target": "FrameCreator", "project_file": "FrameCreator.xcodeproj/project.pbxproj", "bundled_files": 0}]
+            if op == "apple_context_schemes":
+                return [{"scheme": "FrameCreator", "targets": ["FrameCreator", "FrameCreatorUITests"]}]
+            if op == "apple_context_schema_labels":
+                return [{"labels": []}]
+            if op == "apple_context_schema_relationship_types":
+                return [{"rels": []}]
+            if op == "apple_context_workspaces":
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_directory_snapshot"]("/tmp/framecreator", "FrameCreator/Views", 5))
+
+        self.assertIn("### 📥 Consumers (External files importing from here)", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift", output)
+        self.assertIn("### 📤 Dependencies (External files imported by here)", output)
+        self.assertIn("FrameCreator/ViewModels/EditorViewModel.swift", output)
+        self.assertNotIn("### 📥 Consumers: None found.", output)
+        self.assertNotIn("### 📤 Dependencies: None found.", output)
+
     def test_directory_snapshot_includes_cargo_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
