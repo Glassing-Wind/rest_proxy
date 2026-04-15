@@ -928,6 +928,17 @@ def register(mcp: FastMCP) -> None:
                     non_exact_hits.sort(key=sem_helpers.implementation_rank_tuple)
                     all_results = exact_usage_site_hits + exact_non_site_hits + non_exact_hits
 
+            if include_metadata and all_results and (include_paths or exclude_paths):
+                all_results = [
+                    r
+                    for r in all_results
+                    if sem_helpers.path_allowed(
+                        r.get("file_path", ""),
+                        include_paths=include_paths,
+                        exclude_paths=exclude_paths,
+                    )
+                ]
+
             if clone_dedup:
                 try:
                     import graph_bootstrap

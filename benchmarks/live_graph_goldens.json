@@ -245,7 +245,8 @@
       "required_substrings": [
         "--- examples/python_smoke/main.py",
         "tree = parser.parse(b\"def hello(): pass\")",
-        "e2e/python/tests/test_error_handling.py"
+        "--- crates/ts-pack-index/src/tags.rs",
+        "qualified_callee.as_deref() == Some(\"parser.parse\")"
       ]
     },
     {

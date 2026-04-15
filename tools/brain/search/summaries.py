@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import re
 
 from _helpers import get_project_id
 from tools.brain.graph import core as graph_tools
@@ -23,6 +24,39 @@ def _is_test_like_path(file_path: str) -> bool:
         or normalized.endswith("_test.go")
         or normalized.endswith("_spec.rb")
     )
+
+
+_EXPORT_ALIAS_RE = re.compile(
+    r"export\s*\{(?P<body>[^}]*)\}",
+    re.MULTILINE | re.DOTALL,
+)
+_EXPORT_ALIAS_ITEM_RE = re.compile(
+    r"(?:type\s+)?(?P<target>[A-Za-z_][A-Za-z0-9_]*)\s+as\s+(?P<alias>[A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def _extract_explicit_export_aliases(file_path: str, *, symbol_prefix: str = "") -> list[tuple[str, str]]:
+    try:
+        text = open(file_path, "r", encoding="utf-8", errors="replace").read()
+    except Exception:
+        return []
+    aliases: list[tuple[str, str]] = []
+    for match in _EXPORT_ALIAS_RE.finditer(text):
+        body = match.group("body") or ""
+        for item in _EXPORT_ALIAS_ITEM_RE.finditer(body):
+            alias = item.group("alias")
+            target = item.group("target")
+            if symbol_prefix and not alias.startswith(symbol_prefix):
+                continue
+            aliases.append((alias, target))
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for pair in aliases:
+        if pair in seen:
+            continue
+        seen.add(pair)
+        out.append(pair)
+    return out
 
 
 async def get_symbol_imports_overview_impl(
@@ -390,6 +424,33 @@ async def get_symbol_exports_summary_impl(
                 ),
                 key=lambda item: (-item[1], item[0]),
             )[:limit]
+            if include_paths:
+                explicit_alias_symbols: dict[str, int] = {}
+                explicit_alias_files: list[tuple[str, int, list[str]]] = []
+                for rel_path in include_paths:
+                    abs_path = os.path.join(project_path, rel_path)
+                    alias_pairs = _extract_explicit_export_aliases(
+                        abs_path,
+                        symbol_prefix=symbol_prefix,
+                    )
+                    if not alias_pairs:
+                        continue
+                    rendered = [f"{alias} -> {target}" for alias, target in alias_pairs]
+                    explicit_alias_files.append((rel_path, len(rendered), rendered))
+                    for alias, target in alias_pairs:
+                        explicit_alias_symbols[f"{alias} -> {target}"] = (
+                            explicit_alias_symbols.get(f"{alias} -> {target}", 0) + 1
+                        )
+                if explicit_alias_symbols:
+                    top_symbols = sorted(
+                        explicit_alias_symbols.items(),
+                        key=lambda item: (-item[1], item[0]),
+                    )[:limit]
+                if explicit_alias_files:
+                    top_files = sorted(
+                        explicit_alias_files,
+                        key=lambda item: (-item[1], item[0]),
+                    )[:limit]
 
     if not top_symbols and not top_files:
         return (
