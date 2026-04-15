@@ -59,12 +59,6 @@ These are the tools that should normally beat raw grep, raw Cypher, or manual gr
 - `get_related_files(project_path, file_path)`
   - Structural neighbors and likely blast radius.
   - For Rust workspaces, prefers same-crate and directly connected crate files.
-- `get_topology_summary(project_path)`
-  - Compact topology overview.
-  - Prefers non-test files first.
-- `get_heuristic_flow_summary(project_path)`
-  - Higher-level inferred paths.
-  - For Rust library workspaces, falls back to Cargo crate dependency paths when needed.
 
 ## Flow Tools
 
@@ -79,6 +73,11 @@ These are the tools that should normally beat raw grep, raw Cypher, or manual gr
   - Apple source -> resource -> target -> scheme -> workspace paths.
 - `get_flow_summary(workspace_id, mode='auto' | 'ui' | 'backend' | 'apple' | 'cli', ...)`
   - Convenience entrypoint that picks the most relevant flow view.
+
+## Internal Fallbacks
+
+Some fallback summaries still exist internally inside the graph layer, especially
+behind `get_flow_summary(...)`, but they are not preferred standalone user-facing tools.
 
 ## Search and Symbol Tools
 

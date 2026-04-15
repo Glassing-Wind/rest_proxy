@@ -69,8 +69,6 @@ These are still worth improving because they do not yet feel like obvious defaul
   - Useful, but still too presentation-heavy and not actionable enough.
 - `get_code_importance`
   - Useful ranking signal, but still closer to analysis support than a default user-facing tool.
-- `get_topology_summary`
-  - Helpful, but not yet strong enough to displace `get_project_overview` or targeted flow tools.
 - `get_heuristic_flow_summary`
   - Useful fallback, but the name and contract already imply second-class behavior.
 - `find_definitions`
@@ -105,12 +103,15 @@ We still have several tools that partially overlap:
 
 - `get_project_overview`
 - `get_directory_snapshot`
-- `get_topology_summary`
 - `get_code_importance`
 - `get_code_communities`
 
 The first two are the best user-facing surfaces. The rest should either become
 clearly stronger or be repositioned as support/debug outputs.
+
+One concrete drift we found: `get_topology_summary` had been discussed in docs
+like a user-facing tool, but it is currently an internal helper path rather than
+a registered MCP surface.
 
 ### 2. Some tools still feel analysis-oriented rather than decision-oriented
 

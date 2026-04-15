@@ -1,0 +1,119 @@
+import json
+import os
+import sys
+import types
+import unittest
+from pathlib import Path
+from unittest import mock
+
+
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+GOLDENS_PATH = os.path.join(REPO_ROOT, "benchmarks", "tool_choice_goldens.json")
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+
+class FakeMCP:
+    def __init__(self) -> None:
+        self.tools: dict[str, object] = {}
+
+    def tool(self):
+        def decorator(fn):
+            self.tools[fn.__name__] = fn
+            return fn
+
+        return decorator
+
+
+def _install_mcp_stub() -> None:
+    if "mcp.server.fastmcp" in sys.modules:
+        return
+    mcp_pkg = types.ModuleType("mcp")
+    server_pkg = types.ModuleType("mcp.server")
+    fastmcp_mod = types.ModuleType("mcp.server.fastmcp")
+    fastmcp_mod.FastMCP = FakeMCP
+    sys.modules["mcp"] = mcp_pkg
+    sys.modules["mcp.server"] = server_pkg
+    sys.modules["mcp.server.fastmcp"] = fastmcp_mod
+
+
+def _install_runtime_stubs() -> None:
+    if "neo4j" not in sys.modules:
+        neo4j_mod = types.ModuleType("neo4j")
+
+        class _AsyncGraphDatabase:
+            @staticmethod
+            def driver(*args, **kwargs):
+                return None
+
+        def unit_of_work(timeout=None, metadata=None):
+            def decorator(fn):
+                return fn
+
+            return decorator
+
+        neo4j_mod.AsyncGraphDatabase = _AsyncGraphDatabase
+        neo4j_mod.unit_of_work = unit_of_work
+        sys.modules["neo4j"] = neo4j_mod
+    if "proxy" not in sys.modules:
+        proxy_pkg = types.ModuleType("proxy")
+        proxy_pkg.__path__ = []
+        sys.modules["proxy"] = proxy_pkg
+    if "proxy.logging" not in sys.modules:
+        proxy_logging = types.ModuleType("proxy.logging")
+        proxy_logging.debug_log = lambda *args, **kwargs: None
+        sys.modules["proxy.logging"] = proxy_logging
+    if "dotenv" not in sys.modules:
+        dotenv_mod = types.ModuleType("dotenv")
+        dotenv_mod.load_dotenv = lambda *args, **kwargs: False
+        dotenv_mod.dotenv_values = lambda *args, **kwargs: {}
+        sys.modules["dotenv"] = dotenv_mod
+
+
+def _build_tool_registry() -> FakeMCP:
+    _install_mcp_stub()
+    _install_runtime_stubs()
+    from tools.brain.code_intel import core as code_intel_core
+    from tools.brain.graph import tools as graph_tools
+    from tools.brain.search import graph_query as graph_query_tools
+    from tools.brain.search import semantic as semantic_tools
+    from tools.brain.search import tools as search_tools
+    from tools.hands import dev as dev_tools
+    from tools.hands import indexing as indexing_tools
+
+    mcp = FakeMCP()
+    with mock.patch.dict(os.environ, {"LM_PROXY_GRAPH_ENABLED": "0"}, clear=False):
+        code_intel_core.register(mcp)
+        graph_tools.register(mcp)
+        graph_query_tools.register(mcp)
+        semantic_tools.register(mcp)
+        search_tools.register(mcp)
+        dev_tools.register(mcp)
+        indexing_tools.register(mcp)
+    return mcp
+
+
+class ToolChoiceRegistryTests(unittest.TestCase):
+    def test_tool_choice_goldens_reference_registered_tools(self):
+        payload = json.loads(Path(GOLDENS_PATH).read_text(encoding="utf-8"))
+        registry = _build_tool_registry()
+        registered = set(registry.tools)
+
+        missing = []
+        for case in payload["cases"]:
+            for key in ("preferred_tools", "acceptable_fallbacks", "avoid_as_primary"):
+                for tool_name in case.get(key, []):
+                    if tool_name not in registered:
+                        missing.append((case["id"], key, tool_name))
+
+        self.assertEqual(
+            [],
+            missing,
+            msg="Missing registered tools in tool-choice goldens: " + ", ".join(
+                f"{case_id}:{key}:{tool_name}" for case_id, key, tool_name in missing
+            ),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
