@@ -116,6 +116,39 @@ class DuplicationReportTests(unittest.TestCase):
         self.assertIn("A: function a() {}", output)
         self.assertIn("B: function b() {}", output)
 
+    def test_append_refactor_candidates_formats_reasoned_output(self):
+        lines = []
+        self.module.append_refactor_candidates(
+            lines,
+            title="High-confidence refactor candidates",
+            candidates=[
+                {
+                    "row_a": {
+                        "file_path": "src/a.ts",
+                        "content": "function normalizeClientName() {}",
+                        "metadata": {"start_line": 10},
+                    },
+                    "row_b": {
+                        "file_path": "src/b.ts",
+                        "content": "function normalizeClientName() {}",
+                        "metadata": {"start_line": 22},
+                    },
+                    "candidate_score": 0.91,
+                    "score": 0.96,
+                    "struct_score": 1.0,
+                    "reasons": [
+                        "same lead statement",
+                        "shared identifiers (normalizeclientname)",
+                    ],
+                }
+            ],
+            max_pairs=5,
+        )
+        output = "\n".join(lines)
+        self.assertIn("High-confidence refactor candidates (1)", output)
+        self.assertIn("Why act: same lead statement; shared identifiers", output)
+        self.assertIn("candidate=0.91", output)
+
 
 if __name__ == "__main__":
     unittest.main()

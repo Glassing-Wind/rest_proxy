@@ -172,6 +172,24 @@ class DuplicationHelperTests(unittest.TestCase):
         self.assertTrue(actionable)
         self.assertFalse(structural_only)
 
+    def test_duplicate_candidate_details_scores_actionable_pairs(self):
+        details = module.duplicate_candidate_details(
+            {
+                "file_path": "src/client_api.py",
+                "content": "def normalize_client_name(value):",
+            },
+            {
+                "file_path": "src/client_api_copy.py",
+                "content": "def normalize_client_name(value):",
+            },
+            score=0.96,
+            struct_score=1.0,
+        )
+        self.assertTrue(details["actionable"])
+        self.assertGreater(details["candidate_score"], 0.7)
+        self.assertIn("same lead statement", details["reasons"])
+        self.assertIn("client", details["path_overlap"])
+
 
 if __name__ == "__main__":
     unittest.main()

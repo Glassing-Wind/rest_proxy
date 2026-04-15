@@ -392,3 +392,68 @@ def has_actionable_duplicate_signal(row_a: dict, row_b: dict) -> bool:
     if path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or ""):
         return True
     return False
+
+
+def duplicate_candidate_details(
+    row_a: dict,
+    row_b: dict,
+    *,
+    score: float,
+    struct_score: float,
+) -> dict:
+    identifiers = preview_identifiers(row_a.get("content") or "") & preview_identifiers(
+        row_b.get("content") or ""
+    )
+    path_overlap = path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or "")
+    same_dir = os.path.dirname(row_a.get("file_path") or "") == os.path.dirname(
+        row_b.get("file_path") or ""
+    )
+    same_ext = os.path.splitext(row_a.get("file_path") or "")[1].lower() == os.path.splitext(
+        row_b.get("file_path") or ""
+    )[1].lower()
+    preview_a = preview_line(row_a.get("content") or "")
+    preview_b = preview_line(row_b.get("content") or "")
+    preview_equal = bool(preview_a and preview_b and preview_a == preview_b)
+
+    candidate_score = 0.0
+    candidate_score += min(score, 1.0) * 0.45
+    candidate_score += min(struct_score, 1.0) * 0.10
+    if preview_equal:
+        candidate_score += 0.20
+    if identifiers:
+        candidate_score += min(0.25, 0.07 * len(identifiers))
+    if path_overlap:
+        candidate_score += min(0.12, 0.04 * len(path_overlap))
+    if same_dir:
+        candidate_score += 0.06
+    if same_ext:
+        candidate_score += 0.04
+
+    reasons: list[str] = []
+    if preview_equal:
+        reasons.append("same lead statement")
+    if identifiers:
+        shared = ", ".join(sorted(identifiers)[:3])
+        reasons.append(f"shared identifiers ({shared})")
+    if path_overlap:
+        shared_path = ", ".join(sorted(path_overlap)[:3])
+        reasons.append(f"path overlap ({shared_path})")
+    if same_dir:
+        reasons.append("same directory")
+    if same_ext:
+        reasons.append("same file type")
+    if score >= 0.95:
+        reasons.append("very high duplicate score")
+    elif score >= 0.85:
+        reasons.append("high duplicate score")
+
+    return {
+        "candidate_score": candidate_score,
+        "reasons": reasons,
+        "shared_identifiers": identifiers,
+        "path_overlap": path_overlap,
+        "same_dir": same_dir,
+        "same_ext": same_ext,
+        "preview_equal": preview_equal,
+        "actionable": bool(identifiers or path_overlap or preview_equal),
+    }

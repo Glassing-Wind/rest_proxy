@@ -543,17 +543,82 @@ def register(mcp: FastMCP) -> None:
                     lines.append(
                         "\nWinnowed duplicates (multi-scale fingerprints + token fallback)"
                     )
-                    actionable_pairs = [
-                        p
-                        for p in winnow_pairs
-                        if dup_helpers.has_actionable_duplicate_signal(p[0], p[1])
+                    scored_pairs = []
+                    for pair in winnow_pairs:
+                        row_a, row_b, score, struct_score = pair
+                        details = dup_helpers.duplicate_candidate_details(
+                            row_a,
+                            row_b,
+                            score=score,
+                            struct_score=struct_score,
+                        )
+                        scored_pairs.append(
+                            {
+                                "row_a": row_a,
+                                "row_b": row_b,
+                                "score": score,
+                                "struct_score": struct_score,
+                                **details,
+                            }
+                        )
+                    actionable_candidates = [
+                        candidate
+                        for candidate in scored_pairs
+                        if candidate["actionable"]
                     ]
-                    if not actionable_pairs:
+                    actionable_candidates.sort(
+                        key=lambda candidate: (
+                            candidate["candidate_score"],
+                            candidate["score"],
+                            len(candidate["shared_identifiers"]),
+                            len(candidate["path_overlap"]),
+                        ),
+                        reverse=True,
+                    )
+                    if not actionable_candidates:
                         lines.append(
                             "No high-confidence actionable duplicate chunks found. "
                             "Broad structural matches were omitted."
                         )
-                        actionable_pairs = []
+                    else:
+                        cross_candidates = [
+                            candidate
+                            for candidate in actionable_candidates
+                            if candidate["row_a"]["file_path"]
+                            != candidate["row_b"]["file_path"]
+                        ]
+                        same_candidates = [
+                            candidate
+                            for candidate in actionable_candidates
+                            if candidate["row_a"]["file_path"]
+                            == candidate["row_b"]["file_path"]
+                        ]
+                        if cross_file_only:
+                            dup_report.append_refactor_candidates(
+                                lines,
+                                title="High-confidence refactor candidates",
+                                candidates=cross_candidates,
+                                max_pairs=max_pairs,
+                            )
+                        elif prefer_cross_file:
+                            dup_report.append_refactor_candidates(
+                                lines,
+                                title="High-confidence refactor candidates",
+                                candidates=cross_candidates + same_candidates,
+                                max_pairs=max_pairs,
+                            )
+                        else:
+                            dup_report.append_refactor_candidates(
+                                lines,
+                                title="High-confidence refactor candidates",
+                                candidates=same_candidates + cross_candidates,
+                                max_pairs=max_pairs,
+                            )
+
+                    actionable_pairs = [
+                        (candidate["row_a"], candidate["row_b"], candidate["score"], candidate["struct_score"])
+                        for candidate in actionable_candidates
+                    ]
                     cross_pairs = [
                         p
                         for p in actionable_pairs

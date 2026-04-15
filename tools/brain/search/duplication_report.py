@@ -121,6 +121,40 @@ def append_winnow_pairs(
         count += 1
 
 
+def append_refactor_candidates(
+    lines: list[str],
+    *,
+    title: str,
+    candidates: list[dict],
+    max_pairs: int,
+) -> None:
+    if not candidates:
+        lines.append(f"{title}: none")
+        return
+    lines.append(f"{title} ({len(candidates)})")
+    for candidate in candidates[:max_pairs]:
+        row_a = candidate["row_a"]
+        row_b = candidate["row_b"]
+        meta_a = row_a.get("metadata") or {}
+        meta_b = row_b.get("metadata") or {}
+        a_start = meta_a.get("start_line")
+        b_start = meta_b.get("start_line")
+        a_line = f":{a_start}" if isinstance(a_start, int) else ""
+        b_line = f":{b_start}" if isinstance(b_start, int) else ""
+        preview_a = dup_helpers.preview_line(row_a.get("content") or "")
+        preview_b = dup_helpers.preview_line(row_b.get("content") or "")
+        reasons = candidate.get("reasons") or []
+        reason_text = "; ".join(reasons[:4]) if reasons else "high duplicate signal"
+        lines.append(
+            f"- {row_a['file_path']}{a_line} ↔ {row_b['file_path']}{b_line}  "
+            f"(candidate={candidate['candidate_score']:.2f}, score={candidate['score']:.2f}, "
+            f"struct={candidate['struct_score']:.2f})"
+        )
+        lines.append(f"  Why act: {reason_text}")
+        lines.append(f"  A: {preview_a}")
+        lines.append(f"  B: {preview_b}")
+
+
 def append_duplicate_symbol_names(lines: list[str], records: list[dict]) -> None:
     if not records:
         return
