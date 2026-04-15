@@ -127,7 +127,27 @@ Use `add_memory(...)` proactively when you discover:
 - Deterministic graph build now happens during `index_workspace`.
 - Separate graph rebuild tools were intentionally removed.
 - `IMPLICIT_IMPORTS_SYMBOL` is heuristic and experimental, not part of the default graph contract.
+- Semantic chunk metadata is producer-owned by `tree-sitter-language-pack`.
+  - `rest_proxy` validates the shared semantic chunk contract during indexing.
+  - Missing required producer fields should fail indexing loudly instead of being backfilled in Python.
 - For custom Codex desktop Streamable HTTP MCP config, a minimal hand-edited `~/.codex/config.toml` entry is more reliable than the current UI save flow when the UI hits null-serialization bugs.
+
+## Debugging Bad Graph Edges
+
+If a call edge or file-graph link looks wrong, debug the producer stages first.
+
+Use optional one-off env vars when reindexing:
+
+- `TS_PACK_DEBUG_PROVENANCE_SYMBOL`
+- `TS_PACK_DEBUG_PROVENANCE_FILE`
+
+These emit `[ts-pack-provenance] ...` lines from:
+
+- parse-stage call extraction
+- exact call resolution
+- finalize-stage `CALLS_FILE` / `FILE_GRAPH_LINK` materialization
+
+This is the preferred path for “where did this edge come from?” investigations. These flags are temporary debug inputs and should not be added to `.env` by default.
 
 ## Repo-Specific Notes For `rest_proxy`
 
