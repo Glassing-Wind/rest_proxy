@@ -424,10 +424,11 @@ def register(mcp: FastMCP) -> None:
         file_filter: str | None = None,
     ) -> str:
         """
-        Trace finalize-stage graph provenance samples for a project.
+        Trace parse/resolve/finalize graph provenance samples for a project.
 
         Uses the ts-pack producer-side provenance report to explain where
-        file-to-file graph links and file-derived call links came from.
+        call and file-to-file graph links came from across parse, resolve,
+        and finalize stages.
 
         Args:
             workspace_id: Logical workspace name or absolute project path.
@@ -453,14 +454,21 @@ def register(mcp: FastMCP) -> None:
                 graph_bootstrap._NEO4J_DB,
                 symbol_filter=symbol_filter_value,
                 file_filter=file_filter_value,
+                project_path=workspace_id,
             )
             if not isinstance(report, dict):
                 return f"Unexpected provenance report type: {type(report).__name__}"
+            parse = report.get("parse") or {}
+            resolve = report.get("resolve") or {}
             finalize = report.get("finalize") or {}
+            parse_samples = parse.get("call_ref_samples") or []
+            resolved_samples = resolve.get("resolved_internal_samples") or []
+            external_samples = resolve.get("external_symbol_samples") or []
+            resolve_note = resolve.get("note") or ""
             call_samples = finalize.get("calls_file_samples") or []
             link_samples = finalize.get("file_graph_link_samples") or []
 
-            if not call_samples and not link_samples:
+            if not parse_samples and not resolved_samples and not external_samples and not call_samples and not link_samples:
                 return (
                     f"No provenance samples matched for `{workspace_id}`."
                     + (f"\nSymbol filter: `{symbol_filter_value}`" if symbol_filter_value else "")
@@ -474,6 +482,55 @@ def register(mcp: FastMCP) -> None:
             if file_filter_value:
                 lines.append(f"File filter: `{file_filter_value}`")
             lines.append("")
+
+            if parse_samples:
+                lines.append("## Parse Call Samples")
+                for sample in parse_samples[:20]:
+                    caller_filepath = sample.get("caller_filepath") or "?"
+                    callee = sample.get("callee") or "?"
+                    kind = sample.get("kind") or "plain"
+                    receiver_hint = sample.get("receiver_hint") or ""
+                    qualified_hint = sample.get("qualified_hint") or ""
+                    suffix_parts = []
+                    if receiver_hint:
+                        suffix_parts.append(f"receiver={receiver_hint}")
+                    if qualified_hint:
+                        suffix_parts.append(f"qualified={qualified_hint}")
+                    suffix = f" ({', '.join(suffix_parts)})" if suffix_parts else ""
+                    lines.append(f"- `{caller_filepath}` -> `{callee}` [{kind}]{suffix}")
+                lines.append("")
+
+            if resolved_samples:
+                lines.append("## Resolved Internal Samples")
+                for sample in resolved_samples[:20]:
+                    src = sample.get("src") or "?"
+                    dst = sample.get("dst") or "?"
+                    caller = sample.get("caller") or "?"
+                    callee = sample.get("callee") or "?"
+                    via = sample.get("via") or "CALLS"
+                    lines.append(f"- `{src}` -> `{dst}` via `{caller} -> {callee}` [{via}]")
+                lines.append("")
+
+            if external_samples:
+                lines.append("## External Symbol Samples")
+                for sample in external_samples[:20]:
+                    src = sample.get("src") or "?"
+                    caller = sample.get("caller") or "?"
+                    callee = sample.get("callee") or "?"
+                    qualified_name = sample.get("qualified_name") or ""
+                    language = sample.get("language") or ""
+                    suffix_parts = []
+                    if qualified_name:
+                        suffix_parts.append(f"qualified={qualified_name}")
+                    if language:
+                        suffix_parts.append(f"language={language}")
+                    suffix = f" ({', '.join(suffix_parts)})" if suffix_parts else ""
+                    lines.append(f"- `{src}` external via `{caller} -> {callee}`{suffix}")
+                lines.append("")
+
+            if resolve_note:
+                lines.append(f"Resolve note: {resolve_note}")
+                lines.append("")
 
             if call_samples:
                 lines.append("## CALLS_FILE Samples")

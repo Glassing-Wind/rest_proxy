@@ -289,10 +289,42 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("DrawThingsCLI.swift", output)
         self.assertNotIn("config_data_model_generated.swift", output)
 
-    def test_trace_graph_provenance_formats_finalize_samples(self):
+    def test_trace_graph_provenance_formats_parse_resolve_finalize_samples(self):
         ts_pack_mod = types.ModuleType("tree_sitter_language_pack")
         ts_pack_mod.trace_graph_provenance = lambda *args, **kwargs: {
             "project_id": "proj123",
+            "parse": {
+                "call_ref_samples": [
+                    {
+                        "caller_filepath": "src/api/routes.py",
+                        "callee": "load_lease",
+                        "kind": "member",
+                        "receiver_hint": "lease_service",
+                        "qualified_hint": "lease_service.load_lease",
+                    }
+                ]
+            },
+            "resolve": {
+                "resolved_internal_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "dst": "src/services/lease.py",
+                        "caller": "build_router",
+                        "callee": "load_lease",
+                        "via": "CALLS",
+                    }
+                ],
+                "external_symbol_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "caller": "build_router",
+                        "callee": "get",
+                        "qualified_name": "requests.get",
+                        "language": "python",
+                    }
+                ],
+                "note": "Unresolved and filtered decisions remain available through index-time provenance logging.",
+            },
             "finalize": {
                 "calls_file_samples": [
                     {
@@ -332,10 +364,22 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Project ID: `proj123`", output)
         self.assertIn("Symbol filter: `load_lease`", output)
         self.assertIn("File filter: `src/api`", output)
+        self.assertIn("## Parse Call Samples", output)
+        self.assertIn(
+            "`src/api/routes.py` -> `load_lease` [member] (receiver=lease_service, qualified=lease_service.load_lease)",
+            output,
+        )
+        self.assertIn("## Resolved Internal Samples", output)
         self.assertIn(
             "`src/api/routes.py` -> `src/services/lease.py` via `build_router -> load_lease` [CALLS]",
             output,
         )
+        self.assertIn("## External Symbol Samples", output)
+        self.assertIn(
+            "`src/api/routes.py` external via `build_router -> get` (qualified=requests.get, language=python)",
+            output,
+        )
+        self.assertIn("Resolve note: Unresolved and filtered decisions remain available through index-time provenance logging.", output)
         self.assertIn(
             "`src/api/routes.py` -> `src/services/lease.py` [CALLS_FILE]",
             output,
