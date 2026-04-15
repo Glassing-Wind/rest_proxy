@@ -67,6 +67,15 @@ def load_index_workspace_module():
 
 
 class FakeTsPack:
+    REQUIRED_SEMANTIC_CHUNK_FIELDS = (
+        "member_usages",
+        "call_like_symbols",
+        "declared_symbols",
+        "contains_definition",
+        "contains_entrypoint",
+        "chunk_role",
+    )
+
     def __init__(
         self,
         result=None,
@@ -374,6 +383,8 @@ class IndexWorkspaceTests(unittest.TestCase):
         captured = {}
 
         class _BuildTsPack:
+            REQUIRED_SEMANTIC_CHUNK_FIELDS = FakeTsPack.REQUIRED_SEMANTIC_CHUNK_FIELDS
+
             def detect_language_from_extension(self, ext):
                 return "typescript" if ext == "ts" else None
 

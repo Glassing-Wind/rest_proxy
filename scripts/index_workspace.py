@@ -125,26 +125,24 @@ _EXTRACTIONS_BY_LANG = {
     },
 }
 
-_SEMANTIC_CHUNK_REQUIRED_FIELDS = {
-    "member_usages",
-    "call_like_symbols",
-    "declared_symbols",
-    "contains_definition",
-    "contains_entrypoint",
-    "chunk_role",
-}
+def _semantic_chunk_required_fields(ts_pack) -> set[str]:
+    fields = getattr(ts_pack, "REQUIRED_SEMANTIC_CHUNK_FIELDS", None)
+    if not fields:
+        raise ValueError("ts_pack semantic contract export missing REQUIRED_SEMANTIC_CHUNK_FIELDS")
+    return {str(field) for field in fields}
 
 
-def _validate_semantic_chunk_contract(chunks: List[Dict], file_path: str) -> None:
+def _validate_semantic_chunk_contract(chunks: List[Dict], file_path: str, ts_pack) -> None:
     if not chunks:
         return
+    required_fields = _semantic_chunk_required_fields(ts_pack)
     for index, chunk in enumerate(chunks):
         metadata = chunk.get("metadata")
         if not isinstance(metadata, dict):
             raise ValueError(
                 f"ts_pack semantic chunk contract violation for {file_path} chunk {index}: missing metadata"
             )
-        missing = sorted(_SEMANTIC_CHUNK_REQUIRED_FIELDS - set(metadata.keys()))
+        missing = sorted(required_fields - set(metadata.keys()))
         if missing:
             raise ValueError(
                 f"ts_pack semantic chunk contract violation for {file_path} chunk {index}: "
@@ -405,7 +403,7 @@ def _read_and_chunk(
             overlap_lines=OVERLAP_LINES,
         )
 
-    _validate_semantic_chunk_contract(chunks, rel_path)
+    _validate_semantic_chunk_contract(chunks, rel_path, ts_pack)
     return chunks, None
 
 
