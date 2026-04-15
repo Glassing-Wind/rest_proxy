@@ -29,6 +29,7 @@ except ModuleNotFoundError:
         "calls_db_model": "CALLS_DB_MODEL",
         "calls_api": "CALLS_API",
         "calls_service": "CALLS_SERVICE",
+        "calls_file": "CALLS_FILE",
         "calls_api_external": "CALLS_API_EXTERNAL",
         "calls_external_symbol": "CALLS_EXTERNAL_SYMBOL",
         "imports": "IMPORTS",
