@@ -990,6 +990,87 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertLess(output.index("`loadProject`"), output.index("`track`"))
 
+    def test_get_call_chain_uses_swift_semantic_usage_fallback_for_callers(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "SidebarView",
+                        "qualified_name": "SidebarView",
+                        "signature": "struct SidebarView: View",
+                        "filepath": "FrameCreator/Views/SidebarView.swift",
+                        "rank": 0,
+                        "path_rank": 0,
+                        "callers_in": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            return []
+
+        executed = []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                executed.append((query, params))
+
+            async def fetchall(self):
+                return [
+                    (
+                        "FrameCreator/Views/ContentView.swift",
+                        "12",
+                        "// File: FrameCreator/Views/ContentView.swift\nSidebarView(viewModel: viewModel)",
+                    )
+                ]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_call_chain"](
+                            "/tmp/FrameCreator",
+                            "SidebarView",
+                            depth=1,
+                            direction="up",
+                            file_path="FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("Swift caller-like usages", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift", output)
+        self.assertTrue(executed)
+
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):
             if "f.pagerank IS NOT NULL" in cypher:
@@ -1029,6 +1110,70 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("[crate:api]", output)
         self.assertIn("architectural leverage", output)
         self.assertIn("Use this to decide where architectural leverage", output)
+
+    def test_get_related_files_ignores_generic_swiftui_import_only_matches(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/ContentView.swift",
+                        "shared_imports": 1,
+                        "sample_imports": ["SwiftUI"],
+                    }
+                ]
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [("FrameCreator/Views/ContentView.swift", 3)]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/FrameCreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("semantic co-mentions", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift", output)
 
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):

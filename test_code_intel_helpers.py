@@ -177,6 +177,85 @@ class CodeIntelHelperTests(unittest.TestCase):
         self.assertIn("External Symbol Callers (Graph)", output)
         self.assertIn("Mentions & Type Usages (Semantic)", output)
 
+    def test_find_references_filters_low_signal_semantic_paths(self):
+        module = load_references_module()
+
+        class FakeResult:
+            def __init__(self, rows):
+                self.rows = rows
+
+            async def data(self):
+                return self.rows
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute_read(self, fn):
+                return await fn(self)
+
+            async def run(self, cypher, **params):
+                return FakeResult([])
+
+        class FakeDriver:
+            def session(self, database=None):
+                return FakeSession()
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            def __aiter__(self):
+                async def gen():
+                    yield ("session-ses_deadbeef.md", "1", "repo", "SidebarView")
+                    yield ("FrameCreator/Views/ContentView.swift", "12", "repo", "SidebarView()")
+                return gen()
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        class FakeMemoryStore:
+            _pg_pool = FakePool()
+
+            @staticmethod
+            async def open_pool():
+                return None
+
+        graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
+
+        async def _require_driver():
+            return FakeDriver()
+
+        graph_bootstrap_mod.require_driver = _require_driver
+        graph_bootstrap_mod._NEO4J_DB = "neo4j"
+
+        with mock.patch.object(module, "get_memory_modules", return_value=(FakeMemoryStore, None, None, None, None)):
+            with mock.patch.dict(sys.modules, {"graph_bootstrap": graph_bootstrap_mod}):
+                output = asyncio.run(module.find_references_impl(["/tmp/repo"], "SidebarView"))
+
+        self.assertIn("FrameCreator/Views/ContentView.swift", output)
+        self.assertNotIn("session-ses_deadbeef.md", output)
+
     def test_format_symbol_context_includes_external_calls(self):
         module = load_symbol_graph_module()
         output = module.format_symbol_context(

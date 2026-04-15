@@ -2,6 +2,7 @@
 
 import time
 import os
+import re
 from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules, get_project_id
@@ -17,6 +18,81 @@ def register(mcp: FastMCP) -> None:
     _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
     _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
     _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "code_intel"}
+    _GENERIC_SWIFT_IMPORTS = {
+        "SwiftUI",
+        "Foundation",
+        "AppKit",
+        "UIKit",
+        "Combine",
+        "Observation",
+        "SwiftData",
+        "UniformTypeIdentifiers",
+        "CoreGraphics",
+        "AVFoundation",
+    }
+    _SWIFT_TYPE_MENTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9_]+\b")
+    _LOW_SIGNAL_RELATED_RE = re.compile(
+        r"(^|/)(session-ses_[^/]+\.md|agents\.md|readme(?:\.[^/]+)?|changelog(?:\.[^/]+)?)$",
+        re.IGNORECASE,
+    )
+
+    def _is_low_signal_support_path(file_path: str | None) -> bool:
+        norm = (file_path or "").replace("\\", "/").lower()
+        if not norm:
+            return True
+        if _LOW_SIGNAL_RELATED_RE.search(norm):
+            return True
+        if norm.endswith((".md", ".rst", ".txt")):
+            return True
+        return False
+
+    def _extract_swift_type_mentions(text: str, local_symbols: list[str] | set[str] | None = None) -> list[str]:
+        local = {str(item).strip() for item in (local_symbols or []) if str(item).strip()}
+        ignored = {
+            *local,
+            "App",
+            "Scene",
+            "View",
+            "Text",
+            "Button",
+            "Image",
+            "Color",
+            "UUID",
+            "String",
+            "Int",
+            "Float",
+            "Double",
+            "Bool",
+            "URL",
+            "Data",
+            "Date",
+            "CommandConfiguration",
+            "ParsableCommand",
+        }
+        out: list[str] = []
+        seen: set[str] = set()
+        for match in _SWIFT_TYPE_MENTION_RE.findall(text or ""):
+            if match in ignored or match in seen:
+                continue
+            seen.add(match)
+            out.append(match)
+            if len(out) >= 12:
+                break
+        return out
+
+    def _best_symbol_snippet(content: str | None, symbol_name: str) -> str:
+        symbol_call = f"{symbol_name}("
+        symbol_token = symbol_name
+        fallback = ""
+        for raw_line in str(content or "").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("// File:"):
+                continue
+            if symbol_call in line:
+                return line[:120]
+            if symbol_token in line and not fallback:
+                fallback = line[:120]
+        return fallback
 
     def _importance_penalty(file_path: str | None) -> float:
         norm = (file_path or "").replace("\\", "/").lower()
@@ -442,6 +518,67 @@ def register(mcp: FastMCP) -> None:
                 )
 
                 if not rows:
+                    if direction == "up" and resolved_filepath.endswith(".swift"):
+                        memory_store, _, _, _, _ = get_memory_modules()
+                        await memory_store.open_pool()
+                        async with memory_store._pg_pool.connection() as conn:
+                            async with conn.cursor() as cur:
+                                await cur.execute(
+                                    """
+                                    SELECT file_path,
+                                           metadata->>'start_line' AS start_line,
+                                           content
+                                    FROM codebase_embeddings
+                                    WHERE project_id = %s
+                                      AND file_path <> %s
+                                      AND file_path LIKE '%%.swift'
+                                      AND content ILIKE %s
+                                    ORDER BY
+                                      CASE
+                                        WHEN content ILIKE %s THEN 0
+                                        ELSE 1
+                                      END,
+                                      file_path
+                                    LIMIT 80
+                                    """,
+                                    (
+                                        project_id,
+                                        resolved_filepath,
+                                        f"%{symbol_name}%",
+                                        f"%{symbol_name}(%",
+                                    ),
+                                )
+                                semantic_rows = await cur.fetchall()
+                        grouped_rows: dict[str, tuple[int, str, str]] = {}
+                        for fp, sl, content in semantic_rows or []:
+                            if _is_low_signal_support_path(fp):
+                                continue
+                            snippet = _best_symbol_snippet(content, symbol_name)
+                            if not snippet:
+                                continue
+                            rank = 0 if f"{symbol_name}(" in snippet else 1
+                            current = grouped_rows.get(fp)
+                            candidate = (rank, str(sl or ""), snippet)
+                            if current is None or candidate < current:
+                                grouped_rows[fp] = candidate
+                        if grouped_rows:
+                            lines = [
+                                f"`{resolved_name}` resolved but no graph callers within {depth} hops.",
+                                "",
+                                "Swift caller-like usages:",
+                            ]
+                            sorted_rows = sorted(
+                                grouped_rows.items(),
+                                key=lambda item: (item[1][0], item[0]),
+                            )
+                            for fp, (rank, sl, snippet) in sorted_rows[:5]:
+                                line_part = f":{sl}" if sl else ""
+                                lines.append(f"- `{fp}{line_part}`  >> {snippet}")
+                            lines.append("")
+                            lines.append(
+                                "SwiftUI/component composition is not always represented as CALLS edges, so this fallback shows source usages."
+                            )
+                            return "\n".join(lines)
                     message = (
                         f"`{resolved_name}` resolved but no {hop_label}s within {depth} hops.\n"
                         "Make sure the project is indexed and Swift CALLS edges are available."
@@ -1202,7 +1339,15 @@ def register(mcp: FastMCP) -> None:
                     op="get_related_files",
                 )
                 for record in records:
-                    import_samples = record.get("sample_imports") or []
+                    import_samples = [
+                        item
+                        for item in (record.get("sample_imports") or [])
+                        if item not in _GENERIC_SWIFT_IMPORTS
+                    ]
+                    if not import_samples and any(
+                        item in _GENERIC_SWIFT_IMPORTS for item in (record.get("sample_imports") or [])
+                    ):
+                        continue
                     sample_text = ", ".join(import_samples[:3])
                     reason = f"shares {record['shared_imports']} import source(s)"
                     if sample_text:
@@ -1282,15 +1427,19 @@ def register(mcp: FastMCP) -> None:
             if not rows:
                 return "No structurally related files found."
 
+            filtered_rows = [(fp, hits) for fp, hits in rows if not _is_low_signal_support_path(fp)]
+            if not filtered_rows:
+                return "No structurally related files found."
+
             output = [
                 "Related Files (semantic co-mentions):",
                 "",
                 "Use this when graph structure is thin and you need the nearest semantic neighbors first.",
                 "",
                 "Inspect First:",
-                f"- start with `{rows[0][0]}` because it shares the strongest semantic co-mention surface",
+                f"- start with `{filtered_rows[0][0]}` because it shares the strongest semantic co-mention surface",
             ]
-            for fp, hits in rows:
+            for fp, hits in filtered_rows:
                 preview_symbols = ", ".join(symbols[:3])
                 output.append(
                     f"- {fp} (semantic co-mentions: {hits}; symbols: {preview_symbols})"

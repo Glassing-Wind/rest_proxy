@@ -169,6 +169,13 @@ These emit `[ts-pack-provenance] ...` lines from:
 
 This is the preferred path for “where did this edge come from?” investigations. These flags are temporary debug inputs and should not be added to `.env` by default.
 
+## Swift Notes
+
+- Swift-heavy repos still need special validation at the tool layer, not only at indexing time.
+- `get_call_chain(..., direction="up")` may need semantic caller fallback for SwiftUI/component composition because those relationships are not always emitted as CALLS edges.
+- `find_references` and `get_related_files` should prefer grouped cross-file Swift source hits and suppress low-signal markdown/session paths.
+- After Swift semantic metadata changes in the producer, do a full `rebuild` on affected repos before judging tool quality.
+
 ## Repo-Specific Notes For `rest_proxy`
 
 - `graphrag-brain` is exposed through FastMCP Streamable HTTP in:

@@ -42,6 +42,29 @@ REL_ASSET_LINKS = rel_type("asset_links")
 REL_CALLS_API = rel_type("calls_api")
 REL_CONTAINS = rel_type("contains")
 REL_FILE_GRAPH_LINK = rel_type("file_graph_link")
+_SWIFT_TYPE_MENTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9_]+\b")
+_LOW_SIGNAL_SEMANTIC_PATH_RE = re.compile(
+    r"(^|/)(session-ses_[^/]+\.md|agents\.md|readme(?:\.[^/]+)?|changelog(?:\.[^/]+)?|notes?)$",
+    re.IGNORECASE,
+)
+_COMMON_SWIFT_TYPE_NAMES = {
+    "App",
+    "Scene",
+    "View",
+    "Text",
+    "Image",
+    "Color",
+    "String",
+    "Int",
+    "Float",
+    "Double",
+    "Bool",
+    "UUID",
+    "URL",
+    "Data",
+    "Date",
+    "Button",
+}
 
 
 def _schema_cypher(text: str) -> str:
@@ -59,9 +82,11 @@ def _schema_cypher(text: str) -> str:
         "__HAS_PACKAGE__": REL_HAS_PACKAGE,
         "__DEPENDS_ON_PACKAGE__": REL_DEPENDS_ON_PACKAGE,
         "__IMPORTS__": REL_IMPORTS,
+        "__CALLS_FILE__": REL_CALLS_FILE,
         "__ASSET_LINKS__": REL_ASSET_LINKS,
         "__CALLS_API__": REL_CALLS_API,
         "__CONTAINS__": REL_CONTAINS,
+        "__FILE_GRAPH_LINK__": REL_FILE_GRAPH_LINK,
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
@@ -70,6 +95,32 @@ def _schema_cypher(text: str) -> str:
 
 def _file_path_expr(alias: str = "f") -> str:
     return f"coalesce({alias}.filepath, {alias}.file_path)"
+
+
+def _is_low_signal_semantic_path(file_path: str | None) -> bool:
+    norm = (file_path or "").replace("\\", "/").lower()
+    if not norm:
+        return True
+    if _LOW_SIGNAL_SEMANTIC_PATH_RE.search(norm):
+        return True
+    if norm.endswith((".md", ".rst", ".txt")):
+        return True
+    return False
+
+
+def _extract_swift_type_mentions(text: str, *, ignore: set[str] | None = None) -> list[str]:
+    ignored = set(ignore or ())
+    ignored.update(_COMMON_SWIFT_TYPE_NAMES)
+    out: list[str] = []
+    seen: set[str] = set()
+    for match in _SWIFT_TYPE_MENTION_RE.findall(text or ""):
+        if match in ignored or match in seen:
+            continue
+        seen.add(match)
+        out.append(match)
+        if len(out) >= 16:
+            break
+    return out
 
 
 def _importance_penalty(filepath: str | None) -> float:
@@ -788,6 +839,105 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         else:
             r_cargo_crates, r_cargo_workspaces, r_cargo_dependencies = [], [], []
             r_cargo_dep_out, r_cargo_dep_in = [], []
+
+        local_symbol_rows = await graph_core._execute_read(
+            session,
+            _schema_cypher("""
+            MATCH (f:__FILE__ {project_id: $p})-[:__CONTAINS__]->(s)
+            WHERE f.filepath STARTS WITH $dir
+              AND s.name IS NOT NULL
+              AND __FILTERS__
+            RETURN s.name AS name
+            LIMIT 20
+        """).replace("__FILTERS__", _SYMBOL_FILTER_CYPHER),
+            p=project_id,
+            dir=dir_prefix,
+            op="get_directory_snapshot_local_symbols",
+        )
+        external_symbol_rows = await graph_core._execute_read(
+            session,
+            _schema_cypher("""
+            MATCH (ext:__FILE__ {project_id: $p})-[:__CONTAINS__]->(s)
+            WHERE NOT ext.filepath STARTS WITH $dir
+              AND s.name IS NOT NULL
+              AND __FILTERS__
+            RETURN ext.filepath AS filepath, s.name AS symbol
+            LIMIT 400
+        """).replace("__FILTERS__", _SYMBOL_FILTER_CYPHER),
+            p=project_id,
+            dir=dir_prefix,
+            op="get_directory_snapshot_external_symbols",
+        )
+
+    local_symbols = {
+        str(rec.get("name") or "").strip()
+        for rec in (local_symbol_rows or [])
+        if str(rec.get("name") or "").strip()
+    }
+
+    if (not r_inbound or not r_outbound) and project_path:
+        memory_store, _, _, _, _ = get_memory_modules()
+        await memory_store.open_pool()
+        async with memory_store._pg_pool.connection() as conn:
+            async with conn.cursor() as cur:
+                if not r_inbound and local_symbols:
+                    ors = " OR ".join(["content ILIKE %s"] * len(local_symbols))
+                    await cur.execute(
+                        (
+                            "SELECT file_path, count(*) AS hits "
+                            "FROM codebase_embeddings "
+                            "WHERE project_id = %s "
+                            "  AND file_path NOT LIKE %s "
+                            "  AND (" + ors + ") "
+                            "GROUP BY file_path "
+                            "ORDER BY hits DESC, file_path "
+                            "LIMIT %s"
+                        ),
+                        [project_id, f"{dir_prefix}%"] + [f"%{symbol}%" for symbol in sorted(local_symbols)] + [limit],
+                    )
+                    rows = await cur.fetchall()
+                    r_inbound = [
+                        {"caller": fp, "n_imports": hits}
+                        for fp, hits in rows
+                        if not _is_low_signal_semantic_path(fp)
+                    ]
+
+                if not r_outbound and any((rec.get("fp") or "").endswith(".swift") for rec in (r_files or [])):
+                    top_local_files = [rec.get("fp") for rec in (r_files or [])[: min(limit, 4)] if rec.get("fp")]
+                    external_symbol_map: dict[str, set[str]] = {}
+                    for rec in external_symbol_rows or []:
+                        fp = str(rec.get("filepath") or "")
+                        symbol = str(rec.get("symbol") or "").strip()
+                        if not fp or not symbol or _is_low_signal_semantic_path(fp):
+                            continue
+                        external_symbol_map.setdefault(fp, set()).add(symbol)
+
+                    scored: list[tuple[int, str]] = []
+                    local_texts: list[str] = []
+                    for fp in top_local_files:
+                        await cur.execute(
+                            """
+                            SELECT content
+                            FROM codebase_embeddings
+                            WHERE project_id = %s AND file_path = %s
+                            ORDER BY chunk_index
+                            LIMIT 2
+                            """,
+                            (project_id, fp),
+                        )
+                        rows = await cur.fetchall()
+                        local_texts.extend(str(row[0] or "") for row in rows)
+                    combined_text = "\n".join(local_texts)
+                    candidate_mentions = set(_extract_swift_type_mentions(combined_text, ignore=local_symbols))
+                    for fp, symbols in external_symbol_map.items():
+                        overlap = candidate_mentions & symbols
+                        if overlap:
+                            scored.append((len(overlap), fp))
+                    scored.sort(key=lambda item: (-item[0], item[1]))
+                    r_outbound = [
+                        {"dependency": fp, "n_usages": score}
+                        for score, fp in scored[:limit]
+                    ]
 
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:

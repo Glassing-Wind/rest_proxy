@@ -33,10 +33,15 @@ class FakeCursor:
         return False
 
     async def execute(self, query, params):
+        self.query = query
+        self.params = params
         return None
 
     async def fetchone(self):
         return (42,)
+
+    async def fetchall(self):
+        return []
 
 
 class FakeConnection:
