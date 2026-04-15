@@ -446,9 +446,12 @@
         "depth": 2
       },
       "required_substrings": [
-        "Swift caller-like usages",
-        "examples/cifar-10/main.swift",
-        "let graph = DynamicGraph()"
+        "Call chain: `DynamicGraph`",
+        "`main`  (examples/cifar-10/main.swift)",
+        "`main`  (examples/ddpg/main.swift)"
+      ],
+      "forbidden_substrings": [
+        "Swift caller-like usages"
       ]
     },
     {
