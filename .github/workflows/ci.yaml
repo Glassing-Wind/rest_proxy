@@ -26,6 +26,9 @@ jobs:
       - name: Run gated CI checks
         run: bash scripts/run_ci_checks.sh
 
+      - name: Run tool-choice workflow checks
+        run: python scripts/run_tool_choice_eval_suite.py
+
   enterprise-eval:
     runs-on: ubuntu-latest
     steps:

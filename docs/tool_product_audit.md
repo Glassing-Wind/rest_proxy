@@ -168,3 +168,7 @@ Intent-to-tool expectations now live in:
 
 This is intentionally small. It is not a giant benchmark harness yet. It is a
 repo-owned statement of which tools should be preferred for common intents.
+
+Canonical preferred workflows are also checked in CI via:
+
+- [`/Users/michaelmarler/Projects/rest_proxy/scripts/run_tool_choice_eval_suite.py`](/Users/michaelmarler/Projects/rest_proxy/scripts/run_tool_choice_eval_suite.py)
