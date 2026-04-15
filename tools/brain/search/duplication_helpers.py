@@ -102,9 +102,13 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "records",
     "row",
     "rows",
+    "message",
+    "payload",
     "file",
     "filepath",
+    "file_path",
     "path",
+    "project_path",
     "text",
     "content",
     "data",
@@ -130,6 +134,8 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "raw",
     "lookup",
     "indexing",
+    "tuple",
+    "crate_rows",
 }
 
 

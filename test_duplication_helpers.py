@@ -221,6 +221,21 @@ class DuplicationHelperTests(unittest.TestCase):
         )
         self.assertFalse(details["actionable"])
 
+    def test_duplicate_candidate_details_rejects_generic_single_identifier_overlap(self):
+        details = module.duplicate_candidate_details(
+            {
+                "file_path": "tools/brain/graph/flow_summary.py",
+                "content": "def _format_backend_flow_empty_message(crate_rows) -> str:",
+            },
+            {
+                "file_path": "tools/brain/search/semantic_helpers.py",
+                "content": "def match_cargo_crate(file_path: str | None, crate_rows) -> tuple[str | None, str | None]:",
+            },
+            score=0.76,
+            struct_score=1.0,
+        )
+        self.assertFalse(details["actionable"])
+
 
 if __name__ == "__main__":
     unittest.main()
