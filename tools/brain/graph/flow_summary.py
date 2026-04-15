@@ -27,6 +27,7 @@ REL_CALLS_API_EXTERNAL = rel_type("calls_api_external")
 REL_CALLS_API = rel_type("calls_api")
 REL_IMPORTS = rel_type("imports")
 REL_DEFINED_IN_FILE = rel_type("defined_in_file")
+REL_FILE_GRAPH_LINK = rel_type("file_graph_link")
 
 
 def _schema_cypher(text: str) -> str:
@@ -46,6 +47,7 @@ def _schema_cypher(text: str) -> str:
         "__CALLS_API__": REL_CALLS_API,
         "__IMPORTS__": REL_IMPORTS,
         "__DEFINED_IN_FILE__": REL_DEFINED_IN_FILE,
+        "__FILE_GRAPH_LINK__": REL_FILE_GRAPH_LINK,
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
@@ -875,7 +877,7 @@ async def _coverage_lines(session, project_id: str) -> list[str]:
     )
     file_graph_result = await graph_core._execute_read(
         session,
-        "MATCH (:File {project_id:$p})-[r:FILE_GRAPH_LINK]->() RETURN count(r) AS file_graph_links",
+        _schema_cypher("MATCH (:__FILE__ {project_id:$p})-[r:__FILE_GRAPH_LINK__]->() RETURN count(r) AS file_graph_links"),
         p=project_id,
         op="get_app_flow_summary_coverage_file_graph",
     )
