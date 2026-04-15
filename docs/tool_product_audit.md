@@ -69,8 +69,6 @@ These are still worth improving because they do not yet feel like obvious defaul
   - Useful, but still too presentation-heavy and not actionable enough.
 - `get_code_importance`
   - Useful ranking signal, but still closer to analysis support than a default user-facing tool.
-- `get_heuristic_flow_summary`
-  - Useful fallback, but the name and contract already imply second-class behavior.
 - `find_definitions`
   - Good fallback, but for real work `get_symbol_context`, `list_symbol_matches`, and `search_codebase` are usually better.
 - `query_graph`
@@ -113,6 +111,9 @@ One concrete drift we found: `get_topology_summary` had been discussed in docs
 like a user-facing tool, but it is currently an internal helper path rather than
 a registered MCP surface.
 
+We are now treating `get_heuristic_flow_summary` the same way: useful as an
+internal fallback behind `get_flow_summary`, but not a peer standalone product tool.
+
 ### 2. Some tools still feel analysis-oriented rather than decision-oriented
 
 A first-class tool should answer the user’s question directly.
@@ -127,7 +128,6 @@ The weaker tools often still provide:
 
 Examples:
 
-- `get_heuristic_flow_summary`
 - `trace_code_ranking`
 - `find_definitions`
 
