@@ -2,10 +2,35 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
+from pathlib import Path
+
+try:
+    from tools.brain.graph_contract import node_label, rel_type
+except ModuleNotFoundError:
+    _GRAPH_CONTRACT_PATH = Path(__file__).resolve().parents[1] / "graph_contract.py"
+    _GRAPH_CONTRACT_SPEC = importlib.util.spec_from_file_location(
+        "_brain_graph_contract", _GRAPH_CONTRACT_PATH
+    )
+    _GRAPH_CONTRACT = importlib.util.module_from_spec(_GRAPH_CONTRACT_SPEC)
+    assert _GRAPH_CONTRACT_SPEC and _GRAPH_CONTRACT_SPEC.loader
+    _GRAPH_CONTRACT_SPEC.loader.exec_module(_GRAPH_CONTRACT)
+    node_label = _GRAPH_CONTRACT.node_label
+    rel_type = _GRAPH_CONTRACT.rel_type
 
 
-SYMBOL_CONTEXT_CYPHER = """
+FILE_LABEL = node_label("file")
+IMPORT_LABEL = node_label("import")
+EXTERNAL_SYMBOL_LABEL = node_label("external_symbol")
+REL_CONTAINS = rel_type("contains")
+REL_CALLS = rel_type("calls")
+REL_CALLS_INFERRED = rel_type("calls_inferred")
+REL_CALLS_EXTERNAL_SYMBOL = rel_type("calls_external_symbol")
+REL_IMPORTS = rel_type("imports")
+
+
+SYMBOL_CONTEXT_CYPHER = f"""
     MATCH (s)
     WHERE (s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:EnumCase OR s:Method
        OR s:Protocol OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType)
@@ -17,10 +42,10 @@ SYMBOL_CONTEXT_CYPHER = """
         OR s.filepath ENDS WITH ('/' + $file_path)
       )
       AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
-    OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
-    OPTIONAL MATCH (caller)-[:CALLS|CALLS_INFERRED]->(s)
-    OPTIONAL MATCH (s)-[:CALLS|CALLS_INFERRED]->(callee)
-    OPTIONAL MATCH (s)-[:CALLS_EXTERNAL_SYMBOL]->(external_callee:ExternalSymbol)
+    OPTIONAL MATCH (s)<-[:{REL_CONTAINS}]-(parent:{FILE_LABEL})
+    OPTIONAL MATCH (caller)-[:{REL_CALLS}|{REL_CALLS_INFERRED}]->(s)
+    OPTIONAL MATCH (s)-[:{REL_CALLS}|{REL_CALLS_INFERRED}]->(callee)
+    OPTIONAL MATCH (s)-[:{REL_CALLS_EXTERNAL_SYMBOL}]->(external_callee:{EXTERNAL_SYMBOL_LABEL})
     RETURN
       head([label IN labels(s) WHERE label <> 'Node']) AS kind,
       s.name AS name,
@@ -30,19 +55,19 @@ SYMBOL_CONTEXT_CYPHER = """
       s.end_line    AS end_line,
       s.signature   AS signature,
       parent.filepath AS parent_file,
-      collect(DISTINCT {name: caller.name, file: caller.filepath,
-                        line: caller.start_line})[..10] AS callers,
-      collect(DISTINCT {name: callee.name, file: callee.filepath})[..10] AS callees,
-      collect(DISTINCT {name: external_callee.name,
+      collect(DISTINCT {{name: caller.name, file: caller.filepath,
+                        line: caller.start_line}})[..10] AS callers,
+      collect(DISTINCT {{name: callee.name, file: callee.filepath}})[..10] AS callees,
+      collect(DISTINCT {{name: external_callee.name,
                         qualified_name: external_callee.qualified_name,
-                        language: external_callee.language})[..10] AS external_callees,
+                        language: external_callee.language}})[..10] AS external_callees,
       count(DISTINCT caller) AS callers_in,
       count(DISTINCT callee) AS callees_out
     LIMIT 12
 """
 
 
-CALL_CHAIN_RESOLVE_CYPHER = """
+CALL_CHAIN_RESOLVE_CYPHER = f"""
     MATCH (s)
     WHERE s.project_id = $pid
       AND (s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum
@@ -53,7 +78,7 @@ CALL_CHAIN_RESOLVE_CYPHER = """
         OR s.filepath ENDS WITH ('/' + $file_path)
       )
       AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
-    OPTIONAL MATCH (s)<-[:CALLS|CALLS_INFERRED]-(caller)
+    OPTIONAL MATCH (s)<-[:{REL_CALLS}|{REL_CALLS_INFERRED}]-(caller)
     WITH s,
          CASE
            WHEN s.name = $name THEN 0
@@ -92,35 +117,35 @@ CALL_CHAIN_RESOLVE_CYPHER = """
 """
 
 
-VISUALIZE_SUBGRAPH_FOCUS_CYPHER = """
-    MATCH (n {name: $name, project_id: $pid})
+VISUALIZE_SUBGRAPH_FOCUS_CYPHER = f"""
+    MATCH (n {{name: $name, project_id: $pid}})
     WHERE n:Function OR n:Class OR n:Struct OR n:Enum OR n:Trait
        OR n:Protocol OR n:Interface OR n:Extension OR n:TypeAlias OR n:AssociatedType
-       OR n:File
+       OR n:{FILE_LABEL}
     RETURN n.id AS id, head([label IN labels(n) WHERE label <> 'Node']) AS kind, n.name AS name,
            n.filepath AS fp, n.start_line AS sl
     LIMIT 12
 """
 
 
-VISUALIZE_SUBGRAPH_NEIGHBORS_CYPHER = """
-    MATCH (n {id: $fid})
-     OPTIONAL MATCH (parent:File)-[:CONTAINS]->(n)
-     OPTIONAL MATCH (n)<-[:CALLS|CALLS_INFERRED]-(caller)
-        WHERE caller:File OR caller:Function OR caller:Class OR caller:Method
+VISUALIZE_SUBGRAPH_NEIGHBORS_CYPHER = f"""
+    MATCH (n {{id: $fid}})
+     OPTIONAL MATCH (parent:{FILE_LABEL})-[:{REL_CONTAINS}]->(n)
+     OPTIONAL MATCH (n)<-[:{REL_CALLS}|{REL_CALLS_INFERRED}]-(caller)
+        WHERE caller:{FILE_LABEL} OR caller:Function OR caller:Class OR caller:Method
            OR caller:Struct OR caller:Trait OR caller:Enum OR caller:Protocol
            OR caller:Interface OR caller:Extension OR caller:TypeAlias OR caller:AssociatedType
-     OPTIONAL MATCH (n)<-[:IMPORTS]-(importer:File)
-    OPTIONAL MATCH (n)-[:CALLS|CALLS_INFERRED]->(callee)
+     OPTIONAL MATCH (n)<-[:{REL_IMPORTS}]-(importer:{FILE_LABEL})
+    OPTIONAL MATCH (n)-[:{REL_CALLS}|{REL_CALLS_INFERRED}]->(callee)
         WHERE callee:Function OR callee:Class OR callee:Struct OR callee:Method
            OR callee:Trait OR callee:Enum OR callee:Protocol OR callee:Interface
            OR callee:Extension OR callee:TypeAlias OR callee:AssociatedType
     RETURN
       parent.id AS parent_id, parent.name AS parent_name, parent.filepath AS parent_fp,
-      collect(DISTINCT {id: caller.id, name: caller.name, fp: caller.filepath})[..6]  AS callers,
-      collect(DISTINCT {id: importer.id, name: importer.name, fp: importer.filepath})[..6] AS importers,
-      collect(DISTINCT {id: callee.id, name: callee.name, kind: head([label IN labels(callee) WHERE label <> 'Node']),
-                        fp: callee.filepath})[..8] AS callees
+      collect(DISTINCT {{id: caller.id, name: caller.name, fp: caller.filepath}})[..6]  AS callers,
+      collect(DISTINCT {{id: importer.id, name: importer.name, fp: importer.filepath}})[..6] AS importers,
+      collect(DISTINCT {{id: callee.id, name: callee.name, kind: head([label IN labels(callee) WHERE label <> 'Node']),
+                        fp: callee.filepath}})[..8] AS callees
     LIMIT 1
 """
 
@@ -833,7 +858,7 @@ def format_call_chain_rows(
             item[0][0] or "",
         ),
     )
-    if root_focus:
+    if root_focus and (resolved_name or symbol_name).strip().lower() in {"main"}:
         focused_first_hops = [
             item for item in ranked_first_hops if (item[0][1] or "").startswith(root_focus)
         ]

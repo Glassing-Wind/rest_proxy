@@ -1,12 +1,27 @@
 """graph_bootstrap.py – Neo4j Graph Database connection and schema initialization."""
 
 import asyncio
+import importlib.util
 import json
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Any, Optional
 from neo4j import AsyncGraphDatabase, unit_of_work
+
+try:
+    from tools.brain.graph_contract import node_label, rel_type
+except ModuleNotFoundError:
+    _GRAPH_CONTRACT_PATH = Path(__file__).resolve().parent / "tools" / "brain" / "graph_contract.py"
+    _GRAPH_CONTRACT_SPEC = importlib.util.spec_from_file_location(
+        "_brain_graph_contract", _GRAPH_CONTRACT_PATH
+    )
+    _GRAPH_CONTRACT = importlib.util.module_from_spec(_GRAPH_CONTRACT_SPEC)
+    assert _GRAPH_CONTRACT_SPEC and _GRAPH_CONTRACT_SPEC.loader
+    _GRAPH_CONTRACT_SPEC.loader.exec_module(_GRAPH_CONTRACT)
+    node_label = _GRAPH_CONTRACT.node_label
+    rel_type = _GRAPH_CONTRACT.rel_type
 
 _NEO4J_ENABLED = os.getenv("LM_PROXY_GRAPH_ENABLED", "1").strip().lower() in {
     "1",
@@ -49,6 +64,9 @@ _ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
 _INIT_FAILURE_COOLDOWN_SECONDS = max(
     0.0, float(os.getenv("LM_PROXY_NEO4J_INIT_FAILURE_COOLDOWN_SECONDS", "10.0"))
 )
+
+FILE_LABEL = node_label("file")
+REL_CONTAINS = rel_type("contains")
 
 _driver: Optional[Any] = None
 _last_init_error: Optional[str] = None
@@ -165,13 +183,13 @@ async def init_graph_db() -> None:
                     # Global structural node identity (already exists, kept for safety)
                     "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE",
                     # File nodes are MERGE'd by id; ensure index-backed MERGE
-                    "CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:File) REQUIRE f.id IS UNIQUE",
+                    f"CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:{FILE_LABEL}) REQUIRE f.id IS UNIQUE",
                     # Per-project lookup index for read-heavy queries
                     "CREATE INDEX node_project_id IF NOT EXISTS FOR (n:Node) ON (n.project_id)",
                     "CREATE INDEX node_project_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name)",
                     "CREATE INDEX node_project_name_filepath IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name, n.filepath)",
                     "CREATE INDEX node_project_qualified_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.qualified_name)",
-                    "CREATE INDEX file_project_id IF NOT EXISTS FOR (f:File) ON (f.project_id)",
+                    f"CREATE INDEX file_project_id IF NOT EXISTS FOR (f:{FILE_LABEL}) ON (f.project_id)",
                     # Session/Project: MERGE'd on every semantic batch — must use index
                     "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.id IS UNIQUE",
                     "CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE",
@@ -182,7 +200,7 @@ async def init_graph_db() -> None:
                     # Chunk: dedicated label constraint for vector index alignment
                     "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE",
                     # Relationship index: eliminates O(degree) edge scan in CONTAINS MERGE
-                    "CREATE INDEX contains_idx IF NOT EXISTS FOR ()-[r:CONTAINS]-() ON (r.project_id)",
+                    f"CREATE INDEX contains_idx IF NOT EXISTS FOR ()-[r:{REL_CONTAINS}]-() ON (r.project_id)",
                 ]
 
                 for query in constraints:
