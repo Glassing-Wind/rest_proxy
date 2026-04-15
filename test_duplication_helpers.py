@@ -190,6 +190,22 @@ class DuplicationHelperTests(unittest.TestCase):
         self.assertIn("same lead statement", details["reasons"])
         self.assertIn("client", details["path_overlap"])
 
+    def test_duplicate_candidate_details_rejects_low_signal_headers(self):
+        details = module.duplicate_candidate_details(
+            {
+                "file_path": "scripts/a.py",
+                "content": "#!/usr/bin/env python3",
+            },
+            {
+                "file_path": "scripts/b.py",
+                "content": "#!/usr/bin/env python3",
+            },
+            score=0.99,
+            struct_score=1.0,
+        )
+        self.assertFalse(details["actionable"])
+        self.assertNotIn("same lead statement", details["reasons"])
+
 
 if __name__ == "__main__":
     unittest.main()

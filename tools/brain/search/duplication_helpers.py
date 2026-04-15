@@ -110,6 +110,24 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "data",
     "name",
     "value",
+    "py",
+    "tool",
+    "tools",
+    "docs",
+    "documentation",
+    "search",
+    "graph",
+    "helpers",
+    "helper",
+    "overview",
+    "summary",
+    "flow",
+    "pipeline",
+    "crawl",
+    "research",
+    "raw",
+    "lookup",
+    "indexing",
 }
 
 
@@ -328,6 +346,8 @@ def is_low_signal_preview(text: str) -> bool:
     preview = preview_line(text).strip()
     if not preview:
         return True
+    if preview.startswith("#!/"):
+        return True
     if preview.startswith('"""') or preview.startswith("'''"):
         return True
     return False
@@ -413,16 +433,20 @@ def duplicate_candidate_details(
     )[1].lower()
     preview_a = preview_line(row_a.get("content") or "")
     preview_b = preview_line(row_b.get("content") or "")
-    preview_equal = bool(preview_a and preview_b and preview_a == preview_b)
+    low_signal_a = is_low_signal_preview(row_a.get("content") or "")
+    low_signal_b = is_low_signal_preview(row_b.get("content") or "")
+    preview_equal = bool(
+        preview_a and preview_b and preview_a == preview_b and not (low_signal_a and low_signal_b)
+    )
 
     candidate_score = 0.0
     candidate_score += min(score, 1.0) * 0.45
     candidate_score += min(struct_score, 1.0) * 0.10
     if preview_equal:
         candidate_score += 0.20
-    if identifiers:
+    if identifiers and not (low_signal_a and low_signal_b):
         candidate_score += min(0.25, 0.07 * len(identifiers))
-    if path_overlap:
+    if path_overlap and not (low_signal_a and low_signal_b):
         candidate_score += min(0.12, 0.04 * len(path_overlap))
     if same_dir:
         candidate_score += 0.06
@@ -432,10 +456,10 @@ def duplicate_candidate_details(
     reasons: list[str] = []
     if preview_equal:
         reasons.append("same lead statement")
-    if identifiers:
+    if identifiers and not (low_signal_a and low_signal_b):
         shared = ", ".join(sorted(identifiers)[:3])
         reasons.append(f"shared identifiers ({shared})")
-    if path_overlap:
+    if path_overlap and not (low_signal_a and low_signal_b):
         shared_path = ", ".join(sorted(path_overlap)[:3])
         reasons.append(f"path overlap ({shared_path})")
     if same_dir:
@@ -455,5 +479,8 @@ def duplicate_candidate_details(
         "same_dir": same_dir,
         "same_ext": same_ext,
         "preview_equal": preview_equal,
-        "actionable": bool(identifiers or path_overlap or preview_equal),
+        "actionable": bool(
+            preview_equal
+            or ((identifiers or path_overlap) and not (low_signal_a and low_signal_b))
+        ),
     }
