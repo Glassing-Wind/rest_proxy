@@ -31,6 +31,17 @@ def _is_stub_like_path(file_path: str) -> bool:
     return normalized.endswith(".pyi") or normalized.endswith(".d.ts")
 
 
+def _is_story_like_path(file_path: str) -> bool:
+    normalized = (file_path or "").lower()
+    return (
+        ".stories." in normalized
+        or normalized.endswith(".story.tsx")
+        or normalized.endswith(".story.ts")
+        or normalized.endswith(".story.js")
+        or normalized.endswith(".story.jsx")
+    )
+
+
 LOW_SIGNAL_IMPORT_SYMBOLS = {
     "Error",
     "Result",
@@ -40,6 +51,14 @@ LOW_SIGNAL_IMPORT_SYMBOLS = {
     "ValidationLevel",
     "Fixture",
     "Generator",
+    "tmpdir",
+    "create",
+    "cmd",
+    "lazy",
+    "bootstrap",
+    "Dict",
+    "Icon",
+    "log",
 }
 
 
@@ -89,6 +108,40 @@ def _import_focus_lines(exp_files: list[tuple[str, int, list[str]]], imp_files: 
     return lines[:3]
 
 
+def _import_file_rank(file_path: str, count: int, symbols: list[str]) -> tuple[int, int, int, str]:
+    useful = _useful_symbol_sample(symbols, limit=6)
+    score = 0
+    lowered = (file_path or "").lower()
+    if _is_stub_like_path(file_path):
+        score -= 40
+    if _is_test_like_path(file_path):
+        score -= 30
+    if _is_story_like_path(file_path):
+        score -= 24
+    if "/src/" in lowered or lowered.startswith("src/"):
+        score += 18
+    if "/packages/" in lowered or lowered.startswith("packages/"):
+        score += 8
+    if "/crates/" in lowered or lowered.startswith("crates/"):
+        score += 8
+    if "/components/" in lowered:
+        score -= 10
+    if "/docs/" in lowered or lowered.startswith("docs/"):
+        score -= 18
+    if "/examples/" in lowered or lowered.startswith("examples/"):
+        score -= 12
+    if "integration_example" in lowered:
+        score -= 12
+    if file_path.endswith("__init__.py"):
+        score -= 8
+    if useful:
+        score += min(len(useful), 4) * 5
+    if symbols and not useful:
+        score -= 12
+    score += min(int(count), 40)
+    return score, len(useful), count, file_path
+
+
 def _export_focus_lines(
     top_symbols: list[tuple],
     top_files: list[tuple[str, int, list[str]]],
@@ -115,7 +168,15 @@ def _export_focus_lines(
 
 
 def _is_low_signal_import_symbol(name: str) -> bool:
-    return name in LOW_SIGNAL_IMPORT_SYMBOLS
+    if name in LOW_SIGNAL_IMPORT_SYMBOLS:
+        return True
+    if re.fullmatch(r"[A-Z]?[a-z]+ID", name):
+        return True
+    if re.fullmatch(r"use[A-Z][A-Za-z0-9]*", name):
+        return True
+    if re.fullmatch(r"Icon[A-Z][A-Za-z0-9]*", name):
+        return True
+    return False
 
 
 def _useful_symbol_sample(symbols: list[str], limit: int = 3) -> list[str]:
@@ -188,7 +249,11 @@ async def get_symbol_imports_overview_impl(
             limit=limit,
             op="get_symbol_imports_overview_exp_files",
         )
-        exp_files = [(rec["file"], rec["n"], rec["symbols"]) for rec in r_exp_files]
+        exp_files = sorted(
+            [(rec["file"], rec["n"], rec["symbols"]) for rec in r_exp_files],
+            key=lambda item: _import_file_rank(item[0], int(item[1]), list(item[2] or [])),
+            reverse=True,
+        )
 
         imp_symbols = []
         imp_files = []
@@ -228,7 +293,11 @@ async def get_symbol_imports_overview_impl(
                 limit=limit,
                 op="get_symbol_imports_overview_imp_files",
             )
-            imp_files = [(rec["file"], rec["n"], rec["symbols"]) for rec in r_imp_files]
+            imp_files = sorted(
+                [(rec["file"], rec["n"], rec["symbols"]) for rec in r_imp_files],
+                key=lambda item: _import_file_rank(item[0], int(item[1]), list(item[2] or [])),
+                reverse=True,
+            )
 
     if not exp_symbols and not exp_files and not imp_symbols and not imp_files:
         return "No symbol import edges found."

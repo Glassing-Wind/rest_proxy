@@ -160,12 +160,17 @@ class SearchSummaryTests(unittest.TestCase):
             if op == "get_symbol_imports_overview_exp_symbols":
                 return [
                     {"symbol": "Result", "n": 8},
+                    {"symbol": "create", "n": 7},
                     {"symbol": "Language", "n": 7},
                     {"symbol": "CaptureOutput", "n": 6},
                 ]
             if op == "get_symbol_imports_overview_exp_files":
                 return [
-                    {"file": "src/lib.rs", "n": 9, "symbols": ["Result", "Language", "CaptureOutput", "CommentKind"]},
+                    {
+                        "file": "src/lib.rs",
+                        "n": 9,
+                        "symbols": ["Result", "Language", "create", "CaptureOutput", "CommentKind"],
+                    },
                 ]
             return []
 
@@ -182,7 +187,112 @@ class SearchSummaryTests(unittest.TestCase):
 
         self.assertIn("CaptureOutput", output)
         self.assertNotIn("- Result  (8)", output)
+        self.assertNotIn("- create  (7)", output)
         self.assertIn("CaptureOutput, CommentKind", output)
+
+    def test_symbol_imports_overview_prefers_implementation_files_over_test_or_story_surfaces(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_imports_overview_exp_count":
+                return [{"n": 6}]
+            if op == "get_symbol_imports_overview_exp_symbols":
+                return [
+                    {"symbol": "tmpdir", "n": 12},
+                    {"symbol": "DocumentSymbol", "n": 11},
+                    {"symbol": "CommandChild", "n": 9},
+                    {"symbol": "ServerReadyData", "n": 8},
+                ]
+            if op == "get_symbol_imports_overview_exp_files":
+                return [
+                    {
+                        "file": "packages/opencode/test/lsp/index.test.ts",
+                        "n": 22,
+                        "symbols": ["DocumentSymbol", "tmpdir", "Status"],
+                    },
+                    {
+                        "file": "packages/ui/src/components/context-menu.stories.tsx",
+                        "n": 19,
+                        "symbols": ["ContextMenuContentProps", "ContextMenuGroupProps", "Icon"],
+                    },
+                    {
+                        "file": "packages/desktop-electron/src/main/index.ts",
+                        "n": 26,
+                        "symbols": ["CommandChild", "InitStep", "ServerReadyData", "WslConfig"],
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_imports_overview_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                    include_implicit=False,
+                )
+            )
+
+        self.assertIn("packages/desktop-electron/src/main/index.ts", output)
+        inspect_line_index = output.find("start with `packages/desktop-electron/src/main/index.ts`")
+        self.assertNotEqual(inspect_line_index, -1)
+
+    def test_symbol_imports_overview_demotes_docs_and_component_leaf_files(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_imports_overview_exp_count":
+                return [{"n": 6}]
+            if op == "get_symbol_imports_overview_exp_symbols":
+                return [
+                    {"symbol": "bootstrap_schema", "n": 30},
+                    {"symbol": "assemble_memory", "n": 28},
+                    {"symbol": "get_embedding_service", "n": 27},
+                ]
+            if op == "get_symbol_imports_overview_exp_files":
+                return [
+                    {
+                        "file": "tools/brain/docs/search.py",
+                        "n": 84,
+                        "symbols": ["get_embedding_service", "bootstrap_schema", "assemble_memory"],
+                    },
+                    {
+                        "file": "scripts/index_workspace.py",
+                        "n": 76,
+                        "symbols": ["get_embedding_service", "bootstrap_schema", "assemble_memory"],
+                    },
+                    {
+                        "file": "packages/web/src/components/share/part.tsx",
+                        "n": 33,
+                        "symbols": ["formatCount", "formatDuration", "formatNumber"],
+                    },
+                    {
+                        "file": "packages/desktop-electron/src/main/index.ts",
+                        "n": 26,
+                        "symbols": ["CommandChild", "InitStep", "ServerReadyData"],
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_imports_overview_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                    include_implicit=False,
+                )
+            )
+
+        self.assertIn("start with `packages/desktop-electron/src/main/index.ts`", output)
+        self.assertLess(
+            output.find("packages/desktop-electron/src/main/index.ts"),
+            output.find("packages/web/src/components/share/part.tsx"),
+        )
+        self.assertLess(
+            output.find("packages/desktop-electron/src/main/index.ts"),
+            output.find("tools/brain/docs/search.py"),
+        )
 
     def test_symbol_exports_summary_falls_back_to_visibility_and_python_naming(self):
         async def fake_execute_read(session, query, **kwargs):
