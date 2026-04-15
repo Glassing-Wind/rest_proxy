@@ -238,7 +238,10 @@ async def get_topology_summary_impl(
     if not result:
         return "No architectural topology found (index might be empty)."
 
-    output = ["### Architectural Topology (Most Connected Files)\n"]
+    output = [
+        "### Architectural Topology (Most Connected Files)\n",
+        "Support view only. Prefer `get_project_overview` for onboarding and use this when you want raw connectivity.\n",
+    ]
     rendered = []
     for rec in result:
         crate, _ = _match_cargo_crate(rec.get("fp"), cargo_rows)
@@ -252,6 +255,11 @@ async def get_topology_summary_impl(
     non_test = [row for row in rendered if not _is_test_like_path(row["line"])]
     test_like = [row for row in rendered if _is_test_like_path(row["line"])]
     rendered = non_test + test_like
+    if rendered:
+        output.append("Best raw connectivity starting points:")
+        for row in rendered[:3]:
+            output.append(f"- {row['line']}")
+        output.append("")
     if any(row.get("crate") for row in rendered):
         output.extend(_group_by_crate(rendered, item_key="crate", line_builder=lambda row: row["line"]))
     else:

@@ -319,7 +319,7 @@ def register(mcp: FastMCP) -> None:
     async def get_heuristic_flow_summary(
         workspace_id: str, limit: int = 20, as_table: bool = False
     ) -> str:
-        """Heuristic flow based on directory patterns and IMPORTS edges."""
+        """Fallback flow view based on directory patterns and IMPORTS edges."""
         try:
             import graph_bootstrap
 
@@ -335,7 +335,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error in heuristic flow: {str(e)}"
 
     async def get_topology_summary(workspace_id: str, limit: int = 10) -> str:
-        """High-level summary of the most connected files/directories."""
+        """Support view of raw file connectivity. Prefer get_project_overview first."""
         try:
             import graph_bootstrap
 

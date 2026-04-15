@@ -811,11 +811,27 @@ def register(mcp: FastMCP) -> None:
                 groups: dict[str, list[str]] = {}
                 for row in rendered_rows:
                     groups.setdefault(row.get("crate") or "(unowned)", []).append(row["line"])
+                top_focus = []
+                for row in rendered_rows[:3]:
+                    focus_label = row["line"].split("  [score:", 1)[0]
+                    top_focus.append(f"- {focus_label}")
+                if top_focus:
+                    output.append("Recommended starting points:")
+                    output.extend(top_focus)
+                    output.append("")
                 for crate, items in groups.items():
                     output.append(f"Crate: {crate}")
                     for item in items:
                         output.append(f"- {item}")
             else:
+                top_focus = []
+                for row in rendered_rows[:3]:
+                    focus_label = row["line"].split("  [score:", 1)[0]
+                    top_focus.append(f"- {focus_label}")
+                if top_focus:
+                    output.append("Recommended starting points:")
+                    output.extend(top_focus)
+                    output.append("")
                 for row in rendered_rows:
                     output.append(f"- {row['line']}")
             if len(output) == 1:
@@ -927,6 +943,19 @@ def register(mcp: FastMCP) -> None:
                 ),
                 reverse=True,
             )
+            if records:
+                output.append("Priority exploration order:")
+                for record in records[:3]:
+                    if using_louvain:
+                        cluster_name = f"cluster #{record['comm']}"
+                    else:
+                        cluster_name = record.get("dominant_dir") or "(root)"
+                    kind_label, _ = _cluster_kind(record.get("top_files") or [])
+                    top_file = (record.get("top_files") or [None])[0]
+                    crate = _match_cargo_crate(top_file, cargo_rows)
+                    suffix = f" [crate:{crate}]" if crate else ""
+                    output.append(f"- {cluster_name} [{kind_label}]{suffix}")
+                output.append("")
             if cargo_rows and not using_louvain:
                 crate_groups: dict[str, list[dict]] = {}
                 for record in records:
