@@ -383,7 +383,7 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
 
 def implementation_rank_tuple(
     result: dict,
-) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
+) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
     low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
@@ -396,6 +396,8 @@ def implementation_rank_tuple(
     role_priority = int(result.get("implementation_role_priority", 0) or 0)
     node_type_priority = int(result.get("implementation_node_type_priority", 0) or 0)
     reexport_surface = int(result.get("implementation_reexport_surface_hit", 0) or 0)
+    facade_surface = int(result.get("implementation_facade_surface_hit", 0) or 0)
+    declared_symbol_hit = int(result.get("implementation_declared_symbol_hit", 0) or 0)
     definition_hit = int(result.get("implementation_definition_hit", 0) or 0)
     signature_hit = int(result.get("implementation_exact_signature_symbol_hit", 0) or 0)
     export_hit = int(result.get("implementation_export_hit", 0) or 0)
@@ -414,7 +416,9 @@ def implementation_rank_tuple(
         -runtime_main_priority,
         -role_priority,
         -node_type_priority,
+        facade_surface,
         reexport_surface,
+        -declared_symbol_hit,
         -signature_hit,
         -definition_hit,
         -export_hit,
@@ -511,6 +515,25 @@ def implementation_symbol_hit(meta: dict, query: str) -> int:
     lowered = {
         str(symbol).strip().lower()
         for symbol in file_symbols
+        if str(symbol).strip()
+    }
+    if not lowered:
+        return 0
+    return sum(1 for symbol in symbols if symbol in lowered)
+
+
+def implementation_declared_symbol_hit(meta: dict, query: str) -> int:
+    if not isinstance(meta, dict):
+        return 0
+    symbols = implementation_query_symbols(query)
+    if not symbols:
+        return 0
+    declared_symbols = meta.get("declared_symbols")
+    if not isinstance(declared_symbols, list) or not declared_symbols:
+        return 0
+    lowered = {
+        str(symbol).strip().lower()
+        for symbol in declared_symbols
         if str(symbol).strip()
     }
     if not lowered:
@@ -775,6 +798,32 @@ def implementation_reexport_surface_hit(
     return 0
 
 
+def implementation_facade_surface_hit(
+    file_path: str | None,
+    meta: dict,
+    *,
+    symbol_hit: int,
+    declared_symbol_hit: int,
+    definition_hit: int,
+    signature_hit: int,
+    export_hit: int,
+    api_context_hit: int,
+) -> int:
+    if symbol_hit <= 0:
+        return 0
+    if declared_symbol_hit > 0 or definition_hit > 0 or signature_hit > 0:
+        return 0
+    node_types = implementation_node_types(meta)
+    declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
+    module_like = bool(node_types & MODULE_NODE_TYPES)
+    chunk_role = implementation_chunk_role(meta, file_path)
+    if export_hit > 0 or api_context_hit > 0:
+        return 1
+    if chunk_role == "definition" and (declaration_like or module_like):
+        return 1
+    return 0
+
+
 def implementation_api_context_hit(meta: dict) -> int:
     if not isinstance(meta, dict):
         return 0
@@ -984,6 +1033,7 @@ def enrich_implementation_result(
     result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(result.get("file_path"))
     result["low_signal_support_path"] = is_low_signal_support_path(result.get("file_path"))
     result["implementation_symbol_hit"] = implementation_symbol_hit(meta, query)
+    result["implementation_declared_symbol_hit"] = implementation_declared_symbol_hit(meta, query)
     result["implementation_path_hint_hit"] = implementation_path_hint_hit(
         result.get("file_path"),
         query=query,
@@ -1016,9 +1066,22 @@ def enrich_implementation_result(
         signature_hit=int(result.get("implementation_exact_signature_symbol_hit", 0) or 0),
     )
     result["implementation_api_context_hit"] = implementation_api_context_hit(meta)
+    result["implementation_facade_surface_hit"] = implementation_facade_surface_hit(
+        result.get("file_path"),
+        meta,
+        symbol_hit=int(result.get("implementation_symbol_hit", 0) or 0),
+        declared_symbol_hit=int(result.get("implementation_declared_symbol_hit", 0) or 0),
+        definition_hit=int(result.get("implementation_definition_hit", 0) or 0),
+        signature_hit=int(result.get("implementation_exact_signature_symbol_hit", 0) or 0),
+        export_hit=int(result.get("implementation_export_hit", 0) or 0),
+        api_context_hit=int(result.get("implementation_api_context_hit", 0) or 0),
+    )
     result["implementation_api_entrypoint_hit"] = implementation_api_entrypoint_hit(
         result.get("file_path", ""),
-        result.get("implementation_definition_hit", 0),
+        max(
+            int(result.get("implementation_definition_hit", 0) or 0),
+            int(result.get("implementation_declared_symbol_hit", 0) or 0),
+        ),
     )
     result["implementation_runtime_main_entrypoint_hit"] = implementation_runtime_main_entrypoint_hit(
         result.get("file_path", ""),
@@ -1042,6 +1105,12 @@ def enrich_implementation_result(
         and role in {"public_api_definition", "canonical_definition", "internal_implementation"}
     ):
         role = "supporting_context"
+    if (
+        query_class in {"api_definition_lookup", "symbol_lookup"}
+        and int(result.get("implementation_facade_surface_hit", 0) or 0) > 0
+        and role in {"public_api_definition", "canonical_definition", "internal_implementation"}
+    ):
+        role = "supporting_context"
     result["implementation_role"] = role
     result["implementation_role_priority"] = implementation_role_priority(role, query_class)
     result["implementation_role_score"] = implementation_role_score(role, query_class)
@@ -1055,6 +1124,7 @@ def enrich_implementation_result(
         support_path_penalty = 0.0
     usage_penalty = 0.04 if result["implementation_usage_heavy_penalty"] else 0.0
     symbol_bonus = 0.015 * min(int(result.get("implementation_symbol_hit", 0) or 0), 2)
+    declared_symbol_bonus = 0.0
     path_hint_bonus = 0.0
     runtime_main_bonus = 0.0
     member_usage_bonus = 0.0
@@ -1088,20 +1158,26 @@ def enrich_implementation_result(
     definition_bonus = 0.025 * min(int(result.get("implementation_definition_hit", 0) or 0), 2)
     signature_bonus = 0.04 * min(int(result.get("implementation_exact_signature_symbol_hit", 0) or 0), 2)
     if query_class_prefers_definitions(query_class):
+        declared_symbol_bonus = 0.05 * min(int(result.get("implementation_declared_symbol_hit", 0) or 0), 2)
         export_bonus = 0.03 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
         api_entrypoint_bonus = 0.03 * min(int(result.get("implementation_api_entrypoint_hit", 0) or 0), 1)
         api_context_bonus = 0.02 * min(int(result.get("implementation_api_context_hit", 0) or 0), 1)
         reexport_surface_penalty = 0.07 * min(int(result.get("implementation_reexport_surface_hit", 0) or 0), 1)
+        facade_surface_penalty = 0.05 * min(int(result.get("implementation_facade_surface_hit", 0) or 0), 1)
     elif query_class == "implementation_search":
+        declared_symbol_bonus = 0.02 * min(int(result.get("implementation_declared_symbol_hit", 0) or 0), 2)
         export_bonus = 0.01 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
         api_entrypoint_bonus = 0.0
         api_context_bonus = 0.0
         reexport_surface_penalty = 0.0
+        facade_surface_penalty = 0.0
     else:
+        declared_symbol_bonus = 0.01 * min(int(result.get("implementation_declared_symbol_hit", 0) or 0), 2)
         export_bonus = 0.0
         api_entrypoint_bonus = 0.0
         api_context_bonus = 0.0
         reexport_surface_penalty = 0.0
+        facade_surface_penalty = 0.0
     meta_component = (float(result.get("meta_score", 0.0) or 0.0) * meta_boost) if meta_boost > 0 else 0.0
 
     result["rank_score"] = (
@@ -1111,6 +1187,7 @@ def enrich_implementation_result(
         + float(result.get("implementation_node_type_score", 0.0) or 0.0)
         + float(result.get("implementation_role_score", 0.0) or 0.0)
         + symbol_bonus
+        + declared_symbol_bonus
         + path_hint_bonus
         + runtime_main_bonus
         + member_usage_bonus
@@ -1126,6 +1203,7 @@ def enrich_implementation_result(
         - support_path_penalty
         - library_entrypoint_penalty
         - reexport_surface_penalty
+        - facade_surface_penalty
         - usage_penalty
     )
     result["implementation_rank_components"] = {
@@ -1135,6 +1213,7 @@ def enrich_implementation_result(
         "node_type_score": float(result.get("implementation_node_type_score", 0.0) or 0.0),
         "role_score": float(result.get("implementation_role_score", 0.0) or 0.0),
         "symbol_bonus": symbol_bonus,
+        "declared_symbol_bonus": declared_symbol_bonus,
         "path_hint_bonus": path_hint_bonus,
         "runtime_main_bonus": runtime_main_bonus,
         "member_usage_bonus": member_usage_bonus,
@@ -1145,6 +1224,7 @@ def enrich_implementation_result(
         "api_entrypoint_bonus": api_entrypoint_bonus,
         "api_context_bonus": api_context_bonus,
         "reexport_surface_penalty": reexport_surface_penalty,
+        "facade_surface_penalty": facade_surface_penalty,
         "doc_penalty": doc_penalty,
         "parser_data_penalty": parser_data_penalty,
         "binding_surface_penalty": binding_surface_penalty,

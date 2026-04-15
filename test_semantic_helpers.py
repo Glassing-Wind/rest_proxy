@@ -887,8 +887,65 @@ class SemanticHelperTests(unittest.TestCase):
             enriched.append(row)
         enriched.sort(key=module.implementation_rank_tuple)
         self.assertEqual(enriched[0]["file_path"], "indexer/unified_indexer.py")
+        self.assertEqual(enriched[0]["implementation_declared_symbol_hit"], 0)
         self.assertEqual(enriched[0]["implementation_reexport_surface_hit"], 0)
         self.assertEqual(enriched[1]["implementation_reexport_surface_hit"], 1)
+
+    def test_definition_lookup_prefers_true_definition_over_facade_surface(self):
+        query = "where is process_repository_indexing defined"
+        rows = [
+            {
+                "file_path": "indexer/facade.py",
+                "content": (
+                    "class IndexerFacade:\n"
+                    "    async def run(self, repo_path, repo_id):\n"
+                    "        return await unified.process_repository_indexing(repo_path, repo_id)\n"
+                ),
+                "metadata": {
+                    "node_types": ["module", "class_definition", "method_definition"],
+                    "file_symbols": ["process_repository_indexing", "IndexerFacade"],
+                    "declared_symbols": ["IndexerFacade", "run"],
+                    "chunk_role": "definition",
+                    "context_path": ["api"],
+                },
+                "rrf": 0.21,
+            },
+            {
+                "file_path": "indexer/unified_indexer.py",
+                "content": (
+                    "@handle_async_errors()\n"
+                    "async def process_repository_indexing(repo_path: str, repo_id: int) -> None:\n"
+                    "    pass\n"
+                ),
+                "metadata": {
+                    "node_types": ["function_definition"],
+                    "file_symbols": ["process_repository_indexing"],
+                    "declared_symbols": ["process_repository_indexing"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.18,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "indexer/unified_indexer.py")
+        self.assertEqual(enriched[0]["implementation_declared_symbol_hit"], 1)
+        self.assertEqual(enriched[0]["implementation_facade_surface_hit"], 0)
+        self.assertEqual(enriched[1]["implementation_declared_symbol_hit"], 0)
+        self.assertEqual(enriched[1]["implementation_facade_surface_hit"], 1)
 
     def test_duplicate_rerank_uses_node_type_aware_rank_score_for_representative_choice(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
