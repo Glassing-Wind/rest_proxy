@@ -4,6 +4,11 @@ This is the plain Markdown replacement for the removed `get_graph_usage_guide` M
 
 Use it to onboard new agents to the current GraphRAG tool surface and normal workflow.
 
+See also:
+
+- [`/Users/michaelmarler/Projects/rest_proxy/docs/tool_product_audit.md`](/Users/michaelmarler/Projects/rest_proxy/docs/tool_product_audit.md)
+  - product audit of which tools are actually first-class vs fallback/debug/admin surfaces
+
 ## Recommended Workflow
 
 1. `index_workspace(workspace_id)`
@@ -22,6 +27,21 @@ Use it to onboard new agents to the current GraphRAG tool surface and normal wor
    - `get_code_communities(workspace_id)`
    - `search_codebase([workspace_id], query, ...)`
    - `get_symbol_context(workspace_id, symbol_name)`
+
+## Preferred First-Class Tools
+
+If multiple tools could answer the question, prefer these first:
+
+- `get_project_overview`
+- `search_codebase`
+- `get_symbol_context`
+- `get_call_chain`
+- `find_references`
+- `describe_file`
+- `get_indexing_health`
+- `trace_graph_provenance`
+
+These are the tools that should normally beat raw grep, raw Cypher, or manual graph inspection.
 
 ## Core Graph Tools
 
