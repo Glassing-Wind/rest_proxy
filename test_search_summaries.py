@@ -152,6 +152,38 @@ class SearchSummaryTests(unittest.TestCase):
         self.assertIn("WHERE f.filepath ENDS WITH '.swift'", implicit_queries["get_symbol_imports_overview_imp_symbols"])
         self.assertIn("WHERE f.filepath ENDS WITH '.swift'", implicit_queries["get_symbol_imports_overview_imp_files"])
 
+    def test_symbol_imports_overview_filters_generic_top_symbols_and_samples(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_imports_overview_exp_count":
+                return [{"n": 3}]
+            if op == "get_symbol_imports_overview_exp_symbols":
+                return [
+                    {"symbol": "Result", "n": 8},
+                    {"symbol": "Language", "n": 7},
+                    {"symbol": "CaptureOutput", "n": 6},
+                ]
+            if op == "get_symbol_imports_overview_exp_files":
+                return [
+                    {"file": "src/lib.rs", "n": 9, "symbols": ["Result", "Language", "CaptureOutput", "CommentKind"]},
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_imports_overview_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                    include_implicit=False,
+                )
+            )
+
+        self.assertIn("CaptureOutput", output)
+        self.assertNotIn("- Result  (8)", output)
+        self.assertIn("CaptureOutput, CommentKind", output)
+
     def test_symbol_exports_summary_falls_back_to_visibility_and_python_naming(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -339,6 +371,49 @@ class SearchSummaryTests(unittest.TestCase):
         self.assertIn("OpencodeClientConfig -> Config", output)
         self.assertIn("packages/sdk/js/src/client.ts", output)
         self.assertIn("## Inspect First", output)
+
+    def test_symbol_exports_summary_prefers_real_file_over_stub_surface(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 5}]
+            if op == "get_symbol_exports_summary_symbols":
+                return [
+                    {
+                        "symbol": "Language",
+                        "target_symbol": "Language",
+                        "alias_edges": 0,
+                        "exporters": 1,
+                        "importers": 16,
+                    }
+                ]
+            if op == "get_symbol_exports_summary_files":
+                return [
+                    {
+                        "file": "crates/ts-pack-python/python/tree_sitter_language_pack/__init__.pyi",
+                        "n": 70,
+                        "symbols": ["Language", "Snippet", "SnippetStatus"],
+                    },
+                    {
+                        "file": "crates/ts-pack-core/src/lib.rs",
+                        "n": 34,
+                        "symbols": ["available_languages", "cache_dir", "clean_cache"],
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertIn("inspect `crates/ts-pack-core/src/lib.rs` next", output)
+        self.assertLess(output.find("crates/ts-pack-core/src/lib.rs"), output.find("__init__.pyi"))
 
 
 if __name__ == "__main__":

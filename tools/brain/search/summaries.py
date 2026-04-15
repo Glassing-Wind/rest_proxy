@@ -26,6 +26,23 @@ def _is_test_like_path(file_path: str) -> bool:
     )
 
 
+def _is_stub_like_path(file_path: str) -> bool:
+    normalized = (file_path or "").lower()
+    return normalized.endswith(".pyi") or normalized.endswith(".d.ts")
+
+
+LOW_SIGNAL_IMPORT_SYMBOLS = {
+    "Error",
+    "Result",
+    "Language",
+    "Snippet",
+    "SnippetStatus",
+    "ValidationLevel",
+    "Fixture",
+    "Generator",
+}
+
+
 _EXPORT_ALIAS_RE = re.compile(
     r"export\s*\{(?P<body>[^}]*)\}",
     re.MULTILINE | re.DOTALL,
@@ -63,11 +80,11 @@ def _import_focus_lines(exp_files: list[tuple[str, int, list[str]]], imp_files: 
     lines: list[str] = []
     if exp_files:
         file, count, symbols = exp_files[0]
-        sample = ", ".join(symbols[:3])
+        sample = ", ".join(_useful_symbol_sample(symbols))
         lines.append(f"- start with `{file}` because it pulls the widest explicit symbol surface ({count}: {sample})")
     if imp_files:
         file, count, symbols = imp_files[0]
-        sample = ", ".join(symbols[:3])
+        sample = ", ".join(_useful_symbol_sample(symbols))
         lines.append(f"- inspect `{file}` next because it relies on the strongest implicit import surface ({count}: {sample})")
     return lines[:3]
 
@@ -95,6 +112,17 @@ def _export_focus_lines(
         detail = "public-surface" if export_mode == "heuristic" else "export"
         lines.append(f"- inspect `{file}` next because it concentrates the widest {detail} surface ({count}: {sample})")
     return lines[:3]
+
+
+def _is_low_signal_import_symbol(name: str) -> bool:
+    return name in LOW_SIGNAL_IMPORT_SYMBOLS
+
+
+def _useful_symbol_sample(symbols: list[str], limit: int = 3) -> list[str]:
+    filtered = [symbol for symbol in symbols if not _is_low_signal_import_symbol(symbol)]
+    if filtered:
+        return filtered[:limit]
+    return symbols[:limit]
 
 
 async def get_symbol_imports_overview_impl(
@@ -139,7 +167,13 @@ async def get_symbol_imports_overview_impl(
             limit=limit,
             op="get_symbol_imports_overview_exp_symbols",
         )
-        exp_symbols = [(rec["symbol"], rec["n"]) for rec in r_exp_symbols]
+        exp_symbols = [
+            (rec["symbol"], rec["n"])
+            for rec in r_exp_symbols
+            if not _is_low_signal_import_symbol(rec["symbol"])
+        ]
+        if not exp_symbols:
+            exp_symbols = [(rec["symbol"], rec["n"]) for rec in r_exp_symbols]
 
         r_exp_files = await graph_tools._execute_read(
             session,
@@ -172,7 +206,13 @@ async def get_symbol_imports_overview_impl(
                 limit=limit,
                 op="get_symbol_imports_overview_imp_symbols",
             )
-            imp_symbols = [(rec["symbol"], rec["n"]) for rec in r_imp_symbols]
+            imp_symbols = [
+                (rec["symbol"], rec["n"])
+                for rec in r_imp_symbols
+                if not _is_low_signal_import_symbol(rec["symbol"])
+            ]
+            if not imp_symbols:
+                imp_symbols = [(rec["symbol"], rec["n"]) for rec in r_imp_symbols]
 
             r_imp_files = await graph_tools._execute_read(
                 session,
@@ -215,7 +255,7 @@ async def get_symbol_imports_overview_impl(
         lines.append("")
         lines.append("## Files with most explicit symbol imports")
         for file, count, symbols in exp_files[:limit]:
-            sample = ", ".join(symbols[:6])
+            sample = ", ".join(_useful_symbol_sample(symbols, limit=6))
             lines.append(f"- {file}  ({count})  [{sample}]")
 
     if include_implicit and imp_symbols:
@@ -227,7 +267,7 @@ async def get_symbol_imports_overview_impl(
         lines.append("")
         lines.append("## Files with most implicit symbol imports")
         for file, count, symbols in imp_files[:limit]:
-            sample = ", ".join(symbols[:6])
+            sample = ", ".join(_useful_symbol_sample(symbols, limit=6))
             lines.append(f"- {file}  ({count})  [{sample}]")
 
     return "\n".join(lines)
@@ -355,7 +395,7 @@ async def get_symbol_exports_summary_impl(
                     for file, symbols in file_symbols.items()
                     if symbols
                 ),
-                key=lambda item: (-item[1], item[0]),
+                key=lambda item: (_is_stub_like_path(item[0]), -item[1], item[0]),
             )[:limit]
         else:
             r1 = await graph_tools._execute_read(
@@ -420,6 +460,10 @@ async def get_symbol_exports_summary_impl(
                 if not _path_allowed(file):
                     continue
                 top_files.append((file, rec["n"], rec["symbols"]))
+            top_files = sorted(
+                top_files,
+                key=lambda item: (_is_stub_like_path(item[0]), -item[1], item[0]),
+            )[:limit]
 
         if not top_symbols and not top_files:
             export_mode = "heuristic"
@@ -494,7 +538,7 @@ async def get_symbol_exports_summary_impl(
                 if explicit_alias_files:
                     top_files = sorted(
                         explicit_alias_files,
-                        key=lambda item: (-item[1], item[0]),
+                        key=lambda item: (_is_stub_like_path(item[0]), -item[1], item[0]),
                     )[:limit]
 
     if not top_symbols and not top_files:
@@ -538,6 +582,6 @@ async def get_symbol_exports_summary_impl(
     if top_files:
         lines.append("## Files with most symbol exports")
         for file, count, symbols in top_files:
-            sample = ", ".join(symbols[:6])
+            sample = ", ".join(_useful_symbol_sample(symbols, limit=6))
             lines.append(f"- {file}  ({count})  [{sample}]")
     return "\n".join(lines)
