@@ -214,6 +214,7 @@ def implementation_query_class(query: str) -> str:
     text = (query or "").strip().lower()
     if not implementation_query_intent(text):
         return "general"
+    path_hints = implementation_query_path_hints(text)
     if re.search(r"\b(?:where|how)\s+is\s+[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+\s+used\b", text):
         return "usage_lookup"
     if re.search(r"\bexamples?\s+of\s+[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+\b", text):
@@ -238,6 +239,8 @@ def implementation_query_class(query: str) -> str:
         or "public api" in text
         or "api entrypoint" in text
     ):
+        if path_hints and ("entrypoint" in text or "main" in text):
+            return "implementation_search"
         return "api_definition_lookup"
     if re.search(r"\bhow does\b", text) and re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
         return "implementation_explanation"
@@ -266,6 +269,42 @@ def usage_query_prefers_example_results(query: str) -> bool:
     if not text:
         return False
     return any(token in text for token in (" example", " examples", "sample", "smoke"))
+
+
+def implementation_query_prefers_runtime_main_entrypoint(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    if not implementation_query_path_hints(text):
+        return False
+    return "main" in text and "entrypoint" in text
+
+
+def implementation_expected_runtime_entrypoint_paths(query: str) -> list[str]:
+    if not implementation_query_prefers_runtime_main_entrypoint(query):
+        return []
+    suffixes = (
+        "src/main.rs",
+        "src/main.py",
+        "src/main.ts",
+        "src/main.tsx",
+        "src/main.js",
+        "src/main.jsx",
+    )
+    paths: list[str] = []
+    for hint in implementation_query_path_hints(query):
+        prefix = hint.rstrip("/")
+        for suffix in suffixes:
+            paths.append(f"{prefix}/{suffix}")
+    return paths
+
+
+def implementation_query_relaxes_dir_cap(query: str) -> bool:
+    if not query:
+        return False
+    if implementation_query_path_hints(query):
+        return True
+    return bool(implementation_expected_runtime_entrypoint_paths(query))
 
 
 def is_low_signal_parser_data_path(file_path: str | None) -> bool:
@@ -335,6 +374,7 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
         or "/.github/" in norm
         or norm.startswith("nix/")
         or "/nix/" in norm
+        or "/release/" in norm
         or "/vendor" in norm
         or basename in {"build.rs", "build.py"}
         or basename in {"justfile", "makefile"}
@@ -343,7 +383,7 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
 
 def implementation_rank_tuple(
     result: dict,
-) -> tuple[int, int, int, int, int, int, int, int, int, int, float, float]:
+) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
     low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
@@ -351,6 +391,8 @@ def implementation_rank_tuple(
     doc_like = 1 if result.get("doc_like") else 0
     usage_heavy = 1 if result.get("implementation_usage_heavy_penalty") else 0
     member_usage_priority = int(result.get("implementation_member_usage_priority", 0) or 0)
+    path_hint_priority = int(result.get("implementation_path_hint_hit", 0) or 0)
+    runtime_main_priority = int(result.get("implementation_runtime_main_entrypoint_hit", 0) or 0)
     role_priority = int(result.get("implementation_role_priority", 0) or 0)
     node_type_priority = int(result.get("implementation_node_type_priority", 0) or 0)
     definition_hit = int(result.get("implementation_definition_hit", 0) or 0)
@@ -367,6 +409,8 @@ def implementation_rank_tuple(
         doc_like,
         usage_heavy,
         -member_usage_priority,
+        -path_hint_priority,
+        -runtime_main_priority,
         -role_priority,
         -node_type_priority,
         -signature_hit,
@@ -570,6 +614,25 @@ def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int
         "/lib.rs",
     )
     if norm.endswith(api_entrypoint_suffixes):
+        return 1
+    if norm.endswith("/main.go") and ("/cmd/" in norm or norm.startswith("cmd/")):
+        return 1
+    return 0
+
+
+def implementation_runtime_main_entrypoint_hit(file_path: str | None, query: str) -> int:
+    if not implementation_query_prefers_runtime_main_entrypoint(query) or not file_path:
+        return 0
+    norm = (file_path or "").replace("\\", "/").lower()
+    runtime_main_suffixes = (
+        "/src/main.rs",
+        "/src/main.py",
+        "/src/main.ts",
+        "/src/main.tsx",
+        "/src/main.js",
+        "/src/main.jsx",
+    )
+    if norm.endswith(runtime_main_suffixes):
         return 1
     if norm.endswith("/main.go") and ("/cmd/" in norm or norm.startswith("cmd/")):
         return 1
@@ -889,6 +952,10 @@ def enrich_implementation_result(
     result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(result.get("file_path"))
     result["low_signal_support_path"] = is_low_signal_support_path(result.get("file_path"))
     result["implementation_symbol_hit"] = implementation_symbol_hit(meta, query)
+    result["implementation_path_hint_hit"] = implementation_path_hint_hit(
+        result.get("file_path"),
+        query=query,
+    )
     chunk_role = implementation_chunk_role(meta)
     result["implementation_chunk_role"] = chunk_role
     result["implementation_exact_member_usage_hit"] = implementation_exact_member_usage_hit(
@@ -913,6 +980,10 @@ def enrich_implementation_result(
     result["implementation_api_entrypoint_hit"] = implementation_api_entrypoint_hit(
         result.get("file_path", ""),
         result.get("implementation_definition_hit", 0),
+    )
+    result["implementation_runtime_main_entrypoint_hit"] = implementation_runtime_main_entrypoint_hit(
+        result.get("file_path", ""),
+        query,
     )
     result["implementation_usage_heavy_penalty"] = (
         query_class_prefers_definitions(query_class) and is_usage_heavy_path(result.get("file_path", ""))
@@ -939,6 +1010,8 @@ def enrich_implementation_result(
         support_path_penalty = 0.0
     usage_penalty = 0.04 if result["implementation_usage_heavy_penalty"] else 0.0
     symbol_bonus = 0.015 * min(int(result.get("implementation_symbol_hit", 0) or 0), 2)
+    path_hint_bonus = 0.0
+    runtime_main_bonus = 0.0
     member_usage_bonus = 0.0
     chunk_role_bonus = 0.0
     if query_class_prefers_usage(query_class):
@@ -953,6 +1026,20 @@ def enrich_implementation_result(
                 chunk_role_bonus += 0.03
     elif query_class == "implementation_search":
         member_usage_bonus = 0.015 * min(int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2)
+    path_hint_hits = int(result.get("implementation_path_hint_hit", 0) or 0)
+    if path_hint_hits > 0:
+        if query_class == "implementation_search":
+            path_hint_bonus = 0.12 * min(path_hint_hits, 1)
+        elif query_class_prefers_definitions(query_class):
+            path_hint_bonus = 0.08 * min(path_hint_hits, 1)
+    runtime_main_hits = int(result.get("implementation_runtime_main_entrypoint_hit", 0) or 0)
+    if runtime_main_hits > 0:
+        runtime_main_bonus = 0.16 * min(runtime_main_hits, 1)
+    library_entrypoint_penalty = 0.0
+    if implementation_query_prefers_runtime_main_entrypoint(query):
+        norm = (result.get("file_path") or "").replace("\\", "/").lower()
+        if norm.endswith(("/src/lib.rs", "/__init__.py", "/lib.rs")):
+            library_entrypoint_penalty = 0.05
     definition_bonus = 0.025 * min(int(result.get("implementation_definition_hit", 0) or 0), 2)
     signature_bonus = 0.04 * min(int(result.get("implementation_exact_signature_symbol_hit", 0) or 0), 2)
     if query_class_prefers_definitions(query_class):
@@ -976,6 +1063,8 @@ def enrich_implementation_result(
         + float(result.get("implementation_node_type_score", 0.0) or 0.0)
         + float(result.get("implementation_role_score", 0.0) or 0.0)
         + symbol_bonus
+        + path_hint_bonus
+        + runtime_main_bonus
         + member_usage_bonus
         + chunk_role_bonus
         + definition_bonus
@@ -987,6 +1076,7 @@ def enrich_implementation_result(
         - parser_data_penalty
         - binding_surface_penalty
         - support_path_penalty
+        - library_entrypoint_penalty
         - usage_penalty
     )
     result["implementation_rank_components"] = {
@@ -996,6 +1086,8 @@ def enrich_implementation_result(
         "node_type_score": float(result.get("implementation_node_type_score", 0.0) or 0.0),
         "role_score": float(result.get("implementation_role_score", 0.0) or 0.0),
         "symbol_bonus": symbol_bonus,
+        "path_hint_bonus": path_hint_bonus,
+        "runtime_main_bonus": runtime_main_bonus,
         "member_usage_bonus": member_usage_bonus,
         "chunk_role_bonus": chunk_role_bonus,
         "definition_bonus": definition_bonus,
@@ -1007,6 +1099,7 @@ def enrich_implementation_result(
         "parser_data_penalty": parser_data_penalty,
         "binding_surface_penalty": binding_surface_penalty,
         "support_path_penalty": support_path_penalty,
+        "library_entrypoint_penalty": library_entrypoint_penalty,
         "usage_penalty": usage_penalty,
         "role": role,
         "chunk_role": chunk_role,

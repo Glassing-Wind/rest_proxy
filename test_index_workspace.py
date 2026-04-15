@@ -171,6 +171,12 @@ class FakeTsPack:
                         "file": file_path,
                         "project_id": project_id,
                         "language": language,
+                        "member_usages": [],
+                        "call_like_symbols": [],
+                        "declared_symbols": [],
+                        "contains_definition": False,
+                        "contains_entrypoint": False,
+                        "chunk_role": "context",
                         **(file_meta or {}),
                     },
                 }
@@ -408,7 +414,15 @@ class IndexWorkspaceTests(unittest.TestCase):
                         {
                             "ref_id": "proj123:v6:src/index.ts:abc123",
                             "text": "// File: src/index.ts\nconst x = 1;",
-                            "metadata": {"file": "src/index.ts"},
+                            "metadata": {
+                                "file": "src/index.ts",
+                                "member_usages": [],
+                                "call_like_symbols": [],
+                                "declared_symbols": [],
+                                "contains_definition": False,
+                                "contains_entrypoint": False,
+                                "chunk_role": "context",
+                            },
                         }
                     ],
                 }
@@ -597,6 +611,12 @@ class IndexWorkspaceTests(unittest.TestCase):
                         "file_metrics": {"total_lines": 4, "code_lines": 4},
                         "file_extractions": {"calls": ["fetch"]},
                         "file_facts": file_facts,
+                        "member_usages": [],
+                        "call_like_symbols": ["fetch"],
+                        "declared_symbols": [],
+                        "contains_definition": False,
+                        "contains_entrypoint": False,
+                        "chunk_role": "usage",
                     },
                 }
             ],
@@ -613,8 +633,10 @@ class IndexWorkspaceTests(unittest.TestCase):
                 )
 
         self.assertIsNone(reason)
-        self.assertEqual(len(chunks), 1)
-        metadata = chunks[0]["metadata"]
+        self.assertGreaterEqual(len(chunks), 1)
+        usage_chunks = [chunk for chunk in chunks if chunk["metadata"].get("chunk_role") == "usage"]
+        self.assertEqual(len(usage_chunks), 1)
+        metadata = usage_chunks[0]["metadata"]
         self.assertEqual(metadata["language"], "typescript")
         self.assertEqual(metadata["file_facts"], file_facts)
         self.assertEqual(metadata["symbols"], ["GET"])
@@ -622,7 +644,7 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(metadata["call_like_symbols"], ["fetch"])
         self.assertEqual(metadata["chunk_role"], "usage")
 
-    def test_read_and_chunk_enriches_member_usage_and_example_role(self):
+    def test_read_and_chunk_accepts_ts_pack_usage_metadata(self):
         payload = {
             "file_meta": {"file_symbols": ["run_example"]},
             "chunks": [
@@ -637,6 +659,12 @@ class IndexWorkspaceTests(unittest.TestCase):
                         "start_line": 1,
                         "end_line": 1,
                         "node_types": ["call_expression"],
+                        "member_usages": ["parser.parse"],
+                        "call_like_symbols": ["parser.parse", "parse"],
+                        "declared_symbols": [],
+                        "contains_definition": False,
+                        "contains_entrypoint": False,
+                        "chunk_role": "example_usage",
                     },
                 }
             ],
@@ -658,7 +686,49 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertIn("parse", metadata["call_like_symbols"])
         self.assertEqual(metadata["chunk_role"], "example_usage")
 
-    def test_read_and_chunk_enriches_test_usage_role(self):
+    def test_read_and_chunk_accepts_ts_pack_definition_metadata(self):
+        payload = {
+            "file_meta": {"file_symbols": ["GET"]},
+            "chunks": [
+                {
+                    "ref_id": "proj123:v6:src/api/items/route.ts:abc123",
+                    "text": "// File: src/api/items/route.ts\nexport async function GET() {}",
+                    "metadata": {
+                        "file": "src/api/items/route.ts",
+                        "project_id": "proj123",
+                        "language": "typescript",
+                        "symbols": ["GET"],
+                        "start_line": 1,
+                        "end_line": 1,
+                        "node_types": ["function_declaration"],
+                        "member_usages": [],
+                        "call_like_symbols": ["GET"],
+                        "declared_symbols": ["GET"],
+                        "contains_definition": True,
+                        "contains_entrypoint": False,
+                        "chunk_role": "definition",
+                    },
+                }
+            ],
+        }
+        fake_ts_pack = FakeTsPack(detected_language="typescript", payload=payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "route.ts"
+            abs_path.write_text("export async function GET() {}", encoding="utf-8")
+
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                chunks, reason = self.module._read_and_chunk(
+                    str(abs_path), "src/api/items/route.ts", "proj123"
+                )
+
+        self.assertIsNone(reason)
+        metadata = chunks[0]["metadata"]
+        self.assertEqual(metadata["declared_symbols"], ["GET"])
+        self.assertTrue(metadata["contains_definition"])
+        self.assertFalse(metadata["contains_entrypoint"])
+
+    def test_read_and_chunk_accepts_ts_pack_test_usage_metadata(self):
         payload = {
             "file_meta": {"file_symbols": ["test_parse"]},
             "chunks": [
@@ -673,6 +743,12 @@ class IndexWorkspaceTests(unittest.TestCase):
                         "start_line": 1,
                         "end_line": 1,
                         "node_types": ["call_expression"],
+                        "member_usages": ["parser.parse"],
+                        "call_like_symbols": ["parser.parse", "parse"],
+                        "declared_symbols": [],
+                        "contains_definition": False,
+                        "contains_entrypoint": False,
+                        "chunk_role": "test_usage",
                     },
                 }
             ],
@@ -691,6 +767,119 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertIsNone(reason)
         metadata = chunks[0]["metadata"]
         self.assertEqual(metadata["chunk_role"], "test_usage")
+
+    def test_read_and_chunk_accepts_ts_pack_entrypoint_anchor_chunk(self):
+        payload = {
+            "file_meta": {"file_symbols": ["configure_display_backend", "main"]},
+            "chunks": [
+                {
+                    "ref_id": "proj123:v6:packages/desktop/src-tauri/src/main.rs:abc123",
+                    "text": (
+                        "// File: packages/desktop/src-tauri/src/main.rs\n"
+                        "#![cfg_attr(not(debug_assertions), windows_subsystem = \"windows\")]\n"
+                        "\n"
+                        "fn configure_display_backend() -> Option<String> { None }\n"
+                    ),
+                    "metadata": {
+                        "file": "packages/desktop/src-tauri/src/main.rs",
+                        "project_id": "proj123",
+                        "language": "rust",
+                        "symbols": ["configure_display_backend"],
+                        "start_line": 1,
+                        "end_line": 4,
+                        "node_types": ["function_item"],
+                        "member_usages": [],
+                        "call_like_symbols": ["configure_display_backend"],
+                        "declared_symbols": ["configure_display_backend"],
+                        "contains_definition": True,
+                        "contains_entrypoint": False,
+                        "chunk_role": "definition",
+                    },
+                },
+                {
+                    "ref_id": "proj123:v6:packages/desktop/src-tauri/src/main.rs:def-main",
+                    "text": (
+                        "// File: packages/desktop/src-tauri/src/main.rs\n"
+                        "fn main() {\n"
+                        "    configure_display_backend();\n"
+                        "}\n"
+                    ),
+                    "metadata": {
+                        "file": "packages/desktop/src-tauri/src/main.rs",
+                        "project_id": "proj123",
+                        "language": "rust",
+                        "symbols": ["main"],
+                        "start_line": 5,
+                        "end_line": 7,
+                        "node_types": ["function_item"],
+                        "member_usages": [],
+                        "call_like_symbols": ["main", "configure_display_backend"],
+                        "declared_symbols": ["main"],
+                        "contains_definition": True,
+                        "contains_entrypoint": True,
+                        "chunk_role": "definition",
+                    },
+                }
+            ],
+        }
+        fake_ts_pack = FakeTsPack(detected_language="rust", payload=payload)
+        source = (
+            "#![cfg_attr(not(debug_assertions), windows_subsystem = \"windows\")]\n"
+            "\n"
+            "fn configure_display_backend() -> Option<String> { None }\n"
+            "\n"
+            "fn main() {\n"
+            "    configure_display_backend();\n"
+            "}\n"
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "main.rs"
+            abs_path.write_text(source, encoding="utf-8")
+
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                chunks, reason = self.module._read_and_chunk(
+                    str(abs_path), "packages/desktop/src-tauri/src/main.rs", "proj123"
+                )
+
+        self.assertIsNone(reason)
+        self.assertGreaterEqual(len(chunks), 2)
+        anchor_chunks = [
+            chunk for chunk in chunks if chunk["metadata"].get("contains_entrypoint")
+        ]
+        self.assertEqual(len(anchor_chunks), 1)
+        anchor = anchor_chunks[0]
+        self.assertIn("fn main()", anchor["text"])
+        self.assertEqual(anchor["metadata"]["declared_symbols"], ["main"])
+        self.assertTrue(anchor["metadata"]["contains_definition"])
+        self.assertEqual(anchor["metadata"]["chunk_role"], "definition")
+
+    def test_read_and_chunk_rejects_missing_semantic_chunk_metadata(self):
+        payload = {
+            "file_meta": {"file_symbols": ["run_example"]},
+            "chunks": [
+                {
+                    "ref_id": "proj123:v6:examples/python_smoke/main.py:abc123",
+                    "text": "// File: examples/python_smoke/main.py\nresult = parser.parse(source, None)",
+                    "metadata": {
+                        "file": "examples/python_smoke/main.py",
+                        "project_id": "proj123",
+                        "language": "python",
+                    },
+                }
+            ],
+        }
+        fake_ts_pack = FakeTsPack(detected_language="python", payload=payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / "main.py"
+            abs_path.write_text("result = parser.parse(source, None)", encoding="utf-8")
+
+            with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+                with self.assertRaisesRegex(ValueError, "semantic chunk contract violation"):
+                    self.module._read_and_chunk(
+                        str(abs_path), "examples/python_smoke/main.py", "proj123"
+                    )
 
     def test_read_and_chunk_swift_uses_package_chunker(self):
         fake_ts_pack = FakeTsPack(

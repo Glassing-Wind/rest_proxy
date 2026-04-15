@@ -144,24 +144,24 @@ async def _load_path_hint_rows(
                        ) AS path_hint_hit,
                        MIN(
                            CASE
-                               WHEN lower(file_path) LIKE '%/src/main.rs'
-                                 OR lower(file_path) LIKE '%/src/main.py'
-                                 OR lower(file_path) LIKE '%/src/main.ts'
-                                 OR lower(file_path) LIKE '%/src/main.tsx'
-                                 OR lower(file_path) LIKE '%/src/main.js'
-                                 OR lower(file_path) LIKE '%/src/main.jsx'
+                               WHEN lower(file_path) LIKE '%%/src/main.rs'
+                                 OR lower(file_path) LIKE '%%/src/main.py'
+                                 OR lower(file_path) LIKE '%%/src/main.ts'
+                                 OR lower(file_path) LIKE '%%/src/main.tsx'
+                                 OR lower(file_path) LIKE '%%/src/main.js'
+                                 OR lower(file_path) LIKE '%%/src/main.jsx'
                                  THEN 0
-                               WHEN lower(file_path) LIKE '%/src/lib.rs'
-                                 OR lower(file_path) LIKE '%/__init__.py'
+                               WHEN lower(file_path) LIKE '%%/src/lib.rs'
+                                 OR lower(file_path) LIKE '%%/__init__.py'
                                  THEN 1
                                WHEN lower(file_path) ~ '\\.(rs|py|ts|tsx|js|jsx|go|java|swift|rb|php|cs)$'
                                  THEN 2
-                               WHEN lower(file_path) LIKE '%cargo.toml'
-                                 OR lower(file_path) LIKE '%package.json'
+                               WHEN lower(file_path) LIKE '%%cargo.toml'
+                                 OR lower(file_path) LIKE '%%package.json'
                                  THEN 4
                                WHEN lower(file_path) ~ '\\.(md|markdown|mdx|json|ya?ml|toml|plist|xml|svg|png|jpg|jpeg|gif|ico)$'
                                  THEN 6
-                               WHEN lower(file_path) LIKE '%/.gitignore'
+                               WHEN lower(file_path) LIKE '%%/.gitignore'
                                  THEN 7
                                ELSE 5
                            END
@@ -187,7 +187,7 @@ async def _load_path_hint_rows(
             )
             SELECT file_path, chunk_index, content, project_id, metadata, path_hint_hit
             FROM ranked
-            WHERE chunk_rank <= 2
+            WHERE chunk_rank <= 6
             ORDER BY path_hint_hit DESC, code_rank ASC, file_path, chunk_index
             """,
             {"pid": pid, "patterns": normalized_hints, "max_files": max_files},
@@ -371,6 +371,9 @@ def register(mcp: FastMCP) -> None:
             impl_query_class = sem_helpers.implementation_query_class(query)
             member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
             path_hints = sem_helpers.implementation_query_path_hints(query)
+            explicit_runtime_entrypoints = sem_helpers.implementation_expected_runtime_entrypoint_paths(
+                query
+            )
 
             svc = get_embedding_service()
             vecs = await svc.embed_batch_async([query])
@@ -519,6 +522,9 @@ def register(mcp: FastMCP) -> None:
                 if max_per_file == 0:
                     max_per_file = 2
 
+            if impl_intent and sem_helpers.implementation_query_relaxes_dir_cap(query):
+                max_per_dir = 0
+
             filters_active = any(
                 [
                     languages,
@@ -665,7 +671,7 @@ def register(mcp: FastMCP) -> None:
                 if non_parser_candidates:
                     all_results = non_parser_candidates
 
-            if impl_intent and sem_helpers.query_class_prefers_definitions(impl_query_class) and all_results:
+            if impl_intent and path_hints and all_results:
                 top_probe = all_results[: min(5, len(all_results))]
                 has_definition_hit = any(
                     int(r.get("implementation_definition_hit", 0) or 0) > 0
@@ -680,8 +686,41 @@ def register(mcp: FastMCP) -> None:
                     > 0
                     for r in top_probe
                 )
-                if path_hints and not has_path_hint_hit:
-                    rescue_results: list[dict] = []
+                has_runtime_entrypoint_hit = any(
+                    int(r.get("implementation_runtime_main_entrypoint_hit", 0) or 0) > 0 for r in top_probe
+                )
+                rescue_results: list[dict] = []
+                if explicit_runtime_entrypoints and not has_runtime_entrypoint_hit:
+                    for pid in pid_to_name:
+                        async with memory_store._pg_pool.connection() as conn:
+                            await conn.execute("BEGIN")
+                            exact_rows = await _load_rescue_rows(
+                                conn,
+                                pid=pid,
+                                file_paths=explicit_runtime_entrypoints,
+                                member_exprs=member_exprs,
+                            )
+                        for r in exact_rows:
+                            r_meta = sem_helpers.coerce_meta(r)
+                            r["_meta"] = r_meta
+                            r["meta_score"] = sem_helpers.meta_score(r_meta)
+                            r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
+                            r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
+                                r.get("file_path")
+                            )
+                            r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
+                                r.get("file_path")
+                            )
+                            sem_helpers.enrich_implementation_result(
+                                r,
+                                query=query,
+                                query_class=impl_query_class,
+                                base_score=float(r.get("rrf", 0.0) or 0.0),
+                                meta_boost=0.0,
+                                base_bonus=0.22,
+                            )
+                        rescue_results.extend(exact_rows)
+                if not has_path_hint_hit:
                     for pid in pid_to_name:
                         async with memory_store._pg_pool.connection() as conn:
                             await conn.execute("BEGIN")
@@ -714,23 +753,23 @@ def register(mcp: FastMCP) -> None:
                                 base_bonus=0.025,
                             )
                         rescue_results.extend(rescue_rows)
-                    if rescue_results:
-                        existing_keys = {
-                            (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
-                            for r in all_results
-                        }
-                        for r in rescue_results:
-                            key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
-                            if key not in existing_keys:
-                                all_results.append(r)
-                        all_results.sort(key=sem_helpers.implementation_rank_tuple)
-                        top_probe = all_results[: min(5, len(all_results))]
-                        has_definition_hit = any(
-                            int(r.get("implementation_definition_hit", 0) or 0) > 0
-                            or int(r.get("implementation_api_entrypoint_hit", 0) or 0) > 0
-                            for r in top_probe
-                        )
-                if not has_definition_hit:
+                if rescue_results:
+                    existing_keys = {
+                        (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                        for r in all_results
+                    }
+                    for r in rescue_results:
+                        key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                        if key not in existing_keys:
+                            all_results.append(r)
+                    all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                    top_probe = all_results[: min(5, len(all_results))]
+                    has_definition_hit = any(
+                        int(r.get("implementation_definition_hit", 0) or 0) > 0
+                        or int(r.get("implementation_api_entrypoint_hit", 0) or 0) > 0
+                        for r in top_probe
+                    )
+                if sem_helpers.query_class_prefers_definitions(impl_query_class) and not has_definition_hit:
                     rescue_results: list[dict] = []
                     for pid, proj_name in pid_to_name.items():
                         proj_root = pid_to_path.get(pid)

@@ -344,6 +344,45 @@ class CodeIntelHelperTests(unittest.TestCase):
         )
         self.assertEqual(picked["filepath"], "/tmp/opencode/packages/desktop/src-tauri/src/main.rs")
 
+    def test_format_call_chain_rows_prefers_same_source_subtree_for_explicit_main(self):
+        module = load_symbol_graph_module()
+        output = module.format_call_chain_rows(
+            [
+                {
+                    "chain": ["main", "configure_display_backend"],
+                    "files": [
+                        "packages/desktop/src-tauri/src/main.rs",
+                        "packages/desktop/src-tauri/src/main.rs",
+                    ],
+                    "lines": [42, 18],
+                },
+                {
+                    "chain": ["main", "run"],
+                    "files": [
+                        "packages/desktop/src-tauri/src/main.rs",
+                        "packages/desktop/src-tauri/src/lib.rs",
+                    ],
+                    "lines": [42, 12],
+                },
+                {
+                    "chain": ["main", "run"],
+                    "files": [
+                        "packages/desktop/src-tauri/src/main.rs",
+                        "packages/opencode/src/git/index.ts",
+                    ],
+                    "lines": [42, 88],
+                },
+            ],
+            resolved_name="main",
+            symbol_name="main",
+            direction="down",
+            depth=1,
+            resolved_filepath="packages/desktop/src-tauri/src/main.rs",
+        )
+        self.assertIn("packages/desktop/src-tauri/src/main.rs", output)
+        self.assertIn("packages/desktop/src-tauri/src/lib.rs", output)
+        self.assertNotIn("packages/opencode/src/git/index.ts", output)
+
     def test_python_exact_call_graph_guidance_appears_when_edges_are_sparse(self):
         module = load_symbol_graph_module()
         output = module.format_symbol_context(

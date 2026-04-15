@@ -750,6 +750,20 @@ class SemanticHelperTests(unittest.TestCase):
             ),
             ["packages/desktop/src-tauri"],
         )
+        self.assertEqual(
+            module.implementation_query_class(
+                "where is packages/desktop/src-tauri main entrypoint defined"
+            ),
+            "implementation_search",
+        )
+
+    def test_implementation_query_relaxes_dir_cap_for_path_heavy_queries(self):
+        self.assertTrue(
+            module.implementation_query_relaxes_dir_cap(
+                "where is packages/desktop/src-tauri main entrypoint defined"
+            )
+        )
+        self.assertFalse(module.implementation_query_relaxes_dir_cap("how does process(source, config) work"))
         self.assertGreater(
             module.implementation_path_hint_hit(
                 "packages/desktop/src-tauri/src/main.rs",
@@ -757,6 +771,39 @@ class SemanticHelperTests(unittest.TestCase):
             ),
             0,
         )
+
+    def test_path_hint_bonus_prefers_explicit_entrypoint_path_over_noisy_scripts(self):
+        rows = [
+            {
+                "file_path": "script/github/close-issues.ts",
+                "content": "async function main() { process.exit(1) }",
+                "metadata": {"node_types": ["function_declaration"], "chunk_role": "script_support"},
+                "rrf": 0.0,
+            },
+            {
+                "file_path": "packages/desktop/src-tauri/src/main.rs",
+                "content": "fn main() { configure_display_backend(); run() }",
+                "metadata": {"node_types": ["function_item"], "file_symbols": ["main"], "chunk_role": "definition"},
+                "rrf": 0.0,
+            },
+        ]
+        enriched = []
+        query = "where is packages/desktop/src-tauri main entrypoint defined"
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "packages/desktop/src-tauri/src/main.rs")
 
     def test_build_implementation_ranking_trace_surfaces_node_type_and_role(self):
         rows = [

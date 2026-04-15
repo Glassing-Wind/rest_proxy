@@ -838,9 +838,7 @@ def format_call_chain_rows(
             item for item in ranked_first_hops if (item[0][1] or "").startswith(root_focus)
         ]
         if focused_first_hops:
-            ranked_first_hops = focused_first_hops + [
-                item for item in ranked_first_hops if item not in focused_first_hops
-            ]
+            ranked_first_hops = focused_first_hops
     visible_first_hops = ranked_first_hops[:max_first_hops]
     hidden_first_hops = max(0, len(ranked_first_hops) - len(visible_first_hops))
 
