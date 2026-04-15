@@ -234,6 +234,37 @@ class CodeIntelHelperTests(unittest.TestCase):
         )
         self.assertEqual(picked["filepath"], "crates/ts-pack-core/src/lib.rs")
 
+    def test_pick_symbol_context_candidate_prefers_exact_file_match_even_for_main(self):
+        module = load_symbol_graph_module()
+        picked = module.pick_symbol_context_candidate(
+            [
+                {
+                    "kind": "Function",
+                    "name": "main",
+                    "qualified_name": "build.main",
+                    "filepath": "packages/desktop/src-tauri/build.rs",
+                    "start_line": 8,
+                    "signature": "fn main()",
+                    "callers_in": 0,
+                    "callees_out": 2,
+                },
+                {
+                    "kind": "Function",
+                    "name": "main",
+                    "qualified_name": "runtime.main",
+                    "filepath": "/tmp/opencode/packages/desktop/src-tauri/src/main.rs",
+                    "start_line": 14,
+                    "signature": "fn main()",
+                    "callers_in": 1,
+                    "callees_out": 6,
+                },
+            ],
+            symbol_name="main",
+            normalized_file_path="packages/desktop/src-tauri/src/main.rs",
+            normalized_signature=None,
+        )
+        self.assertEqual(picked["filepath"], "/tmp/opencode/packages/desktop/src-tauri/src/main.rs")
+
     def test_symbol_context_cypher_parenthesizes_label_filter(self):
         module = load_symbol_graph_module()
         cypher = module.SYMBOL_CONTEXT_CYPHER
@@ -282,6 +313,36 @@ class CodeIntelHelperTests(unittest.TestCase):
                 normalized_signature=None,
             )
         )
+
+    def test_call_chain_candidate_uses_suffix_file_match(self):
+        module = load_symbol_graph_module()
+        picked = module.pick_call_chain_candidate(
+            [
+                {
+                    "eid": "1",
+                    "name": "main",
+                    "qualified_name": "main",
+                    "signature": "fn main()",
+                    "filepath": "/tmp/opencode/packages/desktop/src-tauri/build.rs",
+                    "rank": 0,
+                    "path_rank": 1,
+                    "callers_in": 0,
+                },
+                {
+                    "eid": "2",
+                    "name": "main",
+                    "qualified_name": "main",
+                    "signature": "fn main()",
+                    "filepath": "/tmp/opencode/packages/desktop/src-tauri/src/main.rs",
+                    "rank": 0,
+                    "path_rank": 1,
+                    "callers_in": 3,
+                },
+            ],
+            normalized_file_path="packages/desktop/src-tauri/src/main.rs",
+            normalized_signature=None,
+        )
+        self.assertEqual(picked["filepath"], "/tmp/opencode/packages/desktop/src-tauri/src/main.rs")
 
     def test_python_exact_call_graph_guidance_appears_when_edges_are_sparse(self):
         module = load_symbol_graph_module()

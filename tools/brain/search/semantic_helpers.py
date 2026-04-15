@@ -336,6 +336,7 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
         or norm.startswith("nix/")
         or "/nix/" in norm
         or "/vendor" in norm
+        or basename in {"build.rs", "build.py"}
         or basename in {"justfile", "makefile"}
     )
 
@@ -428,6 +429,28 @@ def implementation_query_member_exprs(query: str) -> set[str]:
         for expr in re.findall(r"\b[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)+\b", text)
         if len(expr.split(".")) >= 2
     }
+
+
+def implementation_query_path_hints(query: str) -> list[str]:
+    text = (query or "").strip().lower()
+    if not text:
+        return []
+    hints = {
+        hint.strip("./")
+        for hint in re.findall(r"\b[a-z0-9._-]+(?:/[a-z0-9._-]+){1,}\b", text)
+        if "/" in hint
+    }
+    return sorted(hint for hint in hints if hint)
+
+
+def implementation_path_hint_hit(file_path: str | None, query: str | None = None, path_hints: list[str] | None = None) -> int:
+    norm = (file_path or "").replace("\\", "/").lower()
+    if not norm:
+        return 0
+    hints = path_hints if path_hints is not None else implementation_query_path_hints(query or "")
+    if not hints:
+        return 0
+    return sum(1 for hint in hints if hint and hint in norm)
 
 
 def implementation_symbol_hit(meta: dict, query: str) -> int:
@@ -533,6 +556,12 @@ def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int
     norm = (file_path or "").replace("\\", "/").lower()
     api_entrypoint_suffixes = (
         "/src/lib.rs",
+        "/src/main.rs",
+        "/src/main.py",
+        "/src/main.ts",
+        "/src/main.tsx",
+        "/src/main.js",
+        "/src/main.jsx",
         "/src/index.ts",
         "/src/index.tsx",
         "/src/index.js",
@@ -540,7 +569,11 @@ def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int
         "/__init__.py",
         "/lib.rs",
     )
-    return 1 if norm.endswith(api_entrypoint_suffixes) else 0
+    if norm.endswith(api_entrypoint_suffixes):
+        return 1
+    if norm.endswith("/main.go") and ("/cmd/" in norm or norm.startswith("cmd/")):
+        return 1
+    return 0
 
 
 DECLARATION_NODE_TYPES = {

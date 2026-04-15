@@ -117,6 +117,97 @@ async def _load_rescue_rows(
     ]
 
 
+async def _load_path_hint_rows(
+    conn,
+    *,
+    pid: str,
+    path_hints: list[str],
+    max_files: int = 12,
+) -> list[dict]:
+    normalized_hints = [
+        f"%{str(hint).strip().lower()}%"
+        for hint in (path_hints or [])
+        if str(hint).strip()
+    ]
+    if not normalized_hints:
+        return []
+    async with conn.cursor() as cur:
+        await cur.execute(
+            """
+            WITH matched_files AS (
+                SELECT file_path,
+                       MAX(
+                           CASE
+                               WHEN lower(file_path) LIKE ANY(%(patterns)s::text[]) THEN 1
+                               ELSE 0
+                           END
+                       ) AS path_hint_hit,
+                       MIN(
+                           CASE
+                               WHEN lower(file_path) LIKE '%/src/main.rs'
+                                 OR lower(file_path) LIKE '%/src/main.py'
+                                 OR lower(file_path) LIKE '%/src/main.ts'
+                                 OR lower(file_path) LIKE '%/src/main.tsx'
+                                 OR lower(file_path) LIKE '%/src/main.js'
+                                 OR lower(file_path) LIKE '%/src/main.jsx'
+                                 THEN 0
+                               WHEN lower(file_path) LIKE '%/src/lib.rs'
+                                 OR lower(file_path) LIKE '%/__init__.py'
+                                 THEN 1
+                               WHEN lower(file_path) ~ '\\.(rs|py|ts|tsx|js|jsx|go|java|swift|rb|php|cs)$'
+                                 THEN 2
+                               WHEN lower(file_path) LIKE '%cargo.toml'
+                                 OR lower(file_path) LIKE '%package.json'
+                                 THEN 4
+                               WHEN lower(file_path) ~ '\\.(md|markdown|mdx|json|ya?ml|toml|plist|xml|svg|png|jpg|jpeg|gif|ico)$'
+                                 THEN 6
+                               WHEN lower(file_path) LIKE '%/.gitignore'
+                                 THEN 7
+                               ELSE 5
+                           END
+                       ) AS code_rank
+                FROM codebase_embeddings
+                WHERE project_id = %(pid)s
+                  AND lower(file_path) LIKE ANY(%(patterns)s::text[])
+                GROUP BY file_path
+                ORDER BY path_hint_hit DESC, code_rank ASC, file_path
+                LIMIT %(max_files)s
+            ),
+            ranked AS (
+                SELECT c.file_path, c.chunk_index, c.content, c.project_id, c.metadata,
+                       m.path_hint_hit, m.code_rank,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY c.file_path
+                           ORDER BY c.chunk_index ASC
+                       ) AS chunk_rank
+                FROM codebase_embeddings c
+                JOIN matched_files m
+                  ON m.file_path = c.file_path
+                WHERE c.project_id = %(pid)s
+            )
+            SELECT file_path, chunk_index, content, project_id, metadata, path_hint_hit
+            FROM ranked
+            WHERE chunk_rank <= 2
+            ORDER BY path_hint_hit DESC, code_rank ASC, file_path, chunk_index
+            """,
+            {"pid": pid, "patterns": normalized_hints, "max_files": max_files},
+        )
+        rows = await cur.fetchall()
+    return [
+        {
+            "file_path": r[0],
+            "chunk_index": r[1],
+            "content": r[2],
+            "project_id": r[3],
+            "metadata": r[4],
+            "implementation_path_hint_hit": int(r[5] or 0),
+            "rrf": 0.0,
+            "_definition_rescue": True,
+        }
+        for r in rows
+    ]
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -278,6 +369,8 @@ def register(mcp: FastMCP) -> None:
 
             impl_intent = sem_helpers.implementation_query_intent(query)
             impl_query_class = sem_helpers.implementation_query_class(query)
+            member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
+            path_hints = sem_helpers.implementation_query_path_hints(query)
 
             svc = get_embedding_service()
             vecs = await svc.embed_batch_async([query])
@@ -579,6 +672,64 @@ def register(mcp: FastMCP) -> None:
                     or int(r.get("implementation_api_entrypoint_hit", 0) or 0) > 0
                     for r in top_probe
                 )
+                has_path_hint_hit = any(
+                    sem_helpers.implementation_path_hint_hit(
+                        r.get("file_path"),
+                        path_hints=path_hints,
+                    )
+                    > 0
+                    for r in top_probe
+                )
+                if path_hints and not has_path_hint_hit:
+                    rescue_results: list[dict] = []
+                    for pid in pid_to_name:
+                        async with memory_store._pg_pool.connection() as conn:
+                            await conn.execute("BEGIN")
+                            rescue_rows = await _load_path_hint_rows(
+                                conn,
+                                pid=pid,
+                                path_hints=path_hints,
+                                max_files=min(max(fallback_max, 8), 16),
+                            )
+                        for r in rescue_rows:
+                            r_meta = sem_helpers.coerce_meta(r)
+                            r["_meta"] = r_meta
+                            r["meta_score"] = sem_helpers.meta_score(r_meta)
+                            is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
+                            is_low_signal_parser_data = sem_helpers.is_low_signal_parser_data_path(
+                                r.get("file_path")
+                            )
+                            is_low_signal_binding_surface = sem_helpers.is_low_signal_binding_surface_path(
+                                r.get("file_path")
+                            )
+                            r["doc_like"] = is_doc_like
+                            r["low_signal_parser_data"] = is_low_signal_parser_data
+                            r["low_signal_binding_surface"] = is_low_signal_binding_surface
+                            sem_helpers.enrich_implementation_result(
+                                r,
+                                query=query,
+                                query_class=impl_query_class,
+                                base_score=float(r.get("rrf", 0.0) or 0.0),
+                                meta_boost=0.0,
+                                base_bonus=0.025,
+                            )
+                        rescue_results.extend(rescue_rows)
+                    if rescue_results:
+                        existing_keys = {
+                            (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                            for r in all_results
+                        }
+                        for r in rescue_results:
+                            key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                            if key not in existing_keys:
+                                all_results.append(r)
+                        all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                        top_probe = all_results[: min(5, len(all_results))]
+                        has_definition_hit = any(
+                            int(r.get("implementation_definition_hit", 0) or 0) > 0
+                            or int(r.get("implementation_api_entrypoint_hit", 0) or 0) > 0
+                            for r in top_probe
+                        )
                 if not has_definition_hit:
                     rescue_results: list[dict] = []
                     for pid, proj_name in pid_to_name.items():
@@ -641,7 +792,6 @@ def register(mcp: FastMCP) -> None:
                     sem_helpers.implementation_exact_member_usage_site_hit(r)
                     for r in top_probe
                 )
-                member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
                 if member_exprs and not has_usage_site_member_hit:
                     rescue_results: list[dict] = []
                     for pid, proj_name in pid_to_name.items():

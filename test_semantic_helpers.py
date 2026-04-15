@@ -697,6 +697,64 @@ class SemanticHelperTests(unittest.TestCase):
         )
         self.assertEqual(
             module.implementation_api_entrypoint_hit("crates/ts-pack-cli/src/main.rs", 1),
+            1,
+        )
+
+    def test_implementation_entrypoint_boost_prefers_runtime_main_over_build_script(self):
+        rows = [
+            {
+                "file_path": "packages/desktop/src-tauri/build.rs",
+                "project_id": "bench",
+                "rrf": 0.91,
+                "rank_score": 0.91,
+                "content": "fn main() { tauri_build::build() }",
+                "metadata": {
+                    "file_symbols": ["main"],
+                    "node_types": ["function_item"],
+                    "chunk_role": "definition",
+                },
+            },
+            {
+                "file_path": "packages/desktop/src-tauri/src/main.rs",
+                "project_id": "bench",
+                "rrf": 0.86,
+                "rank_score": 0.86,
+                "content": "fn main() { app::bootstrap() }",
+                "metadata": {
+                    "file_symbols": ["main"],
+                    "node_types": ["function_item"],
+                    "chunk_role": "definition",
+                },
+            },
+        ]
+        for row in rows:
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query="where is packages/desktop/src-tauri main entrypoint defined",
+                query_class=module.implementation_query_class(
+                    "where is packages/desktop/src-tauri main entrypoint defined"
+                ),
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+
+        rows.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(rows[0]["file_path"], "packages/desktop/src-tauri/src/main.rs")
+
+    def test_implementation_query_path_hints_extract_repo_path(self):
+        self.assertEqual(
+            module.implementation_query_path_hints(
+                "where is packages/desktop/src-tauri main entrypoint defined"
+            ),
+            ["packages/desktop/src-tauri"],
+        )
+        self.assertGreater(
+            module.implementation_path_hint_hit(
+                "packages/desktop/src-tauri/src/main.rs",
+                path_hints=["packages/desktop/src-tauri"],
+            ),
             0,
         )
 

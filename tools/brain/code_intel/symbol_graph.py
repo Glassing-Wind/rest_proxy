@@ -11,7 +11,11 @@ SYMBOL_CONTEXT_CYPHER = """
        OR s:Protocol OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType)
       AND s.project_id = $pid
       AND (s.name = $name OR s.qualified_name = $name)
-      AND ($file_path IS NULL OR s.filepath = $file_path)
+      AND (
+        $file_path IS NULL
+        OR s.filepath = $file_path
+        OR s.filepath ENDS WITH ('/' + $file_path)
+      )
       AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
     OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
     OPTIONAL MATCH (caller)-[:CALLS|CALLS_INFERRED]->(s)
@@ -43,7 +47,11 @@ CALL_CHAIN_RESOLVE_CYPHER = """
     WHERE s.project_id = $pid
       AND (s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait OR s:Enum
            OR s:Protocol OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType)
-      AND ($file_path IS NULL OR s.filepath = $file_path)
+      AND (
+        $file_path IS NULL
+        OR s.filepath = $file_path
+        OR s.filepath ENDS WITH ('/' + $file_path)
+      )
       AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
     OPTIONAL MATCH (s)<-[:CALLS|CALLS_INFERRED]-(caller)
     WITH s,
@@ -240,8 +248,10 @@ def _symbol_role_rank(candidate: dict) -> int:
         return 1
     if filepath.endswith("/mod.rs") or filepath == "src/mod.rs":
         return 2
-    if filepath.endswith("/main.rs") or "/cli/" in filepath or "/bin/" in filepath:
+    if "/cli/" in filepath or "/bin/" in filepath:
         return 5
+    if filepath.endswith("/main.rs"):
+        return 3
     return 3
 
 
@@ -267,7 +277,7 @@ def _symbol_context_score(candidate: dict, *, symbol_name: str) -> int:
     if filepath.endswith("/lib.rs") or filepath == "src/lib.rs":
         score += 18
     if filepath.endswith("/main.rs"):
-        score -= 20
+        score += 8
     score += min(int(candidate.get("callers_in") or 0), 8) * 2
     score += min(int(candidate.get("callees_out") or 0), 8)
     score -= _symbol_kind_rank(candidate.get("kind")) * 3
@@ -291,7 +301,9 @@ def _symbol_context_reason_parts(candidate: dict, *, symbol_name: str) -> list[s
         parts.append("library-entrypoint")
     if filepath.endswith("/mod.rs") or filepath == "src/mod.rs":
         parts.append("module-root")
-    if filepath.endswith("/main.rs") or "/cli/" in filepath or "/bin/" in filepath:
+    if filepath.endswith("/main.rs"):
+        parts.append("runtime-entrypoint")
+    elif "/cli/" in filepath or "/bin/" in filepath:
         parts.append("usage-heavy")
     penalty = _symbol_path_penalty(filepath)
     if penalty >= 5:
@@ -442,7 +454,10 @@ def pick_call_chain_candidate(
     )
     if normalized_file_path:
         file_matches = [
-            c for c in ranked_candidates if c.get("filepath") == normalized_file_path
+            c
+            for c in ranked_candidates
+            if c.get("filepath") == normalized_file_path
+            or str(c.get("filepath") or "").endswith(f"/{normalized_file_path}")
         ]
         if file_matches:
             return file_matches[0]
