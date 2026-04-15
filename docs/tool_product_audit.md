@@ -158,3 +158,12 @@ If we want the tool surface to feel genuinely first-class, the next work should 
 The bar is simple:
 
 - if we would not personally choose the tool first, it should not be treated as a peer first-class surface
+
+## Tool Choice Goldens
+
+Intent-to-tool expectations now live in:
+
+- [`/Users/michaelmarler/Projects/rest_proxy/benchmarks/tool_choice_goldens.json`](/Users/michaelmarler/Projects/rest_proxy/benchmarks/tool_choice_goldens.json)
+
+This is intentionally small. It is not a giant benchmark harness yet. It is a
+repo-owned statement of which tools should be preferred for common intents.

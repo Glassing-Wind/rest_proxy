@@ -14,7 +14,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `extract_class_interface` | **High** | Include decorators (e.g., `@classmethod`) and property markers. | **Tested**: Successfully extracted `WorkspaceRegistry` methods. Perfect for quick API surface review. |
 | `extract_function_body` | **Very High** | None - very precise. | **Tested**: Extracted `get_project_id` cleanly using AST. Superior to manual line-range reading. |
 | `find_code_duplication` | **High** | Add directory-level filtering to reduce output volume for large projects. | **Tested**: Found 6 files sharing `_execute_read`. Excellent for identifying refactoring targets. |
-| `find_definitions` | **Very High** | None - perfect accuracy in tests. | **Tested**: Located `get_project_id` in `_helpers.py:89` instantly. Essential for cross-file navigation. |
+| `find_definitions` | **Medium-High** | Keep positioned as a fallback exact-name and cross-project disambiguation tool, not a peer to `get_symbol_context`. | **Tested**: Good exact-name lookup, but richer workflows should prefer `get_symbol_context`, `list_symbol_matches`, or `search_codebase`. |
 | `find_references` | **Critical** | Group semantic hits by file to further reduce noise. | **Tested**: found 21 graph refs + dozens of semantic mentions. Best-in-class hybrid (graph + semantic) discovery. |
 | `find_symbol_usages` | **High** | None - very useful for local scope. | **Tested**: Found 3 hits for `WorkspaceRegistry` in `_helpers.py`. Faster than cross-file search for local work. |
 | `get_app_flow_summary` | **Niche/High** | Prefer returning route-qualified paths before broad fallbacks. | **Tested**: Useful once indexing completes; no separate rebuild step should be required. |

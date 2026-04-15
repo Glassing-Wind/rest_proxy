@@ -154,7 +154,7 @@ def register(mcp: FastMCP) -> None:
     async def find_definitions(symbol_name: str) -> str:
         """
         Search for the definition of a class, function, or struct across ALL indexed projects.
-        Ideal for cross-project dependency discovery.
+        Best used as an exact-name fallback or cross-project disambiguation tool.
 
         Args:
             symbol_name: Name of the symbol to find.
@@ -196,8 +196,30 @@ def register(mcp: FastMCP) -> None:
                         record.get("line") or 0,
                     )
                 )
-                output = [f"Found {symbol_name} in the following locations:"]
-                for record in filtered:
+                output = [
+                    f"Definition matches for `{symbol_name}` (fallback exact-name lookup):",
+                    "Prefer `get_symbol_context`, `list_symbol_matches`, or `search_codebase` when you need richer navigation.",
+                    "",
+                ]
+                if filtered:
+                    best_candidates = filtered[:3]
+                    remaining_candidates = filtered[3:]
+                    output.append("Best candidate definitions:")
+                    for record in best_candidates:
+                        loc = record["file"] or "unknown"
+                        line = record["line"]
+                        loc_str = f"{loc}:{line}" if line is not None else loc
+                        project_display = record["project_path"] or record["project_id"]
+                        output.append(
+                            f"- [{record['type']}] Project: {project_display}, File: {loc_str}"
+                        )
+                    if remaining_candidates:
+                        output.append("")
+                        output.append("Other exact-name matches:")
+                else:
+                    best_candidates = []
+                    remaining_candidates = []
+                for record in remaining_candidates:
                     loc = record["file"] or "unknown"
                     line = record["line"]
                     loc_str = f"{loc}:{line}" if line is not None else loc
@@ -205,7 +227,7 @@ def register(mcp: FastMCP) -> None:
                     output.append(
                         f"- [{record['type']}] Project: {project_display}, File: {loc_str}"
                     )
-            if len(output) == 1:
+            if len(filtered) == 0:
                 return f"Symbol '{symbol_name}' not found in any indexed project."
             return "\n".join(output)
         except Exception as e:

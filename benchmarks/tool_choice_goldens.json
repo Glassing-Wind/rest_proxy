@@ -1,0 +1,91 @@
+{
+  "cases": [
+    {
+      "id": "repo_onboarding",
+      "intent": "Understand an unfamiliar repo quickly and choose where to start.",
+      "preferred_tools": [
+        "get_indexing_health",
+        "get_project_overview"
+      ],
+      "acceptable_fallbacks": [
+        "get_directory_snapshot",
+        "describe_file"
+      ],
+      "avoid_as_primary": [
+        "get_topology_summary",
+        "query_graph"
+      ]
+    },
+    {
+      "id": "symbol_deep_dive",
+      "intent": "Understand one symbol: definition, callers, callees, and nearby code.",
+      "preferred_tools": [
+        "get_symbol_context"
+      ],
+      "acceptable_fallbacks": [
+        "list_symbol_matches",
+        "find_definitions",
+        "describe_file"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "execution_path",
+      "intent": "Trace what a symbol calls or what calls it.",
+      "preferred_tools": [
+        "get_call_chain"
+      ],
+      "acceptable_fallbacks": [
+        "find_references",
+        "visualize_subgraph"
+      ],
+      "avoid_as_primary": [
+        "find_definitions"
+      ]
+    },
+    {
+      "id": "code_search_general",
+      "intent": "Find the implementation or usage site that best answers a natural-language code question.",
+      "preferred_tools": [
+        "search_codebase"
+      ],
+      "acceptable_fallbacks": [
+        "grep_codebase",
+        "find_references"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "definition_disambiguation",
+      "intent": "Find exact-name matches across projects when the symbol is overloaded or ambiguous.",
+      "preferred_tools": [
+        "find_definitions"
+      ],
+      "acceptable_fallbacks": [
+        "list_symbol_matches",
+        "search_codebase"
+      ],
+      "avoid_as_primary": [
+        "get_topology_summary"
+      ]
+    },
+    {
+      "id": "graph_suspect_result",
+      "intent": "Explain why a graph/file-link result exists or appears suspicious.",
+      "preferred_tools": [
+        "trace_graph_provenance"
+      ],
+      "acceptable_fallbacks": [
+        "get_symbol_context",
+        "get_call_chain"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    }
+  ]
+}

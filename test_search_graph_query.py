@@ -124,6 +124,12 @@ class GraphQueryTests(unittest.TestCase):
             with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
                 output = asyncio.run(self.mcp.tools["find_definitions"]("Config"))
 
+        self.assertIn("fallback exact-name lookup", output)
+        self.assertIn(
+            "Prefer `get_symbol_context`, `list_symbol_matches`, or `search_codebase`",
+            output,
+        )
+        self.assertIn("Best candidate definitions:", output)
         lines = [line for line in output.splitlines() if line.startswith("- [")]
         self.assertGreaterEqual(len(lines), 3)
         self.assertIn("packages/opencode/src/config/config.ts:8", lines[0])
