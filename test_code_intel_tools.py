@@ -945,6 +945,8 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Crate: api", output)
         self.assertIn("crates/api/src/lib.rs", output)
         self.assertIn("[crate:api]", output)
+        self.assertIn("architectural leverage", output)
+        self.assertIn("Use this to decide where architectural leverage", output)
 
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):
@@ -987,6 +989,8 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crate `api`", output)
         self.assertIn("crate `core`", output)
         self.assertIn("crates/api/src/lib.rs", output)
+        self.assertIn("Use this to decide which architectural area", output)
+        self.assertIn("Priority exploration order:", output)
 
     def test_get_code_communities_hides_singleton_zero_symbol_noise(self):
         async def fake_executor(cypher, **kwargs):

@@ -138,6 +138,21 @@ def register(mcp: FastMCP) -> None:
             return "jobs/runtime", 1.25
         return "mixed", 1.0
 
+    def _importance_focus_reason(record: dict) -> str:
+        parts: list[str] = []
+        score = float(record.get("score") or 0.0)
+        betweenness = float(record.get("betweenness") or 0.0)
+        sym_count = int(record.get("sym_count") or 0)
+        if score >= 5.0:
+            parts.append("high centrality")
+        if betweenness >= 3.0:
+            parts.append("bridge file")
+        if sym_count >= 20:
+            parts.append("large symbol surface")
+        if record.get("isolated"):
+            parts.append("isolated hotspot")
+        return ", ".join(parts) if parts else "architectural leverage"
+
     async def _execute_read(
         session,
         cypher: str,
@@ -778,7 +793,10 @@ def register(mcp: FastMCP) -> None:
                 reverse=True,
             )[:15]
 
-            output = [f"Most important files [{scoring_method}, test/vendor excluded]:"]
+            output = [
+                f"Most important files [{scoring_method}, test/vendor excluded]:",
+                "Use this to decide where architectural leverage or blast radius is highest.",
+            ]
             rendered_rows = []
             for record in records:
                 examples = (
@@ -812,9 +830,10 @@ def register(mcp: FastMCP) -> None:
                 for row in rendered_rows:
                     groups.setdefault(row.get("crate") or "(unowned)", []).append(row["line"])
                 top_focus = []
-                for row in rendered_rows[:3]:
+                for index, row in enumerate(rendered_rows[:3], start=1):
                     focus_label = row["line"].split("  [score:", 1)[0]
-                    top_focus.append(f"- {focus_label}")
+                    focus_reason = _importance_focus_reason(records[index - 1])
+                    top_focus.append(f"- {focus_label} — {focus_reason}")
                 if top_focus:
                     output.append("Recommended starting points:")
                     output.extend(top_focus)
@@ -825,9 +844,10 @@ def register(mcp: FastMCP) -> None:
                         output.append(f"- {item}")
             else:
                 top_focus = []
-                for row in rendered_rows[:3]:
+                for index, row in enumerate(rendered_rows[:3], start=1):
                     focus_label = row["line"].split("  [score:", 1)[0]
-                    top_focus.append(f"- {focus_label}")
+                    focus_reason = _importance_focus_reason(records[index - 1])
+                    top_focus.append(f"- {focus_label} — {focus_reason}")
                 if top_focus:
                     output.append("Recommended starting points:")
                     output.extend(top_focus)
@@ -915,7 +935,10 @@ def register(mcp: FastMCP) -> None:
             method = (
                 "GDS Louvain (topology)" if using_louvain else "top-level directory"
             )
-            output = [f"Architectural clusters [{method}]:"]
+            output = [
+                f"Architectural clusters [{method}]:",
+                "Use this to decide which architectural area to inspect first and which areas are likely separate concerns.",
+            ]
             filtered_records = []
             for record in records:
                 file_count = int(record.get("file_count") or 0)
@@ -954,7 +977,12 @@ def register(mcp: FastMCP) -> None:
                     top_file = (record.get("top_files") or [None])[0]
                     crate = _match_cargo_crate(top_file, cargo_rows)
                     suffix = f" [crate:{crate}]" if crate else ""
-                    output.append(f"- {cluster_name} [{kind_label}]{suffix}")
+                    reason = "broadest symbol-rich area"
+                    if kind_label in {"backend/app", "cli/runtime", "sdk/runtime"}:
+                        reason = "runtime-heavy cluster"
+                    elif kind_label in {"sdk/generated", "ui/public"}:
+                        reason = "likely lower-priority support cluster"
+                    output.append(f"- {cluster_name} [{kind_label}]{suffix} — {reason}")
                 output.append("")
             if cargo_rows and not using_louvain:
                 crate_groups: dict[str, list[dict]] = {}
