@@ -61,6 +61,41 @@
       ]
     },
     {
+      "id": "opencode_main_entrypoint_search",
+      "workspace_name": "opencode",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": ["$workspace_id"],
+        "query": "where is packages/desktop/src-tauri main entrypoint defined",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- packages/desktop/src-tauri/src/main.rs",
+        "fn main()",
+        "tauri::Builder"
+      ]
+    },
+    {
       "id": "ts_export_alias_demo_summary",
       "workspace_name": "ts-export-alias-demo",
       "tool": "get_symbol_exports_summary",

@@ -107,7 +107,6 @@ jobs:
           if-no-files-found: error
 
   enterprise-live-graph-smoke:
-    if: github.event_name == 'workflow_dispatch' || vars.LM_PROXY_ENABLE_LIVE_GRAPH_SMOKE == '1'
     runs-on: ubuntu-latest
     services:
       postgres:
