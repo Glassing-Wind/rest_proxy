@@ -419,6 +419,51 @@
         "Libraries/Trainer/Sources/LoRATrainer.swift",
         "[generated/support]"
       ]
+    },
+    {
+      "id": "s4nnc_dynamicgraph_symbol_context",
+      "workspace_name": "s4nncFork",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "DynamicGraph",
+        "include_source_preview": true,
+        "file_path": "nnc/DynamicGraph.swift"
+      },
+      "required_substrings": [
+        "nnc/DynamicGraph.swift",
+        "DynamicGraph",
+        "public final class DynamicGraph {"
+      ]
+    },
+    {
+      "id": "s4nnc_dynamicgraph_call_chain_up",
+      "workspace_name": "s4nncFork",
+      "tool": "get_call_chain",
+      "params": {
+        "symbol_name": "DynamicGraph",
+        "file_path": "nnc/DynamicGraph.swift",
+        "direction": "up",
+        "depth": 2
+      },
+      "required_substrings": [
+        "Swift caller-like usages",
+        "examples/cifar-10/main.swift",
+        "let graph = DynamicGraph()"
+      ]
+    },
+    {
+      "id": "s4nnc_dynamicgraph_related_files",
+      "workspace_name": "s4nncFork",
+      "tool": "get_related_files",
+      "params": {
+        "project_path": "$workspace_id",
+        "file_path": "nnc/DynamicGraph.swift"
+      },
+      "required_substrings": [
+        "Related Files (semantic co-mentions)",
+        "nnc/FunctionalAddons.swift",
+        "DynamicGraph.AnyTensor"
+      ]
     }
   ]
 }

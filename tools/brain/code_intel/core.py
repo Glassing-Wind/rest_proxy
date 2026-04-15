@@ -46,6 +46,33 @@ def register(mcp: FastMCP) -> None:
             return True
         return False
 
+    def _is_test_like_path(file_path: str | None) -> bool:
+        norm = (file_path or "").replace("\\", "/").lower()
+        if not norm:
+            return False
+        return (
+            "/test/" in norm
+            or "/tests/" in norm
+            or norm.startswith("test/")
+            or norm.startswith("tests/")
+            or "/e2e/" in norm
+            or norm.startswith("e2e/")
+            or "/fixtures/" in norm
+            or norm.startswith("fixtures/")
+            or ".spec." in norm
+            or ".stories." in norm
+        )
+
+    def _is_low_signal_related_import_source(source: str | None) -> bool:
+        value = str(source or "").strip()
+        if not value:
+            return True
+        if value in _GENERIC_SWIFT_IMPORTS:
+            return True
+        if value.startswith("C_"):
+            return True
+        return False
+
     def _extract_swift_type_mentions(text: str, local_symbols: list[str] | set[str] | None = None) -> list[str]:
         local = {str(item).strip() for item in (local_symbols or []) if str(item).strip()}
         ignored = {
@@ -78,6 +105,28 @@ def register(mcp: FastMCP) -> None:
             out.append(match)
             if len(out) >= 12:
                 break
+        return out
+
+    def _is_low_signal_symbol_name(name: str | None) -> bool:
+        value = str(name or "").strip()
+        if not value:
+            return True
+        if len(value) <= 2 and not any(ch.isalnum() for ch in value):
+            return True
+        if all(not ch.isalnum() and ch != "_" for ch in value):
+            return True
+        return False
+
+    def _dedupe_symbol_names(symbols: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for symbol in symbols:
+            value = str(symbol or "").strip()
+            lowered = value.lower()
+            if not value or lowered in seen or _is_low_signal_symbol_name(value):
+                continue
+            seen.add(lowered)
+            out.append(value)
         return out
 
     def _best_symbol_snippet(content: str | None, symbol_name: str) -> str:
@@ -375,7 +424,26 @@ def register(mcp: FastMCP) -> None:
             out = symbol_graph.format_symbol_context(rec, symbol_name)
 
             if include_source_preview:
-                # 1. Try Postgres (Brain/Central fallback) - This works remotely!
+                # 1. Prefer the local filesystem when the workspace is available so the
+                # preview starts from the exact symbol span instead of a semantic chunk.
+                if os.path.exists(workspace_id):
+                    try:
+                        abs_path = os.path.join(workspace_id, rec["filepath"])
+                        if os.path.exists(abs_path):
+                            with open(
+                                abs_path, "r", encoding="utf-8", errors="ignore"
+                            ) as fh:
+                                lines_list = fh.read().splitlines()
+                            if lines_list:
+                                start_line = max(1, int(rec["start_line"] or 1))
+                                snippet = "\n".join(lines_list[start_line - 1 : start_line + 79]).strip()
+                                if snippet:
+                                    out += [f"\n**Source preview:**\n```swift\n{snippet[:900]}\n```"]
+                                    return "\n".join(out)
+                    except Exception:
+                        pass
+
+                # 2. Try Postgres (Brain/Central fallback) - This works remotely!
                 try:
                     memory_store, _, _, _, _ = get_memory_modules()
                     await memory_store.open_pool()
@@ -415,22 +483,7 @@ def register(mcp: FastMCP) -> None:
                                 src = str(rows[0][0] or "")[:900]
                                 out += [f"\n**Source preview:**\n```\n{src}\n```"]
                 except Exception:
-                    # 2. Try Local Filesystem (Hands fallback) - only if workspace_id is actually a local path
-                    if os.path.exists(workspace_id):
-                        try:
-                            abs_path = os.path.join(workspace_id, rec["filepath"])
-                            if os.path.exists(abs_path):
-                                with open(
-                                    abs_path, "r", encoding="utf-8", errors="ignore"
-                                ) as fh:
-                                    lines_list = fh.read().splitlines()
-                                start_line = max(1, int(rec["start_line"] or 1))
-                                end_line = max(start_line, int(rec["end_line"] or start_line))
-                                snippet = "\n".join(lines_list[start_line - 1 : end_line])
-                                if snippet.strip():
-                                    out += [f"\n**Source preview:**\n```ts\n{snippet}\n```"]
-                        except Exception:
-                            pass
+                    pass
 
             return "\n".join(out)
         except Exception as e:
@@ -1342,10 +1395,11 @@ def register(mcp: FastMCP) -> None:
                     import_samples = [
                         item
                         for item in (record.get("sample_imports") or [])
-                        if item not in _GENERIC_SWIFT_IMPORTS
+                        if not _is_low_signal_related_import_source(item)
                     ]
                     if not import_samples and any(
-                        item in _GENERIC_SWIFT_IMPORTS for item in (record.get("sample_imports") or [])
+                        _is_low_signal_related_import_source(item)
+                        for item in (record.get("sample_imports") or [])
                     ):
                         continue
                     sample_text = ", ".join(import_samples[:3])
@@ -1403,7 +1457,9 @@ def register(mcp: FastMCP) -> None:
                 )
                 symbols = [rec["name"] for rec in records if rec.get("name")]
 
-            symbols = [s for s in symbols if isinstance(s, str) and s.strip()]
+            symbols = _dedupe_symbol_names(
+                [s for s in symbols if isinstance(s, str) and s.strip()]
+            )
             if not symbols:
                 return "No structurally related files found."
 
@@ -1427,7 +1483,11 @@ def register(mcp: FastMCP) -> None:
             if not rows:
                 return "No structurally related files found."
 
-            filtered_rows = [(fp, hits) for fp, hits in rows if not _is_low_signal_support_path(fp)]
+            filtered_rows = [
+                (fp, hits)
+                for fp, hits in rows
+                if not _is_low_signal_support_path(fp) and not _is_test_like_path(fp)
+            ]
             if not filtered_rows:
                 return "No structurally related files found."
 

@@ -171,6 +171,7 @@ class CodeIntelToolTests(unittest.TestCase):
             if "MATCH path = (start)" in cypher:
                 self.assertIn("/public/", cypher)
                 self.assertIn("/test/", cypher)
+                self.assertIn("STARTS WITH 'test/'", cypher)
                 self.assertIn("/gen/", cypher)
                 return [
                     {
@@ -795,6 +796,71 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertEqual(params[2], "SidebarView")
         self.assertEqual(params[3], 3)
 
+    def test_get_symbol_context_source_preview_prefers_local_file_span_when_available(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Class",
+                        "name": "DynamicGraph",
+                        "qualified_name": None,
+                        "filepath": "nnc/DynamicGraph.swift",
+                        "start_line": 9,
+                        "end_line": 30,
+                        "signature": "public final class DynamicGraph",
+                        "parent_file": "nnc/DynamicGraph.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    }
+                ]
+            return []
+
+        source_text = "\n".join(
+            [
+                "#if canImport(C_nnc)",
+                "import C_nnc",
+                "#endif",
+                "",
+                "/// Comment",
+                "/// More comment",
+                "",
+                "",
+                "public final class DynamicGraph {",
+                "  func run() {}",
+                "}",
+                "",
+                "extension DynamicGraph {",
+                "  func trackGrad() {}",
+                "}",
+            ]
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.os.path, "exists", side_effect=lambda path: True):
+                with mock.patch("builtins.open", mock.mock_open(read_data=source_text)):
+                    global CURRENT_EXECUTOR
+                    CURRENT_EXECUTOR = fake_executor
+                    try:
+                        output = asyncio.run(
+                            self.mcp.tools["get_symbol_context"](
+                                "/tmp/s4nncFork",
+                                "DynamicGraph",
+                                include_source_preview=True,
+                                file_path="nnc/DynamicGraph.swift",
+                            )
+                        )
+                    finally:
+                        CURRENT_EXECUTOR = None
+
+        self.assertIn("```swift", output)
+        self.assertIn("public final class DynamicGraph {", output)
+        self.assertLess(
+            output.index("public final class DynamicGraph {"),
+            output.index("extension DynamicGraph {"),
+        )
+
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:
@@ -1205,6 +1271,71 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("semantic co-mentions", output)
         self.assertIn("FrameCreator/Views/ContentView.swift", output)
+
+    def test_get_related_files_ignores_generic_c_bridge_import_only_matches(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "nnc/CoreMLConversion.swift",
+                        "shared_imports": 2,
+                        "sample_imports": ["C_nnc", "C_swiftpm_nnc"],
+                    }
+                ]
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "=="}, {"name": "DynamicGraph"}, {"name": "DynamicGraph"}]
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [("examples/cifar-10/main.swift", 4)]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/s4nncFork",
+                            "nnc/DynamicGraph.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("semantic co-mentions", output)
+        self.assertIn("examples/cifar-10/main.swift", output)
+        self.assertNotIn("==", output)
 
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):
