@@ -1144,6 +1144,52 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("cluster #10", output)
         self.assertNotIn("cluster #99", output)
+        self.assertIn("Suppressed 1 small long-tail cluster(s)", output)
+
+    def test_get_code_communities_collapses_large_singleton_tail(self):
+        async def fake_executor(cypher, **kwargs):
+            if "get_code_communities_louvain" in kwargs.get("op", "") or "f.louvainCommunity IS NOT NULL" in cypher:
+                rows = [
+                    {
+                        "comm": 10 + idx,
+                        "file_count": 3,
+                        "total_syms": 120 - idx,
+                        "top_files": [f"packages/opencode/src/cli/cmd/{idx}.ts"],
+                    }
+                    for idx in range(12)
+                ]
+                rows.extend(
+                    [
+                        {
+                            "comm": 99,
+                            "file_count": 1,
+                            "total_syms": 3,
+                            "top_files": ["packages/ui/src/components/tiny.tsx"],
+                        },
+                        {
+                            "comm": 100,
+                            "file_count": 1,
+                            "total_syms": 2,
+                            "top_files": ["packages/ui/src/components/tiny2.tsx"],
+                        },
+                    ]
+                )
+                return rows
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/opencode"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Suppressed 2 small long-tail cluster(s)", output)
+        self.assertNotIn("cluster #99", output)
+        self.assertNotIn("cluster #100", output)
 
     def test_get_code_importance_downweights_vendor_files(self):
         async def fake_executor(cypher, **kwargs):

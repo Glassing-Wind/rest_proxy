@@ -153,6 +153,19 @@ def register(mcp: FastMCP) -> None:
             parts.append("isolated hotspot")
         return ", ".join(parts) if parts else "architectural leverage"
 
+    def _community_display_limit(records: list[dict]) -> int:
+        if len(records) <= 12:
+            return len(records)
+        return 12
+
+    def _is_small_community_tail(record: dict) -> bool:
+        file_count = int(record.get("file_count") or 0)
+        total_syms = int(record.get("total_syms") or 0)
+        kind_label, _ = _cluster_kind(record.get("top_files") or [])
+        if kind_label in {"backend/app", "cli/runtime", "sdk/runtime", "data/schema"}:
+            return False
+        return file_count <= 2 or total_syms <= 12
+
     async def _execute_read(
         session,
         cypher: str,
@@ -940,22 +953,26 @@ def register(mcp: FastMCP) -> None:
                 "Use this to decide which architectural area to inspect first and which areas are likely separate concerns.",
             ]
             filtered_records = []
+            suppressed_small_records = 0
             for record in records:
                 file_count = int(record.get("file_count") or 0)
                 total_syms = int(record.get("total_syms") or 0)
                 top_files = record.get("top_files") or []
                 kind_label, _ = _cluster_kind(top_files)
                 if file_count <= 1 and total_syms == 0:
+                    suppressed_small_records += 1
                     continue
                 if total_syms == 0 and all(
                     str(fp).endswith((".md", ".toml", ".yaml", ".yml", ".sql", ".example", ".json"))
                     for fp in top_files
                 ):
+                    suppressed_small_records += 1
                     continue
                 if kind_label == "mixed" and (
                     (file_count <= 1 and total_syms <= 12)
                     or (file_count <= 2 and total_syms <= 4)
                 ):
+                    suppressed_small_records += 1
                     continue
                 filtered_records.append(record)
             records = sorted(
@@ -966,6 +983,14 @@ def register(mcp: FastMCP) -> None:
                 ),
                 reverse=True,
             )
+            display_limit = _community_display_limit(records)
+            visible_records = records[:display_limit]
+            hidden_records = records[display_limit:]
+            hidden_small_tail = [record for record in hidden_records if _is_small_community_tail(record)]
+            hidden_notable = [record for record in hidden_records if not _is_small_community_tail(record)]
+            if hidden_notable:
+                visible_records.extend(hidden_notable[: max(0, 15 - len(visible_records))])
+                display_limit = len(visible_records)
             if records:
                 output.append("Priority exploration order:")
                 for record in records[:3]:
@@ -986,7 +1011,7 @@ def register(mcp: FastMCP) -> None:
                 output.append("")
             if cargo_rows and not using_louvain:
                 crate_groups: dict[str, list[dict]] = {}
-                for record in records:
+                for record in visible_records:
                     top_file = (record.get("top_files") or [None])[0]
                     crate = _match_cargo_crate(top_file, cargo_rows) or record.get("dominant_dir") or "(unowned)"
                     crate_groups.setdefault(crate, []).append(record)
@@ -1007,7 +1032,7 @@ def register(mcp: FastMCP) -> None:
                         f"\n   Top files: {', '.join(top_files[:5])}"
                     )
             else:
-                for record in records:
+                for record in visible_records:
                     if using_louvain:
                         comm_label = f"cluster #{record['comm']}"
                         kind_label, _ = _cluster_kind(record.get("top_files") or [])
@@ -1032,6 +1057,12 @@ def register(mcp: FastMCP) -> None:
                         + (f"  crates: {crate_text}" if crate_text else "")
                         + f"\n   Top files: {', '.join(record['top_files'])}"
                     )
+            total_suppressed_small = suppressed_small_records + len(hidden_small_tail)
+            if total_suppressed_small:
+                output.append("")
+                output.append(
+                    f"Suppressed {total_suppressed_small} small long-tail cluster(s) to keep the view decision-oriented."
+                )
             if len(output) == 1:
                 return "No communities found (ensure project is indexed)."
             return "\n".join(output)
