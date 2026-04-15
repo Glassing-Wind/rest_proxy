@@ -236,6 +236,21 @@ class DuplicationHelperTests(unittest.TestCase):
         )
         self.assertFalse(details["actionable"])
 
+    def test_duplicate_candidate_details_rejects_generic_session_identifier_overlap(self):
+        details = module.duplicate_candidate_details(
+            {
+                "file_path": "proxy/handlers_memory.py",
+                "content": "async def _extract_and_cache_skeleton_bg(session_id: str, raw_content: str) -> None:",
+            },
+            {
+                "file_path": "memory/store_core.py",
+                "content": "async def get_recent_turns(session_id: str) -> List[Dict[str, Any]]:",
+            },
+            score=0.58,
+            struct_score=0.33,
+        )
+        self.assertFalse(details["actionable"])
+
 
 if __name__ == "__main__":
     unittest.main()

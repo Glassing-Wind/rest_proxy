@@ -92,6 +92,7 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "option",
     "result",
     "session",
+    "session_id",
     "project_id",
     "workspace_id",
     "limit",
@@ -136,6 +137,7 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "indexing",
     "tuple",
     "crate_rows",
+    "ts_pack",
 }
 
 
