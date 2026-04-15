@@ -22,6 +22,27 @@ def load_flow_summary_module():
     graph_pkg = types.ModuleType("tools")
     brain_pkg = types.ModuleType("tools.brain")
     graph_subpkg = types.ModuleType("tools.brain.graph")
+    graph_contract_mod = types.ModuleType("tools.brain.graph_contract")
+    graph_contract_mod.node_label = lambda name: {
+        "file": "File",
+        "model": "Model",
+        "external_api": "ExternalApi",
+        "api_route": "ApiRoute",
+        "cargo_crate": "CargoCrate",
+    }.get(name, name)
+    graph_contract_mod.rel_type = lambda name: {
+        "asset_links": "ASSET_LINKS",
+        "calls_api_route": "CALLS_API_ROUTE",
+        "handled_by": "HANDLED_BY",
+        "calls_service": "CALLS_SERVICE",
+        "calls_db_model": "CALLS_DB_MODEL",
+        "calls_db": "CALLS_DB",
+        "calls_api_external": "CALLS_API_EXTERNAL",
+        "calls_api": "CALLS_API",
+        "imports": "IMPORTS",
+        "defined_in_file": "DEFINED_IN_FILE",
+        "file_graph_link": "FILE_GRAPH_LINK",
+    }.get(name, name.upper())
     core_mod = types.ModuleType("tools.brain.graph.core")
 
     async def _execute_read(*args, **kwargs):
@@ -45,6 +66,7 @@ def load_flow_summary_module():
             "_helpers": helpers_mod,
             "tools": graph_pkg,
             "tools.brain": brain_pkg,
+            "tools.brain.graph_contract": graph_contract_mod,
             "tools.brain.graph": graph_subpkg,
             "tools.brain.graph.core": core_mod,
             "tools.brain.graph.flow_summary_apple": apple_module,
@@ -157,6 +179,8 @@ class FlowSummaryTests(unittest.TestCase):
 
         self.assertIn("POST /api/leases", output)
         self.assertEqual(output.count("src/api/leaseRoutes.ts"), 1)
+        self.assertIn("Use this to decide which UI entrypoints reach real APIs or services", output)
+        self.assertIn("Inspect First:", output)
         self.assertNotIn(
             "src/public/properties.html -> src/public/assets/properties.js -> src/api/leaseRoutes.ts -> src/services/leaseService.ts",
             output,
@@ -758,6 +782,8 @@ class FlowSummaryTests(unittest.TestCase):
             )
 
         self.assertIn("Crate: api", output)
+        self.assertIn("Use this to decide which API entrypoints reach real services", output)
+        self.assertIn("Inspect First:", output)
         self.assertIn("[api_crate=api, service_crate=core]", output)
         self.assertIn("crates/api/src/routes.rs -> crates/core/src/service.rs -> User", output)
 
@@ -858,6 +884,7 @@ class FlowSummaryTests(unittest.TestCase):
             seen_ops,
         )
         self.assertIn("Crate: ts-pack-index", output)
+        self.assertIn("Inspect First:", output)
         self.assertIn("crates/ts-pack-index/src/write_phase.rs", output)
         self.assertIn("neo4j://local", output)
 
@@ -1009,6 +1036,7 @@ class FlowSummaryTests(unittest.TestCase):
                 )
 
         self.assertIn("POST /search", output)
+        self.assertIn("Use this to decide which API entrypoints reach real services", output)
         self.assertIn("app/retrieval/hybrid_search.py", output)
         self.assertIn("GET /sources", output)
         self.assertIn("app/models/legal_source.py", output)

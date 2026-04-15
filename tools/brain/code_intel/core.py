@@ -1159,7 +1159,26 @@ def register(mcp: FastMCP) -> None:
                         f"- {record['related_file']} ({reason})"
                     )
             if cargo_related or related:
-                output = ["Related Files:"]
+                output = [
+                    "Related Files:",
+                    "",
+                    "Use this to find the fastest adjacent files to inspect before broadening search.",
+                ]
+                focus_lines: list[str] = []
+                if cargo_related:
+                    first_same_crate = next((line for line in cargo_related if line.startswith("- ") and "(same crate" in line), None)
+                    if first_same_crate:
+                        focus_lines.append(f"- start with {first_same_crate[2:]}")
+                    first_boundary = next(
+                        (line for line in cargo_related if "depends on crate" in line or "used by crate" in line),
+                        None,
+                    )
+                    if first_boundary:
+                        focus_lines.append(f"- then inspect {first_boundary[2:]}")
+                if related:
+                    focus_lines.append(f"- then inspect {related[0][2:]}")
+                if focus_lines:
+                    output.extend(["", "Inspect First:", *focus_lines[:3]])
                 output.extend(cargo_related)
                 if related:
                     if cargo_related:
@@ -1210,7 +1229,14 @@ def register(mcp: FastMCP) -> None:
             if not rows:
                 return "No structurally related files found."
 
-            output = ["Related Files (semantic co-mentions):"]
+            output = [
+                "Related Files (semantic co-mentions):",
+                "",
+                "Use this when graph structure is thin and you need the nearest semantic neighbors first.",
+                "",
+                "Inspect First:",
+                f"- start with `{rows[0][0]}` because it shares the strongest semantic co-mention surface",
+            ]
             for fp, hits in rows:
                 preview_symbols = ", ".join(symbols[:3])
                 output.append(

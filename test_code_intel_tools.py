@@ -1218,6 +1218,8 @@ class CodeIntelToolTests(unittest.TestCase):
                 CURRENT_EXECUTOR = None
 
         self.assertIn("Crate: api", output)
+        self.assertIn("Use this to find the fastest adjacent files", output)
+        self.assertIn("Inspect First:", output)
         self.assertIn("crates/api/src/routes.rs", output)
         self.assertIn("depends on crate `core`", output)
         self.assertIn("used by crate `cli`", output)

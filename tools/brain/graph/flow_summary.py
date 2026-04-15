@@ -367,6 +367,47 @@ def _format_backend_flow_empty_message(crate_rows) -> str:
     )
 
 
+def _app_flow_focus_lines(raw_rows, *, grouped_by_ui: bool) -> list[str]:
+    if not raw_rows:
+        return []
+    ui, js, route, api, svc, model, schema, external = raw_rows[0]
+    lines: list[str] = []
+    if ui:
+        if route or api:
+            lines.append(
+                f"- start with `{ui}` because it has the clearest UI entrypoint into `{route or api}`"
+            )
+        else:
+            lines.append(f"- start with `{ui}` because it is the strongest surviving UI entrypoint")
+    if svc or model or schema:
+        deepest = svc or model or schema
+        lines.append(f"- inspect `{deepest}` next because it is the deepest concrete backend dependency on this path")
+    elif external:
+        lines.append(f"- inspect external dependency `{external}` next because this path exits the repo there")
+    if grouped_by_ui and js and js != ui:
+        lines.append(f"- review `{js}` alongside the UI file because it is the first wiring hop")
+    return lines[:3]
+
+
+def _backend_flow_focus_lines(rows: list[dict]) -> list[str]:
+    if not rows:
+        return []
+    top = rows[0]
+    lines = []
+    if top.get("route") and top.get("api"):
+        lines.append(f"- start with `{top['route']}` in `{top['api']}` because it is the clearest API entrypoint")
+    elif top.get("api"):
+        lines.append(f"- start with `{top['api']}` because it is the strongest backend entrypoint")
+    deepest = top.get("svc") or top.get("model") or top.get("schema") or top.get("external")
+    if deepest:
+        lines.append(f"- inspect `{deepest}` next because it is the deepest downstream dependency on that path")
+    if top.get("api_crate") and top.get("svc_crate") and top.get("api_crate") != top.get("svc_crate"):
+        lines.append(
+            f"- pay attention to the crate boundary `{top['api_crate']}` → `{top['svc_crate']}` because it is a likely integration seam"
+        )
+    return lines[:3]
+
+
 def _is_backend_api_path(filepath: str | None) -> bool:
     if not filepath:
         return False
@@ -998,6 +1039,8 @@ async def get_app_flow_summary_impl(
     if not raw_rows:
         return "No UI → API → Service → DB paths found."
 
+    focus_lines = _app_flow_focus_lines(raw_rows, grouped_by_ui=group_by_ui)
+
     if as_table:
         rows = [
             "| UI | JS | Route | API | Service | Model | Schema | External |",
@@ -1034,7 +1077,13 @@ async def get_app_flow_summary_impl(
     if limit and len(rows) > limit:
         rows = rows[:limit]
     output = []
+    output.append("Use this to decide which UI entrypoints reach real APIs or services and which path to inspect first.")
+    if focus_lines:
+        output.append("")
+        output.append("Inspect First:")
+        output.extend(focus_lines)
     if coverage_lines:
+        output.append("")
         output.extend(coverage_lines)
     output.extend(list(dict.fromkeys(rows)))
     return "\n".join(output)
@@ -1139,6 +1188,8 @@ async def get_backend_flow_summary_impl(
     if not rows:
         return _format_backend_flow_empty_message(cargo_crate_rows)
 
+    focus_lines = _backend_flow_focus_lines(rows)
+
     if as_table:
         output = [
             "| API Crate | Service Crate | API | Route | Service | Model | Schema | External |",
@@ -1169,7 +1220,12 @@ async def get_backend_flow_summary_impl(
     output = list(dict.fromkeys(output))
     if limit and len(output) > limit:
         output = output[:limit]
-    return "\n".join(output)
+    prefix = [
+        "Use this to decide which API entrypoints reach real services, models, or external systems first."
+    ]
+    if focus_lines:
+        prefix.extend(["", "Inspect First:", *focus_lines, ""])
+    return "\n".join(prefix + output)
 
 
 async def get_apple_build_summary_impl(**kwargs) -> str:
