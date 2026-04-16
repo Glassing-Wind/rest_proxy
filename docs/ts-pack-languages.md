@@ -110,7 +110,7 @@ tree-sitter-language-pack supports **248 languages**. All parsers are available 
 | Ninja | `ninja` | [tree-sitter-grammars/tree-sitter-ninja](https://github.com/tree-sitter-grammars/tree-sitter-ninja) |
 | Nix | `nix` | [cstrahan/tree-sitter-nix](https://github.com/cstrahan/tree-sitter-nix) |
 | NQC | `nqc` | [tree-sitter-grammars/tree-sitter-nqc](https://github.com/tree-sitter-grammars/tree-sitter-nqc) |
-| Objective-C | `objc` | [tree-sitter-grammars/tree-sitter-objc](https://github.com/tree-sitter-grammars/tree-sitter-objc) |
+| Objective-C / Objective-C++ | `objc` | [tree-sitter-grammars/tree-sitter-objc](https://github.com/tree-sitter-grammars/tree-sitter-objc) |
 | OCaml | `ocaml` | [tree-sitter/tree-sitter-ocaml](https://github.com/tree-sitter/tree-sitter-ocaml) |
 | OCaml Interface | `ocaml_interface` | [tree-sitter/tree-sitter-ocaml](https://github.com/tree-sitter/tree-sitter-ocaml) |
 | Odin | `odin` | [tree-sitter-grammars/tree-sitter-odin](https://github.com/tree-sitter-grammars/tree-sitter-odin) |

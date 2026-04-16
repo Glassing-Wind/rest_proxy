@@ -122,6 +122,38 @@ class ManifestTests(unittest.TestCase):
         self.assertNotIn("migrations/script.py.mako", rel_paths)
         self.assertNotIn("VERSION", rel_paths)
 
+    def test_global_skip_defaults_exclude_low_value_swift_toolchain_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            (project_path / "Brewfile").write_text("brew 'swift'\n", encoding="utf-8")
+            (project_path / "benchmark").mkdir(parents=True, exist_ok=True)
+            (project_path / "benchmark" / "StringWalk.swift.gyb").write_text("// template\n", encoding="utf-8")
+            (project_path / "stdlib").mkdir(parents=True, exist_ok=True)
+            (project_path / "stdlib" / "Swift.swiftinterface").write_text("// interface\n", encoding="utf-8")
+            (project_path / "clang").mkdir(parents=True, exist_ok=True)
+            (project_path / "clang" / "std.apinotes").write_text("---\n", encoding="utf-8")
+            (project_path / "bindings").mkdir(parents=True, exist_ok=True)
+            (project_path / "bindings" / "comment-xml-schema.rng").write_text("<rng />\n", encoding="utf-8")
+            (project_path / "toolchain").mkdir(parents=True, exist_ok=True)
+            (project_path / "toolchain" / "CompatibilityOverride.def").write_text("ENTRY\n", encoding="utf-8")
+            (project_path / "test").mkdir(parents=True, exist_ok=True)
+            (project_path / "test" / "remote-run.test-sh").write_text("#!/bin/sh\n", encoding="utf-8")
+            (project_path / "notes.sil").write_text("// sil\n", encoding="utf-8")
+            (project_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("app.py", rel_paths)
+        self.assertNotIn("Brewfile", rel_paths)
+        self.assertNotIn("benchmark/StringWalk.swift.gyb", rel_paths)
+        self.assertNotIn("stdlib/Swift.swiftinterface", rel_paths)
+        self.assertNotIn("clang/std.apinotes", rel_paths)
+        self.assertNotIn("bindings/comment-xml-schema.rng", rel_paths)
+        self.assertNotIn("toolchain/CompatibilityOverride.def", rel_paths)
+        self.assertNotIn("test/remote-run.test-sh", rel_paths)
+        self.assertNotIn("notes.sil", rel_paths)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -108,6 +108,38 @@ class FakeTsPack:
     def detect_language(self, path):
         return self._detected_language
 
+    def should_use_line_window_fallback(self, file_path):
+        path = (file_path or "").replace("\\", "/")
+        ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+        filename = os.path.basename(path)
+        return ext in {
+            "yaml",
+            "yml",
+            "toml",
+            "json",
+            "pbxproj",
+            "xcscheme",
+            "xcworkspacedata",
+            "plist",
+            "md",
+            "txt",
+            "sh",
+            "bash",
+            "zsh",
+            "fish",
+            "sql",
+            "graphql",
+            "tf",
+            "hcl",
+            "r",
+            "jl",
+        } or filename in {
+            ".env",
+            ".env.example",
+            ".gitignore",
+            ".indexignore",
+        }
+
     def ProcessConfig(self, language, **kwargs):
         return {"language": language, **kwargs}
 
@@ -192,6 +224,77 @@ class FakeTsPack:
             )
             i += chunk_lines - overlap_lines
         return chunks
+
+    def build_indexing_chunks(
+        self,
+        source,
+        file_path,
+        project_id,
+        *,
+        language=None,
+        chunk_id_version="v6",
+        chunk_max_size=4000,
+        chunk_overlap=200,
+        chunk_lines=60,
+        overlap_lines=10,
+    ):
+        file_meta = {}
+        chunks = []
+        if language == "swift":
+            try:
+                payload = self.build_semantic_payload(
+                    source,
+                    "swift",
+                    file_path,
+                    project_id,
+                    chunk_id_version=chunk_id_version,
+                    chunk_max_size=chunk_max_size,
+                    chunk_overlap=chunk_overlap,
+                )
+                file_meta = payload.get("file_meta") or {}
+            except Exception:
+                file_meta = {}
+            chunks = self.build_swift_chunks(
+                source,
+                file_path,
+                project_id,
+                file_meta=file_meta,
+                chunk_id_version=chunk_id_version,
+                chunk_max_size=chunk_max_size,
+                chunk_lines=chunk_lines,
+                overlap_lines=overlap_lines,
+            )
+            if chunks:
+                return {"language": language, "file_meta": file_meta, "chunks": chunks}
+        elif language:
+            payload = self.build_semantic_payload(
+                source,
+                language,
+                file_path,
+                project_id,
+                chunk_id_version=chunk_id_version,
+                chunk_max_size=chunk_max_size,
+                chunk_overlap=chunk_overlap,
+            )
+            file_meta = payload.get("file_meta") or {}
+            chunks = payload.get("chunks") or []
+            if chunks:
+                return {"language": language, "file_meta": file_meta, "chunks": chunks}
+
+        if language is None and not self.should_use_line_window_fallback(file_path):
+            return {"language": language, "file_meta": file_meta, "chunks": []}
+
+        chunks = self.build_line_window_chunks(
+            source,
+            file_path,
+            project_id,
+            language=language,
+            file_meta=file_meta,
+            chunk_id_version=chunk_id_version,
+            chunk_lines=chunk_lines,
+            overlap_lines=overlap_lines,
+        )
+        return {"language": language, "file_meta": file_meta, "chunks": chunks}
 
     def build_semantic_sync_plan(self, all_chunks, existing_ids=None):
         if self._sync_plan is not None:
@@ -394,6 +497,9 @@ class IndexWorkspaceTests(unittest.TestCase):
             def has_language(self, language):
                 return True
 
+            def should_use_line_window_fallback(self, file_path):
+                return False
+
             def build_semantic_payload(
                 self,
                 source,
@@ -437,6 +543,29 @@ class IndexWorkspaceTests(unittest.TestCase):
                         }
                     ],
                 }
+
+            def build_indexing_chunks(
+                self,
+                source,
+                file_path,
+                project_id,
+                *,
+                language=None,
+                chunk_id_version="v6",
+                chunk_max_size=4000,
+                chunk_overlap=200,
+                chunk_lines=60,
+                overlap_lines=10,
+            ):
+                return self.build_semantic_payload(
+                    source,
+                    language,
+                    file_path,
+                    project_id,
+                    chunk_id_version=chunk_id_version,
+                    chunk_max_size=chunk_max_size,
+                    chunk_overlap=chunk_overlap,
+                )
 
         fake_ts_pack = _BuildTsPack()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -916,6 +1045,12 @@ class IndexWorkspaceTests(unittest.TestCase):
                         "context_path": ["SidebarView"],
                         "file_symbols": ["SidebarView"],
                         "file_diagnostics": {"count": 0, "items": []},
+                        "member_usages": [],
+                        "call_like_symbols": [],
+                        "declared_symbols": ["SidebarView"],
+                        "contains_definition": True,
+                        "contains_entrypoint": False,
+                        "chunk_role": "definition",
                     },
                 }
             ],

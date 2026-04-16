@@ -1,4 +1,13 @@
-"""Manifest builder for workspace indexing."""
+"""Manifest builder for workspace indexing.
+
+This module is the source of truth for policy-style global skips:
+- generated artifacts
+- binary/non-source assets
+- recurring low-value repository files
+
+Runtime outcomes such as read failures, oversized files, or parser diagnostics
+belong in the semantic/struct workers, not here.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +15,7 @@ import fnmatch
 import os
 from pathlib import Path
 
+# Built-in policy skips applied before struct or semantic indexing starts.
 SKIP_DIRS = {
     ".git",
     "__pycache__",
@@ -145,6 +155,13 @@ SKIP_EXTS = {
     ".modulemap",
     ".mdx",
     ".bmp",
+    ".gyb",
+    ".sil",
+    ".swiftinterface",
+    ".apinotes",
+    ".rng",
+    ".def",
+    ".test-sh",
 }
 SKIP_FILENAMES = {
     ".DS_Store",
@@ -181,6 +198,7 @@ SKIP_FILENAMES = {
     "yarn.lock",
     "bun.lockb",
     "script.py.mako",
+    "Brewfile",
 }
 SKIP_RELATIVE_PATTERNS = {
     "migrations/README",

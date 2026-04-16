@@ -48,38 +48,6 @@ TS_PACK_CACHE_DIR = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
 _TS_PACK_INIT_DONE = False
 _TS_PACK_INIT_LOCK = threading.Lock()
 
-# Extensions that always use the line-window fallback (no AST structure).
-_FALLBACK_EXTS = {
-    "yaml",
-    "yml",
-    "toml",
-    "json",
-    "pbxproj",
-    "xcscheme",
-    "xcworkspacedata",
-    "plist",
-    "md",
-    "txt",
-    "sh",
-    "bash",
-    "zsh",
-    "fish",
-    "sql",
-    "graphql",
-    "tf",
-    "hcl",
-    "r",
-    "jl",
-}
-
-# Dotfiles that should still be chunked with the line-window fallback.
-_FALLBACK_FILENAMES = {
-    ".env",
-    ".env.example",
-    ".gitignore",
-    ".indexignore",
-}
-
 # Minimal extraction patterns for languages where queries are stable.
 # Extractions: keep small and stable (query syntax varies by grammar).
 _EXTRACTIONS_BY_LANG = {
@@ -197,7 +165,8 @@ def _preflight_ts_pack(manifest: List[Dict]) -> None:
     detected: set[str] = set()
     for entry in manifest:
         ext = (entry.get("ext") or "").lower().lstrip(".")
-        if not ext or ext in _FALLBACK_EXTS:
+        rel_path = entry.get("rel_path") or entry.get("abs_path") or ""
+        if getattr(ts_pack, "should_use_line_window_fallback", None) and ts_pack.should_use_line_window_fallback(rel_path):
             continue
         lang = None
         try:
@@ -291,14 +260,17 @@ def _read_and_chunk(
             return False
 
     ext = abs_path.rsplit(".", 1)[-1].lower() if "." in abs_path else ""
+    fallback_allowed = False
+    if getattr(ts_pack, "should_use_line_window_fallback", None):
+        try:
+            fallback_allowed = bool(ts_pack.should_use_line_window_fallback(rel_path))
+        except Exception:
+            fallback_allowed = False
 
     # Use ts_pack.detect_language for language detection — covers 156 languages.
     # Prefer extension-based detection when available to avoid mis-detection.
     lang: str | None = None
-    if (
-        ext not in _FALLBACK_EXTS
-        and os.path.basename(abs_path) not in _FALLBACK_FILENAMES
-    ):
+    if not fallback_allowed:
         if ext == "svg":
             lang = "xml"
         else:
@@ -314,12 +286,9 @@ def _read_and_chunk(
         parser_missing = True
         lang = None
 
-    # Nothing to do: unknown file type and not a line-window fallback extension.
-    if (
-        lang is None
-        and ext not in _FALLBACK_EXTS
-        and os.path.basename(abs_path) not in _FALLBACK_FILENAMES
-    ):
+    # Runtime outcome, not manifest policy: the file reached the semantic worker
+    # but we still could not determine a supported language or fallback path.
+    if lang is None and not fallback_allowed:
         reason = "missing_parser" if parser_missing else "unknown_language"
         return [], reason
 
@@ -329,79 +298,97 @@ def _read_and_chunk(
     except OSError:
         return [], "read_error"
 
+    # Runtime safety outcome, not manifest policy.
     if len(source) > MAX_FILE_BYTES:
         return [], "too_large"
+    # Runtime file-content outcome, not manifest policy.
     if not source.strip():
         return [], "empty"
 
     chunks: List[Dict] = []
     file_meta: dict = {}
 
-    def _build_semantic_payload_compat(source_text: str, language_name: str) -> dict:
-        payload_kwargs = {
-            "chunk_id_version": CHUNK_ID_VERSION,
-            "chunk_max_size": CHUNK_MAX_BYTES,
-        }
-        payload_sig = inspect.signature(ts_pack.build_semantic_payload)
-        if "chunk_overlap" in payload_sig.parameters:
-            payload_kwargs["chunk_overlap"] = CHUNK_OVERLAP_BYTES
-        elif "_chunk_overlap" in payload_sig.parameters:
-            payload_kwargs["_chunk_overlap"] = CHUNK_OVERLAP_BYTES
-        return ts_pack.build_semantic_payload(
-            source_text,
-            language_name,
-            rel_path,
-            project_id,
-            **payload_kwargs,
-        )
-
-    # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
-    if lang == "swift":
+    if getattr(ts_pack, "build_indexing_chunks", None):
         try:
-            payload = _build_semantic_payload_compat(source, "swift")
-            file_meta = payload.get("file_meta") or {}
-            if _should_skip_diagnostic_file(file_meta):
-                return [], "diagnostics"
-        except Exception:
-            file_meta = {}
-
-        swift_chunks = ts_pack.build_swift_chunks(
-            source,
-            rel_path,
-            project_id,
-            file_meta=file_meta,
-            chunk_id_version=CHUNK_ID_VERSION,
-            chunk_max_size=CHUNK_MAX_BYTES,
-            chunk_lines=CHUNK_LINES,
-            overlap_lines=OVERLAP_LINES,
-        )
-        if swift_chunks:
-            return swift_chunks, None
-        # fall through to ts_pack / line-window if structure[] was empty
-
-    # ── Native ts_pack chunking ───────────────────────────────────────────────
-    if lang and lang != "swift":
-        try:
-            payload = _build_semantic_payload_compat(source, lang)
+            payload = ts_pack.build_indexing_chunks(
+                source,
+                rel_path,
+                project_id,
+                language=lang,
+                chunk_id_version=CHUNK_ID_VERSION,
+                chunk_max_size=CHUNK_MAX_BYTES,
+                chunk_overlap=CHUNK_OVERLAP_BYTES,
+                chunk_lines=CHUNK_LINES,
+                overlap_lines=OVERLAP_LINES,
+            )
             file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"
             chunks = payload.get("chunks") or []
         except Exception:
-            pass  # Fall through to line-window below
+            chunks = []
+            file_meta = {}
+    else:
+        # Compatibility fallback while editable installs/tests catch up to the
+        # producer-owned helper surface.
+        def _build_semantic_payload_compat(source_text: str, language_name: str) -> dict:
+            payload_kwargs = {
+                "chunk_id_version": CHUNK_ID_VERSION,
+                "chunk_max_size": CHUNK_MAX_BYTES,
+            }
+            payload_sig = inspect.signature(ts_pack.build_semantic_payload)
+            if "chunk_overlap" in payload_sig.parameters:
+                payload_kwargs["chunk_overlap"] = CHUNK_OVERLAP_BYTES
+            elif "_chunk_overlap" in payload_sig.parameters:
+                payload_kwargs["_chunk_overlap"] = CHUNK_OVERLAP_BYTES
+            return ts_pack.build_semantic_payload(
+                source_text,
+                language_name,
+                rel_path,
+                project_id,
+                **payload_kwargs,
+            )
 
-    # ── Line-window fallback (unsupported lang or empty result) ──────────────
-    if not chunks:
-        chunks = ts_pack.build_line_window_chunks(
-            source,
-            rel_path,
-            project_id,
-            language=lang,
-            file_meta=file_meta,
-            chunk_id_version=CHUNK_ID_VERSION,
-            chunk_lines=CHUNK_LINES,
-            overlap_lines=OVERLAP_LINES,
-        )
+        if lang == "swift":
+            try:
+                payload = _build_semantic_payload_compat(source, "swift")
+                file_meta = payload.get("file_meta") or {}
+                if _should_skip_diagnostic_file(file_meta):
+                    return [], "diagnostics"
+            except Exception:
+                file_meta = {}
+
+            chunks = ts_pack.build_swift_chunks(
+                source,
+                rel_path,
+                project_id,
+                file_meta=file_meta,
+                chunk_id_version=CHUNK_ID_VERSION,
+                chunk_max_size=CHUNK_MAX_BYTES,
+                chunk_lines=CHUNK_LINES,
+                overlap_lines=OVERLAP_LINES,
+            )
+        elif lang:
+            try:
+                payload = _build_semantic_payload_compat(source, lang)
+                file_meta = payload.get("file_meta") or {}
+                if _should_skip_diagnostic_file(file_meta):
+                    return [], "diagnostics"
+                chunks = payload.get("chunks") or []
+            except Exception:
+                chunks = []
+
+        if not chunks:
+            chunks = ts_pack.build_line_window_chunks(
+                source,
+                rel_path,
+                project_id,
+                language=lang,
+                file_meta=file_meta,
+                chunk_id_version=CHUNK_ID_VERSION,
+                chunk_lines=CHUNK_LINES,
+                overlap_lines=OVERLAP_LINES,
+            )
 
     _validate_semantic_chunk_contract(chunks, rel_path, ts_pack)
     return chunks, None
