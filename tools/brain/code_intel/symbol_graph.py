@@ -27,6 +27,7 @@ REL_CONTAINS = rel_type("contains")
 REL_CALLS = rel_type("calls")
 REL_CALLS_INFERRED = rel_type("calls_inferred")
 REL_CALLS_EXTERNAL_SYMBOL = rel_type("calls_external_symbol")
+REL_IMPLEMENTS_TYPE = rel_type("implements_type")
 REL_IMPORTS = rel_type("imports")
 
 
@@ -96,7 +97,8 @@ CALL_CHAIN_RESOLVE_CYPHER = f"""
          count(DISTINCT caller) AS callers_in
     WHERE rank < 99
     RETURN elementId(s) AS eid, s.name AS name, s.qualified_name AS qualified_name,
-           s.signature AS signature, s.filepath AS filepath, rank,
+           s.signature AS signature, s.filepath AS filepath,
+           head([label IN labels(s) WHERE label <> 'Node']) AS kind, rank,
            CASE
              WHEN s.filepath IS NULL THEN 2
              WHEN s.filepath CONTAINS '/tests/' OR s.filepath CONTAINS '/test/' OR s.filepath CONTAINS '/e2e/'
@@ -473,6 +475,7 @@ def pick_call_chain_candidate(
         key=lambda candidate: (
             candidate.get("rank", 99),
             min(candidate.get("path_rank", 99), _symbol_path_penalty(candidate.get("filepath"))),
+            _symbol_kind_rank(candidate.get("kind")),
             -int(candidate.get("callers_in") or 0),
             len(candidate.get("qualified_name") or candidate.get("name") or ""),
         ),
@@ -495,6 +498,63 @@ def pick_call_chain_candidate(
         if signature_matches:
             return signature_matches[0]
     return ranked_candidates[0]
+
+
+def build_swift_protocol_upward_fallback_cypher(depth: int) -> str:
+    nested_depth = max(int(depth) - 1, 0)
+    nested_pattern = (
+        ""
+        if nested_depth == 0
+        else f"OPTIONAL MATCH path = (caller)-[:{REL_CALLS}|{REL_CALLS_INFERRED}*1..{nested_depth}]->(impl)\n"
+    )
+    nested_with = (
+        "WITH start, impl, null AS path\n"
+        if nested_depth == 0
+        else (
+            "WHERE caller IS NULL OR (\n"
+            "  (caller:Function OR caller:Method OR caller:Class OR caller:Struct OR caller:Trait OR caller:Enum)\n"
+            "  AND NOT (coalesce(caller.filepath, '') CONTAINS '/tests/'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '/test/'\n"
+            "    OR coalesce(caller.filepath, '') STARTS WITH 'tests/'\n"
+            "    OR coalesce(caller.filepath, '') STARTS WITH 'test/'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '/e2e/'\n"
+            "    OR coalesce(caller.filepath, '') STARTS WITH 'e2e/'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '/fixtures/'\n"
+            "    OR coalesce(caller.filepath, '') STARTS WITH 'fixtures/'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '.spec.'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '.stories.'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '/gen/'\n"
+            "    OR coalesce(caller.filepath, '') STARTS WITH 'gen/'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '/generated/'\n"
+            "    OR coalesce(caller.filepath, '') STARTS WITH 'generated/'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS 'PreGeneratedSPM'\n"
+            "    OR coalesce(caller.filepath, '') CONTAINS '/vendors/'\n"
+            "    OR coalesce(caller.filepath, '') STARTS WITH 'vendors/')\n"
+            ")\n"
+            "WITH start, impl, path\n"
+        )
+    )
+    return (
+        "MATCH (start) WHERE elementId(start) = $eid\n"
+        f"MATCH (impl)-[:{REL_IMPLEMENTS_TYPE}]->(start)\n"
+        "WHERE (impl:Struct OR impl:Class OR impl:Enum OR impl:TypeAlias)\n"
+        + nested_pattern
+        + nested_with
+        + "RETURN CASE\n"
+          "         WHEN path IS NULL THEN [start.name, impl.name]\n"
+          "         ELSE [start.name] + [n IN reverse(nodes(path)) | n.name]\n"
+          "       END AS chain,\n"
+          "       CASE\n"
+          "         WHEN path IS NULL THEN [start.filepath, impl.filepath]\n"
+          "         ELSE [start.filepath] + [n IN reverse(nodes(path)) | n.filepath]\n"
+          "       END AS files,\n"
+          "       CASE\n"
+          "         WHEN path IS NULL THEN [start.start_line, impl.start_line]\n"
+          "         ELSE [start.start_line] + [n IN reverse(nodes(path)) | n.start_line]\n"
+          "       END AS lines\n"
+          "ORDER BY size(chain) ASC, files[1] ASC\n"
+          "LIMIT 40"
+    )
 
 
 def pick_visualize_candidate(candidates: list[dict], *, symbol_name: str) -> dict | None:

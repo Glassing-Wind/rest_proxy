@@ -532,6 +532,7 @@ def register(mcp: FastMCP) -> None:
 
             resolved_name = symbol_name
             resolved_eid = None
+            resolved_kind = None
             hop_label = "caller" if direction == "up" else "callee"
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
@@ -560,6 +561,7 @@ def register(mcp: FastMCP) -> None:
                 resolved_name = (
                     picked.get("qualified_name") or picked.get("name") or symbol_name
                 )
+                resolved_kind = picked.get("kind") or ""
                 resolved_filepath = picked.get("filepath") or ""
                 hop_label, cypher = symbol_graph.build_call_chain_path_cypher(
                     direction,
@@ -569,6 +571,21 @@ def register(mcp: FastMCP) -> None:
                 rows = await _execute_read(
                     session, cypher, eid=resolved_eid, op="get_call_chain"
                 )
+
+                if (
+                    not rows
+                    and direction == "up"
+                    and resolved_filepath.endswith(".swift")
+                    and resolved_kind in {"Protocol", "Interface", "Trait"}
+                ):
+                    protocol_rows = await _execute_read(
+                        session,
+                        symbol_graph.build_swift_protocol_upward_fallback_cypher(depth),
+                        eid=resolved_eid,
+                        op="get_call_chain_swift_protocol_fallback",
+                    )
+                    if protocol_rows:
+                        rows = protocol_rows
 
                 if not rows:
                     if direction == "up" and resolved_filepath.endswith(".swift"):

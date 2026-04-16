@@ -1138,6 +1138,91 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("FrameCreator/Views/ContentView.swift", output)
         self.assertTrue(executed)
 
+    def test_get_call_chain_uses_swift_protocol_graph_fallback_before_semantic_usage(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "EventLoop",
+                        "qualified_name": "EventLoop",
+                        "signature": "public protocol EventLoop: EventLoopGroup",
+                        "filepath": "Sources/NIOCore/EventLoop.swift",
+                        "kind": "Protocol",
+                        "rank": 0,
+                        "path_rank": 0,
+                        "callers_in": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            if "MATCH (impl)-[:IMPLEMENTS_TYPE]->(start)" in cypher:
+                return [
+                    {
+                        "chain": ["EventLoop", "EmbeddedEventLoop", "main"],
+                        "files": [
+                            "Sources/NIOCore/EventLoop.swift",
+                            "Sources/NIOEmbedded/EmbeddedEventLoop.swift",
+                            "Benchmarks/Benchmarks/NIOCoreBenchmarks/Benchmarks.swift",
+                        ],
+                        "lines": [10, 12, 45],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/swift-nio",
+                        "EventLoop",
+                        depth=2,
+                        direction="up",
+                        file_path="Sources/NIOCore/EventLoop.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Call chain: `EventLoop`", output)
+        self.assertIn("`EmbeddedEventLoop`", output)
+        self.assertNotIn("Swift caller-like usages", output)
+
+    def test_pick_call_chain_candidate_prefers_swift_protocol_over_same_file_extension(self):
+        picked = self.module.symbol_graph.pick_call_chain_candidate(
+            [
+                {
+                    "eid": "ext",
+                    "name": "EventLoop",
+                    "qualified_name": "EventLoop",
+                    "signature": None,
+                    "filepath": "Sources/NIOCore/EventLoop.swift",
+                    "kind": "Extension",
+                    "rank": 0,
+                    "path_rank": 1,
+                    "callers_in": 0,
+                },
+                {
+                    "eid": "proto",
+                    "name": "EventLoop",
+                    "qualified_name": "EventLoop",
+                    "signature": None,
+                    "filepath": "Sources/NIOCore/EventLoop.swift",
+                    "kind": "Protocol",
+                    "rank": 0,
+                    "path_rank": 1,
+                    "callers_in": 0,
+                },
+            ],
+            normalized_file_path="Sources/NIOCore/EventLoop.swift",
+            normalized_signature=None,
+        )
+
+        self.assertIsNotNone(picked)
+        self.assertEqual(picked["eid"], "proto")
+
     def test_symbol_context_dedupes_file_level_swift_caller_when_symbol_caller_exists(self):
         output = self.module.symbol_graph.format_symbol_context(
             {
