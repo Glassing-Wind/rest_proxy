@@ -467,6 +467,55 @@
         "nnc/FunctionalAddons.swift",
         "DynamicGraph.AnyTensor"
       ]
+    },
+    {
+      "id": "swift_nio_eventloop_symbol_context",
+      "workspace_name": "swift-nio",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "EventLoop",
+        "include_source_preview": true,
+        "file_path": "Sources/NIOCore/EventLoop.swift"
+      },
+      "required_substrings": [
+        "Sources/NIOCore/EventLoop.swift",
+        "`EventLoop` (Protocol)",
+        "public protocol EventLoop: EventLoopGroup"
+      ]
+    },
+    {
+      "id": "swift_nio_eventloop_call_chain_up",
+      "workspace_name": "swift-nio",
+      "tool": "get_call_chain",
+      "params": {
+        "symbol_name": "EventLoop",
+        "file_path": "Sources/NIOCore/EventLoop.swift",
+        "direction": "up",
+        "depth": 2
+      },
+      "required_substrings": [
+        "Call chain: `EventLoop`",
+        "`NIOAsyncTestingEventLoop`  (Sources/NIOEmbedded/AsyncTestingEventLoop.swift)",
+        "`SelectableEventLoop`  (Sources/NIOPosix/SelectableEventLoop.swift)"
+      ],
+      "forbidden_substrings": [
+        "Swift caller-like usages",
+        "Resolved `EventLoop` → `extension"
+      ]
+    },
+    {
+      "id": "swift_nio_eventloop_extension_ownership",
+      "workspace_name": "swift-nio",
+      "tool": "query_graph",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "cypher_query": "MATCH (e:Extension {project_id:$project_id, filepath:'Sources/NIOCore/EventLoop.swift', name:'EventLoop'})-[:SWIFT_EXTENDS_TYPE]->(t:Node {project_id:$project_id}) WHERE t:Protocol RETURN e.qualified_name AS extension_qname, t.name AS target, t.kind AS kind LIMIT 5"
+      },
+      "required_substrings": [
+        "extension EventLoop@",
+        "\"target\": \"EventLoop\"",
+        "\"kind\": \"Protocol\""
+      ]
     }
   ]
 }
