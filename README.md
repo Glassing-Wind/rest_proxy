@@ -44,6 +44,92 @@
 4. **Index your Workspace**:
    Use the `index_workspace` tool from your AI assistant to perform a full sync.
 
+## LM Studio Local Embeddings
+
+For new local embedding work we use a hybrid LM Studio integration:
+
+- native v1 REST API under `/api/v1/*` for model lifecycle
+  - `GET /api/v1/models`
+  - `POST /api/v1/models/load`
+  - `POST /api/v1/models/unload`
+- OpenAI-compatible `POST /v1/embeddings` for embedding generation
+
+This split is intentional. LM Studio recommends the native v1 API for new
+projects, but embeddings are still documented under the OpenAI-compatible
+surface.
+
+### Why this repo uses both API surfaces
+
+- `/api/v1/*` gives explicit model management and load configuration.
+- `/v1/embeddings` is still the documented embeddings endpoint.
+- Keeping lifecycle and embeddings separate makes the provider easy to swap
+  later if we move to a different local backend.
+- Some LM Studio embedding runtimes reject `eval_batch_size` on model load.
+  The provider handles this cleanly by retrying the load with `context_length`
+  only instead of failing the whole embedding path.
+
+### Environment
+
+```bash
+LMSTUDIO_BASE_URL=http://127.0.0.1:1234
+LMSTUDIO_EMBED_MODEL=text-embedding-jina-embeddings-v2-base-code
+LMSTUDIO_CONTEXT_LENGTH=2048
+LMSTUDIO_EVAL_BATCH_SIZE=512
+LMSTUDIO_EMBED_TIMEOUT_S=120
+LMSTUDIO_AUTO_LOAD=true
+LMSTUDIO_MAX_BATCH_SIZE=256
+LMSTUDIO_MAX_BATCH_TOKENS=524288
+LM_EMBED_CONCURRENCY=4
+```
+
+Compatibility note:
+- older repo paths still honor `LM_PROXY_MEMORY_EMBEDDING_MODEL`,
+  `LM_PROXY_MEMORY_EMBEDDING_BASE_URL`, and `LM_EMBED_BATCH_SIZE`
+- the new `LMSTUDIO_*` names are the preferred configuration surface
+
+### Starting LM Studio as a service
+
+GUI:
+- open LM Studio
+- enable the Developer server on `localhost:1234`
+
+Headless / service style:
+
+```bash
+lms server start
+```
+
+Then verify:
+
+```bash
+curl http://127.0.0.1:1234/api/v1/models
+curl http://127.0.0.1:1234/v1/models
+```
+
+### Benchmarking and tuning on Apple Silicon
+
+Run:
+
+```bash
+python /Users/michaelmarler/Projects/rest_proxy/scripts/benchmark_lmstudio_embeddings.py
+```
+
+Recommended first-pass tuning for a MacBook Pro M3-class machine:
+- `LMSTUDIO_CONTEXT_LENGTH=2048`
+- `LMSTUDIO_EVAL_BATCH_SIZE=512`
+- `LMSTUDIO_MAX_BATCH_SIZE=64`, `128`, then `256`
+- `LM_EMBED_CONCURRENCY=4`
+
+Keep request batch size constrained by token length, not just document count:
+- short code/doc chunks: request batches of `128-256` are reasonable to test
+- longer chunks: reduce request batch size before raising timeout values
+
+Model note:
+- `text-embedding-jina-embeddings-v2-base-code` is a good starting point for
+  local code embeddings because it is relatively small and benchmark-friendly
+- on Apple Silicon, larger MLX-native embedding models may eventually win on
+  throughput, but should be benchmarked separately instead of assumed faster
+
 ## HTTP MCP Operation
 
 The recommended deployment mode is a single shared Streamable HTTP MCP daemon:
