@@ -85,6 +85,17 @@ class FakeMemoryStore:
         return None
 
 
+def fake_embedding_module():
+    embedding_service = types.ModuleType("embedding_service")
+
+    class FakeEmbeddingService:
+        async def embed_batch_async(self, texts):
+            return [[0.1, 0.2, 0.3] for _ in texts]
+
+    embedding_service.get_embedding_service = lambda: FakeEmbeddingService()
+    return embedding_service
+
+
 def load_module(memory_store):
     spec = importlib.util.spec_from_file_location("tools.brain.search.cross_project", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -108,14 +119,6 @@ def load_module(memory_store):
     search_core = types.ModuleType("tools.brain.search.core")
     search_core._execute_read = mock.AsyncMock(return_value=[])
 
-    embedding_service = types.ModuleType("embedding_service")
-
-    class FakeEmbeddingService:
-        async def embed_batch_async(self, texts):
-            return [[0.1, 0.2, 0.3] for _ in texts]
-
-    embedding_service.get_embedding_service = lambda: FakeEmbeddingService()
-
     tools_pkg = types.ModuleType("tools")
     tools_pkg.__path__ = []
     brain_pkg = types.ModuleType("tools.brain")
@@ -133,7 +136,7 @@ def load_module(memory_store):
             "tools.brain": brain_pkg,
             "tools.brain.search": search_pkg,
             "tools.brain.search.core": search_core,
-            "embedding_service": embedding_service,
+            "embedding_service": fake_embedding_module(),
             "mcp.server.fastmcp": mcp_mod,
         },
     ):
@@ -176,7 +179,13 @@ class CrossProjectToolTests(unittest.TestCase):
                 return []
             return []
 
-        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
             with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
                 output = asyncio.run(
                     self.mcp.tools["trace_symbol_cross_project"](
@@ -216,7 +225,13 @@ class CrossProjectToolTests(unittest.TestCase):
                 return []
             return []
 
-        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
             with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
                 output = asyncio.run(
                     self.mcp.tools["trace_symbol_cross_project"](
@@ -274,7 +289,13 @@ class CrossProjectToolTests(unittest.TestCase):
                 return []
             return []
 
-        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
             with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
                 output = asyncio.run(
                     self.mcp.tools["trace_symbol_cross_project"](

@@ -342,6 +342,13 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
         with open(manifest_path, "w") as f:
             json.dump(manifest, f)
 
+        try:
+            from memory import bootstrap as memory_bootstrap
+
+            await memory_bootstrap.bootstrap_schema()
+        except Exception as exc:
+            _debug_log("schema_bootstrap_failed", project_id=project_id, error=str(exc))
+
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
 
@@ -461,6 +468,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
         neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
         neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
         neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+        neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
         runtime = resolve_python_runtime()
         python_cmd = list(runtime["cmd"])
 
@@ -476,6 +484,8 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             neo4j_user,
             "--neo4j-pass",
             neo4j_pass,
+            "--neo4j-db",
+            neo4j_db,
         ]
         sem_cmd = python_cmd + [
             os.path.join(base_dir, "scripts", "index_workspace.py"),

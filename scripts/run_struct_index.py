@@ -452,6 +452,7 @@ def main() -> int:
             manifest_file=args.manifest_file,
             status_project_id=args.project_id,
             run_id=run_id,
+            neo4j_db=args.neo4j_db,
         )
         print(
             f"[ts-pack:struct] Done — {len(files)} files indexed.",
@@ -562,6 +563,7 @@ def main() -> int:
             neo4j_uri=args.neo4j_uri,
             neo4j_user=args.neo4j_user,
             neo4j_pass=args.neo4j_pass,
+            neo4j_db=args.neo4j_db,
         )
         _log_timed_step("prune_struct_shadow_graph", prune_started_at)
         print(
