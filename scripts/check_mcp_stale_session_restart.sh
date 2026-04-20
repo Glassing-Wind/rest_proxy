@@ -6,7 +6,9 @@ STATUS_SCRIPT="$ROOT_DIR/scripts/brain_server_status.sh"
 START_SCRIPT="$ROOT_DIR/scripts/start_brain_server_daemon.sh"
 RESTART_SCRIPT="$ROOT_DIR/scripts/restart_brain_server.sh"
 
-MCP_URL="http://127.0.0.1:8001/mcp"
+PORT="${BRAIN_SERVER_PORT:-8001}"
+BASE_URL="${BRAIN_SERVER_BASE_URL:-http://127.0.0.1:$PORT}"
+MCP_URL="$BASE_URL/mcp"
 PROTO="2025-06-18"
 
 ensure_server() {
@@ -17,11 +19,11 @@ ensure_server() {
 }
 
 wait_for_server() {
-  local attempts=20
+  local attempts=120
   local delay=0.5
   local i
   for ((i=0; i<attempts; i++)); do
-    if curl -fsS "http://127.0.0.1:8001/health" >/dev/null 2>&1; then
+    if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
       return 0
     fi
     sleep "$delay"

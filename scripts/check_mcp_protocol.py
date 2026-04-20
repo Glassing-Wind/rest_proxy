@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import urllib.error
 import urllib.request
 
 
-BASE_URL = "http://127.0.0.1:8001"
+BASE_URL = os.environ.get("BRAIN_SERVER_BASE_URL") or f"http://127.0.0.1:{os.environ.get('BRAIN_SERVER_PORT', '8001')}"
 MCP_URL = f"{BASE_URL}/mcp"
 HEALTH_URL = f"{BASE_URL}/health"
 PROTOCOL_VERSION = "2025-06-18"
@@ -47,7 +48,7 @@ def _extract_sse_json(raw: str) -> dict:
     raise AssertionError("No SSE data frame found in initialize response")
 
 
-def _wait_for_server(timeout_seconds: float = 10.0) -> None:
+def _wait_for_server(timeout_seconds: float = 60.0) -> None:
     deadline = time.monotonic() + timeout_seconds
     last_error: Exception | None = None
     while time.monotonic() < deadline:

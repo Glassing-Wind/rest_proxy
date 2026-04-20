@@ -6,11 +6,13 @@
 # Designed to be called by the launchd plist.
 # ---------------------------------------------------------------------------
 
-set -e
+set -euo pipefail
 
-REPO="/Users/michaelmarler/Projects/rest_proxy"
-PYTHON="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
-UVICORN="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/uvicorn"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON="${LM_PROXY_PYTHON:-${LM_PROXY_INDEX_PYTHON:-}}"
+if [[ -z "$PYTHON" ]]; then
+    PYTHON="$(command -v python || command -v python3)"
+fi
 PORT="${BRAIN_SERVER_PORT:-8001}"
 
 # Source .env so all LM_PROXY_* variables are available.
@@ -26,7 +28,7 @@ export LM_PROXY_TRANSPORT=http
 
 cd "$REPO"
 
-exec "$UVICORN" brain_server:app \
+exec "$PYTHON" -m uvicorn brain_server:app \
     --host 127.0.0.1 \
     --port "$PORT" \
     --workers 1 \

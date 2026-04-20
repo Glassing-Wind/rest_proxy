@@ -30,6 +30,18 @@ echo "[ci] Running GraphRAG regression suite..."
 ./scripts/check_graph_pipeline.sh
 
 echo "[ci] Running MCP protocol checks..."
+MCP_SERVER_STARTED=0
+cleanup_mcp_server() {
+  if [[ "$MCP_SERVER_STARTED" -eq 1 ]]; then
+    ./scripts/stop_brain_server.sh >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_mcp_server EXIT
+
+if ! ./scripts/brain_server_status.sh >/dev/null 2>&1; then
+  ./scripts/start_brain_server_daemon.sh
+  MCP_SERVER_STARTED=1
+fi
 "$PYTHON_BIN" ./scripts/check_mcp_protocol.py
 ./scripts/check_mcp_stale_session_restart.sh
 
