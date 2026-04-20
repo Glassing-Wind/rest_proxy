@@ -240,6 +240,64 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("Use this to land in one directory", output)
         self.assertIn("Recommended Inspection Order", output)
 
+    def test_directory_snapshot_prioritizes_workspace_references_for_apple_workspace_dir(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 1}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            if op == "get_directory_snapshot_files":
+                return [{"fp": "BGM.xcworkspace/contents.xcworkspacedata", "sym_count": 0, "samples": []}]
+            if op == "get_directory_snapshot_inbound":
+                return []
+            if op == "get_directory_snapshot_outbound":
+                return []
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op == "apple_context_targets":
+                return []
+            if op == "apple_context_schemes":
+                return []
+            if op == "apple_context_schema_labels":
+                return [{"labels": ["XcodeWorkspace"]}]
+            if op == "apple_context_schema_relationship_types":
+                return [{"rels": ["REFERENCES_PROJECT"]}]
+            if op == "apple_context_workspaces":
+                return [
+                    {
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                        "projects": [
+                            "BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+                            "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                        ],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["get_directory_snapshot"](
+                        "/tmp/loombackgroundmusic",
+                        "BGM.xcworkspace",
+                        5,
+                    )
+                )
+
+        self.assertIn(
+            "inspect workspace project references first because this directory defines the top-level Xcode workspace",
+            output,
+        )
+        self.assertIn(
+            "check `BGM.xcworkspace/contents.xcworkspacedata` next because it resolves the owning Xcode projects for this workspace",
+            output,
+        )
+        self.assertIn(
+            "workspace `BGM.xcworkspace/contents.xcworkspacedata` references BGMDriver/BGMDriver.xcodeproj/project.pbxproj, BGMApp/BGMApp.xcodeproj/project.pbxproj",
+            output,
+        )
+
     def test_directory_snapshot_falls_back_to_file_graph_for_swift_coupling(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -288,6 +346,62 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("FrameCreator/ViewModels/EditorViewModel.swift", output)
         self.assertNotIn("### 📥 Consumers: None found.", output)
         self.assertNotIn("### 📤 Dependencies: None found.", output)
+
+    def test_directory_snapshot_downweights_test_consumers_and_dependencies(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {"fp": "Sources/NIOPosix/BaseSocketChannel.swift", "sym_count": 12, "samples": ["run", "bind"]},
+                    {"fp": "Sources/NIOPosix/Bootstrap.swift", "sym_count": 10, "samples": ["bootstrap", "bind"]},
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [
+                    {"caller": "Tests/NIOPosixTests/ChannelTests.swift", "n_imports": 5, "signal": "import"},
+                    {"caller": "Sources/NIOEchoClient/main.swift", "n_imports": 3, "signal": "import"},
+                ]
+            if op == "get_directory_snapshot_outbound":
+                return [
+                    {"dependency": "Tests/NIOCoreTests/ByteBufferSpanTests.swift", "n_usages": 4, "signal": "import"},
+                    {"dependency": "Sources/NIOCore/AsyncAwaitSupport.swift", "n_usages": 3, "signal": "import"},
+                ]
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op in {
+                "apple_context_targets",
+                "apple_context_schemes",
+                "apple_context_schema_labels",
+                "apple_context_schema_relationship_types",
+                "apple_context_workspaces",
+                "cargo_context_schema_labels",
+                "cargo_context_schema_relationship_types",
+                "cargo_context_crates",
+                "cargo_context_workspaces",
+                "cargo_context_dependencies",
+                "cargo_directory_schema_labels",
+                "cargo_directory_schema_relationship_types",
+                "cargo_directory_dependencies_outbound",
+                "cargo_directory_dependencies_inbound",
+                "get_directory_snapshot_local_symbols",
+                "get_directory_snapshot_external_symbols",
+            }:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_directory_snapshot"]("/tmp/swift-nio", "Sources/NIOPosix", 8))
+
+        prod_consumer_idx = output.index("Sources/NIOEchoClient/main.swift")
+        test_consumer_idx = output.index("Tests/NIOPosixTests/ChannelTests.swift")
+        prod_dep_idx = output.index("Sources/NIOCore/AsyncAwaitSupport.swift")
+        test_dep_idx = output.index("Tests/NIOCoreTests/ByteBufferSpanTests.swift")
+        self.assertLess(prod_consumer_idx, test_consumer_idx)
+        self.assertLess(prod_dep_idx, test_dep_idx)
 
     def test_directory_snapshot_includes_cargo_context(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -553,6 +667,8 @@ class GraphToolsTests(unittest.TestCase):
                 output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/framecreator"))
 
         self.assertIn("## Apple Build Context", output)
+        self.assertIn("## Inspect First", output)
+        self.assertIn("inspect Apple build context first because target `App` via `ios/App.xcodeproj/project.pbxproj` anchors the app structure", output)
         self.assertIn("target `App` bundles 4 file(s)", output)
         self.assertIn("scheme `App` builds App", output)
         self.assertIn("workspace `ios/App.xcworkspace/contents.xcworkspacedata` references ios/App.xcodeproj/project.pbxproj", output)
@@ -745,6 +861,70 @@ class GraphToolsTests(unittest.TestCase):
         icons_index = output.index("packages/web/src/components/icons/index.tsx")
         self.assertLess(config_index, e2e_index)
         self.assertLess(config_index, icons_index)
+
+    def test_project_overview_downweights_test_and_docs_directories(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 300}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 1200}]
+            if op == "get_project_overview_dirs":
+                return [
+                    {"top_dir": "tests", "files": 140, "syms": 800},
+                    {"top_dir": "pydantic_ai_slim", "files": 90, "syms": 420},
+                    {"top_dir": "docs", "files": 50, "syms": 100},
+                    {"top_dir": "examples", "files": 20, "syms": 70},
+                ]
+            if op == "get_project_overview_key_files":
+                return [{"fp": "pydantic_ai_slim/pydantic_ai/providers/__init__.py", "n": 15, "ex": ["infer_provider_class"]}]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/pydantic-ai"))
+
+        slim_index = output.index("📂 pydantic_ai_slim/")
+        tests_index = output.index("📂 tests/")
+        docs_index = output.index("📂 docs/")
+        self.assertLess(slim_index, tests_index)
+        self.assertLess(slim_index, docs_index)
+
+    def test_project_overview_downweights_tests_and_wrapper_scripts_in_key_files(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 140}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 480}]
+            if op == "get_project_overview_dirs":
+                return [
+                    {"top_dir": "src", "files": 60, "syms": 220},
+                    {"top_dir": "Tests", "files": 70, "syms": 240},
+                ]
+            if op == "get_project_overview_key_files":
+                return [
+                    {"fp": "Tests/AppTests.swift", "n": 300, "ex": ["AppTests"]},
+                    {"fp": "mvnw.cmd", "n": 1, "ex": ["unnamed"]},
+                    {"fp": "src/main/java/example/App.java", "n": 2, "ex": ["App", "main"]},
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/example"))
+
+        self.assertIn("src/main/java/example/App.java", output)
+        self.assertNotIn("Tests/AppTests.swift  (300 symbols", output)
+        self.assertNotIn("inspect `mvnw.cmd` first", output)
 
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):

@@ -660,6 +660,20 @@ def filter_visualize_neighbors(focus: dict, neighbors: dict) -> dict:
             and (not require_named or not _low_value_name(entry.get("name")))
             and _path_penalty(entry.get("fp")) < 4
         ]
+        deduped_items: list[dict] = []
+        seen_keys: set[tuple[str, str, str]] = set()
+        for entry in filtered_items:
+            fp = str(entry.get("fp") or "")
+            key = (fp, "", "") if fp else (
+                "",
+                str(entry.get("name") or ""),
+                str(entry.get("kind") or ""),
+            )
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            deduped_items.append(entry)
+        filtered_items = deduped_items
         if focus_prefix:
             focused = [
                 entry
@@ -1079,3 +1093,49 @@ def render_subgraph_mermaid(focus: dict, neighbors: dict) -> str:
     if len(lines) <= 5:
         return ""
     return "```mermaid\n" + "\n".join(lines) + "\n```"
+
+
+def format_subgraph_summary(focus: dict, neighbors: dict) -> str:
+    focus_name = focus.get("name") or "?"
+    focus_kind = focus.get("kind") or "Symbol"
+    focus_fp = focus.get("fp") or "?"
+    focus_line = focus.get("sl")
+    line_suffix = f":{focus_line}" if focus_line else ""
+
+    lines = [
+        f"## Subgraph: `{focus_name}` ({focus_kind})",
+        f"Focus file: `{focus_fp}{line_suffix}`",
+        "",
+        "## Inspect First",
+        f"- inspect `{focus_fp}` first because it contains the focus symbol `{focus_name}`",
+    ]
+
+    callers = neighbors.get("callers") or []
+    if callers:
+        caller = callers[0]
+        caller_fp = caller.get("fp") or caller.get("name") or "?"
+        lines.append(f"- inspect `{caller_fp}` next because it calls `{focus_name}`")
+
+    callees = neighbors.get("callees") or []
+    if callees:
+        callee = callees[0]
+        callee_name = callee.get("name") or "?"
+        callee_fp = callee.get("fp") or "?"
+        lines.append(f"- inspect `{callee_name}` in `{callee_fp}` because it is the strongest outbound dependency")
+
+    importers = neighbors.get("importers") or []
+    if importers:
+        importer = importers[0]
+        importer_fp = importer.get("fp") or importer.get("name") or "?"
+        lines.append(f"- inspect `{importer_fp}` because it imports the focus symbol into a wider module boundary")
+
+    lines.extend(
+        [
+            "",
+            "## Neighborhood",
+            f"- callers: {len(callers)}",
+            f"- callees: {len(callees)}",
+            f"- importers: {len(importers)}",
+        ]
+    )
+    return "\n".join(lines)

@@ -27,6 +27,10 @@ def load_flow_summary_module():
         "file": "File",
         "model": "Model",
         "external_api": "ExternalApi",
+        "resource": "Resource",
+        "xcode_target": "XcodeTarget",
+        "xcode_workspace": "XcodeWorkspace",
+        "xcode_scheme": "XcodeScheme",
         "api_route": "ApiRoute",
         "cargo_crate": "CargoCrate",
     }.get(name, name)
@@ -42,6 +46,11 @@ def load_flow_summary_module():
         "imports": "IMPORTS",
         "defined_in_file": "DEFINED_IN_FILE",
         "file_graph_link": "FILE_GRAPH_LINK",
+        "backed_by_file": "BACKED_BY_FILE",
+        "bundled_in_target": "BUNDLED_IN_TARGET",
+        "bundles_file": "BUNDLES_FILE",
+        "references_project": "REFERENCES_PROJECT",
+        "builds_target": "BUILDS_TARGET",
     }.get(name, name.upper())
     core_mod = types.ModuleType("tools.brain.graph.core")
 
@@ -558,6 +567,21 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertNotIn("USES_STORYBOARD", query)
         self.assertIn("null AS src, null AS rel", query)
 
+    def test_apple_build_query_uses_coalesced_workspace_project_path(self):
+        query = self.module.flow_summary_apple._apple_build_query(
+            include_resources=False,
+            include_workspaces=True,
+            resource_rel_types=[],
+        )
+        self.assertIn(
+            "coalesce(project_file.filepath, project_file.file_path) = target.project_file",
+            query,
+        )
+        self.assertIn(
+            "coalesce(workspace.filepath, workspace.file_path) AS workspace",
+            query,
+        )
+
     def test_get_apple_build_summary_groups_by_scheme(self):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "apple_build_presence":
@@ -615,6 +639,62 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("ios/App/View.swift", output)
         self.assertIn("ios/App/Settings.swift", output)
         self.assertNotIn("ios/App/Assets.xcassets/brand.colorset/Contents.json -> target=App -> scheme=App\nios/App/View.swift", output)
+
+    def test_get_apple_build_summary_prefers_scheme_matching_target_when_grouped_by_target(self):
+        async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": ["Resource"]}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": ["BUNDLED_IN_TARGET"]}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 0}]
+            if kwargs.get("op") == "get_apple_build_summary":
+                return [
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "AccentColor",
+                        "kind": "color",
+                        "backing": "Shared/Resources/Assets.xcassets/Colors/AccentColor.colorset/Contents.json",
+                        "target": "Fruta iOS All",
+                        "project_file": "Fruta.xcodeproj/project.pbxproj",
+                        "scheme": "Fruta iOS Widgets",
+                        "scheme_file": "Fruta.xcodeproj/xcshareddata/xcschemes/Fruta iOS Widgets.xcscheme",
+                        "workspace": None,
+                    },
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "AccentColor",
+                        "kind": "color",
+                        "backing": "Shared/Resources/Assets.xcassets/Colors/AccentColor.colorset/Contents.json",
+                        "target": "Fruta iOS All",
+                        "project_file": "Fruta.xcodeproj/project.pbxproj",
+                        "scheme": "Fruta iOS All",
+                        "scheme_file": "Fruta.xcodeproj/xcshareddata/xcschemes/Fruta iOS All.xcscheme",
+                        "workspace": None,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/fruta",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("scheme=Fruta iOS All", output)
+        self.assertNotIn("scheme=Fruta iOS Widgets", output)
 
     def test_get_apple_build_summary_does_not_cross_join_resources_and_bundles(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -747,6 +827,141 @@ class FlowSummaryTests(unittest.TestCase):
 
         self.assertEqual("No Apple build graph paths found.", output)
         self.assertEqual(["apple_build_presence"], seen_ops)
+
+    def test_get_apple_build_summary_reports_partial_graph_coverage(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_build_presence":
+                return [{"n": 1}]
+            if op == "graph_schema_labels":
+                return [{"labels": ["XcodeTarget"]}]
+            if op == "graph_schema_relationship_types":
+                return [{"rels": []}]
+            if op == "apple_resource_presence":
+                return [{"n": 0}]
+            if op == "apple_workspace_presence":
+                return [{"n": 0}]
+            if op == "get_apple_build_summary":
+                return []
+            if op == "apple_graph_coverage":
+                return [
+                    {
+                        "project_files": 1,
+                        "workspace_files": 1,
+                        "scheme_files": 1,
+                        "resource_files": 4,
+                        "targets": 2,
+                        "schemes": 0,
+                        "workspaces": 0,
+                        "resources": 0,
+                        "bundles_file_edges": 0,
+                        "builds_target_edges": 0,
+                        "references_project_edges": 0,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/framecreator",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("Apple build files detected, but graph coverage is partial.", output)
+        self.assertIn("Graph: targets=2 schemes=0 workspaces=0 resources=0", output)
+        self.assertIn("scheme files exist, but no XcodeScheme nodes were materialized", output)
+        self.assertIn("workspace files exist, but no XcodeWorkspace nodes were materialized", output)
+
+    def test_get_apple_build_summary_surfaces_multi_project_workspace_overview(self):
+        async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": ["Resource", "XcodeWorkspace"]}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": ["BUNDLED_IN_TARGET", "REFERENCES_PROJECT", "BUILDS_TARGET"]}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_graph_coverage":
+                return [{
+                    "project_files": 2,
+                    "workspace_files": 1,
+                    "scheme_files": 2,
+                    "resource_files": 2,
+                    "targets": 2,
+                    "schemes": 2,
+                    "workspaces": 1,
+                    "resources": 2,
+                    "bundles_file_edges": 2,
+                    "builds_target_edges": 2,
+                    "references_project_edges": 2,
+                }]
+            if kwargs.get("op") == "apple_workspace_projects":
+                return [
+                    {
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                        "project_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                    },
+                    {
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                        "project_file": "BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+                    },
+                ]
+            if kwargs.get("op") == "get_apple_build_summary":
+                return [
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "AirPlayIcon",
+                        "kind": "image",
+                        "backing": "BGMApp/BGMApp/Images.xcassets/AirPlayIcon.imageset/Contents.json",
+                        "target": "Background Music",
+                        "project_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                        "scheme": "Background Music",
+                        "scheme_file": "BGMApp/BGMApp.xcodeproj/xcshareddata/xcschemes/Background Music.xcscheme",
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                    },
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "DriverIcon",
+                        "kind": "image",
+                        "backing": "BGMDriver/Assets.xcassets/DriverIcon.imageset/Contents.json",
+                        "target": "Background Music Device",
+                        "project_file": "BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+                        "scheme": "Background Music Device",
+                        "scheme_file": "BGMDriver/BGMDriver.xcodeproj/xcshareddata/xcschemes/Background Music Device.xcscheme",
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/loom",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("Workspace Overview:", output)
+        self.assertIn("- BGM.xcworkspace/contents.xcworkspacedata", output)
+        self.assertIn("-> BGMApp/BGMApp.xcodeproj/project.pbxproj", output)
+        self.assertIn("-> BGMDriver/BGMDriver.xcodeproj/project.pbxproj", output)
+        self.assertIn("Target: Background Music", output)
+        self.assertIn("Target: Background Music Device", output)
 
     def test_get_backend_flow_summary_includes_cargo_crate_context(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -1041,6 +1256,84 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("GET /sources", output)
         self.assertIn("app/models/legal_source.py", output)
         self.assertIn("app/db/session.py", output)
+
+    def test_get_backend_flow_summary_falls_back_for_fastapi_app_module_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proxy_dir = os.path.join(tmpdir, "proxy")
+            os.makedirs(proxy_dir, exist_ok=True)
+            api_file = os.path.join(proxy_dir, "app.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import FastAPI, Request\n"
+                    "from proxy.handlers import route_request\n"
+                    "from proxy.models import resolve_model_name\n"
+                    "app = FastAPI()\n\n"
+                    "@app.get('/health')\n"
+                    "async def health():\n"
+                    "    return {'ok': True}\n\n"
+                    "@app.post('/v1/chat/completions')\n"
+                    "async def chat(request: Request):\n"
+                    "    model = resolve_model_name('x', [])\n"
+                    "    return await route_request(request, model)\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [
+                        {"api": "proxy/app.py", "dep": "proxy/handlers.py"},
+                        {"api": "proxy/app.py", "dep": "proxy/models.py"},
+                    ]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="proxy/app.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertIn("POST /v1/chat/completions", output)
+        self.assertIn("proxy/handlers.py", output)
+        self.assertIn("proxy/models.py", output)
+
+    def test_extract_python_import_map_supports_parenthesized_imports(self):
+        source_text = (
+            "from proxy.models import (\n"
+            "    resolve_model_name,\n"
+            "    build_local_llm_models,\n"
+            ")\n"
+            "from proxy.handlers import (\n"
+            "    forward_responses_api_completion,\n"
+            ")\n"
+        )
+
+        result = self.module._extract_python_import_map(source_text)
+
+        self.assertEqual("proxy.models", result["resolve_model_name"])
+        self.assertEqual("proxy.models", result["build_local_llm_models"])
+        self.assertEqual(
+            "proxy.handlers",
+            result["forward_responses_api_completion"],
+        )
 
 
 if __name__ == "__main__":

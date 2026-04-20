@@ -242,6 +242,9 @@ class CodeIntelToolTests(unittest.TestCase):
                 CURRENT_EXECUTOR = None
 
         self.assertIn("```mermaid", output)
+        self.assertIn("## Subgraph: `buildRouter` (Function)", output)
+        self.assertIn("## Inspect First", output)
+        self.assertIn("inspect `src/api/routes/buildRouter.ts` first because it contains the focus symbol `buildRouter`", output)
         self.assertIn("|contains|", output)
         self.assertIn("|calls|", output)
         self.assertIn("leaseRouter", output)
@@ -365,6 +368,11 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Project ID: `proj123`", output)
         self.assertIn("Symbol filter: `load_lease`", output)
         self.assertIn("File filter: `src/api`", output)
+        self.assertIn("## Inspect First", output)
+        self.assertIn(
+            "- inspect `src/services/lease.py` first because `src/api/routes.py` resolves `build_router -> load_lease` into it",
+            output,
+        )
         self.assertIn("## Parse Call Samples", output)
         self.assertIn(
             "`src/api/routes.py` -> `load_lease` [member] (receiver=lease_service, qualified=lease_service.load_lease)",
@@ -435,6 +443,44 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertNotIn("iife", output)
         self.assertNotIn("project-init-git.test.ts", output)
         self.assertNotIn("prompt-effect.test.ts", output)
+
+    def test_visualize_subgraph_dedupes_duplicate_neighbor_files(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN n.id AS id" in cypher:
+                return [
+                    {
+                        "id": "focus-1",
+                        "kind": "Struct",
+                        "name": "SidebarView",
+                        "fp": "FrameCreator/Views/SidebarView.swift",
+                        "sl": 3,
+                    }
+                ]
+            if "parent.id AS parent_id" in cypher:
+                return [
+                    {
+                        "parent_id": "file-1",
+                        "parent_name": "SidebarView.swift",
+                        "parent_fp": "FrameCreator/Views/SidebarView.swift",
+                        "callers": [
+                            {"id": "caller-a", "name": "ContentView.swift", "fp": "FrameCreator/Views/ContentView.swift"},
+                            {"id": "caller-b", "name": "ContentView.swift", "fp": "FrameCreator/Views/ContentView.swift"},
+                        ],
+                        "importers": [],
+                        "callees": [],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["visualize_subgraph"]("/tmp/framecreator", "SidebarView"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output.count("FrameCreator/Views/ContentView.swift"), 1)
 
     def test_describe_file_includes_type_alias_symbols_from_graph(self):
         async def fake_executor(cypher, **kwargs):
@@ -1422,6 +1468,47 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("examples/cifar-10/main.swift", output)
         self.assertNotIn("==", output)
 
+    def test_get_related_files_prefers_same_directory_impl_neighbors_over_generic_import_matches(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "Sources/NIOCore/SocketAddresses.swift",
+                        "shared_imports": 4,
+                        "sample_imports": ["CNIOLinux", "CNIOOpenBSD", "WinSDK"],
+                    },
+                    {
+                        "related_file": "Sources/NIOPosix/SocketChannel.swift",
+                        "shared_imports": 4,
+                        "sample_imports": ["CNIOLinux", "CNIOOpenBSD", "NIOCore", "NIOEmbedded"],
+                    },
+                    {
+                        "related_file": "Tests/NIOPosixTests/ChannelTests.swift",
+                        "shared_imports": 5,
+                        "sample_imports": ["NIOCore", "NIOPosix", "XCTest"],
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/swift-nio",
+                        "Sources/NIOPosix/Bootstrap.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        socket_idx = output.index("Sources/NIOPosix/SocketChannel.swift")
+        tests_idx = output.index("Tests/NIOPosixTests/ChannelTests.swift")
+        self.assertLess(socket_idx, tests_idx)
+        self.assertNotIn("Sources/NIOCore/SocketAddresses.swift", output)
+
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):
             if "f.louvainCommunity IS NOT NULL" in cypher:
@@ -1744,6 +1831,113 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("depends on crate `core`", output)
         self.assertIn("used by crate `cli`", output)
         self.assertIn("Import graph:", output)
+
+    def test_get_related_files_surfaces_apple_workspace_context(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (w:XcodeWorkspace {project_id:$pid, filepath:$file_path})" in cypher:
+                return [
+                    {
+                        "related_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                        "relation": "referenced by workspace",
+                    },
+                    {
+                        "related_file": "BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+                        "relation": "referenced by workspace",
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/applews",
+                        "BGM.xcworkspace/contents.xcworkspacedata",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Related Files:", output)
+        self.assertIn("Inspect First:", output)
+        self.assertIn("Apple build graph:", output)
+        self.assertIn("BGMApp/BGMApp.xcodeproj/project.pbxproj (referenced by workspace)", output)
+        self.assertIn("BGMDriver/BGMDriver.xcodeproj/project.pbxproj (referenced by workspace)", output)
+        self.assertEqual(
+            output.count("BGMApp/BGMApp.xcodeproj/project.pbxproj (referenced by workspace)"),
+            1,
+        )
+
+    def test_get_related_files_semantic_fallback_does_not_repeat_highlighted_first_result(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [
+                    ("FrameCreator/Views/ContentView.swift", 3),
+                    ("FrameCreator/Views/InspectorView.swift", 2),
+                ]
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            _pg_pool=FakePool(),
+            open_pool=mock.AsyncMock(return_value=None),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_memory_modules", return_value=(fake_memory_store, None, None, None, None)):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/framecreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        self.assertEqual(output.count("FrameCreator/Views/ContentView.swift"), 1)
+        self.assertIn("FrameCreator/Views/InspectorView.swift", output)
 
 
 if __name__ == "__main__":

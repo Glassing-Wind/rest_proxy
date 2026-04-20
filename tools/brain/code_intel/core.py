@@ -12,6 +12,20 @@ from tools.brain.code_intel import file_describe
 from tools.brain.code_intel import references
 from tools.brain.code_intel import symbol_graph
 
+try:
+    from tree_sitter_language_pack import GRAPH_REL_TYPES as _GRAPH_REL_TYPES
+except ModuleNotFoundError:
+    _GRAPH_REL_TYPES = {
+        "bundles_file": "BUNDLES_FILE",
+        "references_project": "REFERENCES_PROJECT",
+        "builds_target": "BUILDS_TARGET",
+        "defined_in_file": "DEFINED_IN_FILE",
+    }
+
+
+def _rel_type(name: str) -> str:
+    return _GRAPH_REL_TYPES[name]
+
 
 def register(mcp: FastMCP) -> None:
 
@@ -30,11 +44,26 @@ def register(mcp: FastMCP) -> None:
         "CoreGraphics",
         "AVFoundation",
     }
+    _GENERIC_BRIDGE_IMPORTS = {
+        "CNIOLinux",
+        "CNIOOpenBSD",
+        "CNIOWindows",
+        "WinSDK",
+        "ucrt",
+        "Glibc",
+        "Darwin",
+        "FoundationNetworking",
+        "NIOCore",
+    }
     _SWIFT_TYPE_MENTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9_]+\b")
     _LOW_SIGNAL_RELATED_RE = re.compile(
         r"(^|/)(session-ses_[^/]+\.md|agents\.md|readme(?:\.[^/]+)?|changelog(?:\.[^/]+)?)$",
         re.IGNORECASE,
     )
+    _REL_BUNDLES_FILE = _rel_type("bundles_file")
+    _REL_REFERENCES_PROJECT = _rel_type("references_project")
+    _REL_BUILDS_TARGET = _rel_type("builds_target")
+    _REL_DEFINED_IN_FILE = _rel_type("defined_in_file")
 
     def _is_low_signal_support_path(file_path: str | None) -> bool:
         norm = (file_path or "").replace("\\", "/").lower()
@@ -69,9 +98,30 @@ def register(mcp: FastMCP) -> None:
             return True
         if value in _GENERIC_SWIFT_IMPORTS:
             return True
+        if value in _GENERIC_BRIDGE_IMPORTS:
+            return True
         if value.startswith("C_"):
             return True
         return False
+
+    def _related_file_rank(target_file_path: str, candidate_path: str, useful_import_count: int, shared_imports: int) -> tuple[int, int, int, int, str]:
+        target_norm = str(target_file_path or "").replace("\\", "/").strip("/")
+        candidate_norm = str(candidate_path or "").replace("\\", "/").strip("/")
+        target_dir = target_norm.rsplit("/", 1)[0] if "/" in target_norm else ""
+        candidate_dir = candidate_norm.rsplit("/", 1)[0] if "/" in candidate_norm else ""
+        target_parent = target_dir.rsplit("/", 1)[0] if "/" in target_dir else ""
+        score = 0
+        if candidate_dir and candidate_dir == target_dir:
+            score += 90
+        elif target_parent and candidate_dir.startswith(target_parent + "/"):
+            score += 40
+        elif target_dir and candidate_dir.split("/", 1)[0] == target_dir.split("/", 1)[0]:
+            score += 20
+        if _is_test_like_path(candidate_norm):
+            score -= 80
+        if _is_low_signal_support_path(candidate_norm):
+            score -= 60
+        return (-score, -useful_import_count, -shared_imports, len(candidate_norm), candidate_norm)
 
     def _extract_swift_type_mentions(text: str, local_symbols: list[str] | set[str] | None = None) -> list[str]:
         local = {str(item).strip() for item in (local_symbols or []) if str(item).strip()}
@@ -739,6 +789,35 @@ def register(mcp: FastMCP) -> None:
                 lines.append(f"File filter: `{file_filter_value}`")
             lines.append("")
 
+            inspect_first: list[str] = []
+            if resolved_samples:
+                sample = resolved_samples[0]
+                src = sample.get("src") or "?"
+                dst = sample.get("dst") or "?"
+                caller = sample.get("caller") or "?"
+                callee = sample.get("callee") or "?"
+                inspect_first.append(
+                    f"- inspect `{dst}` first because `{src}` resolves `{caller} -> {callee}` into it"
+                )
+            if call_samples:
+                sample = call_samples[0]
+                src = sample.get("src") or "?"
+                dst = sample.get("dst") or "?"
+                inspect_first.append(
+                    f"- inspect the file edge `{src}` -> `{dst}` next because it survives finalize into `CALLS_FILE`"
+                )
+            if external_samples:
+                sample = external_samples[0]
+                qualified_name = sample.get("qualified_name") or sample.get("callee") or "?"
+                src = sample.get("src") or "?"
+                inspect_first.append(
+                    f"- inspect external boundary `{qualified_name}` because `{src}` still depends on it after internal resolution"
+                )
+            if inspect_first:
+                lines.append("## Inspect First")
+                lines.extend(inspect_first[:3])
+                lines.append("")
+
             if parse_samples:
                 lines.append("## Parse Call Samples")
                 for sample in parse_samples[:20]:
@@ -1313,6 +1392,7 @@ def register(mcp: FastMCP) -> None:
 
             driver = await graph_bootstrap.require_driver()
             cargo_related: list[str] = []
+            apple_related: list[str] = []
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 cargo_rows = await _load_cargo_crate_rows(session, project_id)
                 target_crate = _match_cargo_crate(file_path, cargo_rows)
@@ -1388,6 +1468,142 @@ def register(mcp: FastMCP) -> None:
                         files = ", ".join(record.get("files") or [])
                         cargo_related.append(f"- used by crate `{record['crate']}` via {files}")
 
+                if file_path.endswith(".xcworkspace/contents.xcworkspacedata"):
+                    workspace_refs = await _execute_read(
+                        session,
+                        f"""
+                        MATCH (w:XcodeWorkspace {{project_id:$pid, filepath:$file_path}})
+                        MATCH (w)-[:{_REL_REFERENCES_PROJECT}]->(project_file:File {{project_id:$pid}})
+                        RETURN project_file.filepath AS related_file,
+                               "referenced by workspace" AS relation
+                        ORDER BY related_file
+                        LIMIT 10
+                        """,
+                        pid=project_id,
+                        file_path=file_path,
+                        op="get_related_files_apple_workspace_refs",
+                    )
+                    for record in workspace_refs:
+                        apple_related.append(
+                            f"- {record['related_file']} ({record['relation']})"
+                        )
+                elif file_path.endswith(".xcodeproj/project.pbxproj"):
+                    project_related = await _execute_read(
+                        session,
+                        f"""
+                        MATCH (project_file:File {{project_id:$pid, filepath:$file_path}})
+                        OPTIONAL MATCH (workspace:XcodeWorkspace {{project_id:$pid}})-[:{_REL_REFERENCES_PROJECT}]->(project_file)
+                        OPTIONAL MATCH (target:XcodeTarget {{project_id:$pid}})
+                        WHERE target.project_file = $file_path
+                        OPTIONAL MATCH (scheme:XcodeScheme {{project_id:$pid}})-[:{_REL_BUILDS_TARGET}]->(target)
+                        OPTIONAL MATCH (target)-[:{_REL_BUNDLES_FILE}]->(bundled_file:File {{project_id:$pid}})
+                        WITH collect(DISTINCT CASE
+                                 WHEN workspace IS NOT NULL THEN {{
+                                     file: workspace.filepath,
+                                     reason: "workspace references this project"
+                                 }}
+                               END) +
+                             collect(DISTINCT CASE
+                                 WHEN scheme IS NOT NULL THEN {{
+                                     file: scheme.filepath,
+                                     reason: "scheme builds a target from this project"
+                                 }}
+                               END) +
+                             collect(DISTINCT CASE
+                                 WHEN bundled_file IS NOT NULL THEN {{
+                                     file: bundled_file.filepath,
+                                     reason: "bundled by a target in this project"
+                                 }}
+                               END) AS related
+                        UNWIND related AS row
+                        WITH row
+                        WHERE row IS NOT NULL AND row.file IS NOT NULL AND row.file <> $file_path
+                        RETURN row.file AS related_file, row.reason AS relation
+                        ORDER BY
+                          CASE row.reason
+                            WHEN "workspace references this project" THEN 0
+                            WHEN "scheme builds a target from this project" THEN 1
+                            ELSE 2
+                          END,
+                          related_file
+                        LIMIT 12
+                        """,
+                        pid=project_id,
+                        file_path=file_path,
+                        op="get_related_files_apple_project_context",
+                    )
+                    for record in project_related:
+                        apple_related.append(
+                            f"- {record['related_file']} ({record['relation']})"
+                        )
+                elif "/xcshareddata/xcschemes/" in file_path and file_path.endswith(".xcscheme"):
+                    scheme_related = await _execute_read(
+                        session,
+                        f"""
+                        MATCH (scheme:XcodeScheme {{project_id:$pid, filepath:$file_path}})
+                        MATCH (scheme)-[:{_REL_BUILDS_TARGET}]->(target:XcodeTarget {{project_id:$pid}})
+                        RETURN target.project_file AS related_file,
+                               "project owns a target built by this scheme" AS relation
+                        ORDER BY related_file
+                        LIMIT 10
+                        """,
+                        pid=project_id,
+                        file_path=file_path,
+                        op="get_related_files_apple_scheme_context",
+                    )
+                    for record in scheme_related:
+                        apple_related.append(
+                            f"- {record['related_file']} ({record['relation']})"
+                        )
+                elif file_path.endswith("Contents.json"):
+                    resource_related = await _execute_read(
+                        session,
+                        f"""
+                        MATCH (target:XcodeTarget {{project_id:$pid}})-[:{_REL_BUNDLES_FILE}]->(:File {{project_id:$pid, filepath:$file_path}})
+                        OPTIONAL MATCH (scheme:XcodeScheme {{project_id:$pid}})-[:{_REL_BUILDS_TARGET}]->(target)
+                        WITH target, scheme
+                        OPTIONAL MATCH (project_file:File {{project_id:$pid, filepath: target.project_file}})
+                        OPTIONAL MATCH (workspace:XcodeWorkspace {{project_id:$pid}})-[:{_REL_REFERENCES_PROJECT}]->(project_file)
+                        WITH collect(DISTINCT CASE
+                                 WHEN project_file IS NOT NULL THEN {{
+                                     file: project_file.filepath,
+                                     reason: "project bundles this resource"
+                                 }}
+                               END) +
+                             collect(DISTINCT CASE
+                                 WHEN scheme IS NOT NULL THEN {{
+                                     file: scheme.filepath,
+                                     reason: "scheme builds the owning target"
+                                 }}
+                               END) +
+                             collect(DISTINCT CASE
+                                 WHEN workspace IS NOT NULL THEN {{
+                                     file: workspace.filepath,
+                                     reason: "workspace references the owning project"
+                                 }}
+                               END) AS related
+                        UNWIND related AS row
+                        WITH row
+                        WHERE row IS NOT NULL AND row.file IS NOT NULL
+                        RETURN row.file AS related_file, row.reason AS relation
+                        ORDER BY
+                          CASE row.reason
+                            WHEN "project bundles this resource" THEN 0
+                            WHEN "scheme builds the owning target" THEN 1
+                            ELSE 2
+                          END,
+                          related_file
+                        LIMIT 10
+                        """,
+                        pid=project_id,
+                        file_path=file_path,
+                        op="get_related_files_apple_resource_context",
+                    )
+                    for record in resource_related:
+                        apple_related.append(
+                            f"- {record['related_file']} ({record['relation']})"
+                        )
+
             cypher = """
             MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)
             WITH f1, collect(imp1.source) AS my_imports
@@ -1408,6 +1624,7 @@ def register(mcp: FastMCP) -> None:
                     pid=project_id,
                     op="get_related_files",
                 )
+                related_records: list[dict] = []
                 for record in records:
                     import_samples = [
                         item
@@ -1423,36 +1640,74 @@ def register(mcp: FastMCP) -> None:
                     reason = f"shares {record['shared_imports']} import source(s)"
                     if sample_text:
                         reason += f": {sample_text}"
-                    related.append(
-                        f"- {record['related_file']} ({reason})"
+                    related_records.append(
+                        {
+                            "related_file": record["related_file"],
+                            "shared_imports": int(record.get("shared_imports") or 0),
+                            "useful_import_count": len(import_samples),
+                            "reason": reason,
+                        }
                     )
-            if cargo_related or related:
+                related_records.sort(
+                    key=lambda rec: _related_file_rank(
+                        file_path,
+                        str(rec.get("related_file") or ""),
+                        int(rec.get("useful_import_count") or 0),
+                        int(rec.get("shared_imports") or 0),
+                    )
+                )
+                related = [f"- {rec['related_file']} ({rec['reason']})" for rec in related_records]
+            if cargo_related or apple_related or related:
                 output = [
                     "Related Files:",
                     "",
                     "Use this to find the fastest adjacent files to inspect before broadening search.",
                 ]
                 focus_lines: list[str] = []
+                highlighted_entries: set[str] = set()
                 if cargo_related:
                     first_same_crate = next((line for line in cargo_related if line.startswith("- ") and "(same crate" in line), None)
                     if first_same_crate:
                         focus_lines.append(f"- start with {first_same_crate[2:]}")
+                        highlighted_entries.add(first_same_crate[2:])
                     first_boundary = next(
                         (line for line in cargo_related if "depends on crate" in line or "used by crate" in line),
                         None,
                     )
                     if first_boundary:
                         focus_lines.append(f"- then inspect {first_boundary[2:]}")
+                        highlighted_entries.add(first_boundary[2:])
+                if apple_related:
+                    focus_lines.append(
+                        f"{'- then inspect' if focus_lines else '- start with'} {apple_related[0][2:]}"
+                    )
+                    highlighted_entries.add(apple_related[0][2:])
                 if related:
                     prefix = "- then inspect" if focus_lines else "- start with"
                     focus_lines.append(f"{prefix} {related[0][2:]}")
+                    highlighted_entries.add(related[0][2:])
                 if focus_lines:
                     output.extend(["", "Inspect First:", *focus_lines[:3]])
-                output.extend(cargo_related)
+                output.extend(
+                    line
+                    for line in cargo_related
+                    if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                )
+                if apple_related:
+                    output.append("Apple build graph:")
+                    output.extend(
+                        line
+                        for line in apple_related
+                        if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                    )
                 if related:
-                    if cargo_related:
+                    if cargo_related or apple_related:
                         output.append("Import graph:")
-                    output.extend(related)
+                    output.extend(
+                        line
+                        for line in related
+                        if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                    )
                 return "\n".join(output)
 
             # Fallback: semantic co-mentions based on top symbols in the file
@@ -1516,7 +1771,7 @@ def register(mcp: FastMCP) -> None:
                 "Inspect First:",
                 f"- start with `{filtered_rows[0][0]}` because it shares the strongest semantic co-mention surface",
             ]
-            for fp, hits in filtered_rows:
+            for fp, hits in filtered_rows[1:]:
                 preview_symbols = ", ".join(symbols[:3])
                 output.append(
                     f"- {fp} (semantic co-mentions: {hits}; symbols: {preview_symbols})"
@@ -1613,9 +1868,10 @@ def register(mcp: FastMCP) -> None:
                 )
                 nbr = dict(nbr_rows[0]) if nbr_rows else {}
                 nbr = symbol_graph.filter_visualize_neighbors(focus, nbr)
+            summary = symbol_graph.format_subgraph_summary(focus, nbr)
             rendered = symbol_graph.render_subgraph_mermaid(focus, nbr)
             if not rendered:
                 return f"No relationships found for '{symbol_name}'."
-            return rendered
+            return f"{summary}\n\n{rendered}"
         except Exception as e:
             return f"Error visualizing subgraph: {str(e)}"

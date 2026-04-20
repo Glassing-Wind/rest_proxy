@@ -237,12 +237,9 @@ ORDER BY api
 
 _BACKEND_IMPORT_FALLBACK_QUERY = _schema_cypher("""
 MATCH (api:__FILE__ {project_id:$p})-[:__IMPORTS__]->(dep:__FILE__ {project_id:$p})
-WHERE (
-    api.filepath CONTAINS '/api/'
-    OR api.filepath CONTAINS '/routes/'
-    OR api.filepath STARTS WITH 'api/'
-    OR api.filepath STARTS WITH 'app/api/'
-)
+RETURN api.filepath AS api, dep.filepath AS dep
+UNION
+MATCH (api:__FILE__ {project_id:$p})-[:__FILE_GRAPH_LINK__]->(dep:__FILE__ {project_id:$p})
 RETURN api.filepath AS api, dep.filepath AS dep
 ORDER BY api, dep
 """)
@@ -417,6 +414,9 @@ def _is_backend_api_path(filepath: str | None) -> bool:
         or "/routes/" in normalized
         or normalized.startswith("api/")
         or normalized.startswith("app/api/")
+        or normalized.endswith("/app.py")
+        or normalized.endswith("/main.py")
+        or normalized.endswith("/server.py")
     )
 
 
@@ -424,9 +424,28 @@ def _classify_backend_dep(filepath: str | None) -> str | None:
     if not filepath:
         return None
     normalized = filepath.replace("\\", "/").lower()
-    if any(token in normalized for token in ("/services/", "/service/", "/retrieval/", "/ingestion/")):
+    if any(
+        token in normalized
+        for token in (
+            "/services/",
+            "/service/",
+            "/retrieval/",
+            "/ingestion/",
+            "/handlers/",
+            "/handler/",
+        )
+    ) or (
+        normalized.endswith("/handlers.py")
+        or normalized.endswith("/handler.py")
+        or "/handlers_" in normalized
+        or normalized.endswith("_handler.py")
+    ):
         return "svc"
-    if "/models/" in normalized:
+    if (
+        "/models/" in normalized
+        or normalized.endswith("/models.py")
+        or normalized.endswith("/model.py")
+    ):
         return "model"
     if any(token in normalized for token in ("/db/", "/database/", "/repositories/", "/repository/")):
         return "schema"
@@ -447,6 +466,20 @@ def _module_name_from_filepath(filepath: str | None) -> str | None:
 
 def _extract_python_import_map(source_text: str) -> dict[str, str]:
     symbol_to_module: dict[str, str] = {}
+    multiline_pattern = re.compile(
+        r"(?ms)^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s*\((.*?)\)\s*$"
+    )
+    for match in multiline_pattern.finditer(source_text):
+        module_name = match.group(1).strip()
+        raw_symbols = match.group(2) or ""
+        for item in raw_symbols.split(","):
+            symbol = item.strip()
+            if not symbol:
+                continue
+            if " as " in symbol:
+                symbol = symbol.split(" as ", 1)[-1].strip()
+            if symbol:
+                symbol_to_module[symbol] = module_name
     for match in re.finditer(
         r"(?m)^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+([A-Za-z0-9_, ]+)$",
         source_text,
@@ -464,15 +497,15 @@ def _extract_python_import_map(source_text: str) -> dict[str, str]:
 
 def _extract_fastapi_route_blocks(source_text: str) -> list[dict[str, str | None]]:
     pattern = re.compile(
-        r"(?ms)^\s*@router\.(get|post|put|patch|delete|options|head)\(\s*([\"'])(.*?)\2.*?\)\s*"
-        r"\n\s*(?:async\s+def|def)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\):\s*\n(.*?)(?=^\s*@router\.|\Z)"
+        r"(?ms)^\s*@([A-Za-z_][A-Za-z0-9_]*)\.(get|post|put|patch|delete|options|head)\(\s*([\"'])(.*?)\3.*?\)\s*"
+        r"\n\s*(?:async\s+def|def)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\):\s*\n(.*?)(?=^\s*@[A-Za-z_][A-Za-z0-9_]*\.(?:get|post|put|patch|delete|options|head)\(|\Z)"
     )
     routes: list[dict[str, str | None]] = []
     for match in pattern.finditer(source_text):
-        method = match.group(1).upper()
-        path = match.group(3).strip()
-        signature = match.group(5) or ""
-        body = match.group(6) or ""
+        method = match.group(2).upper()
+        path = match.group(4).strip()
+        signature = match.group(6) or ""
+        body = match.group(7) or ""
         routes.append(
             {
                 "route": f"{method} {path}",
@@ -503,7 +536,19 @@ async def _load_backend_import_fallback_rows(session, project_id: str) -> list[d
         p=project_id,
         op="get_backend_flow_summary_import_fallback",
     )
-    return [row for row in rows if _is_backend_api_path(row.get("api")) and row.get("dep")]
+    deduped = []
+    seen = set()
+    for row in rows:
+        api = row.get("api")
+        dep = row.get("dep")
+        if not api or not dep:
+            continue
+        key = (api, dep)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped
 
 
 async def _build_python_backend_flow_fallback(

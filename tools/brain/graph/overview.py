@@ -129,8 +129,33 @@ def _directory_snapshot_path_penalty(file_path: str | None) -> int:
         )
     ):
         penalty += 40
-    if any(marker in norm for marker in ("/tests/", "/test/", "/stories/", "/fixtures/", "/examples/")):
-        penalty += 30
+    if any(
+        marker in norm
+        for marker in (
+            "/tests/",
+            "/test/",
+            "tests/",
+            "test/",
+            "/stories/",
+            "/fixtures/",
+            "fixtures/",
+            "/examples/",
+            "examples/",
+        )
+    ):
+        penalty += 60
+    if any(
+        marker in norm
+        for marker in (
+            "/integrationtests/",
+            "integrationtests/",
+            "/integration-tests/",
+            "integration-tests/",
+            "/e2e/",
+            "e2e/",
+        )
+    ):
+        penalty += 70
     return penalty
 
 
@@ -255,9 +280,95 @@ def _backend_bridge_boost(filepath: str | None) -> float:
     return 1.0
 
 
+def _overview_directory_penalty(top_dir: str | None) -> int:
+    norm = str(top_dir or "").replace("\\", "/").strip("/").lower()
+    if not norm or norm == "(root)":
+        return 0
+    if norm in {"tests", "test"} or norm.startswith("tests/") or norm.startswith("test/"):
+        return 40
+    if norm in {"docs", "doc"} or norm.startswith("docs/") or norm.startswith("doc/"):
+        return 25
+    if norm.startswith("examples/") or norm == "examples":
+        return 20
+    if norm.startswith("samples/") or norm == "samples":
+        return 18
+    if norm.startswith("benchmark/") or norm == "benchmark":
+        return 15
+    return 0
+
+
 def _overview_file_rank(filepath: str | None, symbol_count: int) -> float:
     base = float(symbol_count or 0) ** 0.85
-    return base * _importance_penalty(filepath) * _backend_bridge_boost(filepath)
+    norm = (filepath or "").replace("\\", "/").lower()
+    basename = os.path.basename(norm)
+    score = base * _importance_penalty(filepath) * _backend_bridge_boost(filepath)
+    if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")) or norm.startswith(
+        ("tests/", "test/", "fixtures/", "examples/")
+    ):
+        score *= 0.005
+    if basename in {"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"}:
+        score *= 0.005
+    if norm.endswith((".cmd", ".bat")):
+        score *= 0.02
+    if norm.endswith(".sh") and "/" not in norm:
+        score *= 0.05
+    return score
+
+
+def _is_overview_low_signal_key_file(filepath: str | None) -> bool:
+    norm = (filepath or "").replace("\\", "/").lower()
+    basename = os.path.basename(norm)
+    if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")):
+        return True
+    if norm.startswith(("tests/", "test/", "fixtures/", "examples/")):
+        return True
+    if basename in {"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"}:
+        return True
+    return False
+
+
+def _project_overview_priority_lines(
+    *,
+    project_path: str,
+    dirs: list[dict[str, object]],
+    key_files: list[str],
+    apple_targets: list[dict[str, object]],
+    cargo_crates: list[dict[str, object]],
+    repo_linked_dependencies: list[str],
+) -> list[str]:
+    lines: list[str] = []
+    if apple_targets:
+        first_target = str(apple_targets[0].get("target") or "").strip()
+        project_file = str(apple_targets[0].get("project_file") or "").strip()
+        if first_target:
+            detail = f"target `{first_target}`"
+            if project_file:
+                detail += f" via `{project_file}`"
+            lines.append(f"  - inspect Apple build context first because {detail} anchors the app structure")
+    if cargo_crates:
+        first_crate = str(cargo_crates[0].get("crate") or "").strip()
+        manifest = str(cargo_crates[0].get("manifest_path") or "").strip()
+        if first_crate:
+            detail = f"crate `{first_crate}`"
+            if manifest:
+                detail += f" via `{manifest}`"
+            lines.append(f"  - inspect cargo workspace context next because {detail} anchors the Rust entry surface")
+    if repo_linked_dependencies:
+        lines.append("  - inspect repo-linked dependencies early because they define cross-repo breakage boundaries")
+    if key_files:
+        first_line = key_files[0].strip()
+        if first_line.startswith("- "):
+            first_line = first_line[2:]
+        file_path = first_line.split("  (", 1)[0].strip()
+        if file_path:
+            lines.append(f"  - inspect `{file_path}` first because it is the highest-signal non-test implementation file")
+    if dirs:
+        top_dir = str(dirs[0].get("top_dir") or "").strip()
+        if top_dir and top_dir != "(root)":
+            lines.append(
+                f"  - use get_directory_snapshot('{project_path}', '{top_dir}', limit=12) to orient inside the strongest implementation directory"
+            )
+    return lines[:4]
 
 
 def _normalize_pkg_name(name: str) -> str:
@@ -410,17 +521,57 @@ def _summarize_repo_linked_dependencies_for_directory(
     return lines
 
 
+def _classify_apple_directory(directory_path: str | None) -> str | None:
+    norm = (directory_path or "").replace("\\", "/").strip("./")
+    if not norm:
+        return None
+    if ".xcworkspace" in norm:
+        return "workspace"
+    if ".xcodeproj" in norm:
+        return "project"
+    if ".xcassets" in norm or any(
+        token in norm
+        for token in (
+            ".imageset",
+            ".colorset",
+            ".appiconset",
+            ".brandassets",
+            ".dataset",
+            ".stickerpack",
+        )
+    ):
+        return "resources"
+    if norm.endswith((".storyboard", ".xib", ".plist")):
+        return "resources"
+    return None
+
+
 def _directory_snapshot_priority_lines(
+    directory_path: str,
     file_rows: list[dict],
     inbound_rows: list[dict],
     outbound_rows: list[dict],
     asset_rows: list[dict],
     has_apple_context: bool,
     has_cargo_context: bool,
+    apple_workspace_rows: list[dict],
     repo_linked_dependencies: list[str],
 ) -> list[str]:
     priorities: list[str] = []
-    if file_rows:
+    apple_dir_kind = _classify_apple_directory(directory_path) if has_apple_context else None
+    if apple_dir_kind == "workspace":
+        priorities.append(
+            "- inspect workspace project references first because this directory defines the top-level Xcode workspace"
+        )
+    elif apple_dir_kind == "project":
+        priorities.append(
+            "- inspect scheme and target membership first because this directory defines an Xcode project"
+        )
+    elif apple_dir_kind == "resources":
+        priorities.append(
+            "- inspect bundled resource ownership first because this directory contains Apple app assets or build resources"
+        )
+    if file_rows and apple_dir_kind != "workspace":
         top = file_rows[0]
         priorities.append(
             f"- start with `{top['fp']}` because it has the densest local symbol surface ({top['sym_count']} symbols)"
@@ -428,7 +579,22 @@ def _directory_snapshot_priority_lines(
     if has_cargo_context:
         priorities.append("- inspect Cargo context next because this directory sits on a crate or workspace boundary")
     elif has_apple_context:
-        priorities.append("- inspect Apple build context next because this directory is tied to an Xcode target or scheme")
+        if apple_dir_kind == "workspace" and apple_workspace_rows:
+            workspace = apple_workspace_rows[0].get("workspace")
+            if workspace:
+                priorities.append(
+                    f"- check `{workspace}` next because it resolves the owning Xcode projects for this workspace"
+                )
+        elif apple_dir_kind == "project":
+            priorities.append(
+                "- inspect Apple build context next because this project directory maps schemes to targets and bundled files"
+            )
+        elif apple_dir_kind == "resources":
+            priorities.append(
+                "- inspect Apple build context next because this resource directory is tied to bundled targets and schemes"
+            )
+        else:
+            priorities.append("- inspect Apple build context next because this directory is tied to an Xcode target or scheme")
     if inbound_rows:
         top = next(
             (row for row in inbound_rows if _directory_snapshot_path_penalty(row.get("caller")) < 40),
@@ -939,11 +1105,11 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             op="get_directory_snapshot_assets",
         )
         if await has_apple_build_context(session, project_id):
-            r_apple_targets, r_apple_schemes, _ = await load_apple_build_context(
+            r_apple_targets, r_apple_schemes, r_apple_workspaces = await load_apple_build_context(
                 session, project_id, dir_prefix=dir_prefix, limit=limit
             )
         else:
-            r_apple_targets, r_apple_schemes = [], []
+            r_apple_targets, r_apple_schemes, r_apple_workspaces = [], [], []
         if await has_cargo_build_context(session, project_id):
             r_cargo_crates, r_cargo_workspaces, r_cargo_dependencies = await load_cargo_build_context(
                 session, project_id, dir_prefix=dir_prefix, limit=limit
@@ -1074,12 +1240,14 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     lines.append("Use this to land in one directory and decide what to inspect first.")
 
     priority_lines = _directory_snapshot_priority_lines(
+        directory_path,
         r_files,
         r_inbound,
         r_outbound,
         r_assets,
-        bool(r_apple_targets or r_apple_schemes),
+        bool(r_apple_targets or r_apple_schemes or r_apple_workspaces),
         bool(r_cargo_crates or r_cargo_workspaces or r_cargo_dependencies or r_cargo_dep_out or r_cargo_dep_in),
+        r_apple_workspaces,
         repo_linked_dependencies,
     )
     if priority_lines:
@@ -1103,7 +1271,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             elif rel == REL_CALLS_API:
                 lines.append(f"- `{source}` -> 🔌 `{target}` (API Endpoint)")
 
-    if r_apple_targets or r_apple_schemes:
+    if r_apple_targets or r_apple_schemes or r_apple_workspaces:
         lines.append("\n### 🍎 Apple Build Context")
         for rec in r_apple_targets:
             lines.append(
@@ -1113,6 +1281,9 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         for rec in r_apple_schemes:
             targets = ", ".join(rec.get("targets") or [])
             lines.append(f"- scheme `{rec['scheme']}` builds {targets}")
+        for rec in r_apple_workspaces:
+            projects = ", ".join(rec.get("projects") or [])
+            lines.append(f"- workspace `{rec['workspace']}` references {projects}")
 
     if r_cargo_crates or r_cargo_workspaces or r_cargo_dependencies:
         lines.append("\n### 🦀 Cargo Context")
@@ -1191,21 +1362,33 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
             OPTIONAL MATCH (f)-[:__CONTAINS__]->(s)
             WHERE {filters}
             WITH top_dir, count(DISTINCT s) AS syms, count(DISTINCT f) AS files
-            ORDER BY syms DESC LIMIT 6
+            ORDER BY syms DESC LIMIT 14
             RETURN top_dir, files, syms
         """).format(filters=_SYMBOL_FILTER_CYPHER),
             p=project_id,
             op="get_project_overview_dirs",
         )
-        dirs = [f"  📂 {rec['top_dir']}/  ({rec['files']} files, {rec['syms']} symbols)" for rec in r3]
+        ranked_dir_rows = sorted(
+            r3,
+            key=lambda rec: (
+                _overview_directory_penalty(rec.get("top_dir")),
+                -(int(rec.get("syms") or 0)),
+                -(int(rec.get("files") or 0)),
+                str(rec.get("top_dir") or ""),
+            ),
+        )[:6]
+        dirs = [
+            f"  📂 {rec['top_dir']}/  ({rec['files']} files, {rec['syms']} symbols)"
+            for rec in ranked_dir_rows
+        ]
 
         r4 = await graph_core._execute_read(
             session,
             _schema_cypher("""
             MATCH (f:__FILE__ {{project_id: $p}})-[:__CONTAINS__]->(s)
             WHERE ({filters})
-              AND NOT f.filepath CONTAINS 'test'
-              AND NOT f.filepath CONTAINS 'spec'
+              AND NOT toLower(f.filepath) CONTAINS 'test'
+              AND NOT toLower(f.filepath) CONTAINS 'spec'
             WITH f.filepath AS fp, count(s) AS n, collect(DISTINCT s.name)[..3] AS ex
             ORDER BY n DESC LIMIT 20
             RETURN fp, n, ex
@@ -1221,7 +1404,11 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
                 int(rec.get("n") or 0),
             ),
             reverse=True,
-        )[:5]
+        )
+        filtered_key_rows = [rec for rec in ranked_key_rows if not _is_overview_low_signal_key_file(rec.get("fp"))]
+        if filtered_key_rows:
+            ranked_key_rows = filtered_key_rows
+        ranked_key_rows = ranked_key_rows[:5]
         for rec in ranked_key_rows:
             ex = ", ".join(e for e in rec["ex"] if e)
             key_files.append(f"  - {rec['fp']}  ({rec['n']} symbols: {ex})")
@@ -1301,9 +1488,20 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
         for rec in cargo_dependencies:
             deps = ", ".join(rec.get("deps") or [])
             lines.append(f"  - crate `{rec['crate']}` depends on {deps}")
-    if repo_linked_dependencies:
-        lines.extend(["", "## Repo-Linked Dependencies"])
-        lines.extend(repo_linked_dependencies)
+        if repo_linked_dependencies:
+            lines.extend(["", "## Repo-Linked Dependencies"])
+            lines.extend(repo_linked_dependencies)
+    priority_lines = _project_overview_priority_lines(
+        project_path=project_path,
+        dirs=ranked_dir_rows,
+        key_files=key_files,
+        apple_targets=apple_targets,
+        cargo_crates=cargo_crates,
+        repo_linked_dependencies=repo_linked_dependencies,
+    )
+    if priority_lines:
+        insert_at = lines.index("## Architecture (top-level directories by symbol density)")
+        lines[insert_at:insert_at] = ["## Inspect First", *priority_lines, ""]
     return "\n".join(lines)
 
 
