@@ -133,6 +133,15 @@ class DuplicationHelperTests(unittest.TestCase):
         )
         self.assertFalse(module.keep_default_winnow_pair(pair, include_patterns=[]))
 
+    def test_keep_default_winnow_pair_suppresses_python_main_guards(self):
+        pair = (
+            {"file_path": "test_a.py", "content": 'if __name__ == "__main__":\n    unittest.main()'},
+            {"file_path": "test_b.py", "content": 'if __name__ == "__main__":\n    unittest.main()'},
+            1.0,
+            1.0,
+        )
+        self.assertFalse(module.keep_default_winnow_pair(pair, include_patterns=[]))
+
     def test_filter_duplicate_symbol_name_records_skips_common_noise_by_default(self):
         records = [
             {"name": "__init__", "count": 3, "files": ["a.py", "b.py"]},
@@ -148,6 +157,7 @@ class DuplicationHelperTests(unittest.TestCase):
     def test_is_low_signal_preview_flags_file_headers(self):
         self.assertFalse(module.is_low_signal_preview("// File: src/a.ts\nfunction x() {}"))
         self.assertTrue(module.is_low_signal_preview('"""module docstring'))
+        self.assertTrue(module.is_low_signal_preview('if __name__ == "__main__":'))
         self.assertFalse(module.is_low_signal_preview("fn real_logic() {"))
 
     def test_preview_line_skips_synthetic_file_headers(self):

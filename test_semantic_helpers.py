@@ -805,6 +805,377 @@ class SemanticHelperTests(unittest.TestCase):
         enriched.sort(key=module.implementation_rank_tuple)
         self.assertEqual(enriched[0]["file_path"], "packages/desktop/src-tauri/src/main.rs")
 
+    def test_dispatcher_bonus_prefers_infer_model_over_profile_helper(self):
+        query = "where is model inference selected"
+        rows = [
+            {
+                "file_path": "pydantic_ai_slim/pydantic_ai/profiles/deepseek.py",
+                "content": "def deepseek_model_profile(model_name: str) -> ModelProfile | None:",
+                "metadata": {
+                    "node_types": ["function_definition"],
+                    "file_symbols": ["deepseek_model_profile"],
+                    "declared_symbols": ["deepseek_model_profile"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.95,
+            },
+            {
+                "file_path": "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+                "content": "def infer_model(model: Model | KnownModelName) -> Model:",
+                "metadata": {
+                    "node_types": ["function_definition", "module"],
+                    "file_symbols": ["infer_model"],
+                    "declared_symbols": ["infer_model"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.75,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        )
+
+    def test_dispatcher_bonus_prefers_callable_dispatcher_over_property_surface(self):
+        query = "where is model inference selected"
+        rows = [
+            {
+                "file_path": "Libraries/SwiftDiffusion/Sources/TeaCache/TeaCache.swift",
+                "content": "public let modelIdentifier: String = \"flux\"",
+                "metadata": {
+                    "node_types": ["property_declaration"],
+                    "file_symbols": ["modelIdentifier"],
+                    "declared_symbols": ["modelIdentifier"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.96,
+            },
+            {
+                "file_path": "Libraries/ModelOp/Sources/ModelImporter.swift",
+                "content": "func inferModelSpecification(from file: String) -> ModelSpecification { }",
+                "metadata": {
+                    "node_types": ["function_declaration"],
+                    "file_symbols": ["inferModelSpecification"],
+                    "declared_symbols": ["inferModelSpecification"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.72,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "Libraries/ModelOp/Sources/ModelImporter.swift",
+        )
+
+    def test_routing_query_demotes_generated_grpc_surface_below_service_impl(self):
+        query = "how does gRPC server request routing work"
+        self.assertEqual(module.implementation_query_class(query), "implementation_explanation")
+        rows = [
+            {
+                "file_path": "Libraries/GRPC/Models/Sources/controlPanel/controlPanel.grpc.swift",
+                "content": "public func registerMethods(with server: GRPCServer) { }",
+                "metadata": {
+                    "node_types": ["function_declaration"],
+                    "file_symbols": ["registerMethods"],
+                    "declared_symbols": ["registerMethods"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.94,
+            },
+            {
+                "file_path": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "content": "func handleGenerateImage(_ request: GenerateImageRequest) async throws -> GenerateImageResponse { }",
+                "metadata": {
+                    "node_types": ["method_declaration"],
+                    "file_symbols": ["handleGenerateImage"],
+                    "declared_symbols": ["handleGenerateImage"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.78,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+        )
+        self.assertGreater(
+            enriched[0]["implementation_rank_components"]["routing_bonus"],
+            0.0,
+        )
+        self.assertGreater(
+            enriched[0]["implementation_rank_components"]["request_handler_bonus"],
+            0.0,
+        )
+        self.assertEqual(enriched[1]["implementation_role"], "generated_surface")
+        self.assertGreater(
+            enriched[1]["implementation_rank_components"]["generated_surface_penalty"],
+            0.1,
+        )
+
+    def test_routing_query_demotes_server_infrastructure_below_service_handler(self):
+        query = "how does gRPC server request routing work"
+        rows = [
+            {
+                "file_path": "Libraries/GRPC/Server/Sources/GRPCServiceBrowser.swift",
+                "content": "public func netServiceDidResolveAddress(_ sender: NetService) { }",
+                "metadata": {
+                    "node_types": ["method_declaration"],
+                    "file_symbols": ["netServiceDidResolveAddress"],
+                    "declared_symbols": ["netServiceDidResolveAddress"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.95,
+            },
+            {
+                "file_path": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "content": "private func handleGenerateImage(request: ImageGenerationRequest) async throws { }",
+                "metadata": {
+                    "node_types": ["method_declaration"],
+                    "file_symbols": ["handleGenerateImage"],
+                    "declared_symbols": ["handleGenerateImage"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.72,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+        )
+        self.assertGreater(
+            enriched[1]["implementation_rank_components"]["server_infra_penalty"],
+            0.0,
+        )
+
+    def test_request_handling_query_prefers_gin_handler_over_support_file(self):
+        query = "where are incoming http requests handled in gin"
+        rows = [
+            {
+                "file_path": "ginS/gins.go",
+                "content": "func New() *Server { }",
+                "metadata": {
+                    "node_types": ["function_declaration"],
+                    "file_symbols": ["New"],
+                    "declared_symbols": ["New"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.94,
+            },
+            {
+                "file_path": "gin.go",
+                "content": "func (engine *Engine) handleHTTPRequest(c *Context) { }",
+                "metadata": {
+                    "node_types": ["method_declaration"],
+                    "file_symbols": ["handleHTTPRequest"],
+                    "declared_symbols": ["handleHTTPRequest"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.72,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "gin.go")
+        self.assertGreater(enriched[0]["implementation_routing_priority"], 0)
+        self.assertGreater(enriched[0]["implementation_request_handler_priority"], 0)
+
+    def test_request_routing_query_prefers_spring_controller_over_template(self):
+        query = "where is owner request routing implemented in spring petclinic"
+        rows = [
+            {
+                "file_path": "src/main/resources/templates/owners/createOrUpdateOwnerForm.html",
+                "content": "<form action=\"#\">",
+                "metadata": {
+                    "node_types": ["element"],
+                    "file_symbols": [],
+                    "declared_symbols": [],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.96,
+            },
+            {
+                "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                "content": "@GetMapping(\"/owners\") public String processFindForm(@RequestParam(defaultValue = \"1\") int page, Owner owner, BindingResult result) { }",
+                "metadata": {
+                    "node_types": ["method_declaration", "class_declaration"],
+                    "file_symbols": ["OwnerController", "processFindForm"],
+                    "declared_symbols": ["OwnerController", "processFindForm"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.74,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        )
+        self.assertGreater(enriched[0]["implementation_routing_priority"], 0)
+        self.assertGreater(enriched[0]["implementation_request_handler_priority"], 0)
+        self.assertGreater(enriched[0]["implementation_controller_entity_hit"], 0)
+
+    def test_request_routing_query_prefers_owner_controller_over_sibling_controller(self):
+        query = "where is owner request routing implemented in spring petclinic"
+        rows = [
+            {
+                "file_path": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+                "content": "@GetMapping(\"/owners/{ownerId}/visits/new\") public String initNewVisitForm() { }",
+                "metadata": {
+                    "node_types": ["method_declaration", "class_declaration"],
+                    "file_symbols": ["VisitController", "initNewVisitForm"],
+                    "declared_symbols": ["VisitController", "initNewVisitForm"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.91,
+            },
+            {
+                "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                "content": "@GetMapping(\"/owners\") public String processFindForm(@RequestParam(defaultValue = \"1\") int page, Owner owner, BindingResult result) { }",
+                "metadata": {
+                    "node_types": ["method_declaration", "class_declaration"],
+                    "file_symbols": ["OwnerController", "processFindForm"],
+                    "declared_symbols": ["OwnerController", "processFindForm"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.74,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        )
+        self.assertGreater(enriched[0]["implementation_controller_entity_hit"], 0)
+        self.assertEqual(enriched[1]["implementation_controller_entity_hit"], 0)
+
+    def test_generated_surface_query_keeps_generated_penalty_off_when_explicitly_requested(self):
+        query = "where is the generated grpc stub for request routing"
+        row = {
+            "file_path": "Libraries/GRPC/Models/Sources/controlPanel/controlPanel.grpc.swift",
+            "content": "public func registerMethods(with router: inout GRPCCore.RPCRouter<Transport>) { }",
+            "metadata": {
+                "node_types": ["function_declaration"],
+                "file_symbols": ["registerMethods"],
+                "declared_symbols": ["registerMethods"],
+                "chunk_role": "definition",
+            },
+            "rrf": 0.8,
+        }
+        row["_meta"] = row.get("metadata", {})
+        row["meta_score"] = module.meta_score(row["_meta"])
+        module.enrich_implementation_result(
+            row,
+            query=query,
+            query_class=module.implementation_query_class(query),
+            base_score=float(row.get("rrf", 0.0) or 0.0),
+            meta_boost=0.0,
+        )
+        self.assertEqual(
+            row["implementation_rank_components"]["generated_surface_penalty"],
+            0.0,
+        )
+
     def test_build_implementation_ranking_trace_surfaces_node_type_and_role(self):
         rows = [
             {
@@ -946,6 +1317,61 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(enriched[0]["implementation_facade_surface_hit"], 0)
         self.assertEqual(enriched[1]["implementation_declared_symbol_hit"], 0)
         self.assertEqual(enriched[1]["implementation_facade_surface_hit"], 1)
+
+    def test_exact_identifier_helper_detects_camel_case_api_names(self):
+        self.assertEqual(
+            module.implementation_query_exact_identifiers("where is fromJSONSchema implemented"),
+            {"fromjsonschema"},
+        )
+        self.assertEqual(
+            module.implementation_query_exact_identifiers("where is parse implemented"),
+            set(),
+        )
+
+    def test_exact_identifier_bonus_prefers_exact_symbol_over_related_neighbor(self):
+        query = "where is fromJSONSchema implemented"
+        rows = [
+            {
+                "file_path": "packages/zod/src/v4/core/to-json-schema.ts",
+                "content": "export const createToJSONSchemaMethod = () => {}",
+                "metadata": {
+                    "node_types": ["function_declaration"],
+                    "file_symbols": ["createToJSONSchemaMethod", "toJSONSchema"],
+                    "declared_symbols": ["createToJSONSchemaMethod"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.26,
+            },
+            {
+                "file_path": "packages/zod/src/v4/classic/from-json-schema.ts",
+                "content": "export function fromJSONSchema(schema: JSONSchema) {}",
+                "metadata": {
+                    "node_types": ["function_declaration"],
+                    "file_symbols": ["fromJSONSchema"],
+                    "declared_symbols": ["fromJSONSchema"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.18,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "packages/zod/src/v4/classic/from-json-schema.ts")
+        self.assertEqual(enriched[0]["implementation_exact_identifier_hit"], 1)
+        self.assertEqual(enriched[1]["implementation_exact_identifier_hit"], 0)
 
     def test_duplicate_rerank_uses_node_type_aware_rank_score_for_representative_choice(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
@@ -1192,6 +1618,152 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertTrue(module.usage_query_prefers_test_results("where is parser.parse used in tests"))
         self.assertFalse(module.usage_query_prefers_example_results("where is parser.parse used"))
         self.assertTrue(module.usage_query_prefers_example_results("show parser.parse examples"))
+
+    def test_role_policy_keeps_priority_and_score_in_one_table(self):
+        usage_policy = module.implementation_role_policy("usage_lookup")
+        self.assertEqual(usage_policy["test_example"]["priority"], 7)
+        self.assertEqual(usage_policy["test_example"]["score"], 0.10)
+        self.assertEqual(module.implementation_role_priority("test_example", "usage_lookup"), 7)
+        self.assertEqual(module.implementation_role_score("test_example", "usage_lookup"), 0.10)
+
+        explanation_policy = module.implementation_role_policy("implementation_explanation")
+        self.assertEqual(explanation_policy["public_api_definition"]["priority"], 7)
+        self.assertEqual(explanation_policy["public_api_definition"]["score"], 0.09)
+        self.assertEqual(
+            module.implementation_role_priority("public_api_definition", "implementation_explanation"),
+            7,
+        )
+        self.assertEqual(
+            module.implementation_role_score("public_api_definition", "implementation_explanation"),
+            0.09,
+        )
+
+    def test_node_type_policy_keeps_priority_and_score_in_one_table(self):
+        usage_policy = module.implementation_node_type_policy("usage_lookup")
+        self.assertEqual(usage_policy["callsite"]["priority"], 4)
+        self.assertEqual(usage_policy["callsite"]["score"], 0.05)
+
+        definition_policy = module.implementation_node_type_policy("api_definition_lookup")
+        self.assertEqual(definition_policy["declaration"]["priority"], 4)
+        self.assertEqual(definition_policy["declaration"]["score"], 0.05)
+        self.assertEqual(definition_policy["callsite"]["priority"], -4)
+        self.assertEqual(definition_policy["callsite"]["score"], -0.06)
+
+    def test_node_type_priority_and_score_follow_shared_policy(self):
+        meta = {"node_types": ["function_definition", "export_statement", "source_file"]}
+        self.assertEqual(module.implementation_node_type_priority(meta, "api_definition_lookup"), 7)
+        self.assertEqual(module.implementation_node_type_score(meta, "api_definition_lookup"), 0.09)
+
+        usage_meta = {"node_types": ["call_expression"]}
+        self.assertEqual(module.implementation_node_type_priority(usage_meta, "usage_lookup"), 4)
+        self.assertEqual(module.implementation_node_type_score(usage_meta, "usage_lookup"), 0.05)
+
+    def test_intent_policy_keeps_bonus_weights_in_one_table(self):
+        search_policy = module.implementation_intent_policy(
+            "where is model inference selected",
+            "implementation_search",
+        )
+        self.assertTrue(search_policy["allow_dispatcher_bonus"])
+        self.assertEqual(search_policy["dispatcher_bonus_weight"], 0.04)
+        self.assertEqual(search_policy["request_handler_bonus_weight"], 0.05)
+        self.assertEqual(search_policy["declared_symbol_bonus_search"], 0.02)
+        self.assertEqual(search_policy["exact_identifier_bonus_weight"], 0.08)
+
+        definition_policy = module.implementation_intent_policy(
+            "where is process defined",
+            "api_definition_lookup",
+        )
+        self.assertTrue(definition_policy["allow_dispatcher_bonus"])
+        self.assertFalse(definition_policy["allow_routing_bonus"])
+        self.assertEqual(definition_policy["declared_symbol_bonus_definition"], 0.05)
+        self.assertEqual(definition_policy["exact_identifier_bonus_weight"], 0.08)
+        self.assertEqual(definition_policy["reexport_surface_penalty_definition"], 0.07)
+
+        usage_policy = module.implementation_intent_policy(
+            "where is parser.parse used",
+            "usage_lookup",
+        )
+        self.assertEqual(usage_policy["member_usage_bonus_usage"], 0.06)
+        self.assertFalse(usage_policy["allow_dispatcher_bonus"])
+        self.assertEqual(usage_policy["exact_identifier_bonus_weight"], 0.0)
+
+    def test_support_surface_penalties_are_query_class_aware(self):
+        penalties = module.implementation_support_surface_penalties(
+            "docs/guide.md",
+            query="where is process defined",
+            query_class="api_definition_lookup",
+            doc_like=True,
+            low_signal_support=False,
+            usage_heavy=False,
+        )
+        self.assertEqual(penalties["doc_penalty"], 0.05)
+        self.assertEqual(penalties["support_path_penalty"], 0.0)
+        self.assertEqual(penalties["usage_penalty"], 0.0)
+
+        penalties = module.implementation_support_surface_penalties(
+            "tools/dev.py",
+            query="how does process work",
+            query_class="implementation_explanation",
+            doc_like=False,
+            low_signal_support=True,
+            usage_heavy=False,
+        )
+        self.assertGreater(penalties["support_path_penalty"], 0.0)
+
+        penalties = module.implementation_support_surface_penalties(
+            "tools/dev.py",
+            query="how does the build script work",
+            query_class="implementation_explanation",
+            doc_like=False,
+            low_signal_support=True,
+            usage_heavy=False,
+        )
+        self.assertEqual(penalties["support_path_penalty"], 0.0)
+
+    def test_usage_surface_bonus_prefers_examples_or_tests_only_when_relevant(self):
+        self.assertEqual(
+            module.implementation_usage_surface_bonus(
+                chunk_role="example_usage",
+                query="where is parser.parse used",
+                query_class="usage_lookup",
+                exact_member_hits=1,
+            ),
+            0.11,
+        )
+        self.assertGreater(
+            module.implementation_usage_surface_bonus(
+                chunk_role="example_usage",
+                query="show parser.parse examples",
+                query_class="usage_lookup",
+                exact_member_hits=1,
+            ),
+            0.11,
+        )
+        self.assertGreater(
+            module.implementation_usage_surface_bonus(
+                chunk_role="test_usage",
+                query="where is parser.parse used in tests",
+                query_class="usage_lookup",
+                exact_member_hits=1,
+            ),
+            0.06,
+        )
+        self.assertEqual(
+            module.implementation_usage_surface_bonus(
+                chunk_role="test_usage",
+                query="where is parser.parse used",
+                query_class="implementation_search",
+                exact_member_hits=1,
+            ),
+            0.0,
+        )
+
+    def test_inferred_filename_hints_add_controller_candidates_for_routing_queries(self):
+        hints = module.implementation_inferred_filename_hints(
+            "where is owner request routing implemented in spring petclinic"
+        )
+        self.assertIn("ownercontroller.java", hints)
+        self.assertNotIn("requestcontroller.java", hints)
 
     def test_definition_entrypoint_golden_prefers_library_root_over_cli(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")

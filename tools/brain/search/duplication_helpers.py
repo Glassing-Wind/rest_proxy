@@ -82,6 +82,12 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "crate",
     "mod",
     "where",
+    "if",
+    "else",
+    "elif",
+    "for",
+    "while",
+    "with",
     "await",
     "list",
     "dict",
@@ -138,6 +144,8 @@ PREVIEW_IDENTIFIER_BLOCKLIST = {
     "tuple",
     "crate_rows",
     "ts_pack",
+    "__main__",
+    "__name__",
 }
 
 
@@ -185,6 +193,8 @@ def keep_default_winnow_pair(
     preview_a = preview_line(row_a.get("content") or "")
     preview_b = preview_line(row_b.get("content") or "")
     if _is_import_only_preview(preview_a) and _is_import_only_preview(preview_b):
+        return False
+    if _is_entrypoint_preview(preview_a) and _is_entrypoint_preview(preview_b):
         return False
     identifiers_a = preview_identifiers(row_a.get("content") or "")
     identifiers_b = preview_identifiers(row_b.get("content") or "")
@@ -360,7 +370,22 @@ def is_low_signal_preview(text: str) -> bool:
         return True
     if preview.startswith('"""') or preview.startswith("'''"):
         return True
+    if preview == 'if __name__ == "__main__":' or preview == "if __name__ == '__main__':":
+        return True
+    if preview in {"unittest.main()", "asyncio.run(main())", "main()"}:
+        return True
     return False
+
+
+def _is_entrypoint_preview(preview: str) -> bool:
+    stripped = (preview or "").strip()
+    return stripped in {
+        'if __name__ == "__main__":',
+        "if __name__ == '__main__':",
+        "unittest.main()",
+        "asyncio.run(main())",
+        "main()",
+    }
 
 
 def preview_identifiers(text: str) -> set[str]:

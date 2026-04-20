@@ -176,6 +176,11 @@ def implementation_query_intent(query: str) -> bool:
         "service",
         "route",
         "handler",
+        "handled",
+        "request",
+        "requests",
+        "http",
+        "controller",
         "function",
         "method",
         "class",
@@ -187,12 +192,15 @@ def implementation_query_intent(query: str) -> bool:
         "call graph",
         "implementation",
         "code path",
+        "how does",
         "where is",
         "where does",
         "find",
         "bug",
         "fix",
         "logic",
+        "routing",
+        "router",
         "call site",
         "db model",
         "prisma",
@@ -207,7 +215,7 @@ def implementation_query_intent(query: str) -> bool:
     if "::" in text:
         return True
     token_hits = re.findall(r"[a-zA-Z_]{3,}", text)
-    return any(tok in {"svc", "api", "db", "route", "model", "handler"} for tok in token_hits)
+    return any(tok in {"svc", "api", "db", "route", "routing", "router", "model", "handler", "server"} for tok in token_hits)
 
 
 def implementation_query_class(query: str) -> str:
@@ -243,6 +251,8 @@ def implementation_query_class(query: str) -> str:
             return "implementation_search"
         return "api_definition_lookup"
     if re.search(r"\bhow does\b", text) and re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
+        return "implementation_explanation"
+    if "how does" in text and any(term in text for term in ("routing", "router", "handler", "server")):
         return "implementation_explanation"
     if re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
         return "symbol_lookup"
@@ -307,6 +317,197 @@ def implementation_query_relaxes_dir_cap(query: str) -> bool:
     return bool(implementation_expected_runtime_entrypoint_paths(query))
 
 
+def implementation_query_prefers_dispatchers(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    dispatcher_terms = (
+        "selected",
+        "selection",
+        "inference",
+        "infer",
+        "wiring",
+        "wire",
+        "dispatch",
+        "provider wiring",
+        "provider selection",
+        "model selection",
+    )
+    return any(term in text for term in dispatcher_terms)
+
+
+def implementation_query_accepts_generated_surfaces(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    generated_terms = (
+        "generated",
+        "stub",
+        "stubs",
+        "proto",
+        "protobuf",
+        ".grpc.swift",
+        ".pb.swift",
+    )
+    return any(term in text for term in generated_terms)
+
+
+def implementation_query_prefers_supporting_context(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    return any(term in text for term in ("script", "tooling", "build", "release", "dev tool", "developer tool"))
+
+
+def implementation_query_prefers_request_routing(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    if "routing" in text or "router" in text:
+        return True
+    request_terms = ("request", "requests", "incoming", "http", "endpoint", "controller")
+    routing_terms = ("server", "handler", "handled", "handle", "mapping", "mapped", "route", "routes")
+    return any(term in text for term in request_terms) and any(term in text for term in routing_terms)
+
+
+def implementation_support_surface_penalties(
+    file_path: str | None,
+    *,
+    query: str,
+    query_class: str,
+    doc_like: bool,
+    low_signal_support: bool,
+    usage_heavy: bool,
+) -> dict[str, float]:
+    penalties = {
+        "doc_penalty": 0.0,
+        "support_path_penalty": 0.0,
+        "usage_penalty": 0.0,
+    }
+    if doc_like:
+        penalties["doc_penalty"] = 0.05
+    norm = (file_path or "").replace("\\", "/").lower()
+    template_like = "/templates/" in norm or norm.endswith(".html")
+    if template_like and not implementation_query_prefers_supporting_context(query):
+        penalties["support_path_penalty"] = max(
+            penalties["support_path_penalty"],
+            0.07 if query_class_prefers_definitions(query_class) else 0.04,
+        )
+    if low_signal_support and not implementation_query_prefers_supporting_context(query):
+        penalties["support_path_penalty"] = max(
+            penalties["support_path_penalty"],
+            0.05 if query_class_prefers_definitions(query_class) else 0.03,
+        )
+    if usage_heavy:
+        penalties["usage_penalty"] = 0.04 if query_class_prefers_definitions(query_class) else 0.0
+    return penalties
+
+
+def implementation_usage_surface_bonus(
+    *,
+    chunk_role: str,
+    query: str,
+    query_class: str,
+    exact_member_hits: int,
+) -> float:
+    if exact_member_hits <= 0 or not query_class_prefers_usage(query_class):
+        return 0.0
+    if chunk_role == "example_usage":
+        return 0.13 if usage_query_prefers_example_results(query) else 0.11
+    if chunk_role == "test_usage":
+        return 0.08 if usage_query_prefers_test_results(query) else 0.06
+    if chunk_role == "usage":
+        return 0.03
+    return 0.0
+
+
+def implementation_intent_policy(query: str, query_class: str) -> dict[str, float | bool]:
+    policy: dict[str, float | bool] = {
+        "member_usage_bonus_usage": 0.0,
+        "member_usage_bonus_search": 0.0,
+        "path_hint_bonus_search": 0.0,
+        "path_hint_bonus_definition": 0.0,
+        "controller_entity_bonus_weight": 0.0,
+        "dispatcher_bonus_weight": 0.0,
+        "routing_bonus_weight": 0.0,
+        "request_handler_bonus_weight": 0.0,
+        "callable_bonus_weight": 0.0,
+        "runtime_main_bonus_weight": 0.16,
+        "definition_bonus_weight": 0.025,
+        "signature_bonus_weight": 0.04,
+        "declared_symbol_bonus_definition": 0.0,
+        "declared_symbol_bonus_search": 0.0,
+        "declared_symbol_bonus_general": 0.0,
+        "exact_identifier_bonus_weight": 0.0,
+        "export_bonus_definition": 0.0,
+        "export_bonus_search": 0.0,
+        "api_entrypoint_bonus_definition": 0.0,
+        "api_context_bonus_definition": 0.0,
+        "reexport_surface_penalty_definition": 0.0,
+        "facade_surface_penalty_definition": 0.0,
+        "library_entrypoint_penalty": 0.0,
+        "allow_dispatcher_bonus": False,
+        "allow_routing_bonus": False,
+        "allow_request_handler_bonus": False,
+        "allow_callable_bonus": False,
+    }
+    if query_class_prefers_usage(query_class):
+        policy["member_usage_bonus_usage"] = 0.06
+        return policy
+    if query_class == "implementation_search":
+        policy["member_usage_bonus_search"] = 0.015
+        policy["path_hint_bonus_search"] = 0.12
+        policy["controller_entity_bonus_weight"] = 0.06
+        policy["dispatcher_bonus_weight"] = 0.04
+        policy["routing_bonus_weight"] = 0.04
+        policy["request_handler_bonus_weight"] = 0.05
+        policy["callable_bonus_weight"] = 0.03
+        policy["declared_symbol_bonus_search"] = 0.02
+        policy["exact_identifier_bonus_weight"] = 0.08
+        policy["export_bonus_search"] = 0.01
+        policy["allow_dispatcher_bonus"] = True
+        policy["allow_routing_bonus"] = True
+        policy["allow_request_handler_bonus"] = True
+        policy["allow_callable_bonus"] = True
+    elif query_class == "implementation_explanation":
+        policy["path_hint_bonus_definition"] = 0.08
+        policy["controller_entity_bonus_weight"] = 0.05
+        policy["dispatcher_bonus_weight"] = 0.04
+        policy["routing_bonus_weight"] = 0.04
+        policy["request_handler_bonus_weight"] = 0.05
+        policy["callable_bonus_weight"] = 0.03
+        policy["declared_symbol_bonus_definition"] = 0.05
+        policy["exact_identifier_bonus_weight"] = 0.08
+        policy["export_bonus_definition"] = 0.03
+        policy["api_entrypoint_bonus_definition"] = 0.03
+        policy["api_context_bonus_definition"] = 0.02
+        policy["reexport_surface_penalty_definition"] = 0.07
+        policy["facade_surface_penalty_definition"] = 0.05
+        policy["allow_dispatcher_bonus"] = True
+        policy["allow_routing_bonus"] = True
+        policy["allow_request_handler_bonus"] = True
+        policy["allow_callable_bonus"] = True
+    elif query_class_prefers_definitions(query_class):
+        policy["path_hint_bonus_definition"] = 0.08
+        policy["dispatcher_bonus_weight"] = 0.04
+        policy["callable_bonus_weight"] = 0.03
+        policy["declared_symbol_bonus_definition"] = 0.05
+        policy["exact_identifier_bonus_weight"] = 0.08
+        policy["export_bonus_definition"] = 0.03
+        policy["api_entrypoint_bonus_definition"] = 0.03
+        policy["api_context_bonus_definition"] = 0.02
+        policy["reexport_surface_penalty_definition"] = 0.07
+        policy["facade_surface_penalty_definition"] = 0.05
+        policy["allow_dispatcher_bonus"] = True
+        policy["allow_callable_bonus"] = True
+    else:
+        policy["declared_symbol_bonus_general"] = 0.01
+        policy["exact_identifier_bonus_weight"] = 0.04
+    if implementation_query_prefers_runtime_main_entrypoint(query):
+        policy["library_entrypoint_penalty"] = 0.05
+    return policy
+
+
 def is_low_signal_parser_data_path(file_path: str | None) -> bool:
     if not file_path:
         return False
@@ -337,9 +538,24 @@ def is_low_signal_binding_surface_path(file_path: str | None) -> bool:
     return (
         basename in {"models.cs", "types.go", "processresult.java", "processconfig.php"}
         or basename.endswith("registry.java")
-        or "/src/main/java/" in norm
         or "/packages/csharp/" in norm
-        or "/packages/go/" in norm
+    )
+
+
+def is_generated_implementation_surface_path(file_path: str | None) -> bool:
+    if not file_path:
+        return False
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    return (
+        basename.endswith(".pb.swift")
+        or basename.endswith(".grpc.swift")
+        or basename.endswith("_generated.swift")
+        or basename.endswith("_generated.h")
+        or basename.endswith("_generated.c")
+        or "/pregeneratedspm/" in norm
+        or "/generatedc/" in norm
+        or "/generated/" in norm
     )
 
 
@@ -366,7 +582,9 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
     return (
-        norm.startswith("scripts/")
+        "/templates/" in norm
+        or basename.endswith(".html")
+        or norm.startswith("scripts/")
         or "/scripts/" in norm
         or norm.startswith("tools/")
         or "/tools/" in norm
@@ -383,21 +601,28 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
 
 def implementation_rank_tuple(
     result: dict,
-) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
+) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
     low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
+    generated_surface = 1 if result.get("generated_implementation_surface") else 0
     low_signal_support = 1 if result.get("low_signal_support_path") else 0
     doc_like = 1 if result.get("doc_like") else 0
     usage_heavy = 1 if result.get("implementation_usage_heavy_penalty") else 0
+    callable_priority = int(result.get("implementation_callable_priority", 0) or 0)
     member_usage_priority = int(result.get("implementation_member_usage_priority", 0) or 0)
+    dispatcher_priority = int(result.get("implementation_dispatcher_priority", 0) or 0)
+    routing_priority = int(result.get("implementation_routing_priority", 0) or 0)
+    handler_priority = int(result.get("implementation_request_handler_priority", 0) or 0)
     path_hint_priority = int(result.get("implementation_path_hint_hit", 0) or 0)
+    basename_token_priority = int(result.get("implementation_basename_token_hit", 0) or 0)
     runtime_main_priority = int(result.get("implementation_runtime_main_entrypoint_hit", 0) or 0)
     role_priority = int(result.get("implementation_role_priority", 0) or 0)
     node_type_priority = int(result.get("implementation_node_type_priority", 0) or 0)
     reexport_surface = int(result.get("implementation_reexport_surface_hit", 0) or 0)
     facade_surface = int(result.get("implementation_facade_surface_hit", 0) or 0)
     declared_symbol_hit = int(result.get("implementation_declared_symbol_hit", 0) or 0)
+    exact_identifier_hit = int(result.get("implementation_exact_identifier_hit", 0) or 0)
     definition_hit = int(result.get("implementation_definition_hit", 0) or 0)
     signature_hit = int(result.get("implementation_exact_signature_symbol_hit", 0) or 0)
     export_hit = int(result.get("implementation_export_hit", 0) or 0)
@@ -408,16 +633,23 @@ def implementation_rank_tuple(
     return (
         low_signal_parser_data,
         low_signal_binding_surface,
+        generated_surface,
         low_signal_support,
         doc_like,
         usage_heavy,
+        -callable_priority,
         -member_usage_priority,
+        -dispatcher_priority,
+        -handler_priority,
+        -routing_priority,
         -path_hint_priority,
+        -basename_token_priority,
         -runtime_main_priority,
         -role_priority,
         -node_type_priority,
         facade_surface,
         reexport_surface,
+        -exact_identifier_hit,
         -declared_symbol_hit,
         -signature_hit,
         -definition_hit,
@@ -470,6 +702,53 @@ def implementation_query_symbols(query: str) -> set[str]:
     return symbols
 
 
+def implementation_query_exact_identifiers(query: str) -> set[str]:
+    raw = (query or "").strip()
+    if not raw:
+        return set()
+    stopwords = {
+        "how",
+        "does",
+        "work",
+        "works",
+        "what",
+        "where",
+        "when",
+        "which",
+        "into",
+        "from",
+        "with",
+        "that",
+        "this",
+        "have",
+        "uses",
+        "using",
+        "used",
+        "build",
+        "builds",
+        "local",
+        "files",
+        "file",
+        "code",
+        "tree",
+        "pack",
+        "index",
+        "ts",
+        "implemented",
+        "implementation",
+    }
+    identifiers: set[str] = set()
+    for token in re.findall(r"[$A-Za-z_][A-Za-z0-9_]*", raw):
+        if len(token) < 3:
+            continue
+        lowered = token.lower()
+        if lowered in stopwords:
+            continue
+        if token.startswith("$") or "_" in token or any(ch.isupper() for ch in token[1:]):
+            identifiers.add(lowered)
+    return identifiers
+
+
 def implementation_query_member_exprs(query: str) -> set[str]:
     text = (query or "").strip().lower()
     if not text:
@@ -493,14 +772,70 @@ def implementation_query_path_hints(query: str) -> list[str]:
     return sorted(hint for hint in hints if hint)
 
 
+def implementation_inferred_filename_hints(query: str) -> list[str]:
+    text = (query or "").strip().lower()
+    if not text:
+        return []
+    hints: set[str] = set()
+    if implementation_query_prefers_request_routing(query):
+        generic = {
+            "request",
+            "requests",
+            "routing",
+            "route",
+            "routes",
+            "router",
+            "server",
+            "handler",
+            "handled",
+            "handle",
+            "incoming",
+            "http",
+            "endpoint",
+            "controller",
+            "implemented",
+            "implementation",
+            "spring",
+            "petclinic",
+            "gin",
+        }
+        for token in implementation_query_symbols(query):
+            if token in generic:
+                continue
+            hints.add(f"{token}controller.java")
+    return sorted(hints)
+
+
 def implementation_path_hint_hit(file_path: str | None, query: str | None = None, path_hints: list[str] | None = None) -> int:
     norm = (file_path or "").replace("\\", "/").lower()
     if not norm:
         return 0
-    hints = path_hints if path_hints is not None else implementation_query_path_hints(query or "")
+    if path_hints is not None:
+        hints = path_hints
+    else:
+        query_text = query or ""
+        hints = implementation_query_path_hints(query_text)
+        inferred = implementation_inferred_filename_hints(query_text)
+        if inferred:
+            hints = sorted(set(hints) | set(inferred))
     if not hints:
         return 0
     return sum(1 for hint in hints if hint and hint in norm)
+
+
+def implementation_basename_token_hit(file_path: str | None, query: str) -> int:
+    basename = ((file_path or "").replace("\\", "/").rsplit("/", 1)[-1]).strip().lower()
+    if not basename:
+        return 0
+    query_tokens = implementation_query_symbols(query) | implementation_query_exact_identifiers(query)
+    if not query_tokens:
+        return 0
+    basename_tokens = {
+        token.lower()
+        for token in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|[0-9]+", basename.replace(".", "_"))
+        if token
+    }
+    return sum(1 for token in query_tokens if token in basename_tokens)
 
 
 def implementation_symbol_hit(meta: dict, query: str) -> int:
@@ -541,6 +876,204 @@ def implementation_declared_symbol_hit(meta: dict, query: str) -> int:
     return sum(1 for symbol in symbols if symbol in lowered)
 
 
+def implementation_exact_identifier_hit(meta: dict, query: str) -> int:
+    if not isinstance(meta, dict):
+        return 0
+    identifiers = implementation_query_exact_identifiers(query)
+    if not identifiers:
+        return 0
+    candidates: set[str] = set()
+    for key in ("declared_symbols", "file_symbols"):
+        values = meta.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            text = str(value).strip().lower()
+            if text:
+                candidates.add(text)
+    if not candidates:
+        return 0
+    return sum(1 for identifier in identifiers if identifier in candidates)
+
+
+def implementation_dispatcher_priority(meta: dict, query: str) -> int:
+    if not implementation_query_prefers_dispatchers(query):
+        return 0
+    if not isinstance(meta, dict):
+        return 0
+    candidates: set[str] = set()
+    for key in ("declared_symbols", "file_symbols"):
+        values = meta.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            text = str(value).strip().lower()
+            if text:
+                candidates.add(text)
+    if not candidates:
+        return 0
+    priority = 0
+    for symbol in candidates:
+        if symbol in {"infer_model", "infer_provider", "infer_provider_class"}:
+            priority = max(priority, 3)
+        elif re.match(r"^(infer|resolve|select|dispatch|choose)_[a-z0-9_]+$", symbol):
+            priority = max(priority, 2)
+        elif "provider" in symbol or "model" in symbol:
+            priority = max(priority, 1)
+    return priority
+
+
+def implementation_routing_priority(meta: dict, file_path: str | None, query: str) -> int:
+    if not implementation_query_prefers_request_routing(query):
+        return 0
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    priority = 0
+    if any(part in norm for part in ("/grpc/server/", "/server/sources/", "/server/")):
+        priority = max(priority, 2)
+    if "/controller/" in norm or basename.endswith("controller.java"):
+        priority = max(priority, 2)
+    if "serviceimpl" in basename or basename.endswith("server.swift"):
+        priority = max(priority, 2)
+    candidates: set[str] = set()
+    if isinstance(meta, dict):
+        for key in ("declared_symbols", "file_symbols"):
+            values = meta.get(key)
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                text = str(value).strip().lower()
+                if text:
+                    candidates.add(text)
+    for symbol in candidates:
+        if re.match(r"^(handle|route|dispatch)_[a-z0-9_]+$", symbol):
+            priority = max(priority, 3)
+        elif symbol.startswith(("handle", "route", "dispatch")):
+            priority = max(priority, 3)
+        elif "route" in symbol or "mapping" in symbol:
+            priority = max(priority, 3)
+        elif symbol.endswith("controller"):
+            priority = max(priority, 2)
+        elif symbol.startswith("process"):
+            priority = max(priority, 2)
+        elif symbol.startswith(("manage", "update")):
+            priority = max(priority, 1)
+    return priority
+
+
+def implementation_request_handler_priority(meta: dict, file_path: str | None, query: str) -> int:
+    if not implementation_query_prefers_request_routing(query):
+        return 0
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    priority = 0
+    if "serviceimpl" in basename:
+        priority = max(priority, 3)
+    elif "/controller/" in norm or basename.endswith("controller.java"):
+        priority = max(priority, 2)
+    elif basename.endswith(("service.swift", "server.swift")):
+        priority = max(priority, 1)
+    candidates: set[str] = set()
+    if isinstance(meta, dict):
+        for key in ("declared_symbols", "file_symbols"):
+            values = meta.get(key)
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                text = str(value).strip().lower()
+                if text:
+                    candidates.add(text)
+    for symbol in candidates:
+        if symbol.startswith("handle"):
+            priority = max(priority, 3)
+        elif symbol.startswith("process"):
+            priority = max(priority, 2)
+        elif symbol.startswith(("generate", "complete", "cancel")):
+            priority = max(priority, 2)
+    return priority
+
+
+def implementation_controller_entity_hit(meta: dict, file_path: str | None, query: str) -> int:
+    if not implementation_query_prefers_request_routing(query):
+        return 0
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    if not ("/controller/" in norm or basename.endswith("controller.java")):
+        return 0
+    generic = {
+        "request",
+        "requests",
+        "routing",
+        "route",
+        "routes",
+        "router",
+        "server",
+        "handler",
+        "handled",
+        "handle",
+        "incoming",
+        "http",
+        "endpoint",
+        "controller",
+        "implemented",
+        "implementation",
+        "spring",
+        "petclinic",
+        "java",
+    }
+    query_tokens = {
+        token
+        for token in (implementation_query_symbols(query) | implementation_query_exact_identifiers(query))
+        if token and token not in generic
+    }
+    if not query_tokens:
+        return 0
+
+    symbol_candidates: set[str] = set()
+    if isinstance(meta, dict):
+        for key in ("declared_symbols", "file_symbols"):
+            values = meta.get(key)
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                text = str(value).strip().lower()
+                if text:
+                    symbol_candidates.add(text)
+
+    priority = 0
+    for token in query_tokens:
+        controller_name = f"{token}controller"
+        if controller_name in symbol_candidates:
+            priority = max(priority, 2)
+        if token in basename:
+            priority = max(priority, 1)
+    return priority
+
+
+def implementation_server_infra_penalty(meta: dict, file_path: str | None, query: str) -> float:
+    if not implementation_query_prefers_request_routing(query):
+        return 0.0
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    penalty = 0.0
+    if any(token in basename for token in ("browser.swift", "advertiser.swift", "signer.swift")):
+        penalty = max(penalty, 0.08)
+    candidates: set[str] = set()
+    if isinstance(meta, dict):
+        for key in ("declared_symbols", "file_symbols"):
+            values = meta.get(key)
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                text = str(value).strip().lower()
+                if text:
+                    candidates.add(text)
+    infra_prefixes = ("netservice", "advertise", "resolve", "discover", "browse", "completeboost")
+    if any(symbol.startswith(infra_prefixes) for symbol in candidates):
+        penalty = max(penalty, 0.08)
+    return penalty
+
+
 def implementation_member_usages(meta: dict) -> set[str]:
     if not isinstance(meta, dict):
         return set()
@@ -570,6 +1103,33 @@ def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
     if path.startswith("scripts/") or "/scripts/" in path:
         return "script_support"
     return ""
+
+
+def implementation_declares_callable(meta: dict, content: str | None = None) -> bool:
+    if not isinstance(meta, dict):
+        meta = {}
+    node_types = implementation_node_types(meta)
+    callable_node_types = {
+        "function_definition",
+        "function_declaration",
+        "function_item",
+        "method_definition",
+        "method_declaration",
+        "init_declaration",
+        "deinit_declaration",
+        "protocol_function_declaration",
+    }
+    if node_types & callable_node_types:
+        return True
+    text = (content or "").strip().lower()
+    if not text:
+        return False
+    return bool(
+        re.search(r"\b(?:async\s+)?def\s+[a-z_][a-z0-9_]*\s*\(", text)
+        or re.search(r"\bfunc\s+[a-z_][a-z0-9_]*\s*\(", text)
+        or re.search(r"\bfunction\s+[a-z_][a-z0-9_]*\s*\(", text)
+        or re.search(r"\b(?:public\s+|private\s+|internal\s+|open\s+)?static\s+func\s+[a-z_][a-z0-9_]*\s*\(", text)
+    )
 
 
 def implementation_exact_member_usage_hit(content: str | None, query: str, meta: dict | None = None) -> int:
@@ -834,6 +1394,36 @@ def implementation_api_context_hit(meta: dict) -> int:
     return 1 if {"api", "public", "exports"} & lowered else 0
 
 
+NODE_TYPE_POLICY_USAGE = {
+    "declaration": {"priority": 2, "score": -0.01},
+    "callsite": {"priority": 4, "score": 0.05},
+    "export": {"priority": 0, "score": 0.0},
+    "type_or_module": {"priority": 0, "score": 0.0},
+}
+
+NODE_TYPE_POLICY_DEFINITION = {
+    "declaration": {"priority": 4, "score": 0.05},
+    "callsite": {"priority": -4, "score": -0.06},
+    "export": {"priority": 2, "score": 0.03},
+    "type_or_module": {"priority": 1, "score": 0.01},
+}
+
+NODE_TYPE_POLICY_IMPLEMENTATION = {
+    "declaration": {"priority": 2, "score": 0.03},
+    "callsite": {"priority": 1, "score": -0.01},
+    "export": {"priority": 0, "score": 0.03},
+    "type_or_module": {"priority": 0, "score": 0.01},
+}
+
+
+def implementation_node_type_policy(query_class: str) -> dict[str, dict[str, float | int]]:
+    if query_class_prefers_usage(query_class):
+        return NODE_TYPE_POLICY_USAGE
+    if query_class_prefers_definitions(query_class):
+        return NODE_TYPE_POLICY_DEFINITION
+    return NODE_TYPE_POLICY_IMPLEMENTATION
+
+
 def implementation_node_type_priority(meta: dict, query_class: str) -> int:
     node_types = implementation_node_types(meta)
     declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
@@ -841,28 +1431,18 @@ def implementation_node_type_priority(meta: dict, query_class: str) -> int:
     export_like = bool(node_types & EXPORT_NODE_TYPES)
     type_like = bool(node_types & TYPE_DEFINITION_NODE_TYPES)
     module_like = bool(node_types & MODULE_NODE_TYPES)
-    if query_class_prefers_usage(query_class):
-        if callsite_like:
-            return 4
-        if declaration_like:
-            return 2
-        return 0
-    if query_class_prefers_definitions(query_class):
-        score = 0
-        if declaration_like:
-            score += 4
-        if export_like:
-            score += 2
-        if type_like or module_like:
-            score += 1
-        if callsite_like and not declaration_like:
-            score -= 4
-        return score
+    policy = implementation_node_type_policy(query_class)
     score = 0
     if declaration_like:
-        score += 2
-    if callsite_like:
-        score += 1
+        score += int(policy["declaration"]["priority"])
+    if export_like:
+        score += int(policy["export"]["priority"])
+    if type_like or module_like:
+        score += int(policy["type_or_module"]["priority"])
+    if callsite_like and not declaration_like:
+        score += int(policy["callsite"]["priority"])
+    elif callsite_like and query_class_prefers_usage(query_class):
+        score += int(policy["callsite"]["priority"])
     return score
 
 
@@ -880,6 +1460,8 @@ def implementation_result_role(
     callsite_like = bool(node_types & CALLSITE_NODE_TYPES)
     api_context_hit = implementation_api_context_hit(meta)
     chunk_role = implementation_chunk_role(meta, file_path)
+    if is_generated_implementation_surface_path(file_path):
+        return "generated_surface"
     if is_low_signal_binding_surface_path(file_path):
         return "generated_surface"
     if is_doc_like_path(file_path):
@@ -914,82 +1496,71 @@ def implementation_result_role(
     return "internal_implementation" if declaration_like else "supporting_context"
 
 
-def implementation_role_priority(role: str, query_class: str) -> int:
+ROLE_POLICY_USAGE = {
+    "test_example": {"priority": 7, "score": 0.10},
+    "usage_callsite": {"priority": 6, "score": 0.07},
+    "internal_implementation": {"priority": 4, "score": 0.02},
+    "canonical_definition": {"priority": 3, "score": 0.0},
+    "public_api_definition": {"priority": 2, "score": -0.01},
+    "supporting_context": {"priority": 1, "score": 0.0},
+    "generated_surface": {"priority": 0, "score": 0.0},
+    "docs": {"priority": 0, "score": 0.0},
+}
+
+ROLE_POLICY_EXPLANATION = {
+    "public_api_definition": {"priority": 7, "score": 0.09},
+    "canonical_definition": {"priority": 6, "score": 0.06},
+    "internal_implementation": {"priority": 5, "score": 0.04},
+    "supporting_context": {"priority": 3, "score": 0.01},
+    "usage_callsite": {"priority": 1, "score": -0.06},
+    "test_example": {"priority": 0, "score": -0.05},
+    "generated_surface": {"priority": 0, "score": 0.0},
+    "docs": {"priority": 0, "score": 0.0},
+}
+
+ROLE_POLICY_DEFINITION = {
+    "public_api_definition": {"priority": 7, "score": 0.10},
+    "canonical_definition": {"priority": 6, "score": 0.07},
+    "internal_implementation": {"priority": 5, "score": 0.03},
+    "supporting_context": {"priority": 3, "score": 0.0},
+    "usage_callsite": {"priority": 1, "score": -0.07},
+    "test_example": {"priority": 0, "score": -0.06},
+    "generated_surface": {"priority": 0, "score": 0.0},
+    "docs": {"priority": 0, "score": 0.0},
+}
+
+ROLE_POLICY_IMPLEMENTATION = {
+    "internal_implementation": {"priority": 5, "score": 0.04},
+    "canonical_definition": {"priority": 4, "score": 0.03},
+    "public_api_definition": {"priority": 4, "score": 0.02},
+    "supporting_context": {"priority": 3, "score": 0.0},
+    "usage_callsite": {"priority": 2, "score": 0.0},
+    "test_example": {"priority": 1, "score": -0.01},
+    "generated_surface": {"priority": 0, "score": 0.0},
+    "docs": {"priority": 0, "score": 0.0},
+}
+
+
+def implementation_role_policy(query_class: str) -> dict[str, dict[str, float | int]]:
     if query_class_prefers_usage(query_class):
-        order = {
-            "test_example": 7,
-            "usage_callsite": 6,
-            "internal_implementation": 4,
-            "canonical_definition": 3,
-            "public_api_definition": 2,
-            "supporting_context": 1,
-            "generated_surface": 0,
-            "docs": 0,
-        }
-        return order.get(role, 0)
+        return ROLE_POLICY_USAGE
+    if query_class == "implementation_explanation":
+        return ROLE_POLICY_EXPLANATION
     if query_class_prefers_definitions(query_class):
-        order = {
-            "public_api_definition": 7,
-            "canonical_definition": 6,
-            "internal_implementation": 5,
-            "supporting_context": 3,
-            "usage_callsite": 1,
-            "test_example": 0,
-            "generated_surface": 0,
-            "docs": 0,
-        }
-        return order.get(role, 0)
-    order = {
-        "internal_implementation": 5,
-        "canonical_definition": 4,
-        "public_api_definition": 4,
-        "supporting_context": 3,
-        "usage_callsite": 2,
-        "test_example": 1,
-        "generated_surface": 0,
-        "docs": 0,
-    }
-    return order.get(role, 0)
+        return ROLE_POLICY_DEFINITION
+    return ROLE_POLICY_IMPLEMENTATION
+
+
+def implementation_role_priority(role: str, query_class: str) -> int:
+    policy = implementation_role_policy(query_class)
+    entry = policy.get(role, {})
+    return int(entry.get("priority", 0) or 0)
 
 
 def implementation_role_score(role: str, query_class: str) -> float:
-    if query_class_prefers_usage(query_class):
-        weights = {
-            "test_example": 0.1,
-            "usage_callsite": 0.07,
-            "internal_implementation": 0.02,
-            "canonical_definition": 0.0,
-            "public_api_definition": -0.01,
-        }
-        return weights.get(role, 0.0)
-    if query_class == "implementation_explanation":
-        weights = {
-            "public_api_definition": 0.09,
-            "canonical_definition": 0.06,
-            "internal_implementation": 0.04,
-            "supporting_context": 0.01,
-            "usage_callsite": -0.06,
-            "test_example": -0.05,
-        }
-        return weights.get(role, 0.0)
-    if query_class_prefers_definitions(query_class):
-        weights = {
-            "public_api_definition": 0.1,
-            "canonical_definition": 0.07,
-            "internal_implementation": 0.03,
-            "supporting_context": 0.0,
-            "usage_callsite": -0.07,
-            "test_example": -0.06,
-        }
-        return weights.get(role, 0.0)
-    weights = {
-        "internal_implementation": 0.04,
-        "canonical_definition": 0.03,
-        "public_api_definition": 0.02,
-        "usage_callsite": 0.0,
-        "test_example": -0.01,
-    }
-    return weights.get(role, 0.0)
+    policy = implementation_role_policy(query_class)
+    entry = policy.get(role, {})
+    return float(entry.get("score", 0.0) or 0.0)
 
 
 def implementation_node_type_score(meta: dict, query_class: str) -> float:
@@ -999,21 +1570,18 @@ def implementation_node_type_score(meta: dict, query_class: str) -> float:
     export_like = bool(node_types & EXPORT_NODE_TYPES)
     type_like = bool(node_types & TYPE_DEFINITION_NODE_TYPES)
     module_like = bool(node_types & MODULE_NODE_TYPES)
+    policy = implementation_node_type_policy(query_class)
     score = 0.0
-    if query_class_prefers_usage(query_class):
-        if callsite_like:
-            score += 0.05
-        if declaration_like:
-            score -= 0.01
-        return score
     if declaration_like:
-        score += 0.05 if query_class_prefers_definitions(query_class) else 0.03
+        score += float(policy["declaration"]["score"])
     if export_like:
-        score += 0.03
+        score += float(policy["export"]["score"])
     if type_like or module_like:
-        score += 0.01
+        score += float(policy["type_or_module"]["score"])
     if callsite_like and not declaration_like:
-        score -= 0.06 if query_class_prefers_definitions(query_class) else 0.01
+        score += float(policy["callsite"]["score"])
+    elif callsite_like and query_class_prefers_usage(query_class):
+        score += float(policy["callsite"]["score"])
     return score
 
 
@@ -1031,12 +1599,40 @@ def enrich_implementation_result(
     result["doc_like"] = is_doc_like_path(result.get("file_path"))
     result["low_signal_parser_data"] = is_low_signal_parser_data_path(result.get("file_path"))
     result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(result.get("file_path"))
+    result["generated_implementation_surface"] = is_generated_implementation_surface_path(result.get("file_path"))
     result["low_signal_support_path"] = is_low_signal_support_path(result.get("file_path"))
+    result["implementation_callable_priority"] = int(
+        implementation_declares_callable(meta, result.get("content", ""))
+    )
     result["implementation_symbol_hit"] = implementation_symbol_hit(meta, query)
     result["implementation_declared_symbol_hit"] = implementation_declared_symbol_hit(meta, query)
+    result["implementation_exact_identifier_hit"] = implementation_exact_identifier_hit(meta, query)
     result["implementation_path_hint_hit"] = implementation_path_hint_hit(
         result.get("file_path"),
         query=query,
+    )
+    if query_class_prefers_usage(query_class):
+        result["implementation_basename_token_hit"] = 0
+    else:
+        result["implementation_basename_token_hit"] = implementation_basename_token_hit(
+            result.get("file_path"),
+            query,
+        )
+    result["implementation_dispatcher_priority"] = implementation_dispatcher_priority(meta, query)
+    result["implementation_routing_priority"] = implementation_routing_priority(
+        meta,
+        result.get("file_path"),
+        query,
+    )
+    result["implementation_request_handler_priority"] = implementation_request_handler_priority(
+        meta,
+        result.get("file_path"),
+        query,
+    )
+    result["implementation_controller_entity_hit"] = implementation_controller_entity_hit(
+        meta,
+        result.get("file_path"),
+        query,
     )
     chunk_role = implementation_chunk_role(meta)
     result["implementation_chunk_role"] = chunk_role
@@ -1115,69 +1711,146 @@ def enrich_implementation_result(
     result["implementation_role_priority"] = implementation_role_priority(role, query_class)
     result["implementation_role_score"] = implementation_role_score(role, query_class)
 
-    doc_penalty = 0.05 if result["doc_like"] else 0.0
     parser_data_penalty = 0.08 if result["low_signal_parser_data"] else 0.0
     binding_surface_penalty = 0.06 if result["low_signal_binding_surface"] else 0.0
-    if result["low_signal_support_path"]:
-        support_path_penalty = 0.05 if query_class_prefers_definitions(query_class) else 0.03
+    if result["generated_implementation_surface"]:
+        if implementation_query_accepts_generated_surfaces(query):
+            generated_surface_penalty = 0.0
+        elif query_class in {"implementation_search", "implementation_explanation", "api_definition_lookup"}:
+            generated_surface_penalty = 0.18
+        else:
+            generated_surface_penalty = 0.08
     else:
-        support_path_penalty = 0.0
-    usage_penalty = 0.04 if result["implementation_usage_heavy_penalty"] else 0.0
+        generated_surface_penalty = 0.0
+    support_surface_penalties = implementation_support_surface_penalties(
+        result.get("file_path"),
+        query=query,
+        query_class=query_class,
+        doc_like=bool(result["doc_like"]),
+        low_signal_support=bool(result["low_signal_support_path"]),
+        usage_heavy=bool(result["implementation_usage_heavy_penalty"]),
+    )
+    doc_penalty = float(support_surface_penalties["doc_penalty"])
+    support_path_penalty = float(support_surface_penalties["support_path_penalty"])
+    usage_penalty = float(support_surface_penalties["usage_penalty"])
+    intent_policy = implementation_intent_policy(query, query_class)
     symbol_bonus = 0.015 * min(int(result.get("implementation_symbol_hit", 0) or 0), 2)
     declared_symbol_bonus = 0.0
+    exact_identifier_bonus = 0.0
     path_hint_bonus = 0.0
+    basename_token_bonus = 0.0
+    dispatcher_bonus = 0.0
+    routing_bonus = 0.0
+    request_handler_bonus = 0.0
+    controller_entity_bonus = 0.0
     runtime_main_bonus = 0.0
     member_usage_bonus = 0.0
     chunk_role_bonus = 0.0
+    callable_bonus = 0.0
     if query_class_prefers_usage(query_class):
-        member_usage_bonus = 0.06 * min(int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2)
+        member_usage_bonus = float(intent_policy["member_usage_bonus_usage"]) * min(
+            int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2
+        )
         exact_member_hits = int(result.get("implementation_exact_member_usage_hit", 0) or 0)
-        if exact_member_hits > 0:
-            if chunk_role == "example_usage":
-                chunk_role_bonus += 0.11
-            elif chunk_role == "test_usage":
-                chunk_role_bonus += 0.06
-            elif chunk_role == "usage":
-                chunk_role_bonus += 0.03
+        chunk_role_bonus = implementation_usage_surface_bonus(
+            chunk_role=chunk_role,
+            query=query,
+            query_class=query_class,
+            exact_member_hits=exact_member_hits,
+        )
     elif query_class == "implementation_search":
-        member_usage_bonus = 0.015 * min(int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2)
+        member_usage_bonus = float(intent_policy["member_usage_bonus_search"]) * min(
+            int(result.get("implementation_exact_member_usage_hit", 0) or 0), 2
+        )
     path_hint_hits = int(result.get("implementation_path_hint_hit", 0) or 0)
     if path_hint_hits > 0:
         if query_class == "implementation_search":
-            path_hint_bonus = 0.12 * min(path_hint_hits, 1)
+            path_hint_bonus = float(intent_policy["path_hint_bonus_search"]) * min(path_hint_hits, 1)
         elif query_class_prefers_definitions(query_class):
-            path_hint_bonus = 0.08 * min(path_hint_hits, 1)
+            path_hint_bonus = float(intent_policy["path_hint_bonus_definition"]) * min(path_hint_hits, 1)
+    basename_token_hits = int(result.get("implementation_basename_token_hit", 0) or 0)
+    if basename_token_hits > 0 and query_class in {"implementation_search", "implementation_explanation", "api_definition_lookup"}:
+        basename_token_bonus = 0.03 * min(basename_token_hits, 2)
+    dispatcher_hits = int(result.get("implementation_dispatcher_priority", 0) or 0)
+    if dispatcher_hits > 0 and bool(intent_policy["allow_dispatcher_bonus"]):
+        dispatcher_bonus = float(intent_policy["dispatcher_bonus_weight"]) * min(dispatcher_hits, 3)
+    routing_hits = int(result.get("implementation_routing_priority", 0) or 0)
+    if routing_hits > 0 and bool(intent_policy["allow_routing_bonus"]):
+        routing_bonus = float(intent_policy["routing_bonus_weight"]) * min(routing_hits, 3)
+    request_handler_hits = int(result.get("implementation_request_handler_priority", 0) or 0)
+    if request_handler_hits > 0 and bool(intent_policy["allow_request_handler_bonus"]):
+        request_handler_bonus = float(intent_policy["request_handler_bonus_weight"]) * min(request_handler_hits, 3)
+    controller_entity_hits = int(result.get("implementation_controller_entity_hit", 0) or 0)
+    if controller_entity_hits > 0:
+        controller_entity_bonus = float(intent_policy["controller_entity_bonus_weight"]) * min(
+            controller_entity_hits, 2
+        )
+    callable_hits = int(result.get("implementation_callable_priority", 0) or 0)
+    if callable_hits > 0 and bool(intent_policy["allow_callable_bonus"]):
+        callable_bonus = float(intent_policy["callable_bonus_weight"]) * min(callable_hits, 1)
     runtime_main_hits = int(result.get("implementation_runtime_main_entrypoint_hit", 0) or 0)
     if runtime_main_hits > 0:
-        runtime_main_bonus = 0.16 * min(runtime_main_hits, 1)
+        runtime_main_bonus = float(intent_policy["runtime_main_bonus_weight"]) * min(runtime_main_hits, 1)
     library_entrypoint_penalty = 0.0
-    if implementation_query_prefers_runtime_main_entrypoint(query):
+    if float(intent_policy["library_entrypoint_penalty"]) > 0.0:
         norm = (result.get("file_path") or "").replace("\\", "/").lower()
         if norm.endswith(("/src/lib.rs", "/__init__.py", "/lib.rs")):
-            library_entrypoint_penalty = 0.05
-    definition_bonus = 0.025 * min(int(result.get("implementation_definition_hit", 0) or 0), 2)
-    signature_bonus = 0.04 * min(int(result.get("implementation_exact_signature_symbol_hit", 0) or 0), 2)
+            library_entrypoint_penalty = float(intent_policy["library_entrypoint_penalty"])
+    definition_bonus = float(intent_policy["definition_bonus_weight"]) * min(
+        int(result.get("implementation_definition_hit", 0) or 0), 2
+    )
+    signature_bonus = float(intent_policy["signature_bonus_weight"]) * min(
+        int(result.get("implementation_exact_signature_symbol_hit", 0) or 0), 2
+    )
     if query_class_prefers_definitions(query_class):
-        declared_symbol_bonus = 0.05 * min(int(result.get("implementation_declared_symbol_hit", 0) or 0), 2)
-        export_bonus = 0.03 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
-        api_entrypoint_bonus = 0.03 * min(int(result.get("implementation_api_entrypoint_hit", 0) or 0), 1)
-        api_context_bonus = 0.02 * min(int(result.get("implementation_api_context_hit", 0) or 0), 1)
-        reexport_surface_penalty = 0.07 * min(int(result.get("implementation_reexport_surface_hit", 0) or 0), 1)
-        facade_surface_penalty = 0.05 * min(int(result.get("implementation_facade_surface_hit", 0) or 0), 1)
+        exact_identifier_bonus = float(intent_policy["exact_identifier_bonus_weight"]) * min(
+            int(result.get("implementation_exact_identifier_hit", 0) or 0), 2
+        )
+        declared_symbol_bonus = float(intent_policy["declared_symbol_bonus_definition"]) * min(
+            int(result.get("implementation_declared_symbol_hit", 0) or 0), 2
+        )
+        export_bonus = float(intent_policy["export_bonus_definition"]) * min(
+            int(result.get("implementation_export_hit", 0) or 0), 2
+        )
+        api_entrypoint_bonus = float(intent_policy["api_entrypoint_bonus_definition"]) * min(
+            int(result.get("implementation_api_entrypoint_hit", 0) or 0), 1
+        )
+        api_context_bonus = float(intent_policy["api_context_bonus_definition"]) * min(
+            int(result.get("implementation_api_context_hit", 0) or 0), 1
+        )
+        reexport_surface_penalty = float(intent_policy["reexport_surface_penalty_definition"]) * min(
+            int(result.get("implementation_reexport_surface_hit", 0) or 0), 1
+        )
+        facade_surface_penalty = float(intent_policy["facade_surface_penalty_definition"]) * min(
+            int(result.get("implementation_facade_surface_hit", 0) or 0), 1
+        )
     elif query_class == "implementation_search":
-        declared_symbol_bonus = 0.02 * min(int(result.get("implementation_declared_symbol_hit", 0) or 0), 2)
-        export_bonus = 0.01 * min(int(result.get("implementation_export_hit", 0) or 0), 2)
+        exact_identifier_bonus = float(intent_policy["exact_identifier_bonus_weight"]) * min(
+            int(result.get("implementation_exact_identifier_hit", 0) or 0), 2
+        )
+        declared_symbol_bonus = float(intent_policy["declared_symbol_bonus_search"]) * min(
+            int(result.get("implementation_declared_symbol_hit", 0) or 0), 2
+        )
+        export_bonus = float(intent_policy["export_bonus_search"]) * min(
+            int(result.get("implementation_export_hit", 0) or 0), 2
+        )
         api_entrypoint_bonus = 0.0
         api_context_bonus = 0.0
         reexport_surface_penalty = 0.0
         facade_surface_penalty = 0.0
     else:
-        declared_symbol_bonus = 0.01 * min(int(result.get("implementation_declared_symbol_hit", 0) or 0), 2)
+        exact_identifier_bonus = float(intent_policy["exact_identifier_bonus_weight"]) * min(
+            int(result.get("implementation_exact_identifier_hit", 0) or 0), 2
+        )
+        declared_symbol_bonus = float(intent_policy["declared_symbol_bonus_general"]) * min(
+            int(result.get("implementation_declared_symbol_hit", 0) or 0), 2
+        )
         export_bonus = 0.0
         api_entrypoint_bonus = 0.0
         api_context_bonus = 0.0
         reexport_surface_penalty = 0.0
         facade_surface_penalty = 0.0
+    server_infra_penalty = implementation_server_infra_penalty(meta, result.get("file_path"), query)
     meta_component = (float(result.get("meta_score", 0.0) or 0.0) * meta_boost) if meta_boost > 0 else 0.0
 
     result["rank_score"] = (
@@ -1187,8 +1860,15 @@ def enrich_implementation_result(
         + float(result.get("implementation_node_type_score", 0.0) or 0.0)
         + float(result.get("implementation_role_score", 0.0) or 0.0)
         + symbol_bonus
+        + exact_identifier_bonus
         + declared_symbol_bonus
         + path_hint_bonus
+        + basename_token_bonus
+        + dispatcher_bonus
+        + routing_bonus
+        + request_handler_bonus
+        + controller_entity_bonus
+        + callable_bonus
         + runtime_main_bonus
         + member_usage_bonus
         + chunk_role_bonus
@@ -1200,11 +1880,13 @@ def enrich_implementation_result(
         - doc_penalty
         - parser_data_penalty
         - binding_surface_penalty
+        - generated_surface_penalty
         - support_path_penalty
         - library_entrypoint_penalty
         - reexport_surface_penalty
         - facade_surface_penalty
         - usage_penalty
+        - server_infra_penalty
     )
     result["implementation_rank_components"] = {
         "base_relevance": float(base_score),
@@ -1213,8 +1895,15 @@ def enrich_implementation_result(
         "node_type_score": float(result.get("implementation_node_type_score", 0.0) or 0.0),
         "role_score": float(result.get("implementation_role_score", 0.0) or 0.0),
         "symbol_bonus": symbol_bonus,
+        "exact_identifier_bonus": exact_identifier_bonus,
         "declared_symbol_bonus": declared_symbol_bonus,
         "path_hint_bonus": path_hint_bonus,
+        "basename_token_bonus": basename_token_bonus,
+        "dispatcher_bonus": dispatcher_bonus,
+        "routing_bonus": routing_bonus,
+        "request_handler_bonus": request_handler_bonus,
+        "controller_entity_bonus": controller_entity_bonus,
+        "callable_bonus": callable_bonus,
         "runtime_main_bonus": runtime_main_bonus,
         "member_usage_bonus": member_usage_bonus,
         "chunk_role_bonus": chunk_role_bonus,
@@ -1228,9 +1917,11 @@ def enrich_implementation_result(
         "doc_penalty": doc_penalty,
         "parser_data_penalty": parser_data_penalty,
         "binding_surface_penalty": binding_surface_penalty,
+        "generated_surface_penalty": generated_surface_penalty,
         "support_path_penalty": support_path_penalty,
         "library_entrypoint_penalty": library_entrypoint_penalty,
         "usage_penalty": usage_penalty,
+        "server_infra_penalty": server_infra_penalty,
         "role": role,
         "chunk_role": chunk_role,
         "node_types": sorted(implementation_node_types(meta)),

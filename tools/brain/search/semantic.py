@@ -371,6 +371,9 @@ def register(mcp: FastMCP) -> None:
             impl_query_class = sem_helpers.implementation_query_class(query)
             member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
             path_hints = sem_helpers.implementation_query_path_hints(query)
+            inferred_filename_hints = sem_helpers.implementation_inferred_filename_hints(query)
+            if inferred_filename_hints:
+                path_hints = sorted(set(path_hints) | set(inferred_filename_hints))
             explicit_runtime_entrypoints = sem_helpers.implementation_expected_runtime_entrypoint_paths(
                 query
             )
