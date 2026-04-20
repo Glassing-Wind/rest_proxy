@@ -30,9 +30,437 @@
         "limit": 6
       },
       "required_substrings": [
-        "Apple Build Context",
+        "# Directory Snapshot: `FrameCreator/Views/`",
         "FrameCreator/Views/SidebarView.swift",
         "FrameCreator/Views/ContentView.swift"
+      ]
+    },
+    {
+      "id": "framecreator_flow_summary",
+      "workspace_name": "FrameCreator",
+      "tool": "get_flow_summary",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "### Flow Type: Apple Build Graph",
+        "AccentColor -> FrameCreator/Assets.xcassets/AccentColor.colorset/Contents.json",
+        "PlaceholderFrame -> FrameCreator/Assets.xcassets/PlaceholderFrame.imageset/Contents.json"
+      ]
+    },
+    {
+      "id": "framecreator_apple_build_summary",
+      "workspace_name": "FrameCreator",
+      "tool": "get_apple_build_summary",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "Target: FrameCreator",
+        "AccentColor -> FrameCreator/Assets.xcassets/AccentColor.colorset/Contents.json -> target=FrameCreator -> scheme=FrameCreator -> workspace=FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata",
+        "PlaceholderFrame -> FrameCreator/Assets.xcassets/PlaceholderFrame.imageset/Contents.json -> target=FrameCreator -> scheme=FrameCreator -> workspace=FrameCreator.xcodeproj/project.xcworkspace/contents.xcworkspacedata"
+      ]
+    },
+    {
+      "id": "sample_food_truck_apple_build_summary",
+      "workspace_name": "sample-food-truck",
+      "tool": "get_apple_build_summary",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "Target: Widgets",
+        "IslandCompactIcon -> Widgets/Assets.xcassets/IslandCompactIcon.imageset/Contents.json -> target=Widgets -> scheme=Widgets",
+        "Target: Food Truck All"
+      ]
+    },
+    {
+      "id": "sample_food_truck_project_related_files",
+      "workspace_name": "sample-food-truck",
+      "tool": "get_related_files",
+      "params": {
+        "project_path": "$workspace_id",
+        "file_path": "Food Truck.xcodeproj/project.pbxproj"
+      },
+      "required_substrings": [
+        "Related Files:",
+        "Apple build graph:",
+        "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme (scheme builds a target from this project)",
+        "Widgets/Assets.xcassets/AccentColorDimmed.colorset/Contents.json (bundled by a target in this project)"
+      ]
+    },
+    {
+      "id": "fruta_apple_build_summary",
+      "workspace_name": "Fruta-upstream",
+      "tool": "get_apple_build_summary",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "Target: Fruta iOS",
+        "AccentColor -> Shared/Resources/Assets.xcassets/Colors/AccentColor.colorset/Contents.json -> target=Fruta iOS -> scheme=Fruta iOS",
+        "Target: Fruta iOS All"
+      ]
+    },
+    {
+      "id": "loombackgroundmusic_apple_build_summary",
+      "workspace_name": "LoomBackgroundMusic",
+      "tool": "get_apple_build_summary",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "Workspace Overview:",
+        "-> BGMApp/BGMApp.xcodeproj/project.pbxproj",
+        "-> BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+        "Target: Background Music",
+        "AirPlayIcon -> BGMApp/BGMApp/Images.xcassets/AirPlayIcon.imageset/Contents.json -> target=Background Music -> scheme=Background Music -> workspace=BGM.xcworkspace/contents.xcworkspacedata",
+        "Volume3 -> BGMApp/BGMApp/Images.xcassets/Volume3.imageset/Contents.json -> target=Background Music -> scheme=Background Music -> workspace=BGM.xcworkspace/contents.xcworkspacedata"
+      ]
+    },
+    {
+      "id": "loombackgroundmusic_workspace_related_files",
+      "workspace_name": "LoomBackgroundMusic",
+      "tool": "get_related_files",
+      "params": {
+        "project_path": "$workspace_id",
+        "file_path": "BGM.xcworkspace/contents.xcworkspacedata"
+      },
+      "required_substrings": [
+        "Related Files:",
+        "Apple build graph:",
+        "BGMApp/BGMApp.xcodeproj/project.pbxproj (referenced by workspace)",
+        "BGMDriver/BGMDriver.xcodeproj/project.pbxproj (referenced by workspace)"
+      ]
+    },
+    {
+      "id": "loombackgroundmusic_workspace_directory_snapshot",
+      "workspace_name": "LoomBackgroundMusic",
+      "tool": "get_directory_snapshot",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "directory_path": "BGM.xcworkspace",
+        "limit": 10
+      },
+      "required_substrings": [
+        "# Directory Snapshot: `BGM.xcworkspace/`",
+        "inspect workspace project references first because this directory defines the top-level Xcode workspace",
+        "check `BGM.xcworkspace/contents.xcworkspacedata` next because it resolves the owning Xcode projects for this workspace",
+        "workspace `BGM.xcworkspace/contents.xcworkspacedata` references BGMDriver/BGMDriver.xcodeproj/project.pbxproj, BGMApp/BGMApp.xcodeproj/project.pbxproj"
+      ]
+    },
+    {
+      "id": "loombackgroundmusic_apple_investigation_workflow",
+      "workspace_name": "LoomBackgroundMusic",
+      "steps": [
+        {
+          "name": "Inspect Apple build summary",
+          "tool": "get_apple_build_summary",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "Workspace Overview:",
+            "-> BGMApp/BGMApp.xcodeproj/project.pbxproj",
+            "-> BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+            "Target: Background Music"
+          ]
+        },
+        {
+          "name": "Inspect project overview",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: LoomBackgroundMusic",
+            "scheme `Background Music` builds BGMAppUnitTests, BGMAppUITests, Background Music",
+            "workspace `BGM.xcworkspace/contents.xcworkspacedata` references BGMDriver/BGMDriver.xcodeproj/project.pbxproj, BGMApp/BGMApp.xcodeproj/project.pbxproj"
+          ]
+        },
+        {
+          "name": "Inspect app directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "directory_path": "BGMApp",
+            "limit": 20
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `BGMApp/`",
+            "target `Background Music` bundles 9 file(s) via `BGMApp/BGMApp.xcodeproj/project.pbxproj`",
+            "target `BGMXPCHelper` bundles 1 file(s) via `BGMApp/BGMApp.xcodeproj/project.pbxproj`"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "BGM.xcworkspace/contents.xcworkspacedata",
+        "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+        "target `Background Music` bundles 9 file(s) via `BGMApp/BGMApp.xcodeproj/project.pbxproj`"
+      ]
+    },
+    {
+      "id": "loombackgroundmusic_workspace_context_workflow",
+      "workspace_name": "LoomBackgroundMusic",
+      "steps": [
+        {
+          "name": "Inspect project overview for workspace context",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: LoomBackgroundMusic",
+            "workspace `BGM.xcworkspace/contents.xcworkspacedata` references BGMDriver/BGMDriver.xcodeproj/project.pbxproj, BGMApp/BGMApp.xcodeproj/project.pbxproj"
+          ]
+        },
+        {
+          "name": "Inspect related workspace files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "BGM.xcworkspace/contents.xcworkspacedata"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "Apple build graph:",
+            "BGMApp/BGMApp.xcodeproj/project.pbxproj (referenced by workspace)",
+            "BGMDriver/BGMDriver.xcodeproj/project.pbxproj (referenced by workspace)"
+          ]
+        },
+        {
+          "name": "Inspect workspace directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "directory_path": "BGM.xcworkspace",
+            "limit": 10
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `BGM.xcworkspace/`",
+            "inspect workspace project references first because this directory defines the top-level Xcode workspace",
+            "workspace `BGM.xcworkspace/contents.xcworkspacedata` references BGMDriver/BGMDriver.xcodeproj/project.pbxproj, BGMApp/BGMApp.xcodeproj/project.pbxproj"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "BGM.xcworkspace/contents.xcworkspacedata",
+        "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+        "BGMDriver/BGMDriver.xcodeproj/project.pbxproj"
+      ]
+    },
+    {
+      "id": "rest_proxy_repo_dependency_summary",
+      "workspace_name": "rest_proxy",
+      "tool": "get_repo_dependency_summary",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "# Repo Dependency Summary: `rest_proxy`",
+        "tree_sitter_language_pack",
+        "tree-sitter-language-pack",
+        "crates/ts-pack-python"
+      ]
+    },
+    {
+      "id": "rest_proxy_backend_flow_summary",
+      "workspace_name": "rest_proxy",
+      "tool": "get_backend_flow_summary",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "limit": 20
+      },
+      "required_substrings": [
+        "Use this to decide which API entrypoints reach real services, models, or external systems first.",
+        "proxy/app.py -> GET /v1/models -> proxy/handlers.py -> proxy/models.py",
+        "inspect `proxy/handlers.py` next because it is the deepest downstream dependency on that path"
+      ]
+    },
+    {
+      "id": "rest_proxy_backend_context_workflow",
+      "workspace_name": "rest_proxy",
+      "steps": [
+        {
+          "name": "Inspect project overview",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: rest_proxy",
+            "## Inspect First",
+            "inspect repo-linked dependencies early because they define cross-repo breakage boundaries"
+          ]
+        },
+        {
+          "name": "Inspect repo dependency summary",
+          "tool": "get_repo_dependency_summary",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Repo Dependency Summary: `rest_proxy`",
+            "tree_sitter_language_pack",
+            "crates/ts-pack-python"
+          ]
+        },
+        {
+          "name": "Inspect backend flow summary",
+          "tool": "get_backend_flow_summary",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 20
+          },
+          "required_substrings": [
+            "proxy/app.py -> GET /v1/models -> proxy/handlers.py -> proxy/models.py",
+            "inspect `proxy/handlers.py` next because it is the deepest downstream dependency on that path"
+          ]
+        },
+        {
+          "name": "Inspect proxy directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "directory_path": "proxy",
+            "limit": 12
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `proxy/`",
+            "check outbound dependency `memory/bootstrap.py` because files here rely on it most often",
+            "proxy/app.py"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "tree_sitter_language_pack",
+        "proxy/app.py -> GET /v1/models -> proxy/handlers.py -> proxy/models.py",
+        "# Directory Snapshot: `proxy/`"
+      ]
+    },
+    {
+      "id": "framecreator_sidebar_investigation_workflow",
+      "workspace_name": "FrameCreator",
+      "steps": [
+        {
+          "name": "Find the editor sidebar implementation",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "where is the editor sidebar implemented in FrameCreator",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- FrameCreator/Views/SidebarView.swift",
+            "context=SidebarView > body"
+          ]
+        },
+        {
+          "name": "Inspect the sidebar view symbol",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "SidebarView",
+            "include_source_preview": true,
+            "file_path": "FrameCreator/Views/SidebarView.swift"
+          },
+          "required_substrings": [
+            "## `SidebarView` (Struct)",
+            "ContentView.swift",
+            "struct SidebarView: View"
+          ]
+        },
+        {
+          "name": "Find sidebar references",
+          "tool": "find_references",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "SidebarView"
+          },
+          "required_substrings": [
+            "### Functional References (Graph)",
+            "FrameCreator/Views/ContentView.swift:4 (ContentView)",
+            "SidebarView(viewModel: viewModel)"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "FrameCreator/Views/SidebarView.swift",
+        "struct SidebarView: View",
+        "FrameCreator/Views/ContentView.swift:4 (ContentView)"
+      ]
+    },
+    {
+      "id": "framecreator_sidebar_context_workflow",
+      "workspace_name": "FrameCreator",
+      "steps": [
+        {
+          "name": "Inspect project overview for UI context",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: FrameCreator",
+            "## Inspect First",
+            "inspect Apple build context first because target `FrameCreator` via `FrameCreator.xcodeproj/project.pbxproj` anchors the app structure"
+          ]
+        },
+        {
+          "name": "Inspect sidebar neighbors",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "FrameCreator/Views/SidebarView.swift"
+          },
+          "required_substrings": [
+            "Related Files (semantic co-mentions):",
+            "Inspect First:",
+            "FrameCreator/Views/ContentView.swift"
+          ]
+        },
+        {
+          "name": "Visualize the sidebar graph neighborhood",
+          "tool": "visualize_subgraph",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "SidebarView"
+          },
+          "required_substrings": [
+            "## Neighborhood",
+            "## Inspect First",
+            "## Subgraph: `SidebarView` (Struct)",
+            "```mermaid",
+            "Views/SidebarView.swift",
+            "Views/ContentView.swift"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "FrameCreator.xcodeproj/project.pbxproj",
+        "FrameCreator/Views/ContentView.swift",
+        "```mermaid"
       ]
     },
     {
@@ -87,6 +515,365 @@
         "Struct",
         "Source preview",
         "struct DrawThingsCLI: ParsableCommand"
+      ]
+    },
+    {
+      "id": "uv_command_enum_search",
+      "workspace_name": "uv",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where is the uv command enum defined",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- crates/uv-cli/src/lib.rs",
+        "#[derive(Subcommand)]",
+        "pub enum Commands"
+      ]
+    },
+    {
+      "id": "uv_run_symbol_context",
+      "workspace_name": "uv",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "run",
+        "include_source_preview": true,
+        "file_path": "crates/uv/src/lib.rs"
+      },
+      "required_substrings": [
+        "crates/uv/src/lib.rs",
+        "Source preview",
+        "async fn run(cli: Cli) -> Result<ExitStatus>"
+      ]
+    },
+    {
+      "id": "uv_find_python_installation_symbol_context",
+      "workspace_name": "uv",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "find_python_installation",
+        "include_source_preview": true,
+        "file_path": "crates/uv-python/src/discovery.rs"
+      },
+      "required_substrings": [
+        "crates/uv-python/src/discovery.rs",
+        "find_python_installations",
+        "Source preview",
+        "pub(crate) fn find_python_installation"
+      ]
+    },
+    {
+      "id": "uv_project_lock_resolution_search",
+      "workspace_name": "uv",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where is project lock resolution executed in uv",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- crates/uv/src/commands/project/lock.rs",
+        "Resolve the requirements.",
+        "pip::operations::resolve"
+      ]
+    },
+    {
+      "id": "uv_lock_commit_symbol_context",
+      "workspace_name": "uv",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "commit",
+        "include_source_preview": true,
+        "file_path": "crates/uv/src/commands/project/lock_target.rs"
+      },
+      "required_substrings": [
+        "crates/uv/src/commands/project/lock_target.rs",
+        "execute",
+        "Source preview",
+        "fs_err::tokio::write(self.lock_path(), encoded).await?"
+      ]
+    },
+    {
+      "id": "uv_lock_investigation_workflow",
+      "workspace_name": "uv",
+      "steps": [
+        {
+          "name": "Find lock resolution entrypoint",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "where is project lock resolution executed in uv",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- crates/uv/src/commands/project/lock.rs",
+            "pip::operations::resolve"
+          ]
+        },
+        {
+          "name": "Inspect lock commit implementation",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "commit",
+            "include_source_preview": true,
+            "file_path": "crates/uv/src/commands/project/lock_target.rs"
+          },
+          "required_substrings": [
+            "## `commit` (Function)",
+            "Called by",
+            "fs_err::tokio::write(self.lock_path(), encoded).await?"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "crates/uv/src/commands/project/lock.rs",
+        "pip::operations::resolve",
+        "crates/uv/src/commands/project/lock_target.rs"
+      ]
+    },
+    {
+      "id": "axum_route_definition_search",
+      "workspace_name": "axum",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where is route definition implemented in axum",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- axum/src/routing/mod.rs",
+        "Routing between [`Service`]s and handlers.",
+        "pub mod method_routing;"
+      ]
+    },
+    {
+      "id": "axum_nest_symbol_context",
+      "workspace_name": "axum",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "nest",
+        "include_source_preview": true,
+        "file_path": "axum/src/routing/path_router.rs"
+      },
+      "required_substrings": [
+        "axum/src/routing/path_router.rs",
+        "SetNestedPath::layer",
+        "Source preview",
+        "pub(super) fn nest("
+      ]
+    },
+    {
+      "id": "axum_serve_entrypoint_search",
+      "workspace_name": "axum",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where is the axum serve entrypoint implemented",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- axum/src/serve/mod.rs",
+        "Serve the service with the supplied listener.",
+        "pub use self::listener::{ConnLimiter, ConnLimiterIo, Listener, ListenerExt, TapIo};"
+      ]
+    },
+    {
+      "id": "axum_method_router_symbol_context",
+      "workspace_name": "axum",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "MethodRouter",
+        "include_source_preview": true,
+        "file_path": "axum/src/routing/method_routing.rs"
+      },
+      "required_substrings": [
+        "axum/src/routing/method_routing.rs",
+        "Source preview",
+        "pub struct MethodRouter<S = (), E = Infallible>"
+      ]
+    },
+    {
+      "id": "axum_serve_investigation_workflow",
+      "workspace_name": "axum",
+      "steps": [
+        {
+          "name": "Find the serve entrypoint",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "where is the axum serve entrypoint implemented",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- axum/src/serve/mod.rs",
+            "Serve the service with the supplied listener."
+          ]
+        },
+        {
+          "name": "Inspect serve symbol",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "serve",
+            "include_source_preview": true,
+            "file_path": "axum/src/serve/mod.rs"
+          },
+          "required_substrings": [
+            "## `serve` (Function)",
+            "pub fn serve<L, M, S, B>(listener: L, make_service: M)",
+            "pub struct Serve<L, M, S, B>"
+          ]
+        },
+        {
+          "name": "Inspect method router type",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "MethodRouter",
+            "include_source_preview": true,
+            "file_path": "axum/src/routing/method_routing.rs"
+          },
+          "required_substrings": [
+            "## `MethodRouter` (Struct)",
+            "pub struct MethodRouter<S = (), E = Infallible>"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "axum/src/serve/mod.rs",
+        "pub fn serve<L, M, S, B>(listener: L, make_service: M)",
+        "MethodRouter"
       ]
     },
     {
@@ -421,6 +1208,620 @@
       ]
     },
     {
+      "id": "drawthings_model_inference_selected_search",
+      "workspace_name": "draw-things-community",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where is model inference selected",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- Libraries/ModelOp/Sources/ModelImporter.swift",
+        "inferModelSpecification"
+      ],
+      "forbidden_substrings": [
+        "--- Libraries/SwiftDiffusion/Sources/TeaCache/TeaCache.swift"
+      ]
+    },
+    {
+      "id": "drawthings_grpc_request_routing_search",
+      "workspace_name": "draw-things-community",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "how does gRPC server request routing work",
+        "k": 10,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 3,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+        "handleGenerateImage"
+      ],
+      "forbidden_substrings": [
+        "--- Libraries/GRPC/Models/Sources/controlPanel/controlPanel.grpc.swift"
+      ]
+    },
+    {
+      "id": "drawthings_grpc_server_directory_snapshot",
+      "workspace_name": "draw-things-community",
+      "tool": "get_directory_snapshot",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "directory_path": "Libraries/GRPC/Server/Sources",
+        "limit": 8
+      },
+      "required_substrings": [
+        "# Directory Snapshot: `Libraries/GRPC/Server/Sources/`",
+        "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+        "Apps/gRPCServerCLI/gRPCServerCLI.swift"
+      ]
+    },
+    {
+      "id": "drawthings_grpc_investigation_workflow",
+      "workspace_name": "draw-things-community",
+      "steps": [
+        {
+          "name": "Find gRPC routing implementation",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "how does gRPC server request routing work",
+            "k": 10,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 3,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+            "handleGenerateImage"
+          ]
+        },
+        {
+          "name": "Inspect image generation implementation",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "generateImage",
+            "include_source_preview": true,
+            "file_path": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"
+          },
+          "required_substrings": [
+            "## `generateImage` (Function)",
+            "ImageGenerationServiceImpl.swift",
+            "private func generateImage("
+          ]
+        },
+        {
+          "name": "Find generator references",
+          "tool": "find_references",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "generateImage"
+          },
+          "required_substrings": [
+            "Apps/gRPCServerCLI/gRPCServerCLI.swift",
+            "Libraries/RemoteImageGenerator/Sources/RemoteImageGenerator.swift"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "ImageGenerationServiceImpl.swift",
+        "private func generateImage(",
+        "RemoteImageGenerator.swift"
+      ]
+    },
+    {
+      "id": "pydantic_ai_model_inference_selected_search",
+      "workspace_name": "pydantic-ai",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where is model inference selected",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        "infer_model"
+      ],
+      "forbidden_substrings": [
+        "--- pydantic_ai_slim/pydantic_ai/profiles/deepseek.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_wiring_search",
+      "workspace_name": "pydantic-ai",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "how does OpenAI provider wiring work",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+        "infer_provider_class"
+      ]
+    },
+    {
+      "id": "pydantic_ai_tool_results_to_messages_search",
+      "workspace_name": "pydantic-ai",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where are tool call results converted into messages",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "pydantic_ai_slim/pydantic_ai/_agent_graph.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_models_directory_snapshot",
+      "workspace_name": "pydantic-ai",
+      "tool": "get_directory_snapshot",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "directory_path": "pydantic_ai_slim/pydantic_ai/models",
+        "limit": 8
+      },
+      "required_substrings": [
+        "# Directory Snapshot: `pydantic_ai_slim/pydantic_ai/models/`",
+        "pydantic_ai_slim/pydantic_ai/models/gemini.py",
+        "pydantic_ai_slim/pydantic_ai/exceptions.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_code_importance",
+      "workspace_name": "pydantic-ai",
+      "tool": "get_code_importance",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "Most important files [",
+        "Recommended starting points:",
+        "pydantic_ai_slim/pydantic_ai/agent/__init__.py",
+        "pydantic_ai_slim/pydantic_ai/models/__init__.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_exports_summary",
+      "workspace_name": "pydantic-ai",
+      "tool": "get_symbol_exports_summary",
+      "params": {
+        "project_path": "$workspace_id",
+        "limit": 10,
+        "symbol_prefix": "infer_provider"
+      },
+      "required_substrings": [
+        "# Symbol export summary: pydantic-ai",
+        "## Inspect First",
+        "infer_provider_class",
+        "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_symbol_imports_overview",
+      "workspace_name": "pydantic-ai",
+      "tool": "get_symbol_imports_overview",
+      "params": {
+        "project_path": "$workspace_id",
+        "limit": 12
+      },
+      "required_substrings": [
+        "# Symbol import overview: pydantic-ai",
+        "## Inspect First",
+        "pydantic_ai_slim/pydantic_ai/models/openai.py",
+        "IMPORTS_SYMBOL: 1994"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_related_files",
+      "workspace_name": "pydantic-ai",
+      "tool": "get_related_files",
+      "params": {
+        "project_path": "$workspace_id",
+        "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+      },
+      "required_substrings": [
+        "Related Files:",
+        "Inspect First:",
+        "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_subgraph",
+      "workspace_name": "pydantic-ai",
+      "tool": "visualize_subgraph",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "symbol_name": "infer_provider_class"
+      },
+      "required_substrings": [
+        "```mermaid",
+        "infer_provider_class",
+        "providers/__init__.py",
+        "normalize_gateway_provider",
+        "models/__init__.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_query_graph",
+      "workspace_name": "pydantic-ai",
+      "tool": "query_graph",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "cypher_query": "MATCH (n:Node {project_id:$project_id, name:'infer_provider_class'}) RETURN n.filepath AS filepath, n.kind AS kind LIMIT 5"
+      },
+      "required_substrings": [
+        "\"filepath\": \"pydantic_ai_slim/pydantic_ai/providers/__init__.py\"",
+        "\"kind\": \"Function\""
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_provenance",
+      "workspace_name": "pydantic-ai",
+      "tool": "trace_graph_provenance",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "symbol_filter": "infer_provider",
+        "file_filter": "providers/__init__.py"
+      },
+      "required_substrings": [
+        "# Graph Provenance: pydantic-ai",
+        "Project ID: `c383585045fa`",
+        "Symbol filter: `infer_provider`",
+        "File filter: `providers/__init__.py`",
+        "## Resolved Internal Samples",
+        "`pydantic_ai_slim/pydantic_ai/models/__init__.py` -> `pydantic_ai_slim/pydantic_ai/providers/__init__.py` via `infer_model_profile -> infer_provider_class` [CALLS]",
+        "Resolve note: Unresolved and filtered decisions remain available through index-time provenance logging.",
+        "## File Graph Link Samples",
+        "`pydantic_ai_slim/pydantic_ai/providers/__init__.py` -> `pydantic_ai_slim/pydantic_ai/providers/gateway.py` [CALLS_FILE]"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_investigation_workflow",
+      "workspace_name": "pydantic-ai",
+      "steps": [
+        {
+          "name": "Find provider wiring entrypoint",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "how does OpenAI provider wiring work",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+            "infer_provider_class"
+          ]
+        },
+        {
+          "name": "Inspect provider inference symbol",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "infer_provider_class",
+            "include_source_preview": true,
+            "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          },
+          "required_substrings": [
+            "## `infer_provider_class` (Function)",
+            "infer_model_profile",
+            "normalize_gateway_provider"
+          ]
+        },
+        {
+          "name": "Inspect models directory context",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "directory_path": "pydantic_ai_slim/pydantic_ai/models",
+            "limit": 8
+          },
+          "required_substrings": [
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+            "pydantic_ai_slim/pydantic_ai/exceptions.py"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "infer_provider_class",
+        "infer_model_profile",
+        "pydantic_ai_slim/pydantic_ai/models/__init__.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_adjacency_workflow",
+      "workspace_name": "pydantic-ai",
+      "steps": [
+        {
+          "name": "Find provider wiring entrypoint",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "how does OpenAI provider wiring work",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+            "infer_provider_class"
+          ]
+        },
+        {
+          "name": "Inspect provider inference symbol",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "infer_provider_class",
+            "include_source_preview": true,
+            "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          },
+          "required_substrings": [
+            "## `infer_provider_class` (Function)",
+            "infer_model_profile",
+            "normalize_gateway_provider"
+          ]
+        },
+        {
+          "name": "Inspect adjacent provider files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+            "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "infer_provider_class",
+        "normalize_gateway_provider",
+        "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_graph_debug_workflow",
+      "workspace_name": "pydantic-ai",
+      "steps": [
+        {
+          "name": "Inspect project overview",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: pydantic-ai",
+            "pydantic_ai_slim/",
+            "pydantic_ai_slim/pydantic_ai/models/gemini.py"
+          ]
+        },
+        {
+          "name": "Trace provider provenance",
+          "tool": "trace_graph_provenance",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_filter": "infer_provider",
+            "file_filter": "providers/__init__.py"
+          },
+          "required_substrings": [
+            "# Graph Provenance: pydantic-ai",
+            "## Inspect First",
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py` -> `pydantic_ai_slim/pydantic_ai/providers/__init__.py` via `infer_model_profile -> infer_provider_class` [CALLS]",
+            "`pydantic_ai_slim/pydantic_ai/providers/__init__.py` -> `pydantic_ai_slim/pydantic_ai/providers/gateway.py` [CALLS_FILE]"
+          ]
+        },
+        {
+          "name": "Inspect provider subgraph",
+          "tool": "visualize_subgraph",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "infer_provider_class"
+          },
+          "required_substrings": [
+            "## Neighborhood",
+            "## Inspect First",
+            "## Subgraph: `infer_provider_class` (Function)",
+            "```mermaid",
+            "infer_provider_class",
+            "normalize_gateway_provider",
+            "models/__init__.py"
+          ]
+        },
+        {
+          "name": "Inspect related provider files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+            "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "infer_provider_class",
+        "normalize_gateway_provider",
+        "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+      ]
+    },
+    {
       "id": "s4nnc_dynamicgraph_symbol_context",
       "workspace_name": "s4nncFork",
       "tool": "get_symbol_context",
@@ -500,7 +1901,7 @@
       ],
       "forbidden_substrings": [
         "Swift caller-like usages",
-        "Resolved `EventLoop` → `extension"
+        "Resolved `EventLoop` \u2192 `extension"
       ]
     },
     {
@@ -515,6 +1916,1225 @@
         "extension EventLoop@",
         "\"target\": \"EventLoop\"",
         "\"kind\": \"Protocol\""
+      ]
+    },
+    {
+      "id": "zod_json_schema_conversion_search",
+      "workspace_name": "zod-upstream",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "how does json schema conversion work",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- packages/zod/src/v4/classic/from-json-schema.ts",
+        "function detectVersion(schema: JSONSchema.JSONSchema"
+      ]
+    },
+    {
+      "id": "zod_discriminated_union_symbol_context",
+      "workspace_name": "zod-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "discriminatedUnion",
+        "include_source_preview": true,
+        "file_path": "packages/zod/src/v4/classic/schemas.ts"
+      },
+      "required_substrings": [
+        "packages/zod/src/v4/classic/schemas.ts",
+        "Source preview",
+        "export function discriminatedUnion<"
+      ]
+    },
+    {
+      "id": "zod_from_json_schema_symbol_context",
+      "workspace_name": "zod-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "fromJSONSchema",
+        "include_source_preview": true,
+        "file_path": "packages/zod/src/v4/classic/from-json-schema.ts"
+      },
+      "required_substrings": [
+        "packages/zod/src/v4/classic/from-json-schema.ts",
+        "Source preview",
+        "fromJSONSchema"
+      ]
+    },
+    {
+      "id": "zod_object_core_symbol_context",
+      "workspace_name": "zod-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "$ZodObject",
+        "include_source_preview": true,
+        "file_path": "packages/zod/src/v4/core/schemas.ts"
+      },
+      "required_substrings": [
+        "packages/zod/src/v4/core/schemas.ts",
+        "Source preview",
+        "$ZodObject"
+      ]
+    },
+    {
+      "id": "zod_json_schema_investigation_workflow",
+      "workspace_name": "zod-upstream",
+      "steps": [
+        {
+          "name": "Find JSON schema conversion entrypoint",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "how does json schema conversion work",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- packages/zod/src/v4/classic/from-json-schema.ts",
+            "function detectVersion(schema: JSONSchema.JSONSchema"
+          ]
+        },
+        {
+          "name": "Inspect fromJSONSchema symbol",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "fromJSONSchema",
+            "include_source_preview": true,
+            "file_path": "packages/zod/src/v4/classic/from-json-schema.ts"
+          },
+          "required_substrings": [
+            "## `fromJSONSchema` (Function)",
+            "return convertSchema(schema, ctx);"
+          ]
+        },
+        {
+          "name": "Find JSON schema conversion references",
+          "tool": "find_references",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "fromJSONSchema"
+          },
+          "required_substrings": [
+            "packages/zod/src/v4/classic/external.ts:1",
+            "packages/zod/src/v4/classic/tests/from-json-schema.test.ts:1"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "packages/zod/src/v4/classic/from-json-schema.ts",
+        "fromJSONSchema",
+        "packages/zod/src/v4/classic/external.ts:1"
+      ]
+    },
+    {
+      "id": "gin_add_route_symbol_context",
+      "workspace_name": "gin-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "addRoute",
+        "include_source_preview": true,
+        "file_path": "gin.go"
+      },
+      "required_substrings": [
+        "gin.go",
+        "Source preview",
+        "func (engine *Engine) addRoute(method, path string, handlers HandlersChain)"
+      ]
+    },
+    {
+      "id": "gin_request_handling_search",
+      "workspace_name": "gin-upstream",
+      "tool": "search_codebase",
+      "params": {
+        "workspace_ids": [
+          "$workspace_id"
+        ],
+        "query": "where are incoming http requests handled in gin",
+        "k": 5,
+        "include_metadata": false,
+        "dedupe_files": true,
+        "include_debug": false,
+        "max_per_file": 0,
+        "max_per_dir": 2,
+        "meta_boost": 0.005,
+        "mode": "precise",
+        "fallback": "none",
+        "fallback_ratio": 0.4,
+        "fallback_max": 12,
+        "fallback_glob": "",
+        "exclude_tests": true,
+        "languages": null,
+        "min_imports": 0,
+        "min_symbols": 0,
+        "require_diagnostics": false,
+        "require_context": false,
+        "crate_contains": null,
+        "include_paths": null,
+        "exclude_paths": null
+      },
+      "required_substrings": [
+        "--- gin.go",
+        "package gin",
+        "type HandlerFunc func(*Context)"
+      ]
+    },
+    {
+      "id": "gin_add_route_references",
+      "workspace_name": "gin-upstream",
+      "tool": "find_references",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "symbol_name": "addRoute"
+      },
+      "required_substrings": [
+        "### Functional References (Graph)",
+        "gin.go:364 (addRoute)",
+        "routergroup.go:1 (semantic)"
+      ]
+    },
+    {
+      "id": "gin_handle_http_request_symbol_context",
+      "workspace_name": "gin-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "handleHTTPRequest",
+        "include_source_preview": true,
+        "file_path": "gin.go"
+      },
+      "required_substrings": [
+        "gin.go",
+        "Source preview",
+        "func (engine *Engine) handleHTTPRequest(c *Context)"
+      ]
+    },
+    {
+      "id": "gin_request_flow_workflow",
+      "workspace_name": "gin-upstream",
+      "steps": [
+        {
+          "name": "Find request handling entrypoint",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "where are incoming http requests handled in gin",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- gin.go",
+            "package gin"
+          ]
+        },
+        {
+          "name": "Inspect request handler symbol",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "handleHTTPRequest",
+            "include_source_preview": true,
+            "file_path": "gin.go"
+          },
+          "required_substrings": [
+            "## `handleHTTPRequest` (Function)",
+            "getValue",
+            "c.Next()"
+          ]
+        },
+        {
+          "name": "Find route registration references",
+          "tool": "find_references",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "addRoute"
+          },
+          "required_substrings": [
+            "gin.go:364 (addRoute)",
+            "routergroup.go:1 (semantic)"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "handleHTTPRequest",
+        "addRoute",
+        "routergroup.go:1 (semantic)"
+      ]
+    },
+    {
+      "id": "spring_petclinic_owner_request_workflow",
+      "workspace_name": "spring-petclinic-upstream",
+      "steps": [
+        {
+          "name": "Find owner request routing entrypoint",
+          "tool": "search_codebase",
+          "params": {
+            "workspace_ids": [
+              "$workspace_id"
+            ],
+            "query": "where is owner request routing implemented in spring petclinic",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "include_debug": false,
+            "max_per_file": 0,
+            "max_per_dir": 2,
+            "meta_boost": 0.005,
+            "mode": "precise",
+            "fallback": "none",
+            "fallback_ratio": 0.4,
+            "fallback_max": 12,
+            "fallback_glob": "",
+            "exclude_tests": true,
+            "languages": null,
+            "min_imports": 0,
+            "min_symbols": 0,
+            "require_diagnostics": false,
+            "require_context": false,
+            "crate_contains": null,
+            "include_paths": null,
+            "exclude_paths": null
+          },
+          "required_substrings": [
+            "--- src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+          ]
+        },
+        {
+          "name": "Inspect owner controller",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "OwnerController",
+            "include_source_preview": true,
+            "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+          },
+          "required_substrings": [
+            "class OwnerController",
+            "@GetMapping(\"/owners/new\")"
+          ]
+        },
+        {
+          "name": "Inspect owner find-form handler",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "processFindForm",
+            "include_source_preview": true,
+            "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+          },
+          "required_substrings": [
+            "public String processFindForm(@RequestParam(defaultValue = \"1\") int page, Owner owner, BindingResult result,",
+            "@GetMapping(\"/owners\")"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "OwnerController.java",
+        "processFindForm",
+        "@GetMapping(\"/owners\")"
+      ]
+    },
+    {
+      "id": "spring_petclinic_owner_controller_symbol_context",
+      "workspace_name": "spring-petclinic-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "OwnerController",
+        "include_source_preview": true,
+        "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+      },
+      "required_substrings": [
+        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        "Source preview",
+        "class OwnerController",
+        "@GetMapping(\"/owners/new\")"
+      ]
+    },
+    {
+      "id": "spring_petclinic_process_find_form_symbol_context",
+      "workspace_name": "spring-petclinic-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "processFindForm",
+        "include_source_preview": true,
+        "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+      },
+      "required_substrings": [
+        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        "Source preview",
+        "public String processFindForm(@RequestParam(defaultValue = \"1\") int page, Owner owner, BindingResult result,",
+        "@GetMapping(\"/owners\")"
+      ]
+    },
+    {
+      "id": "spring_petclinic_vet_controller_symbol_context",
+      "workspace_name": "spring-petclinic-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "VetController",
+        "include_source_preview": true,
+        "file_path": "src/main/java/org/springframework/samples/petclinic/vet/VetController.java"
+      },
+      "required_substrings": [
+        "src/main/java/org/springframework/samples/petclinic/vet/VetController.java",
+        "Source preview",
+        "class VetController",
+        "@GetMapping(\"/vets.html\")"
+      ]
+    },
+    {
+      "id": "okhttp_real_interceptor_chain_symbol_context",
+      "workspace_name": "okhttp-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "RealInterceptorChain",
+        "include_source_preview": true,
+        "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
+      },
+      "required_substrings": [
+        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt",
+        "Source preview",
+        "class RealInterceptorChain"
+      ]
+    },
+    {
+      "id": "okhttp_proceed_symbol_context",
+      "workspace_name": "okhttp-upstream",
+      "tool": "get_symbol_context",
+      "params": {
+        "symbol_name": "proceed",
+        "include_source_preview": true,
+        "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
+      },
+      "required_substrings": [
+        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt",
+        "Source preview",
+        "override fun proceed(request: Request): Response"
+      ]
+    },
+    {
+      "id": "okhttp_real_interceptor_chain_references",
+      "workspace_name": "okhttp-upstream",
+      "tool": "find_references",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "symbol_name": "RealInterceptorChain"
+      },
+      "required_substrings": [
+        "### Mentions & Type Usages (Semantic)",
+        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt:53",
+        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt:1"
+      ]
+    },
+    {
+      "id": "okhttp_interceptor_context_workflow",
+      "workspace_name": "okhttp-upstream",
+      "steps": [
+        {
+          "name": "Inspect project overview for implementation context",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: okhttp-upstream",
+            "## Inspect First",
+            "use get_directory_snapshot('/Users/michaelmarler/Projects/okhttp-upstream', 'okhttp', limit=12)"
+          ]
+        },
+        {
+          "name": "Inspect interceptor chain neighbors",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
+          },
+          "required_substrings": [
+            "Related Files (semantic co-mentions):",
+            "Inspect First:",
+            "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+            "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt"
+          ]
+        },
+        {
+          "name": "Visualize the interceptor chain neighborhood",
+          "tool": "visualize_subgraph",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "RealInterceptorChain"
+          },
+          "required_substrings": [
+            "## Neighborhood",
+            "## Inspect First",
+            "## Subgraph: `RealInterceptorChain` (Class)",
+            "```mermaid",
+            "RealInterceptorChain",
+            "http/RealInterceptorChain.kt"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+        "RealInterceptorChain",
+        "```mermaid"
+      ]
+    },
+    {
+      "id": "okhttp_interceptor_chain_workflow",
+      "workspace_name": "okhttp-upstream",
+      "steps": [
+        {
+          "name": "Inspect interceptor chain type",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "RealInterceptorChain",
+            "include_source_preview": true,
+            "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
+          },
+          "required_substrings": [
+            "## `RealInterceptorChain` (Class)",
+            "class RealInterceptorChain"
+          ]
+        },
+        {
+          "name": "Inspect proceed implementation",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "proceed",
+            "include_source_preview": true,
+            "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
+          },
+          "required_substrings": [
+            "## `proceed` (Function)",
+            "override fun proceed(request: Request): Response",
+            "interceptor.intercept(next)"
+          ]
+        },
+        {
+          "name": "Find chain references",
+          "tool": "find_references",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "RealInterceptorChain"
+          },
+          "required_substrings": [
+            "RealInterceptorChain.kt:53",
+            "ConnectInterceptor.kt:1"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "RealInterceptorChain",
+        "override fun proceed(request: Request): Response",
+        "ConnectInterceptor.kt:1"
+      ]
+    },
+    {
+      "id": "sample_food_truck_widget_context_workflow",
+      "workspace_name": "sample-food-truck",
+      "steps": [
+        {
+          "name": "Inspect Apple build summary",
+          "tool": "get_apple_build_summary",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "Target: Widgets",
+            "IslandCompactIcon -> Widgets/Assets.xcassets/IslandCompactIcon.imageset/Contents.json -> target=Widgets -> scheme=Widgets",
+            "Target: Food Truck All"
+          ]
+        },
+        {
+          "name": "Inspect project overview",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: sample-food-truck",
+            "target `Widgets` bundles 9 file(s) via `Food Truck.xcodeproj/project.pbxproj`",
+            "scheme `Widgets` builds Widgets"
+          ]
+        },
+        {
+          "name": "Inspect project-related files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "Food Truck.xcodeproj/project.pbxproj"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "Apple build graph:",
+            "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme (scheme builds a target from this project)",
+            "Widgets/Assets.xcassets/AccentColorDimmed.colorset/Contents.json (bundled by a target in this project)"
+          ]
+        },
+        {
+          "name": "Inspect widgets directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "directory_path": "Widgets",
+            "limit": 15
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `Widgets/`",
+            "target `Widgets` bundles 9 file(s) via `Food Truck.xcodeproj/project.pbxproj`",
+            "Widgets/TruckActivityWidget.swift"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "Target: Widgets",
+        "Food Truck.xcodeproj/project.pbxproj",
+        "Widgets/TruckActivityWidget.swift"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_provenance_context_workflow",
+      "workspace_name": "pydantic-ai",
+      "steps": [
+        {
+          "name": "Inspect project overview for provider context",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: pydantic-ai",
+            "## Inspect First",
+            "pydantic_ai_slim/pydantic_ai/models/gemini.py"
+          ]
+        },
+        {
+          "name": "Trace provider provenance with actionable guidance",
+          "tool": "trace_graph_provenance",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_filter": "infer_provider",
+            "file_filter": "providers/__init__.py"
+          },
+          "required_substrings": [
+            "# Graph Provenance: pydantic-ai",
+            "## Inspect First",
+            "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+            "`pydantic_ai_slim/pydantic_ai/providers/__init__.py` -> `pydantic_ai_slim/pydantic_ai/providers/gateway.py` [CALLS_FILE]"
+          ]
+        },
+        {
+          "name": "Inspect provider neighbors after provenance",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+            "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "## Inspect First",
+        "infer_provider_class",
+        "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+      ]
+    },
+    {
+      "id": "framecreator_sidebar_subgraph_explain_workflow",
+      "workspace_name": "FrameCreator",
+      "steps": [
+        {
+          "name": "Inspect project overview for app context",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: FrameCreator",
+            "## Inspect First",
+            "FrameCreator.xcodeproj/project.pbxproj"
+          ]
+        },
+        {
+          "name": "Explain the sidebar subgraph",
+          "tool": "visualize_subgraph",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "SidebarView"
+          },
+          "required_substrings": [
+            "## Subgraph: `SidebarView` (Struct)",
+            "## Inspect First",
+            "inspect `FrameCreator/Views/SidebarView.swift` first because it contains the focus symbol `SidebarView`",
+            "Views/ContentView.swift",
+            "## Neighborhood",
+            "```mermaid"
+          ]
+        },
+        {
+          "name": "Inspect sidebar neighbors after graph summary",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "FrameCreator/Views/SidebarView.swift"
+          },
+          "required_substrings": [
+            "Related Files (semantic co-mentions):",
+            "Inspect First:",
+            "FrameCreator/Views/ContentView.swift"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "SidebarView",
+        "FrameCreator/Views/ContentView.swift",
+        "## Neighborhood"
+      ]
+    },
+    {
+      "id": "okhttp_interceptor_subgraph_explain_workflow",
+      "workspace_name": "okhttp-upstream",
+      "steps": [
+        {
+          "name": "Inspect interceptor neighbors first",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
+          },
+          "required_substrings": [
+            "Related Files (semantic co-mentions):",
+            "Inspect First:",
+            "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt"
+          ]
+        },
+        {
+          "name": "Explain the interceptor subgraph",
+          "tool": "visualize_subgraph",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "RealInterceptorChain"
+          },
+          "required_substrings": [
+            "## Subgraph: `RealInterceptorChain` (Class)",
+            "## Inspect First",
+            "inspect `okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt` first because it contains the focus symbol `RealInterceptorChain`",
+            "## Neighborhood",
+            "```mermaid"
+          ]
+        },
+        {
+          "name": "Inspect proceed after subgraph explanation",
+          "tool": "get_symbol_context",
+          "params": {
+            "symbol_name": "proceed",
+            "include_source_preview": true,
+            "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
+          },
+          "required_substrings": [
+            "## `proceed` (Function)",
+            "RealInterceptorChain.kt",
+            "override fun proceed(request: Request): Response"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "RealInterceptorChain",
+        "proceed",
+        "## Neighborhood"
+      ]
+    },
+    {
+      "id": "axum_routing_orientation_workflow",
+      "workspace_name": "axum",
+      "steps": [
+        {
+          "name": "Inspect project overview for routing orientation",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: axum",
+            "## Inspect First",
+            "axum/"
+          ]
+        },
+        {
+          "name": "Inspect routing directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 12,
+            "directory_path": "axum/src/routing"
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `axum/src/routing/`",
+            "Recommended Inspection Order",
+            "axum/src/routing/mod.rs",
+            "axum/src/routing/method_routing.rs"
+          ]
+        },
+        {
+          "name": "Inspect related routing files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "axum/src/routing/method_routing.rs"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "Inspect First:",
+            "axum/src/routing/mod.rs"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "axum/src/routing/mod.rs",
+        "axum/src/routing/method_routing.rs",
+        "Recommended Inspection Order"
+      ]
+    },
+    {
+      "id": "sample_food_truck_project_orientation_workflow",
+      "workspace_name": "sample-food-truck",
+      "steps": [
+        {
+          "name": "Inspect project overview for app orientation",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: sample-food-truck",
+            "## Inspect First",
+            "Food Truck.xcodeproj/project.pbxproj"
+          ]
+        },
+        {
+          "name": "Inspect app directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 12,
+            "directory_path": "App"
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `App/`",
+            "Recommended Inspection Order",
+            "App/Store/SubscriptionStoreView.swift",
+            "Apple Build Context"
+          ]
+        },
+        {
+          "name": "Inspect related project files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "Food Truck.xcodeproj/project.pbxproj"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "Inspect First:",
+            "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "Food Truck.xcodeproj/project.pbxproj",
+        "App/Store/SubscriptionStoreView.swift",
+        "Inspect First:"
+      ]
+    },
+    {
+      "id": "pydantic_ai_models_orientation_workflow",
+      "workspace_name": "pydantic-ai",
+      "steps": [
+        {
+          "name": "Inspect project overview for model orientation",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: pydantic-ai",
+            "## Inspect First",
+            "pydantic_ai_slim/"
+          ]
+        },
+        {
+          "name": "Inspect models directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 12,
+            "directory_path": "pydantic_ai_slim/pydantic_ai/models"
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `pydantic_ai_slim/pydantic_ai/models/`",
+            "Recommended Inspection Order",
+            "pydantic_ai_slim/pydantic_ai/models/gemini.py",
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py"
+          ]
+        },
+        {
+          "name": "Inspect related model wiring files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "pydantic_ai_slim/pydantic_ai/models/__init__.py"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "Inspect First:",
+            "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+        "Recommended Inspection Order"
+      ]
+    },
+    {
+      "id": "swift_nio_code_importance",
+      "workspace_name": "swift-nio",
+      "tool": "get_code_importance",
+      "params": {
+        "workspace_id": "$workspace_id"
+      },
+      "required_substrings": [
+        "Most important files [",
+        "Recommended starting points:",
+        "Sources/NIOEmbedded/Embedded.swift",
+        "Sources/NIOPosix/Bootstrap.swift",
+        "Sources/NIOCore/ByteBuffer-core.swift"
+      ]
+    },
+    {
+      "id": "swift_nio_bytebuffer_exports_summary",
+      "workspace_name": "swift-nio",
+      "tool": "get_symbol_exports_summary",
+      "params": {
+        "project_path": "$workspace_id",
+        "limit": 10,
+        "symbol_prefix": "ByteBuffer"
+      },
+      "required_substrings": [
+        "# Symbol export summary: swift-nio",
+        "## Inspect First",
+        "ByteBuffer",
+        "Sources/NIOCore/ByteBuffer-core.swift"
+      ]
+    },
+    {
+      "id": "swift_nio_core_orientation_workflow",
+      "workspace_name": "swift-nio",
+      "steps": [
+        {
+          "name": "Inspect project overview for SwiftPM backend orientation",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: swift-nio",
+            "## Inspect First",
+            "Sources/NIOCore/ChannelPipeline.swift"
+          ]
+        },
+        {
+          "name": "Inspect code importance for architectural hotspots",
+          "tool": "get_code_importance",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "Recommended starting points:",
+            "Sources/NIOEmbedded/Embedded.swift",
+            "Sources/NIOPosix/Bootstrap.swift"
+          ]
+        },
+        {
+          "name": "Inspect NIOCore directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 12,
+            "directory_path": "Sources/NIOCore"
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `Sources/NIOCore/`",
+            "Recommended Inspection Order",
+            "Sources/NIOCore/ChannelPipeline.swift",
+            "Sources/NIOCore/EventLoop.swift"
+          ]
+        },
+        {
+          "name": "Inspect related files for ChannelPipeline",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "Sources/NIOCore/ChannelPipeline.swift"
+          },
+          "required_substrings": [
+            "Related Files",
+            "Inspect First:",
+            "Sources/NIOCore/ChannelHandler.swift"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "Sources/NIOCore/ChannelPipeline.swift",
+        "Sources/NIOEmbedded/Embedded.swift",
+        "Sources/NIOCore/ChannelHandler.swift"
+      ]
+    },
+    {
+      "id": "spring_petclinic_owner_orientation_workflow",
+      "workspace_name": "spring-petclinic-upstream",
+      "steps": [
+        {
+          "name": "Inspect project overview for app orientation",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: spring-petclinic-upstream",
+            "## Inspect First",
+            "src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java"
+          ]
+        },
+        {
+          "name": "Inspect owner package snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 12,
+            "directory_path": "src/main/java/org/springframework/samples/petclinic/owner"
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `src/main/java/org/springframework/samples/petclinic/owner/`",
+            "Recommended Inspection Order",
+            "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+          ]
+        },
+        {
+          "name": "Inspect related owner controller files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
+          },
+          "required_substrings": [
+            "Related Files",
+            "Inspect First:",
+            "src/main/java/org/springframework/samples/petclinic/owner/PetController.java"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java",
+        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        "src/main/java/org/springframework/samples/petclinic/owner/PetController.java"
+      ]
+    },
+    {
+      "id": "swift_nio_posix_orientation_workflow",
+      "workspace_name": "swift-nio",
+      "steps": [
+        {
+          "name": "Inspect NIOPosix directory snapshot for runtime orientation",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 10,
+            "directory_path": "Sources/NIOPosix"
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `Sources/NIOPosix/`",
+            "Recommended Inspection Order",
+            "Sources/NIOPosix/BaseSocketChannel.swift",
+            "Sources/NIOEchoClient/main.swift",
+            "Sources/NIOCore/AsyncAwaitSupport.swift"
+          ]
+        },
+        {
+          "name": "Inspect related files for SocketChannel",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "Sources/NIOPosix/SocketChannel.swift"
+          },
+          "required_substrings": [
+            "Related Files",
+            "Inspect First:",
+            "Sources/NIOPosix/BaseSocketChannel.swift",
+            "Sources/NIOPosix/Bootstrap.swift"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "Sources/NIOPosix/BaseSocketChannel.swift",
+        "Sources/NIOEchoClient/main.swift",
+        "Sources/NIOPosix/Bootstrap.swift"
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_import_surface_workflow",
+      "workspace_name": "pydantic-ai",
+      "steps": [
+        {
+          "name": "Inspect project overview for provider entrypoints",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: pydantic-ai",
+            "## Inspect First",
+            "pydantic_ai_slim/"
+          ]
+        },
+        {
+          "name": "Inspect symbol import surface",
+          "tool": "get_symbol_imports_overview",
+          "params": {
+            "project_path": "$workspace_id",
+            "limit": 12
+          },
+          "required_substrings": [
+            "# Symbol import overview: pydantic-ai",
+            "## Inspect First",
+            "pydantic_ai_slim/pydantic_ai/models/openai.py",
+            "IMPORTS_SYMBOL: 1994"
+          ]
+        },
+        {
+          "name": "Inspect related provider wiring files",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "Inspect First:",
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+            "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "pydantic_ai_slim/pydantic_ai/models/openai.py",
+        "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        "pydantic_ai_slim/pydantic_ai/providers/gateway.py"
+      ]
+    },
+    {
+      "id": "sample_food_truck_store_orientation_workflow",
+      "workspace_name": "sample-food-truck",
+      "steps": [
+        {
+          "name": "Inspect App Store directory snapshot",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "limit": 10,
+            "directory_path": "App/Store"
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `App/Store/`",
+            "Recommended Inspection Order",
+            "App/Store/SubscriptionStoreView.swift",
+            "Apple Build Context"
+          ]
+        },
+        {
+          "name": "Inspect related files for SubscriptionStoreView",
+          "tool": "get_related_files",
+          "params": {
+            "project_path": "$workspace_id",
+            "file_path": "App/Store/SubscriptionStoreView.swift"
+          },
+          "required_substrings": [
+            "Related Files:",
+            "Inspect First:",
+            "App/Account/AccountView.swift",
+            "App/Store/RefundView.swift"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "App/Store/SubscriptionStoreView.swift",
+        "App/Account/AccountView.swift",
+        "App/Store/RefundView.swift"
       ]
     }
   ]

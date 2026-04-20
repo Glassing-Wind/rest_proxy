@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Run retrieval duplicate eval plus live graph goldens in one place."""
+"""Run enterprise retrieval trend eval artifacts.
+
+This script is for broader retrieval trend tracking:
+- duplicate-collapse benchmark metrics
+- optional live graph golden capture
+
+It is not the main day-to-day retrieval quality gate. Use
+`scripts/run_retrieval_quality_gate.sh` for the standard trust check.
+"""
 
 from __future__ import annotations
 
@@ -266,7 +274,13 @@ def write_enterprise_artifacts(payload: dict, artifact_dir: str | Path) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run enterprise retrieval trend evaluation and write artifacts. "
+            "Use scripts/run_retrieval_quality_gate.sh for the standard "
+            "tool-trust gate."
+        )
+    )
     parser.add_argument(
         "--workspace",
         action="append",

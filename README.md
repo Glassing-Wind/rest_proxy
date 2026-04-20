@@ -184,6 +184,16 @@ For a protocol smoke check against the live daemon:
   /Users/michaelmarler/Projects/rest_proxy/scripts/check_mcp_protocol.py
 ```
 
+For a narrow end-to-end MCP tool parity check against the live daemon:
+
+```bash
+/Users/michaelmarler/Projects/rest_proxy/scripts/run_mcp_tool_parity_smoke.sh
+```
+
+This verifies a small high-value subset of retrieval tools through the actual
+MCP transport and compares the outputs to direct in-process tool invocation, so
+transport wiring drift is caught separately from ranking regressions.
+
 For a restart regression that verifies stale MCP sessions are rejected after a
 daemon restart:
 
@@ -194,6 +204,90 @@ daemon restart:
 See also:
 
 - [docs/mcp_conformance_checklist.md](/Users/michaelmarler/Projects/rest_proxy/docs/mcp_conformance_checklist.md)
+
+## Retrieval Quality Gate
+
+For the standard user-trust gate, run:
+
+```bash
+/Users/michaelmarler/Projects/rest_proxy/scripts/run_retrieval_quality_gate.sh
+```
+
+This is the main retrieval-quality path for the repo. It runs:
+
+- canonical tool-choice evals
+- health-gated live graph regressions against the indexed benchmark repos
+- MCP transport parity smoke checks against the live daemon
+
+Use this when you want the quickest answer to:
+
+- do the retrieval tools still choose the right tool families?
+- do the real benchmark repos still return healthy, aligned, useful results?
+- did a ranking change break a real investigation workflow?
+- did direct tool behavior drift from actual MCP transport behavior?
+
+## Live Graph Regressions
+
+For a narrow live retrieval/tool-eval pass against the current indexed benchmark
+workspaces, run:
+
+```bash
+/Users/michaelmarler/Projects/rest_proxy/scripts/run_live_graph_regressions.sh
+```
+
+This exercises the focused real-user regression set in
+[`benchmarks/live_graph_goldens.json`](/Users/michaelmarler/Projects/rest_proxy/benchmarks/live_graph_goldens.json)
+through [`test_live_graph_tools.py`](/Users/michaelmarler/Projects/rest_proxy/test_live_graph_tools.py),
+including:
+
+- model inference selection
+- provider wiring
+- tool-result to message conversion
+- gRPC request routing
+- Apple/Xcode build graph orientation
+- Spring owner request routing and controller workflows
+- Rust command dispatch
+- Rust routing and serve entrypoints
+- TypeScript schema conversion and symbol resolution
+- Go router registration and request handling
+- multi-step investigation workflows that chain search, symbol context, references, and directory snapshots
+- Java Spring controller and request-flow entrypoints
+- Kotlin interceptor chain classes and methods
+- SwiftNIO package orientation and export/import surface summaries
+
+To run a narrower subset or pass extra flags directly, invoke the harness:
+
+```bash
+/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python \
+  /Users/michaelmarler/Projects/rest_proxy/test_live_graph_tools.py \
+  /Users/michaelmarler/Projects/pydantic-ai \
+  /Users/michaelmarler/draw-things-community \
+  /Users/michaelmarler/Projects/uv \
+  /Users/michaelmarler/Projects/axum \
+  /Users/michaelmarler/Projects/zod-upstream \
+  --regressions-only \
+  --verbose-progress \
+  --fail-fast \
+  --case-id pydantic_ai_model_inference_selected_search
+```
+
+## Enterprise Retrieval Eval
+
+For broader retrieval trend artifacts, run:
+
+```bash
+python /Users/michaelmarler/Projects/rest_proxy/scripts/run_enterprise_eval.py --skip-graph
+```
+
+Use this when you want:
+
+- duplicate-collapse benchmark summaries
+- historical JSON artifacts under `.runtime/enterprise_eval/`
+- trend comparison across retrieval metric changes
+
+This is intentionally separate from the retrieval quality gate. The quality
+gate answers "would I trust the tools right now?"; enterprise eval answers
+"how are the retrieval metrics trending over time?".
 
 ## STDIO Fallback
 
