@@ -3,6 +3,7 @@ import importlib.util
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -30,7 +31,7 @@ class FakeTx:
 
     async def run(self, cypher, **params):
         self.calls.append((cypher, params))
-        if "RETURN\n                              p.struct_active_run_id AS struct_active_run_id" in cypher:
+        if "p.struct_active_run_id AS struct_active_run_id" in cypher:
             return FakeConsumeResult(
                 [
                     {
@@ -149,6 +150,219 @@ class IndexJobOrchestrationTests(unittest.TestCase):
         self.assertTrue(any("SET f.indexed_at = timestamp(), f.vector_indexed_at = timestamp()" in c for c in cyphers))
         align_queries = [c for c in cyphers if "semantic_active_struct_run_id = struct_run_id" in c]
         self.assertEqual(len(align_queries), 1)
+        self.assertIn("MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})", align_queries[0])
+
+    def test_reconcile_finished_job_runs_post_index_maintenance(self):
+        tx = FakeTx()
+        module = load_jobs_module(FakeDriver(tx))
+        loop = asyncio.new_event_loop()
+        self.addCleanup(loop.close)
+        module._MAIN_LOOP = types.SimpleNamespace(is_running=lambda: True)
+
+        def run_coro_immediately(coro, running_loop):
+            self.assertTrue(running_loop.is_running())
+            return ImmediateFuture(loop.run_until_complete(coro))
+
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+            module._JOBS["job2"] = {
+                "status": "done",
+                "project_path": "/tmp/repo",
+                "project_id": "proj123",
+                "struct_rc": 0,
+                "sem_rc": 0,
+                "logs": [],
+                "started_at": 100.0,
+                "finished_at": 200.0,
+                "cancel_requested": False,
+            }
+
+        with mock.patch("asyncio.run_coroutine_threadsafe", side_effect=run_coro_immediately):
+            job = module._reconcile_job_process_state("job2")
+
+        self.assertIsNotNone(job)
+        self.assertIsNotNone(job.get("post_index_maintenance_done"))
+        self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-1")
+        self.assertTrue(any("timestamps refreshed" in line for line in job["logs"]))
+
+        cyphers = [cypher for cypher, _ in tx.calls]
+        self.assertTrue(any("semantic_active_struct_run_id = struct_run_id" in c for c in cyphers))
+        self.assertTrue(any("MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})" in c for c in cyphers))
+
+    def test_post_index_maintenance_handles_same_running_loop(self):
+        tx = FakeTx()
+        module = load_jobs_module(FakeDriver(tx))
+
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+            module._JOBS["job3"] = {
+                "status": "done",
+                "project_path": "/tmp/repo",
+                "project_id": "proj123",
+                "struct_rc": 0,
+                "sem_rc": 0,
+                "logs": [],
+                "started_at": 100.0,
+                "finished_at": 200.0,
+                "cancel_requested": False,
+            }
+
+        async def _run_inside_loop():
+            module._MAIN_LOOP = asyncio.get_running_loop()
+            module._run_post_index_maintenance("job3")
+            await asyncio.sleep(0)
+
+        asyncio.run(_run_inside_loop())
+
+        with module._JOBS_LOCK:
+            job = module._JOBS["job3"]
+            self.assertIsNotNone(job.get("post_index_maintenance_done"))
+            self.assertIsNone(job.get("post_index_maintenance_pending"))
+            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-1")
+            self.assertTrue(any("timestamps refreshed" in line for line in job["logs"]))
+
+        cyphers = [cypher for cypher, _ in tx.calls]
+        self.assertTrue(any("semantic_active_struct_run_id = struct_run_id" in c for c in cyphers))
+        self.assertTrue(any("MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})" in c for c in cyphers))
+
+    def test_post_index_maintenance_cancellation_leaves_job_retryable(self):
+        tx = FakeTx()
+        module = load_jobs_module(FakeDriver(tx))
+
+        created_tasks = []
+
+        class FakeTask:
+            def __init__(self):
+                self.callbacks = []
+
+            def add_done_callback(self, callback):
+                self.callbacks.append(callback)
+
+            def result(self):
+                raise asyncio.CancelledError()
+
+        class FakeLoop:
+            def create_task(self, coro):
+                try:
+                    coro.close()
+                except Exception:
+                    pass
+                task = FakeTask()
+                created_tasks.append(task)
+                return task
+
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+            module._JOBS["job4"] = {
+                "status": "done",
+                "project_path": "/tmp/repo",
+                "project_id": "proj123",
+                "struct_rc": 0,
+                "sem_rc": 0,
+                "logs": [],
+                "started_at": 100.0,
+                "finished_at": 200.0,
+                "cancel_requested": False,
+            }
+
+        fake_loop = FakeLoop()
+        module._MAIN_LOOP = fake_loop
+        with mock.patch("asyncio.get_running_loop", return_value=fake_loop):
+            module._run_post_index_maintenance("job4")
+        self.assertEqual(len(created_tasks), 1)
+        created_tasks[0].callbacks[0](created_tasks[0])
+
+        with module._JOBS_LOCK:
+            job = module._JOBS["job4"]
+            self.assertIsNone(job.get("post_index_maintenance_done"))
+            self.assertIsNone(job.get("post_index_maintenance_pending"))
+            self.assertIsNone(job.get("post_index_maintenance_error"))
+            self.assertNotIn("run_summary", job)
+
+    def test_post_index_maintenance_uses_blocking_fallback_without_registered_main_loop(self):
+        tx = FakeTx()
+        module = load_jobs_module(FakeDriver(tx))
+        fake_loop = object()
+
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+            module._JOBS["job5"] = {
+                "status": "done",
+                "project_path": "/tmp/repo",
+                "project_id": "proj123",
+                "struct_rc": 0,
+                "sem_rc": 0,
+                "logs": [],
+                "started_at": 100.0,
+                "finished_at": 200.0,
+                "cancel_requested": False,
+            }
+
+        module._MAIN_LOOP = None
+        expected_summary = {
+            "struct_active_run_id": "struct-2",
+            "semantic_active_run_id": "sem-2",
+            "semantic_active_struct_run_id": "struct-2",
+            "struct_index_status": "done",
+            "semantic_index_status": "done",
+        }
+
+        with mock.patch("asyncio.get_running_loop", return_value=fake_loop):
+            def _run_and_close(coro, **kwargs):
+                coro.close()
+                return expected_summary
+
+            with mock.patch.object(module, "_run_coro_blocking", side_effect=_run_and_close) as run_blocking:
+                module._run_post_index_maintenance("job5")
+
+        run_blocking.assert_called_once()
+        with module._JOBS_LOCK:
+            job = module._JOBS["job5"]
+            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-2")
+            self.assertIsNotNone(job.get("post_index_maintenance_done"))
+            self.assertIsNone(job.get("post_index_maintenance_pending"))
+
+    def test_post_index_maintenance_retries_stale_pending_marker(self):
+        tx = FakeTx()
+        module = load_jobs_module(FakeDriver(tx))
+
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+            module._JOBS["job6"] = {
+                "status": "done",
+                "project_path": "/tmp/repo",
+                "project_id": "proj123",
+                "struct_rc": 0,
+                "sem_rc": 0,
+                "logs": [],
+                "started_at": 100.0,
+                "finished_at": 200.0,
+                "cancel_requested": False,
+                "post_index_maintenance_pending": time.time() - 31,
+            }
+
+        expected_summary = {
+            "struct_active_run_id": "struct-3",
+            "semantic_active_run_id": "sem-3",
+            "semantic_active_struct_run_id": "struct-3",
+            "struct_index_status": "done",
+            "semantic_index_status": "done",
+        }
+        module._MAIN_LOOP = None
+        with mock.patch("asyncio.get_running_loop", side_effect=RuntimeError()):
+            def _run_and_close(coro, **kwargs):
+                coro.close()
+                return expected_summary
+
+            with mock.patch.object(module, "_run_coro_blocking", side_effect=_run_and_close) as run_blocking:
+                module._run_post_index_maintenance("job6")
+
+        run_blocking.assert_called_once()
+        with module._JOBS_LOCK:
+            job = module._JOBS["job6"]
+            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-3")
+            self.assertIsNotNone(job.get("post_index_maintenance_done"))
+            self.assertIsNone(job.get("post_index_maintenance_pending"))
 
 
 if __name__ == "__main__":

@@ -64,7 +64,6 @@ SKIP_DIRS = {
     "mocks",
     "snapshots",
     "__snapshots__",
-    "parsers",
 }
 SKIP_DIR_SUFFIXES = (
     ".xcuserdatad",
@@ -135,7 +134,6 @@ SKIP_EXTS = {
     ".resolved",
     ".typed",
     ".fbs",
-    ".mm",
     ".model",
     ".spiece",
     ".crt",
@@ -203,6 +201,11 @@ SKIP_FILENAMES = {
 SKIP_RELATIVE_PATTERNS = {
     "migrations/README",
     "*/migrations/README",
+    "tests/**/cassettes/**",
+    "test/**/cassettes/**",
+    "**/cassettes/**",
+    "*.tm.jsonl",
+    "**/*.tm.jsonl",
 }
 MAX_FILE_SIZE = 1 * 1024 * 1024
 
@@ -236,6 +239,22 @@ def matches_global_skip_patterns(rel: str) -> bool:
     parts = rel.replace("\\", "/")
     for pattern in SKIP_RELATIVE_PATTERNS:
         if fnmatch.fnmatch(parts, pattern):
+            return True
+    return False
+
+
+def should_skip_directory(root: Path, current_path: Path, dirname: str) -> bool:
+    if dirname in SKIP_DIRS:
+        return True
+    if any(dirname.endswith(suffix) for suffix in SKIP_DIR_SUFFIXES):
+        return True
+    # Do not globally skip every `parsers/` source tree. Some repos, such as
+    # RepoAnalyzer, keep core application code there. We only skip the
+    # tree-sitter-language-pack style top-level vendor payload, which is a very
+    # large grammar corpus identified by its cache manifest.
+    if dirname == "parsers" and current_path == root:
+        candidate = current_path / dirname
+        if (candidate / ".cache_manifest.json").exists():
             return True
     return False
 
@@ -296,8 +315,7 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
         dirnames[:] = [
             dirname
             for dirname in dirnames
-            if dirname not in SKIP_DIRS
-            and not any(dirname.endswith(suffix) for suffix in SKIP_DIR_SUFFIXES)
+            if not should_skip_directory(root, current_path, dirname)
             and (
                 _is_required_graph_dir(str(Path(*rel_dir_parts, dirname)).replace("\\", "/"))
                 or not matches_indexignore(str(Path(*rel_dir_parts, dirname)).replace("\\", "/"), indexignore_patterns)

@@ -31,8 +31,12 @@ def load_index_workspace_module():
     async def _insert_embeddings_batch(**kwargs):
         return len(kwargs.get("batch") or [])
 
+    async def _link_embedding_refs(*_args, **_kwargs):
+        return 0
+
     memory_store_mod.open_pool = _open_pool
     memory_store_mod.insert_embeddings_batch = _insert_embeddings_batch
+    memory_store_mod.link_embedding_refs = _link_embedding_refs
 
     memory_bootstrap_mod = types.ModuleType("memory.bootstrap")
 
@@ -325,6 +329,44 @@ class FakeTsPack:
             "total_chunks": sum(len(cs) for cs in all_chunks),
         }
 
+    def process_semantic_manifest_entries(
+        self,
+        manifest_entries,
+        project_id,
+        *,
+        max_file_bytes=1_000_000,
+        chunk_id_version="v6",
+        chunk_max_size=4000,
+        chunk_overlap=200,
+        chunk_lines=60,
+        overlap_lines=10,
+        skip_diagnostic_files=False,
+    ):
+        results = []
+        for entry in manifest_entries:
+            results.append(
+                {
+                    "chunks": [
+                        {
+                            "ref_id": f"{project_id}:{chunk_id_version}:{entry['rel_path']}:native",
+                            "text": "hello",
+                            "metadata": {
+                                "file": entry["rel_path"],
+                                "project_id": project_id,
+                                "member_usages": [],
+                                "call_like_symbols": [],
+                                "declared_symbols": [],
+                                "contains_definition": False,
+                                "contains_entrypoint": False,
+                                "chunk_role": "context",
+                            },
+                        }
+                    ],
+                    "reason": None,
+                }
+            )
+        return results
+
     async def execute_semantic_sync(self, conn, project_id, all_chunks):
         if self._sync_plan is not None:
             return self._sync_plan
@@ -482,6 +524,56 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.module = load_index_workspace_module()
         self.module._TS_PACK_INIT_DONE = True
 
+    def test_get_latest_successful_struct_run_id_ignores_stale_project_pointer(self):
+        captured = {}
+
+        class _Record(dict):
+            pass
+
+        class _Result:
+            def single(self):
+                return _Record(run_id="struct-new")
+
+        class _Session:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def run(self, cypher, **params):
+                captured["cypher"] = cypher
+                captured["params"] = params
+                return _Result()
+
+        class _Driver:
+            def session(self, database=None):
+                captured["database"] = database
+                return _Session()
+
+            def close(self):
+                captured["closed"] = True
+
+        class _GraphDatabase:
+            @staticmethod
+            def driver(uri, auth=None):
+                captured["uri"] = uri
+                captured["auth"] = auth
+                return _Driver()
+
+        neo4j_mod = types.SimpleNamespace(GraphDatabase=_GraphDatabase)
+
+        with mock.patch.dict(sys.modules, {"neo4j": neo4j_mod}):
+            run_id = self.module._get_latest_successful_struct_run_id("proj123")
+
+        self.assertEqual(run_id, "struct-new")
+        self.assertEqual(captured["params"], {"pid": "proj123"})
+        self.assertIn("MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})", captured["cypher"])
+        self.assertIn("WHERE sr.status = 'done'", captured["cypher"])
+        self.assertIn("ORDER BY coalesce(sr.finished_at, sr.started_at, 0) DESC, sr.id DESC", captured["cypher"])
+        self.assertNotIn("struct_active_run_id", captured["cypher"])
+        self.assertTrue(captured["closed"])
+
     def test_read_and_chunk_forwards_semantic_payload_config(self):
         captured = {}
 
@@ -590,11 +682,15 @@ class IndexWorkspaceTests(unittest.TestCase):
 
     def test_index_project_delegates_to_package_driver(self):
         payload = {
-            "new_chunks": [{"ref_id": "chunk-1", "text": "hello"}],
-            "skipped_chunks": 1,
-            "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1"]}],
-            "total_chunks": 1,
-            "existing_ids": {"chunk-1"},
+            "new_chunks": [
+                {"ref_id": "chunk-1", "text": "hello"},
+                {"ref_id": "chunk-2", "text": "world"},
+                {"ref_id": "chunk-3", "text": "!"},
+            ],
+            "skipped_chunks": 0,
+            "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1", "chunk-2", "chunk-3"]}],
+            "total_chunks": 3,
+            "existing_ids": set(),
             "pruned_total": 0,
             "wiped": True,
             "orphan_pruned": 2,
@@ -625,6 +721,7 @@ class IndexWorkspaceTests(unittest.TestCase):
 
         self.module.memory_bootstrap.bootstrap_schema = _bootstrap
         self.module.memory_store.open_pool = _open_pool
+        self.module._get_latest_successful_struct_run_id = lambda _pid: "struct-new"
 
         svc = types.SimpleNamespace(effective_batch_size=2, _device="cpu")
         with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
@@ -654,12 +751,238 @@ class IndexWorkspaceTests(unittest.TestCase):
 
         self.assertEqual(result, 3)
 
+    def test_index_project_marks_partial_semantic_completion_failed(self):
+        payload = {
+            "new_chunks": [
+                {"ref_id": "chunk-1", "text": "hello"},
+                {"ref_id": "chunk-2", "text": "world"},
+            ],
+            "skipped_chunks": 0,
+            "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1", "chunk-2"]}],
+            "total_chunks": 2,
+            "existing_ids": set(),
+            "pruned_total": 0,
+            "wiped": False,
+            "orphan_pruned": 0,
+        }
+        fake_ts_pack = FakeTsPack(sync_plan=payload, rounds_result={"written": 1, "rounds": 1})
+        manifest = [{"abs_path": "/tmp/src/a.ts", "rel_path": "src/a.ts"}]
+        statuses = []
+
+        class _PoolConnection:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        class _Pool:
+            def connection(self):
+                return _PoolConnection()
+
+        self.module.memory_store._pg_pool_available = lambda: True
+        self.module.memory_store._pg_pool = _Pool()
+        self.module.memory_store.link_embedding_refs = mock.AsyncMock(return_value=1)
+
+        async def _bootstrap():
+            return None
+
+        async def _open_pool():
+            return None
+
+        self.module.memory_bootstrap.bootstrap_schema = _bootstrap
+        self.module.memory_store.open_pool = _open_pool
+        self.module._get_latest_successful_struct_run_id = lambda _pid: "struct-new"
+
+        svc = types.SimpleNamespace(effective_batch_size=2, _device="cpu")
+
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+            with mock.patch.object(self.module, "_preflight_ts_pack", return_value=None):
+                with mock.patch.object(
+                    self.module,
+                    "chunk_file",
+                    return_value=(
+                        [
+                            {"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}, "text": "hello"},
+                            {"ref_id": "chunk-2", "metadata": {"file": "src/a.ts"}, "text": "world"},
+                        ],
+                        None,
+                    ),
+                ):
+                    with mock.patch.object(self.module, "get_embedding_service", return_value=svc):
+                        with mock.patch.object(
+                            self.module,
+                            "_set_semantic_run_status",
+                            side_effect=lambda *args, **kwargs: statuses.append((args, kwargs)),
+                        ):
+                            result = asyncio.run(
+                                self.module.index_project(
+                                    "/tmp/project",
+                                    "proj123",
+                                    manifest,
+                                    rebuild=False,
+                                    cleanup_only=False,
+                                )
+                            )
+
+        self.assertEqual(result, 1)
+        self.assertFalse(self.module._LAST_INDEX_PROJECT_OK)
+        self.assertTrue(statuses)
+        self.assertEqual(statuses[-1][0][2], "failed")
+        self.assertIn("semantic_partial_completion", statuses[-1][1]["error"])
+
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
         with mock.patch.dict(os.environ, {"LM_PROXY_SKIP_DIAGNOSTIC_FILES": "1"}, clear=False):
             self.assertTrue(self.module._should_skip_diagnostic_file(file_meta))
         with mock.patch.dict(os.environ, {"LM_PROXY_SKIP_DIAGNOSTIC_FILES": "0"}, clear=False):
             self.assertFalse(self.module._should_skip_diagnostic_file(file_meta))
+
+    def test_write_buffer_can_defer_neo4j_links(self):
+        captured = {}
+
+        async def _insert_embeddings_batch(**kwargs):
+            captured["kwargs"] = kwargs
+            return len(kwargs.get("batch") or [])
+
+        self.module.memory_store.insert_embeddings_batch = _insert_embeddings_batch
+        deferred_ref_ids = []
+
+        written = asyncio.run(
+            self.module._write_buffer(
+                [{"ref_id": "chunk-1", "text": "hello", "vector": [0.0], "metadata": {}}],
+                "/tmp/project",
+                "proj123",
+                defer_link_refs=True,
+                deferred_ref_ids=deferred_ref_ids,
+            )
+        )
+
+        self.assertEqual(written, 1)
+        self.assertEqual(deferred_ref_ids, ["chunk-1"])
+        self.assertFalse(captured["kwargs"]["link_refs"])
+
+    def test_index_project_uses_larger_write_batch_than_embed_batch(self):
+        fake_ts_pack = FakeTsPack(sync_plan={"new_chunks": [], "skipped_chunks": 0, "prune_targets": [], "total_chunks": 0, "existing_ids": set(), "wiped": False, "orphan_pruned": 0}, rounds_result={"written": 0, "rounds": 0})
+        manifest = [{"abs_path": "/tmp/src/a.ts", "rel_path": "src/a.ts"}]
+        captured = {}
+
+        class _PoolConnection:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        class _Pool:
+            def connection(self):
+                return _PoolConnection()
+
+        self.module.memory_store._pg_pool_available = lambda: True
+        self.module.memory_store._pg_pool = _Pool()
+        self.module.memory_store.link_embedding_refs = mock.AsyncMock(return_value=0)
+
+        async def _bootstrap():
+            return None
+
+        async def _open_pool():
+            return None
+
+        self.module.memory_bootstrap.bootstrap_schema = _bootstrap
+        self.module.memory_store.open_pool = _open_pool
+        self.module._get_latest_successful_struct_run_id = lambda _pid: "struct-new"
+
+        svc = types.SimpleNamespace(effective_batch_size=2, _device="cpu")
+
+        async def _driver(conn, project_id, manifest_paths, all_chunks, **kwargs):
+            captured["batch_size"] = kwargs["batch_size"]
+            return {"new_chunks": [], "skipped_chunks": 0, "pruned_total": 0, "existing_ids": set(), "wiped": False, "orphan_pruned": 0, "written": 0, "rounds": 0}
+
+        fake_ts_pack.execute_semantic_index_driver = _driver
+
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+            with mock.patch.dict(os.environ, {"LM_PROXY_PG_WRITE_BATCH_SIZE": "16"}, clear=False):
+                with mock.patch.object(self.module, "_preflight_ts_pack", return_value=None):
+                    with mock.patch.object(
+                        self.module,
+                        "chunk_file",
+                        return_value=([{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}, "text": "hello"}], None),
+                    ):
+                        with mock.patch.object(self.module, "get_embedding_service", return_value=svc):
+                            result = asyncio.run(
+                                self.module.index_project(
+                                    "/tmp/project",
+                                    "proj123",
+                                    manifest,
+                                    rebuild=False,
+                                    cleanup_only=False,
+                                )
+                            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(captured["batch_size"], 2)
+
+    def test_index_project_prefers_native_manifest_chunk_processor(self):
+        fake_ts_pack = FakeTsPack(
+            sync_plan={
+                "new_chunks": [{"ref_id": "chunk-1", "text": "hello"}],
+                "skipped_chunks": 0,
+                "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1"]}],
+                "total_chunks": 1,
+                "existing_ids": set(),
+                "wiped": False,
+                "orphan_pruned": 0,
+            },
+            rounds_result={"written": 1, "rounds": 1},
+        )
+        manifest = [{"abs_path": "/tmp/src/a.ts", "rel_path": "src/a.ts"}]
+
+        class _PoolConnection:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        class _Pool:
+            def connection(self):
+                return _PoolConnection()
+
+        self.module.memory_store._pg_pool_available = lambda: True
+        self.module.memory_store._pg_pool = _Pool()
+        self.module.memory_store.link_embedding_refs = mock.AsyncMock(return_value=0)
+
+        async def _bootstrap():
+            return None
+
+        async def _open_pool():
+            return None
+
+        self.module.memory_bootstrap.bootstrap_schema = _bootstrap
+        self.module.memory_store.open_pool = _open_pool
+        self.module._get_latest_successful_struct_run_id = lambda _pid: "struct-new"
+
+        svc = types.SimpleNamespace(effective_batch_size=2, _device="cpu")
+
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+            with mock.patch.object(self.module, "_preflight_ts_pack", return_value=None):
+                with mock.patch.object(
+                    self.module,
+                    "chunk_file",
+                    side_effect=AssertionError("legacy chunk_file should not run"),
+                ):
+                    with mock.patch.object(self.module, "get_embedding_service", return_value=svc):
+                        result = asyncio.run(
+                            self.module.index_project(
+                                "/tmp/project",
+                                "proj123",
+                                manifest,
+                                rebuild=False,
+                                cleanup_only=False,
+                            )
+                        )
+
+        self.assertEqual(result, 1)
 
     def test_read_and_chunk_line_window_fallback(self):
         fake_ts_pack = FakeTsPack(detected_language=None)

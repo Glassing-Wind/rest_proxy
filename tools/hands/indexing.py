@@ -10,7 +10,19 @@ import subprocess
 import time
 from typing import Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
-from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job, client_session_id
+from _jobs import (
+    _JOBS,
+    _JOBS_LOCK,
+    _drain_proc_output,
+    _finalize_job,
+    _job_control_paths,
+    _persist_job_state,
+    _reconcile_job_process_state,
+    _render_job_logs,
+    load_job_record,
+    register_main_loop,
+    client_session_id,
+)
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from _runtime import resolve_python_runtime
 
@@ -60,12 +72,201 @@ def _debug_log(message: str, **fields: object) -> None:
         )
 
 
+def _is_source_eligible_structural_path(file_path: str | None) -> bool:
+    """Return True for source files that should count toward structural parse quality."""
+    if not file_path:
+        return False
+    norm = str(file_path).replace("\\", "/").lower()
+    basename = os.path.basename(norm)
+
+    if any(token in norm for token in (
+        "/.github/",
+        "/docs/",
+        "/docs-site/",
+        "/agent_docs/",
+        "/.claude/",
+        "/.cursor/",
+    )):
+        return False
+
+    if basename in {
+        "makefile",
+        ".gitignore",
+        "readme.md",
+        "contributing.md",
+        "agents.md",
+        "claude.md",
+        "pyproject.toml",
+        "package.json",
+        "tsconfig.json",
+        "mkdocs.yml",
+        "wrangler.toml",
+    }:
+        return False
+
+    ext = os.path.splitext(norm)[1].lower()
+    return ext in {
+        ".py",
+        ".swift",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".rb",
+        ".php",
+        ".c",
+        ".cc",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".m",
+        ".mm",
+    }
+
+
+def _is_structural_expected_manifest_path(rel_path: str | None) -> bool:
+    """Return True when structural indexing is expected to materialize a File node."""
+    if not rel_path:
+        return False
+    basename = os.path.basename(str(rel_path).replace("\\", "/"))
+    if basename in {".gitignore", ".indexignore", ".env", ".env.example"}:
+        return False
+    return True
+
+
+def _is_semantic_expected_path(
+    rel_path: str | None,
+    abs_path: str | None,
+    ext: str | None = None,
+) -> bool:
+    """Return True when the semantic worker would reasonably be expected to emit chunks."""
+    rel = str(rel_path or "")
+    abs_file = str(abs_path or "")
+    ext_norm = str(ext or "").lower().lstrip(".")
+    if abs_file:
+        try:
+            if os.path.getsize(abs_file) <= 0:
+                return False
+        except OSError:
+            return False
+    try:
+        import tree_sitter_language_pack as ts_pack
+    except Exception:
+        return _is_source_eligible_structural_path(rel_path)
+
+    try:
+        fallback_allowed = bool(
+            getattr(ts_pack, "should_use_line_window_fallback", lambda _p: False)(rel)
+        )
+    except Exception:
+        fallback_allowed = False
+    if fallback_allowed:
+        return True
+
+    lang = None
+    try:
+        if ext_norm:
+            lang = ts_pack.detect_language_from_extension(ext_norm)
+    except Exception:
+        lang = None
+    if not lang and abs_file:
+        try:
+            lang = ts_pack.detect_language(abs_file)
+        except Exception:
+            lang = None
+    if not lang:
+        return False
+    try:
+        has_language = getattr(ts_pack, "has_language", None)
+        if callable(has_language):
+            return bool(has_language(lang))
+    except Exception:
+        return False
+    return True
+
+
 def _is_deadlock_error(exc: Exception) -> bool:
     code = getattr(exc, "code", "") or getattr(exc, "gql_status", "")
     if isinstance(code, str) and "DeadlockDetected" in code:
         return True
     msg = str(exc)
     return "DeadlockDetected" in msg or "deadlock" in msg.lower()
+
+
+async def _get_apple_graph_health(session, project_id: str) -> dict[str, int]:
+    rows = await _execute_read(
+        session,
+        """
+        CALL () {
+          MATCH (f:File {project_id: $pid})
+          RETURN
+            count(CASE WHEN coalesce(f.filepath, f.file_path) ENDS WITH '.xcodeproj/project.pbxproj' THEN 1 END) AS project_files,
+            count(CASE WHEN coalesce(f.filepath, f.file_path) ENDS WITH '.xcworkspace/contents.xcworkspacedata' THEN 1 END) AS workspace_files,
+            count(CASE WHEN coalesce(f.filepath, f.file_path) ENDS WITH '.xcscheme' THEN 1 END) AS scheme_files,
+            count(CASE WHEN coalesce(f.filepath, f.file_path) ENDS WITH '.storyboard'
+                            OR coalesce(f.filepath, f.file_path) ENDS WITH '.xib'
+                            OR coalesce(f.filepath, f.file_path) CONTAINS '.xcassets/'
+                       THEN 1 END) AS resource_like_files
+        }
+        CALL () {
+          MATCH (n:XcodeTarget {project_id: $pid})
+          RETURN count(n) AS targets
+        }
+        CALL () {
+          MATCH (n:XcodeScheme {project_id: $pid})
+          RETURN count(n) AS schemes
+        }
+        CALL () {
+          MATCH (n:XcodeWorkspace {project_id: $pid})
+          RETURN count(n) AS workspaces
+        }
+        CALL () {
+          MATCH (n:Resource {project_id: $pid})
+          RETURN count(n) AS resources
+        }
+        CALL () {
+          MATCH (:XcodeTarget {project_id: $pid})-[rel:BUNDLES_FILE]->(:File {project_id: $pid})
+          RETURN count(rel) AS bundles_file_edges
+        }
+        CALL () {
+          MATCH (:XcodeScheme {project_id: $pid})-[rel:BUILDS_TARGET]->(:XcodeTarget {project_id: $pid})
+          RETURN count(rel) AS builds_target_edges
+        }
+        CALL () {
+          MATCH (:XcodeWorkspace {project_id: $pid})-[rel:REFERENCES_PROJECT]->(:File {project_id: $pid})
+          RETURN count(rel) AS references_project_edges
+        }
+        RETURN project_files, workspace_files, scheme_files, resource_like_files,
+               targets, schemes, workspaces, resources,
+               bundles_file_edges, builds_target_edges, references_project_edges
+        """,
+        pid=project_id,
+        op="get_indexing_health_apple_graph",
+    )
+    return dict(rows[0]) if rows else {}
+
+
+def _describe_apple_graph_health(coverage: dict[str, int]) -> list[str]:
+    notes: List[str] = []
+    if coverage.get("project_files", 0) > 0 and coverage.get("targets", 0) == 0:
+        notes.append("project files exist, but no XcodeTarget nodes were materialized")
+    if coverage.get("scheme_files", 0) > 0 and coverage.get("schemes", 0) == 0:
+        notes.append("scheme files exist, but no XcodeScheme nodes were materialized")
+    if coverage.get("workspace_files", 0) > 0 and coverage.get("workspaces", 0) == 0:
+        notes.append("workspace metadata exists, but no XcodeWorkspace nodes were materialized")
+    if coverage.get("resource_like_files", 0) > 0 and coverage.get("resources", 0) == 0:
+        notes.append("resource-like files exist, but no Resource nodes were materialized")
+    if coverage.get("scheme_files", 0) > 0 and coverage.get("builds_target_edges", 0) == 0:
+        notes.append("scheme files exist, but no BUILDS_TARGET edges were created")
+    if coverage.get("workspace_files", 0) > 0 and coverage.get("references_project_edges", 0) == 0:
+        notes.append("workspace metadata exists, but no REFERENCES_PROJECT edges were created")
+    if coverage.get("resource_like_files", 0) > 0 and coverage.get("bundles_file_edges", 0) == 0:
+        notes.append("resource-like files exist, but no BUNDLES_FILE edges were created")
+    return notes
 
 
 async def _retry_deadlock(label: str, fn, attempts: int = 3) -> None:
@@ -119,6 +320,11 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
     """
     try:
         import time, uuid
+
+        # Standalone async callers do not go through mcp_server.py startup, so
+        # capture the active loop here as the canonical loop for post-index
+        # maintenance and other driver-bound follow-up work.
+        register_main_loop(asyncio.get_running_loop())
 
         project_path = get_workspace_path(workspace_id)
         project_id = get_project_id(workspace_id)
@@ -225,6 +431,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                     )
 
             job_id = str(uuid.uuid4())[:8]
+            control_paths = _job_control_paths(job_id)
             _JOBS[job_id] = {
                 "status": "running",
                 "session_id": current_session,
@@ -235,6 +442,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 "sem_rc": None,
                 "logs": [],
                 "started_at": time.time(),
+                "last_log_at": time.time(),
                 "finished_at": None,
                 "cancel_requested": False,
                 "struct_proc": None,
@@ -242,7 +450,13 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 "runtime_python": None,
                 "runtime_source": None,
                 "runtime_conda_env": None,
+                "struct_pid": None,
+                "sem_pid": None,
+                "struct_log_path": control_paths["struct_log_path"],
+                "semantic_log_path": control_paths["semantic_log_path"],
+                "manifest_path": manifest_path,
             }
+        _persist_job_state(job_id)
 
         neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
         neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
@@ -288,16 +502,25 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             struct_env.setdefault("TS_PACK_AUTO_DOWNLOAD", "1")
         struct_env.setdefault("LM_PROXY_RUNTIME_PYTHON", str(runtime.get("python") or ""))
         struct_env.setdefault("LM_PROXY_RUNTIME_SOURCE", str(runtime.get("source") or ""))
+        struct_log_fh = open(control_paths["struct_log_path"], "a", encoding="utf-8")
+        sem_log_fh = open(control_paths["semantic_log_path"], "a", encoding="utf-8")
         struct_proc = subprocess.Popen(
             struct_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=struct_log_fh,
+            stderr=subprocess.STDOUT,
             text=True,
             env=struct_env,
+            start_new_session=True,
         )
         sem_proc = subprocess.Popen(
-            sem_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            sem_cmd,
+            stdout=sem_log_fh,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
         )
+        struct_log_fh.close()
+        sem_log_fh.close()
 
         with _JOBS_LOCK:
             if job_id in _JOBS:
@@ -312,17 +535,9 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 )
                 _JOBS[job_id]["struct_proc"] = struct_proc
                 _JOBS[job_id]["sem_proc"] = sem_proc
-
-        threading.Thread(
-            target=_drain_proc_output,
-            args=(struct_proc, job_id, "[struct]", "struct_rc"),
-            daemon=True,
-        ).start()
-        threading.Thread(
-            target=_drain_proc_output,
-            args=(sem_proc, job_id, "[semantic]", "sem_rc"),
-            daemon=True,
-        ).start()
+                _JOBS[job_id]["struct_pid"] = struct_proc.pid
+                _JOBS[job_id]["sem_pid"] = sem_proc.pid
+        _persist_job_state(job_id)
         threading.Thread(
             target=_finalize_job, args=(job_id, manifest_path), daemon=True
         ).start()
@@ -356,22 +571,26 @@ async def get_index_status(job_id: str) -> str:
                     job = j
                     job_id = jid
                     break
-        
+
         # Security: Only allow sessions to see their own jobs when strict mode is enabled
         if job and current_session and job.get("session_id") != current_session and _is_strict_job_session():
             return f"Access Denied: Job {job_id} belongs to another session."
 
     if job is None:
-        return (
-            f"No job found for id '{job_id}'.\n"
-            f"Active jobs: {list(_JOBS.keys()) or 'none'}"
-        )
+        job = load_job_record(job_id)
+        if job is None:
+            return (
+                f"No job found for id '{job_id}'.\n"
+                f"Active jobs: {list(_JOBS.keys()) or 'none'}"
+            )
 
+    job = _reconcile_job_process_state(job_id) or job
     elapsed = time.time() - job["started_at"]
     finished = job.get("finished_at")
     struct_rc = job.get("struct_rc")
     sem_rc = job.get("sem_rc")
-    logs = job.get("logs", [])
+    logs = _render_job_logs(job)
+    last_log_at = job.get("last_log_at")
     run_summary = job.get("run_summary") or {}
     metrics = job.get("metrics") or {}
 
@@ -407,6 +626,12 @@ async def get_index_status(job_id: str) -> str:
         if sem_rc is not None
         else "  semantic:   running…",
     ]
+    if (
+        job.get("status") in {"running", "cancelling"}
+        and last_log_at
+        and (time.time() - last_log_at) >= 300
+    ):
+        lines.append(f"  heartbeat:  stale ({time.time() - last_log_at:.0f}s since last log)")
     if run_summary:
         struct_run = run_summary.get("struct_active_run_id") or "unknown"
         semantic_run = run_summary.get("semantic_active_run_id") or "unknown"
@@ -494,29 +719,48 @@ async def cancel_index_job(job_id: str) -> str:
                     job_id = jid
                     break
 
+        # Security check: Match session ID when strict mode is enabled
+        if job and current_session and job.get("session_id") != current_session and _is_strict_job_session():
+            return f"Access Denied: Cannot cancel a job belonging to another session."
+        active_jobs = list(_JOBS.keys())
+
+    if job is None:
+        job = load_job_record(job_id)
         if job is None:
             return (
                 f"No job found for id '{job_id}'.\n"
-                f"Active jobs: {list(_JOBS.keys()) or 'none'}"
+                f"Active jobs: {active_jobs or 'none'}"
             )
 
-        # Security check: Match session ID when strict mode is enabled
-        if current_session and job.get("session_id") != current_session and _is_strict_job_session():
-            return f"Access Denied: Cannot cancel a job belonging to another session."
+    if current_session and job.get("session_id") != current_session and _is_strict_job_session():
+        return f"Access Denied: Cannot cancel a job belonging to another session."
 
-        if job.get("status") != "running":
-            return f"Job {job_id} is not running (status={job.get('status')})."
+    if job.get("status") != "running":
+        return f"Job {job_id} is not running (status={job.get('status')})."
 
-        job["cancel_requested"] = True
-        job["status"] = "cancelling"
-        struct_proc = job.get("struct_proc")
-        sem_proc = job.get("sem_proc")
+    with _JOBS_LOCK:
+        if job_id not in _JOBS:
+            _JOBS[job_id] = dict(job)
+        if job_id in _JOBS:
+            _JOBS[job_id]["cancel_requested"] = True
+            _JOBS[job_id]["status"] = "cancelling"
+        struct_proc = _JOBS.get(job_id, {}).get("struct_proc")
+        sem_proc = _JOBS.get(job_id, {}).get("sem_proc")
+    struct_pid = job.get("struct_pid")
+    sem_pid = job.get("sem_pid")
+    _persist_job_state(job_id)
 
     for proc in [struct_proc, sem_proc]:
         try:
             if proc and proc.poll() is None:
                 proc.terminate()
         except Exception:
+            continue
+    for pid in [struct_pid, sem_pid]:
+        try:
+            if pid:
+                os.kill(int(pid), 15)
+        except OSError:
             continue
 
     return f"Cancel requested for job {job_id}. Processes will terminate shortly."
@@ -560,10 +804,15 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
 
     indexed_files: Dict[str, float] = {}
     semantic_files: Dict[str, float] = {}
+    structural_paths: set[str] = set()
+    semantic_present_paths: set[str] = set()
+    semantic_expected_paths: set[str] = set()
     file_nodes = 0
     parsed_true = 0
     parsed_false = 0
     parsed_unknown = 0
+    source_eligible_nodes = 0
+    source_eligible_parsed_true = 0
     struct_active_run_id: str | None = None
     struct_last_successful_run_id: str | None = None
     struct_index_status: str | None = None
@@ -572,6 +821,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     semantic_target_struct_run_id: str | None = None
     semantic_active_struct_run_id: str | None = None
     semantic_index_status: str | None = None
+    apple_graph_coverage: Dict[str, int] = {}
     
     # --- Structural Integrity Metrics (Level 2) ---
     import_total = 0
@@ -592,15 +842,23 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         )
         for rec in records:
             file_nodes += 1
+            fp = rec.get("fp")
+            if isinstance(fp, str) and fp:
+                structural_paths.add(fp)
             if rec["ts"]:
                 indexed_files[rec["fp"]] = rec["ts"] / 1000.0
             if rec["vts"]:
                 semantic_files[rec["fp"]] = rec["vts"] / 1000.0
+                semantic_present_paths.add(rec["fp"])
             
             p = rec["parsed"]
             if p is True: parsed_true += 1
             elif p is False: parsed_false += 1
             else: parsed_unknown += 1
+            if _is_source_eligible_structural_path(fp):
+                source_eligible_nodes += 1
+                if p is True:
+                    source_eligible_parsed_true += 1
 
         run_records = await _execute_read(
             session,
@@ -629,6 +887,8 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             semantic_target_struct_run_id = rec.get("semantic_target_struct_run_id")
             semantic_active_struct_run_id = rec.get("semantic_active_struct_run_id")
             semantic_index_status = rec.get("semantic_index_status")
+
+        apple_graph_coverage = await _get_apple_graph_health(session, project_id)
 
         if audit:
             # 2. Internal Import Resolution Rate (Level 2)
@@ -710,7 +970,26 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             )
             isolated_files = [r["fp"] for r in isolated_records]
 
-    if not indexed_files and not semantic_files:
+    if memory_store._pg_pool_available():
+        try:
+            async with memory_store._pg_pool.connection() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        SELECT file_path
+                        FROM codebase_embeddings
+                        WHERE project_id = %s
+                        GROUP BY file_path
+                        """,
+                        (project_id,),
+                    )
+                    semantic_present_paths.update(
+                        row[0] for row in (await cur.fetchall()) if row and row[0]
+                    )
+        except Exception:
+            pass
+
+    if not structural_paths and not semantic_present_paths:
         if file_nodes > 0:
             return (
                 f"Project '{project_path}' ({project_id}) has a structural index "
@@ -720,6 +999,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         return f"Project '{project_path}' ({project_id}) is not indexed. Run index_workspace first."
 
     # --- Phase 1: Synchronization Logic ---
+
     stale_graph: List[str] = []
     stale_vector: List[str] = []
     missing: List[str] = []
@@ -734,18 +1014,25 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             continue
         try:
             mtime = os.path.getmtime(abs_path)
-            if rel not in indexed_files:
+            if rel not in structural_paths and _is_structural_expected_manifest_path(rel):
                 missing.append(rel)
                 continue
-            if mtime > indexed_files[rel]:
+            ts = indexed_files.get(rel)
+            if ts and mtime > ts:
                 stale_graph.append(rel)
+            semantic_expected = _is_semantic_expected_path(rel, abs_path, entry.get("ext"))
+            if semantic_expected:
+                semantic_expected_paths.add(rel)
+            if semantic_expected and rel not in semantic_present_paths:
+                stale_vector.append(rel)
+                continue
             v_ts = semantic_files.get(rel, 0)
-            if v_ts == 0 or mtime > v_ts:
+            if semantic_expected and v_ts and mtime > v_ts:
                 stale_vector.append(rel)
         except (OSError, FileNotFoundError):
             continue
 
-    orphans_graph = [fp for fp in indexed_files if fp not in manifest_paths]
+    orphans_graph = [fp for fp in structural_paths if fp not in manifest_paths]
     
     ghost_chunks_count = 0
     ghost_files: List[str] = []
@@ -775,8 +1062,8 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     # Bucket 1: Synchronization
     lines.append("## 1. Synchronization (Level 1)")
     lines.append(f"  - Files on disk:             {total_checked_all}")
-    lines.append(f"  - Files in structural index: {len(indexed_files)}")
-    lines.append(f"  - Files in semantic index:   {len(semantic_files)}")
+    lines.append(f"  - Files in structural index: {len(structural_paths)}")
+    lines.append(f"  - Files in semantic index:   {len(semantic_present_paths)}")
     
     sync_status = "✅ Healthy"
     if stale_graph or stale_vector or missing or orphans_graph or ghost_files:
@@ -803,18 +1090,79 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     lines.append(f"  - Semantic last success:    `{semantic_last_successful_run_id or 'none'}`")
     lines.append(f"  - Semantic target struct:   `{semantic_target_struct_run_id or 'none'}`")
     lines.append(f"  - Semantic active struct:   `{semantic_active_struct_run_id or 'none'}`")
+    struct_reference_run = struct_active_run_id or struct_last_successful_run_id
+    semantic_reference_struct_run = semantic_active_struct_run_id or semantic_target_struct_run_id
     aligned = bool(
-        struct_active_run_id
-        and semantic_active_struct_run_id
-        and struct_active_run_id == semantic_active_struct_run_id
+        struct_reference_run
+        and semantic_reference_struct_run
+        and struct_reference_run == semantic_reference_struct_run
         and semantic_index_status == "done"
     )
+    if not aligned:
+        coverage_verified = (
+            struct_index_status == "done"
+            and semantic_index_status == "done"
+            and not missing
+            and not stale_graph
+            and not stale_vector
+            and len(structural_paths) >= len(manifest_paths)
+            and semantic_expected_paths.issubset(semantic_present_paths)
+        )
+        if coverage_verified and not semantic_reference_struct_run:
+            aligned = True
     lines.append(f"  - **Run Alignment**:        {'✅ Aligned' if aligned else '⚠️ Not aligned'}")
+
+    apple_files_present = any(
+        apple_graph_coverage.get(key, 0) > 0
+        for key in ("project_files", "scheme_files", "workspace_files", "resource_like_files")
+    )
+    apple_notes = _describe_apple_graph_health(apple_graph_coverage)
+    if apple_files_present:
+        lines.append("\n## 1.75 Apple Build Coverage")
+        lines.append(
+            "  - Apple build files: "
+            f"project={apple_graph_coverage.get('project_files', 0)} "
+            f"scheme={apple_graph_coverage.get('scheme_files', 0)} "
+            f"workspace={apple_graph_coverage.get('workspace_files', 0)} "
+            f"resource-like={apple_graph_coverage.get('resource_like_files', 0)}"
+        )
+        lines.append(
+            "  - Graph nodes: "
+            f"targets={apple_graph_coverage.get('targets', 0)} "
+            f"schemes={apple_graph_coverage.get('schemes', 0)} "
+            f"workspaces={apple_graph_coverage.get('workspaces', 0)} "
+            f"resources={apple_graph_coverage.get('resources', 0)}"
+        )
+        lines.append(
+            "  - Graph edges: "
+            f"bundles_file={apple_graph_coverage.get('bundles_file_edges', 0)} "
+            f"builds_target={apple_graph_coverage.get('builds_target_edges', 0)} "
+            f"references_project={apple_graph_coverage.get('references_project_edges', 0)}"
+        )
+        lines.append(
+            "  - **Apple Graph Status**: "
+            + ("✅ Covered" if not apple_notes else "⚠️ Partial")
+        )
+        for note in apple_notes:
+            lines.append(f"    - {note}")
 
     # Bucket 2: Structural Integrity (Level 2)
     lines.append("\n## 2. Structural Integrity (Level 2)")
     parse_rate = (parsed_true / file_nodes * 100) if file_nodes > 0 else 0
-    lines.append(f"  - **Parse Success Rate**: {parse_rate:.1f}% ({parsed_true}/{file_nodes})")
+    source_parse_rate = (
+        source_eligible_parsed_true / source_eligible_nodes * 100
+        if source_eligible_nodes > 0
+        else 0
+    )
+    lines.append(
+        f"  - **Parse Success Rate**: {source_parse_rate:.1f}% "
+        f"({source_eligible_parsed_true}/{source_eligible_nodes} source-eligible files)"
+    )
+    if source_eligible_nodes != file_nodes:
+        lines.append(
+            f"  - Support-file coverage: {parse_rate:.1f}% "
+            f"({parsed_true}/{file_nodes} across all manifest-kept files)"
+        )
     
     if audit:
         import_rate = (import_resolved_internal / import_total * 100) if import_total > 0 else 0
@@ -853,9 +1201,13 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         recommendations.append(
             f"- Structural and semantic runs are not aligned. Re-run `index_workspace(workspace_id='{workspace_id}')` and confirm both phases complete successfully."
         )
+    if apple_notes:
+        recommendations.append(
+            "- Apple build metadata is only partially materialized. Re-run structural indexing after verifying the checkout contains the expected `.xcodeproj`, shared schemes, workspace metadata, and bundled resources."
+        )
     
     if audit:
-        if parse_rate < 80 or (import_total > 0 and (import_resolved_internal/import_total) < 0.5):
+        if source_parse_rate < 80 or (import_total > 0 and (import_resolved_internal/import_total) < 0.5):
             recommendations.append(f"- ⚠️ **Strongly Recommended**: Run `index_workspace(workspace_id='{workspace_id}', mode='rebuild')` or investigate parser/grammar compatibility.")
         elif suspicious_files:
              recommendations.append("- Investigate suspicious files for language-specific parsing gaps or grammar mismatches.")

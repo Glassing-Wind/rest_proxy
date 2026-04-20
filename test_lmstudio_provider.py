@@ -246,23 +246,35 @@ class LMStudioProviderTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("eval_batch_size", fake.calls[1][2])
             self.assertNotIn("eval_batch_size", fake.calls[2][2])
 
-    async def test_token_guard_rejects_overlong_text(self):
+    async def test_overlong_text_is_truncated_before_embedding_request(self):
         with mock.patch.dict(
             os.environ,
             {
                 "LMSTUDIO_EMBED_MODEL": "embed-model",
                 "LMSTUDIO_AUTO_LOAD": "false",
                 "LMSTUDIO_CONTEXT_LENGTH": "4",
+                "LMSTUDIO_INPUT_TOKEN_MARGIN": "1.0",
+                "LMSTUDIO_ESTIMATED_CHARS_PER_TOKEN": "3",
             },
             clear=False,
         ):
             mod = self._load_module()
             provider = mod.LMStudioEmbeddingProvider()
-            provider._client = _FakeClient(
-                [_FakeResponse(payload=[{"id": "embed-model", "type": "embedding", "status": "loaded"}])]
+            fake = _FakeClient(
+                [
+                    _FakeResponse(
+                        payload=[{"id": "embed-model", "type": "embedding", "status": "loaded", "loaded": True}]
+                    ),
+                    _FakeResponse(payload={"data": [{"index": 0, "embedding": [0.1, 0.2]}]}),
+                ]
             )
-            with self.assertRaises(ValueError):
-                await provider.embed_texts(["x" * 40], batch_size=1)
+            provider._client = fake
+            vectors = await provider.embed_texts(["x" * 40], batch_size=1)
+            self.assertEqual(vectors, [[0.1, 0.2]])
+            self.assertEqual(fake.calls[1][1], "/v1/embeddings")
+            sent_text = fake.calls[1][2]["input"][0]
+            self.assertLess(len(sent_text), 40)
+            self.assertLessEqual(len(sent_text), 12)
 
 
 if __name__ == "__main__":

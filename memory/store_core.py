@@ -451,6 +451,8 @@ async def insert_embeddings_batch(
     project_id: str,
     batch: List[Dict[str, Any]],
     project_path: Optional[str] = None,
+    *,
+    link_refs: bool = True,
 ) -> int:
     from memory import store_embeddings
 
@@ -459,6 +461,24 @@ async def insert_embeddings_batch(
         project_id,
         batch,
         project_path=project_path,
+        link_refs=link_refs,
+    )
+
+
+async def link_embedding_refs(
+    session_id: str,
+    project_id: str,
+    ref_ids: List[str],
+    *,
+    batch_size: int = 1024,
+) -> int:
+    from memory import store_embeddings
+
+    return await store_embeddings.link_embedding_refs(
+        session_id,
+        project_id,
+        ref_ids,
+        batch_size=batch_size,
     )
 
 

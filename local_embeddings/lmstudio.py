@@ -64,6 +64,8 @@ class LMStudioConfig:
     max_batch_size: int
     max_batch_tokens: int
     concurrency: int
+    input_token_margin: float
+    estimated_chars_per_token: int
 
     @classmethod
     def from_env(cls) -> "LMStudioConfig":
@@ -93,6 +95,8 @@ class LMStudioConfig:
             max(context_length, 1) * max(max_batch_size, 1),
         )
         concurrency = _int_env("LM_EMBED_CONCURRENCY", 4)
+        input_token_margin = _float_env("LMSTUDIO_INPUT_TOKEN_MARGIN", 0.9)
+        estimated_chars_per_token = _int_env("LMSTUDIO_ESTIMATED_CHARS_PER_TOKEN", 3)
         return cls(
             base_url=base_url,
             embed_model=embed_model,
@@ -103,6 +107,8 @@ class LMStudioConfig:
             max_batch_size=max(max_batch_size, 1),
             max_batch_tokens=max(max_batch_tokens, 1),
             concurrency=max(concurrency, 1),
+            input_token_margin=min(max(input_token_margin, 0.25), 1.0),
+            estimated_chars_per_token=max(estimated_chars_per_token, 1),
         )
 
 
@@ -333,18 +339,54 @@ class LMStudioEmbeddingProvider(LocalEmbeddingProvider):
             await self.load_model()
 
     @staticmethod
-    def _estimate_tokens(text: str) -> int:
+    def _estimate_tokens_with_ratio(text: str, chars_per_token: int) -> int:
         # Conservative rough estimate, adequate for batching guardrails.
-        return max(1, len(text) // 4)
+        return max(1, len(text) // max(chars_per_token, 1))
+
+    def _estimate_tokens(self, text: str) -> int:
+        return self._estimate_tokens_with_ratio(text, self.config.estimated_chars_per_token)
+
+    def _max_input_tokens(self) -> int:
+        return max(1, int(self.config.context_length * self.config.input_token_margin))
+
+    def _normalize_text_for_context(self, text: str) -> tuple[str, bool]:
+        limit_tokens = self._max_input_tokens()
+        estimated = self._estimate_tokens(text)
+        if estimated <= limit_tokens:
+            return text, False
+
+        char_budget = max(1, limit_tokens * self.config.estimated_chars_per_token)
+        if len(text) <= char_budget:
+            return text, False
+
+        marker = "\n// ... truncated for embedding ...\n"
+        if char_budget <= len(marker) + 32:
+            return text[:char_budget], True
+
+        payload_budget = char_budget - len(marker)
+        head_budget = max(1, int(payload_budget * 0.75))
+        tail_budget = max(1, payload_budget - head_budget)
+        normalized = text[:head_budget] + marker + text[-tail_budget:]
+        return normalized[:char_budget], True
+
+    def _prepare_texts_for_context(self, texts: Sequence[str]) -> tuple[List[str], int]:
+        normalized: List[str] = []
+        truncated = 0
+        for text in texts:
+            clipped, changed = self._normalize_text_for_context(text)
+            normalized.append(clipped)
+            if changed:
+                truncated += 1
+        return normalized, truncated
 
     def _iter_batches(self, texts: Sequence[str], batch_size: int) -> Iterable[List[str]]:
         current: List[str] = []
         current_tokens = 0
         for text in texts:
             estimated = self._estimate_tokens(text)
-            if estimated > self.config.context_length:
+            if estimated > self._max_input_tokens():
                 raise ValueError(
-                    f"Input text exceeds LM Studio context_length={self.config.context_length} "
+                    f"Input text exceeds LM Studio safe context budget={self._max_input_tokens()} "
                     f"(estimated_tokens={estimated})."
                 )
             if current and (
@@ -387,8 +429,19 @@ class LMStudioEmbeddingProvider(LocalEmbeddingProvider):
             return []
         await self._ensure_model_ready()
         requested_batch = max(1, min(batch_size or self.config.max_batch_size, self.config.max_batch_size))
-        logger.debug("lmstudio embedding request batch_size=%s texts=%s", requested_batch, len(texts))
-        batches = list(self._iter_batches(texts, requested_batch))
+        prepared_texts, truncated = self._prepare_texts_for_context(texts)
+        if truncated:
+            logger.warning(
+                "lmstudio embedding truncated %s/%s input texts to fit safe token budget=%s "
+                "(context_length=%s chars_per_token=%s)",
+                truncated,
+                len(texts),
+                self._max_input_tokens(),
+                self.config.context_length,
+                self.config.estimated_chars_per_token,
+            )
+        logger.debug("lmstudio embedding request batch_size=%s texts=%s", requested_batch, len(prepared_texts))
+        batches = list(self._iter_batches(prepared_texts, requested_batch))
         if len(batches) == 1:
             return await self._embed_request(batches[0])
 

@@ -30,6 +30,7 @@ if REPO_ROOT not in sys.path:
 import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
+from local_embeddings import get_lmstudio_provider
 # AST-chunk size: target upper bound for native ts_pack chunks.
 CHUNK_MAX_BYTES = 4_000  # bytes — passed through to ts_pack helpers
 # Overlap between adjacent AST chunks (bytes). Keep small to avoid duplication.
@@ -42,11 +43,27 @@ OVERLAP_LINES = 10  # overlap between windows
 MANIFEST_BATCH = 50  # files per interleaved cycle
 MAX_FILE_BYTES = 1_000_000  # skip source files > 1 MB
 CHUNK_CONCURRENCY = max(1, int(os.getenv("LM_PROXY_CHUNK_CONCURRENCY", "64")))
+USE_NATIVE_SEMANTIC_DRIVER = os.getenv("LM_PROXY_NATIVE_SEMANTIC_DRIVER", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+DEFER_NEO4J_EMBED_LINKS = os.getenv("LM_PROXY_DEFER_NEO4J_EMBED_LINKS", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+DEFER_NEO4J_LINK_BATCH_SIZE = max(
+    1, int(os.getenv("LM_PROXY_DEFER_NEO4J_LINK_BATCH_SIZE", "4096"))
+)
 TS_PACK_AUTO_DOWNLOAD = os.getenv("LM_PROXY_TS_PACK_AUTO_DOWNLOAD", "1") == "1"
 TS_PACK_CACHE_DIR = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
 
 _TS_PACK_INIT_DONE = False
 _TS_PACK_INIT_LOCK = threading.Lock()
+_LAST_INDEX_PROJECT_OK = True
 
 # Minimal extraction patterns for languages where queries are stable.
 # Extractions: keep small and stable (query syntax varies by grammar).
@@ -401,6 +418,37 @@ async def chunk_file(
     return await asyncio.to_thread(_read_and_chunk, abs_path, rel_path, project_id)
 
 
+def _chunk_manifest_native(manifest: List[Dict], project_id: str) -> List[Tuple[List[Dict], str | None]]:
+    import tree_sitter_language_pack as ts_pack
+
+    native_manifest = getattr(ts_pack, "process_semantic_manifest_entries", None)
+    if native_manifest is None:
+        raise RuntimeError("ts_pack native manifest chunk processor unavailable")
+
+    payload = native_manifest(
+        manifest,
+        project_id,
+        max_file_bytes=MAX_FILE_BYTES,
+        chunk_id_version=CHUNK_ID_VERSION,
+        chunk_max_size=CHUNK_MAX_BYTES,
+        chunk_overlap=CHUNK_OVERLAP_BYTES,
+        chunk_lines=CHUNK_LINES,
+        overlap_lines=OVERLAP_LINES,
+        skip_diagnostic_files=_skip_diagnostic_files_enabled(),
+    )
+    all_results: List[Tuple[List[Dict], str | None]] = []
+    for entry, item in zip(manifest, payload or []):
+        chunks = item.get("chunks") or []
+        reason = item.get("reason")
+        _validate_semantic_chunk_contract(chunks, entry.get("rel_path") or "", ts_pack)
+        all_results.append((chunks, reason))
+    if len(all_results) != len(manifest):
+        raise ValueError(
+            f"ts_pack native manifest processor returned {len(all_results)} result(s) for {len(manifest)} file(s)"
+        )
+    return all_results
+
+
 # ── Main indexing coroutine ───────────────────────────────────────────────────
 
 
@@ -409,7 +457,10 @@ async def _embed_buffer(buffer: list, embedding_svc) -> list:
     if not buffer:
         return buffer
     texts = [it["text"] for it in buffer]
-    vectors = await embedding_svc.embed_batch_async(texts)
+    vectors = await embedding_svc.embed_batch_async(
+        texts,
+        batch_size=embedding_svc.effective_batch_size,
+    )
     for k, vec in enumerate(vectors):
         buffer[k]["vector"] = vec
     return buffer
@@ -419,15 +470,23 @@ async def _write_buffer(
     buffer: list,
     target_dir: str,
     project_id: str,
+    *,
+    defer_link_refs: bool = False,
+    deferred_ref_ids: list[str] | None = None,
 ) -> int:
     """Write a pre-embedded buffer to Postgres. Returns chunk count written."""
     if not buffer:
         return 0
+    if defer_link_refs and deferred_ref_ids is not None:
+        deferred_ref_ids.extend(
+            item.get("ref_id") for item in buffer if item.get("ref_id")
+        )
     return await memory_store.insert_embeddings_batch(
         session_id=project_id,
         project_id=project_id,
         batch=buffer,
         project_path=target_dir,
+        link_refs=not defer_link_refs,
     )
 
 
@@ -489,7 +548,7 @@ def _semantic_run_id(project_id: str) -> str:
     return f"{project_id}:semantic:{uuid.uuid4().hex[:12]}"
 
 
-def _get_struct_active_run_id(project_id: str) -> str | None:
+def _get_latest_successful_struct_run_id(project_id: str) -> str | None:
     try:
         import neo4j
     except Exception:
@@ -504,8 +563,11 @@ def _get_struct_active_run_id(project_id: str) -> str | None:
         with driver.session(database=neo4j_db) as session:
             record = session.run(
                 """
-                MATCH (p:Project {id:$pid})
-                RETURN coalesce(p.struct_active_run_id, p.struct_last_successful_run_id) AS run_id
+                MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})
+                WHERE sr.status = 'done'
+                RETURN sr.id AS run_id
+                ORDER BY coalesce(sr.finished_at, sr.started_at, 0) DESC, sr.id DESC
+                LIMIT 1
                 """,
                 pid=project_id,
             ).single()
@@ -611,9 +673,11 @@ async def index_project(
 
     Returns total new chunks written.
     """
+    global _LAST_INDEX_PROJECT_OK
+    _LAST_INDEX_PROJECT_OK = True
     t0 = time.time()
     semantic_run_id = _semantic_run_id(project_id)
-    struct_run_id = _get_struct_active_run_id(project_id)
+    struct_run_id = _get_latest_successful_struct_run_id(project_id)
     _set_semantic_run_status(
         project_id,
         semantic_run_id,
@@ -636,55 +700,114 @@ async def index_project(
             struct_run_id=struct_run_id,
             error="pg_pool_unavailable",
         )
+        _LAST_INDEX_PROJECT_OK = False
         return 0
 
     embedding_svc = get_embedding_service()
 
-    bs = embedding_svc.effective_batch_size
+    embed_bs = embedding_svc.effective_batch_size
+    write_bs = max(embed_bs, int(os.getenv("LM_PROXY_PG_WRITE_BATCH_SIZE", str(max(embed_bs, 1024)))))
     total_files = len(manifest)
     print(
         f"[lm-proxy:indexer] Semantic phase — {total_files} files "
-        f"(device={embedding_svc._device}, embed_batch={bs}, chunk_concurrency={CHUNK_CONCURRENCY})",
+        f"(device={embedding_svc._device}, embed_batch={embed_bs}, write_batch={write_bs}, "
+        f"chunk_concurrency={CHUNK_CONCURRENCY})",
         file=sys.stderr,
         flush=True,
     )
 
     _preflight_ts_pack(manifest)
+    deferred_ref_ids: list[str] = []
+    ingest_stats = {
+        "embed_calls": 0,
+        "embed_chunks": 0,
+        "embed_seconds": 0.0,
+        "write_calls": 0,
+        "write_chunks": 0,
+        "write_seconds": 0.0,
+        "deferred_link_seconds": 0.0,
+        "deferred_link_count": 0,
+    }
 
-    # ── Parallel chunking (I/O-bound reads) ─────────────────────────────────
-    # Bound concurrent file reads/parses so large manifests do not exhaust the
-    # file descriptor limit on hosts with lower per-process limits.
-    chunk_sem = asyncio.Semaphore(CHUNK_CONCURRENCY)
+    import tree_sitter_language_pack as ts_pack
 
-    async def _chunk_manifest_entry(entry: Dict) -> Tuple[List[Dict], str | None]:
-        async with chunk_sem:
-            return await chunk_file(
-                entry["abs_path"], entry["rel_path"], project_id
-            )
-
+    native_manifest_processor = getattr(ts_pack, "process_semantic_manifest_entries", None)
     t_chunk = time.time()
-    all_results: List[Tuple[List[Dict], str | None]] = await asyncio.gather(
-        *[_chunk_manifest_entry(e) for e in manifest]
-    )
+    if native_manifest_processor is not None:
+        print(
+            "[lm-proxy:indexer] Semantic chunking — native ts-pack manifest path",
+            file=sys.stderr,
+            flush=True,
+        )
+        try:
+            all_results = await asyncio.to_thread(_chunk_manifest_native, manifest, project_id)
+        except Exception as exc:
+            print(
+                f"[lm-proxy:indexer] Native manifest chunking failed ({exc}) — falling back",
+                file=sys.stderr,
+                flush=True,
+            )
+            native_manifest_processor = None
+    if native_manifest_processor is None:
+        # ── Parallel chunking (I/O-bound reads) ─────────────────────────────
+        # Bound concurrent file reads/parses so large manifests do not exhaust the
+        # file descriptor limit on hosts with lower per-process limits.
+        chunk_sem = asyncio.Semaphore(CHUNK_CONCURRENCY)
+
+        async def _chunk_manifest_entry(entry: Dict) -> Tuple[List[Dict], str | None]:
+            async with chunk_sem:
+                return await chunk_file(
+                    entry["abs_path"], entry["rel_path"], project_id
+                )
+
+        all_results = await asyncio.gather(
+            *[_chunk_manifest_entry(e) for e in manifest]
+        )
     all_chunks, parsed_files, skipped_files = _report_chunking_results(
         manifest, all_results, time.time() - t_chunk
     )
 
-    import tree_sitter_language_pack as ts_pack
     manifest_paths = [entry.get("rel_path") or "" for entry in manifest]
     try:
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
             from embedding_service import _CONCURRENCY as CONCURRENCY
 
             async def _embed(batch):
-                return await _embed_buffer(batch, embedding_svc)
+                started = time.perf_counter()
+                result = await _embed_buffer(batch, embedding_svc)
+                ingest_stats["embed_calls"] += 1
+                ingest_stats["embed_chunks"] += len(batch)
+                ingest_stats["embed_seconds"] += time.perf_counter() - started
+                return result
 
             async def _write(batch):
-                return await _write_buffer(batch, target_dir, project_id)
+                started = time.perf_counter()
+                written = await _write_buffer(
+                    batch,
+                    target_dir,
+                    project_id,
+                    defer_link_refs=DEFER_NEO4J_EMBED_LINKS,
+                    deferred_ref_ids=deferred_ref_ids,
+                )
+                ingest_stats["write_calls"] += 1
+                ingest_stats["write_chunks"] += int(written or 0)
+                ingest_stats["write_seconds"] += time.perf_counter() - started
+                return written
 
             async def _progress(event: dict) -> None:
                 phase = event.get("phase")
-                if phase == "embed_start":
+                if phase == "prepare_done":
+                    print(
+                        f"[lm-proxy:indexer] Semantic prepare — "
+                        f"{event.get('prepare_seconds', 0.0):.2f}s "
+                        f"(existing={event.get('existing_count', 0)} "
+                        f"orphans={event.get('orphan_pruned', 0)} "
+                        f"pruned={event.get('pruned_total', 0)} "
+                        f"new={event.get('total_new', 0)})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                elif phase == "embed_start":
                     print(
                         f"[lm-proxy:indexer] Embedding round {event['round_index'] + 1}/{event['rounds']} "
                         f"— {event['batch_count']} concurrent batches — "
@@ -694,23 +817,73 @@ async def index_project(
                     )
                 elif phase == "round_done":
                     print(
-                        f"[lm-proxy:indexer]   wrote {event.get('round_written', 0)} chunks",
+                        f"[lm-proxy:indexer]   wrote {event.get('round_written', 0)} chunks "
+                        f"(embed={event.get('embed_seconds', 0.0):.2f}s "
+                        f"write={event.get('write_seconds', 0.0):.2f}s "
+                        f"round={event.get('round_seconds', 0.0):.2f}s)",
                         file=sys.stderr,
                         flush=True,
                     )
 
-            index_result = await ts_pack.execute_semantic_index_driver(
-                conn,
-                project_id,
-                manifest_paths,
-                all_chunks,
-                rebuild=rebuild,
-                batch_size=bs,
-                concurrency=CONCURRENCY,
-                embed_batch_fn=_embed,
-                write_batch_fn=_write,
-                progress_fn=_progress,
-            )
+            native_driver = getattr(ts_pack, "execute_semantic_index_driver_native", None)
+            pg_dsn = os.getenv("LM_PROXY_PG_DSN", "").strip()
+            lmstudio_provider = None
+            if USE_NATIVE_SEMANTIC_DRIVER and native_driver is not None and pg_dsn:
+                try:
+                    lmstudio_provider = get_lmstudio_provider()
+                except Exception:
+                    lmstudio_provider = None
+            if USE_NATIVE_SEMANTIC_DRIVER and native_driver is not None and pg_dsn and lmstudio_provider is not None:
+                print(
+                    "[lm-proxy:indexer] Semantic driver — native Rust LM Studio + Postgres path",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                index_result = await native_driver(
+                    project_id,
+                    manifest_paths,
+                    all_chunks,
+                    pg_dsn,
+                    lmstudio_provider.config.base_url,
+                    lmstudio_provider.config.embed_model,
+                    rebuild=rebuild,
+                    # Keep round planning tied to embed_bs so native execution
+                    # preserves the intended LM Studio fan-out.
+                    batch_size=embed_bs,
+                    concurrency=CONCURRENCY,
+                    write_batch_size=write_bs,
+                    timeout_s=lmstudio_provider.config.embed_timeout_s,
+                    progress_fn=_progress,
+                )
+                native_stats = index_result.get("ingest_stats") or {}
+                for key in (
+                    "embed_calls",
+                    "embed_chunks",
+                    "embed_seconds",
+                    "write_calls",
+                    "write_chunks",
+                    "write_seconds",
+                ):
+                    if key in native_stats:
+                        ingest_stats[key] = native_stats[key]
+                if DEFER_NEO4J_EMBED_LINKS:
+                    deferred_ref_ids.extend(index_result.get("written_ref_ids") or [])
+            else:
+                index_result = await ts_pack.execute_semantic_index_driver(
+                    conn,
+                    project_id,
+                    manifest_paths,
+                    all_chunks,
+                    rebuild=rebuild,
+                    # This batch_size shapes semantic round sub-batches before they
+                    # reach embed_batch_fn. Keep it aligned to embed_bs so we do not
+                    # multiply LM Studio fan-out (sub-batches * provider concurrency).
+                    batch_size=embed_bs,
+                    concurrency=CONCURRENCY,
+                    embed_batch_fn=_embed,
+                    write_batch_fn=_write,
+                    progress_fn=_progress,
+                )
     except Exception as exc:
         print(
             f"[lm-proxy:indexer] WARN: semantic index driver failed: {exc}",
@@ -724,6 +897,7 @@ async def index_project(
             struct_run_id=struct_run_id,
             error=str(exc),
         )
+        _LAST_INDEX_PROJECT_OK = False
         index_result = {
             "new_chunks": [],
             "skipped_chunks": 0,
@@ -758,7 +932,7 @@ async def index_project(
         )
         return 0
 
-    existing_count = len(index_result.get("existing_ids") or set())
+    existing_count = int(index_result.get("existing_count") or len(index_result.get("existing_ids") or set()))
     print(
         f"[lm-proxy:indexer] {existing_count} chunks already indexed — skipping unchanged",
         file=sys.stderr,
@@ -774,6 +948,24 @@ async def index_project(
 
     skipped = int(index_result.get("skipped_chunks") or 0)
     total_indexed = int(index_result.get("written") or 0)
+    expected_new = int(index_result.get("new_chunk_count") or len(index_result.get("new_chunks") or []))
+
+    if DEFER_NEO4J_EMBED_LINKS and deferred_ref_ids:
+        started = time.perf_counter()
+        linked = await memory_store.link_embedding_refs(
+            project_id,
+            project_id,
+            deferred_ref_ids,
+            batch_size=DEFER_NEO4J_LINK_BATCH_SIZE,
+        )
+        ingest_stats["deferred_link_seconds"] += time.perf_counter() - started
+        ingest_stats["deferred_link_count"] = linked
+        if linked:
+            print(
+                f"[lm-proxy:indexer] Linked {linked} embedding refs in deferred Neo4j pass",
+                file=sys.stderr,
+                flush=True,
+            )
 
     elapsed = time.time() - t0
     print(
@@ -783,6 +975,34 @@ async def index_project(
         file=sys.stderr,
         flush=True,
     )
+    print(
+        f"[lm-proxy:indexer] Ingest timing — "
+        f"embed={ingest_stats['embed_seconds']:.2f}s/{ingest_stats['embed_calls']} calls/{ingest_stats['embed_chunks']} chunks, "
+        f"pg_write={ingest_stats['write_seconds']:.2f}s/{ingest_stats['write_calls']} calls/{ingest_stats['write_chunks']} chunks, "
+        f"neo4j_link={ingest_stats['deferred_link_seconds']:.2f}s/{ingest_stats['deferred_link_count']} refs",
+        file=sys.stderr,
+        flush=True,
+    )
+    if total_indexed != expected_new:
+        error = (
+            "semantic_partial_completion: "
+            f"wrote={total_indexed} expected_new={expected_new} "
+            f"skipped={skipped} parsed_files={parsed_files} skipped_files={skipped_files}"
+        )
+        print(
+            f"[lm-proxy:indexer] ERROR: {error}",
+            file=sys.stderr,
+            flush=True,
+        )
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "failed",
+            struct_run_id=struct_run_id,
+            error=error,
+        )
+        _LAST_INDEX_PROJECT_OK = False
+        return total_indexed
     _set_semantic_run_status(
         project_id,
         semantic_run_id,
@@ -832,7 +1052,7 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    asyncio.run(
+    indexed = asyncio.run(
         index_project(
             args.target,
             args.project_id,
@@ -841,3 +1061,4 @@ if __name__ == "__main__":
             cleanup_only=args.cleanup_only,
         )
     )
+    sys.exit(0 if _LAST_INDEX_PROJECT_OK else 1)

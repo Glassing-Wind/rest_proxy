@@ -154,6 +154,111 @@ class ManifestTests(unittest.TestCase):
         self.assertNotIn("test/remote-run.test-sh", rel_paths)
         self.assertNotIn("notes.sil", rel_paths)
 
+    def test_global_skip_defaults_do_not_exclude_real_parsers_source_tree(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            (project_path / "parsers").mkdir(parents=True, exist_ok=True)
+            (project_path / "parsers" / "unified_parser.py").write_text(
+                "class UnifiedParser:\n    pass\n",
+                encoding="utf-8",
+            )
+            (project_path / "parsers" / "query_patterns").mkdir(parents=True, exist_ok=True)
+            (project_path / "parsers" / "query_patterns" / "python.py").write_text(
+                "def pattern():\n    return 'ok'\n",
+                encoding="utf-8",
+            )
+            (project_path / "app.py").write_text("print('ok')\n", encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("app.py", rel_paths)
+        self.assertIn("parsers/unified_parser.py", rel_paths)
+        self.assertIn("parsers/query_patterns/python.py", rel_paths)
+
+    def test_vendor_parser_corpus_shape_is_still_excluded(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            (project_path / "parsers").mkdir(parents=True, exist_ok=True)
+            (project_path / "parsers" / ".cache_manifest.json").write_text("{}", encoding="utf-8")
+            (project_path / "parsers" / "swift" / "src").mkdir(parents=True, exist_ok=True)
+            (project_path / "parsers" / "swift" / "src" / "parser.c").write_text(
+                "/* generated parser */\n",
+                encoding="utf-8",
+            )
+            (project_path / "crates").mkdir(parents=True, exist_ok=True)
+            (project_path / "crates" / "lib.rs").write_text("pub fn ok() {}\n", encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("crates/lib.rs", rel_paths)
+        self.assertNotIn("parsers/.cache_manifest.json", rel_paths)
+        self.assertNotIn("parsers/swift/src/parser.c", rel_paths)
+
+    def test_skips_large_test_cassette_payloads_but_keeps_test_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            (project_path / "tests" / "models" / "cassettes").mkdir(parents=True, exist_ok=True)
+            (project_path / "tests" / "unit").mkdir(parents=True, exist_ok=True)
+            (project_path / "tests" / "models" / "cassettes" / "big.yaml").write_text(
+                "payload: large recorded cassette\n",
+                encoding="utf-8",
+            )
+            (project_path / "tests" / "unit" / "test_api.py").write_text(
+                "def test_api():\n    assert True\n",
+                encoding="utf-8",
+            )
+            (project_path / "src").mkdir(parents=True, exist_ok=True)
+            (project_path / "src" / "app.py").write_text("print('ok')\n", encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("src/app.py", rel_paths)
+        self.assertIn("tests/unit/test_api.py", rel_paths)
+        self.assertNotIn("tests/models/cassettes/big.yaml", rel_paths)
+
+    def test_skips_generated_translation_memory_jsonl_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            (project_path / "ui" / "src" / "i18n" / ".i18n").mkdir(parents=True, exist_ok=True)
+            (project_path / "ui" / "src").mkdir(parents=True, exist_ok=True)
+            (project_path / "ui" / "src" / "app.ts").write_text(
+                "export const app = true;\n",
+                encoding="utf-8",
+            )
+            (
+                project_path
+                / "ui"
+                / "src"
+                / "i18n"
+                / ".i18n"
+                / "fr.tm.jsonl"
+            ).write_text('{"source":"hello","target":"bonjour"}\n', encoding="utf-8")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("ui/src/app.ts", rel_paths)
+        self.assertNotIn("ui/src/i18n/.i18n/fr.tm.jsonl", rel_paths)
+
+    def test_objcpp_mm_files_are_not_globally_excluded(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_path = Path(tmpdir)
+            (project_path / "src").mkdir(parents=True, exist_ok=True)
+            (project_path / "src" / "bridge.mm").write_text(
+                "#import <Foundation/Foundation.h>\nint answer() { return 42; }\n",
+                encoding="utf-8",
+            )
+            (project_path / "src" / "blob.bin").write_bytes(b"\x00\x01\x02")
+
+            manifest = build_manifest(str(project_path))
+            rel_paths = {entry["rel_path"] for entry in manifest}
+
+        self.assertIn("src/bridge.mm", rel_paths)
+        self.assertNotIn("src/blob.bin", rel_paths)
+
 
 if __name__ == "__main__":
     unittest.main()
