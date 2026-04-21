@@ -64,7 +64,7 @@ SELECT
   content,
   embedding_text::vector,
   metadata_text::jsonb,
-  to_timestamp(created_at_epoch)
+  created_at_epoch
 FROM codebase_embeddings_stage
 ON CONFLICT (chunk_id) DO NOTHING
 """
