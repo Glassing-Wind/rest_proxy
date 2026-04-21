@@ -111,6 +111,7 @@ def load_indexing_module():
     jobs_mod._reconcile_job_process_state = lambda *args, **kwargs: None
     jobs_mod._render_job_logs = lambda *args, **kwargs: []
     jobs_mod.load_job_record = lambda *args, **kwargs: None
+    jobs_mod.register_main_loop = lambda *args, **kwargs: None
     jobs_mod.client_session_id = types.SimpleNamespace(get=lambda: None)
 
     helpers_mod = types.ModuleType("_helpers")

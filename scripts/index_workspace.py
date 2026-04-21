@@ -27,6 +27,10 @@ load_dotenv(os.path.join(REPO_ROOT, ".env"))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+# This worker's only job is codebase semantic indexing. Keep the proxy-level
+# default conservative, but make direct indexing writes explicit in this process.
+os.environ.setdefault("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "1")
+
 import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
