@@ -459,6 +459,12 @@ def main() -> int:
         except TypeError as exc:
             if "neo4j_db" not in str(exc):
                 raise
+            if args.neo4j_db != "proxy":
+                raise RuntimeError(
+                    "Installed tree_sitter_language_pack does not support neo4j_db; "
+                    f"cannot safely index configured Neo4j database '{args.neo4j_db}'. "
+                    "Reinstall the pinned ts-pack fork."
+                ) from exc
             struct_index_kwargs.pop("neo4j_db", None)
             files = ts_pack.index_workspace(**struct_index_kwargs)
         print(
@@ -577,6 +583,12 @@ def main() -> int:
         except TypeError as exc:
             if "neo4j_db" not in str(exc):
                 raise
+            if args.neo4j_db != "proxy":
+                raise RuntimeError(
+                    "Installed tree_sitter_language_pack does not support neo4j_db; "
+                    f"cannot safely prune configured Neo4j database '{args.neo4j_db}'. "
+                    "Reinstall the pinned ts-pack fork."
+                ) from exc
             prune_kwargs.pop("neo4j_db", None)
             ts_pack.prune_struct_shadow_graph(**prune_kwargs)
         _log_timed_step("prune_struct_shadow_graph", prune_started_at)
