@@ -827,13 +827,30 @@ async def index_project(
 
             native_driver = getattr(ts_pack, "execute_semantic_index_driver_native", None)
             pg_dsn = os.getenv("LM_PROXY_PG_DSN", "").strip()
+            fake_embeddings = os.getenv("LM_PROXY_FAKE_EMBEDDINGS", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
             lmstudio_provider = None
-            if USE_NATIVE_SEMANTIC_DRIVER and native_driver is not None and pg_dsn:
+            if (
+                USE_NATIVE_SEMANTIC_DRIVER
+                and not fake_embeddings
+                and native_driver is not None
+                and pg_dsn
+            ):
                 try:
                     lmstudio_provider = get_lmstudio_provider()
                 except Exception:
                     lmstudio_provider = None
-            if USE_NATIVE_SEMANTIC_DRIVER and native_driver is not None and pg_dsn and lmstudio_provider is not None:
+            if (
+                USE_NATIVE_SEMANTIC_DRIVER
+                and not fake_embeddings
+                and native_driver is not None
+                and pg_dsn
+                and lmstudio_provider is not None
+            ):
                 print(
                     "[lm-proxy:indexer] Semantic driver — native Rust LM Studio + Postgres path",
                     file=sys.stderr,

@@ -443,17 +443,24 @@ def main() -> int:
 
     try:
         index_started_at = time.perf_counter()
-        files = ts_pack.index_workspace(
-            path=args.project_path,
-            project_id=shadow_project_id,
-            neo4j_uri=args.neo4j_uri,
-            neo4j_user=args.neo4j_user,
-            neo4j_pass=args.neo4j_pass,
-            manifest_file=args.manifest_file,
-            status_project_id=args.project_id,
-            run_id=run_id,
-            neo4j_db=args.neo4j_db,
-        )
+        struct_index_kwargs = {
+            "path": args.project_path,
+            "project_id": shadow_project_id,
+            "neo4j_uri": args.neo4j_uri,
+            "neo4j_user": args.neo4j_user,
+            "neo4j_pass": args.neo4j_pass,
+            "manifest_file": args.manifest_file,
+            "status_project_id": args.project_id,
+            "run_id": run_id,
+            "neo4j_db": args.neo4j_db,
+        }
+        try:
+            files = ts_pack.index_workspace(**struct_index_kwargs)
+        except TypeError as exc:
+            if "neo4j_db" not in str(exc):
+                raise
+            struct_index_kwargs.pop("neo4j_db", None)
+            files = ts_pack.index_workspace(**struct_index_kwargs)
         print(
             f"[ts-pack:struct] Done — {len(files)} files indexed.",
             file=sys.stderr,
@@ -557,14 +564,21 @@ def main() -> int:
             flush=True,
         )
         prune_started_at = time.perf_counter()
-        ts_pack.prune_struct_shadow_graph(
-            project_id=shadow_project_id,
-            run_id=run_id,
-            neo4j_uri=args.neo4j_uri,
-            neo4j_user=args.neo4j_user,
-            neo4j_pass=args.neo4j_pass,
-            neo4j_db=args.neo4j_db,
-        )
+        prune_kwargs = {
+            "project_id": shadow_project_id,
+            "run_id": run_id,
+            "neo4j_uri": args.neo4j_uri,
+            "neo4j_user": args.neo4j_user,
+            "neo4j_pass": args.neo4j_pass,
+            "neo4j_db": args.neo4j_db,
+        }
+        try:
+            ts_pack.prune_struct_shadow_graph(**prune_kwargs)
+        except TypeError as exc:
+            if "neo4j_db" not in str(exc):
+                raise
+            prune_kwargs.pop("neo4j_db", None)
+            ts_pack.prune_struct_shadow_graph(**prune_kwargs)
         _log_timed_step("prune_struct_shadow_graph", prune_started_at)
         print(
             f"[ts-pack:shadow] Done — stale structural graph data pruned for run {run_id}.",

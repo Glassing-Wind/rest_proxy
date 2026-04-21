@@ -45,6 +45,7 @@ def load_indexing_module():
     jobs_mod._persist_job_state = lambda *args, **kwargs: None
     jobs_mod._render_job_logs = lambda job: list(job.get("logs") or [])
     jobs_mod.load_job_record = lambda job_id: jobs_mod._JOBS.get(job_id)
+    jobs_mod.register_main_loop = lambda *args, **kwargs: None
     def _reconcile_job_process_state(job_id):
         job = jobs_mod._JOBS.get(job_id)
         if not job:
