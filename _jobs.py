@@ -109,7 +109,9 @@ def _persist_job_state(job_id: str) -> None:
         payload = _job_runtime_fields(job)
     state_path = _job_state_path(job_id)
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = state_path.with_suffix(".json.tmp")
+    tmp_path = state_path.with_name(
+        f"{state_path.name}.tmp.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}"
+    )
     tmp_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     tmp_path.replace(state_path)
 
