@@ -44,6 +44,12 @@
 4. **Index your Workspace**:
    Use the `index_workspace` tool from your AI assistant to perform a full sync.
 
+## ts-pack Dependency Policy
+
+This repo currently pins a forked `tree_sitter_language_pack` commit for GraphRAG
+fidelity and database-selection behavior. The update and CI policy for that
+fork is documented in [docs/ts_pack_fork_policy.md](/Users/michaelmarler/Projects/rest_proxy/docs/ts_pack_fork_policy.md).
+
 ## LM Studio Local Embeddings
 
 For new local embedding work we use a hybrid LM Studio integration:
