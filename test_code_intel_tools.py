@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import tempfile
 import sys
 import types
 import unittest
@@ -1938,6 +1939,58 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Inspect First:", output)
         self.assertEqual(output.count("FrameCreator/Views/ContentView.swift"), 1)
         self.assertIn("FrameCreator/Views/InspectorView.swift", output)
+
+    def test_get_symbol_context_uses_file_extension_for_source_preview_fence(self):
+        record = {
+            "kind": "Class",
+            "filepath": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+            "start_line": 48,
+            "end_line": 176,
+            "name": "OwnerController",
+            "signature": None,
+            "parent_name": None,
+            "parent_file": None,
+            "docs": None,
+            "callers": [],
+            "callees": [],
+        }
+
+        async def fake_executor(cypher, **kwargs):
+            return [record]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / record["filepath"]
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            abs_path.write_text(
+                "\n".join(
+                    [f"// filler {idx}" for idx in range(1, 48)]
+                    + [
+                        "@Controller",
+                        "class OwnerController {",
+                        "}",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_symbol_context"](
+                            tmpdir,
+                            "OwnerController",
+                            include_source_preview=True,
+                            file_path=record["filepath"],
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("```java", output)
+        self.assertNotIn("```swift", output)
+        self.assertIn("@Controller", output)
 
     def test_list_symbol_matches_prefers_types_and_formats_context(self):
         async def fake_executor(cypher, **kwargs):

@@ -64,6 +64,45 @@ def register(mcp: FastMCP) -> None:
     _REL_REFERENCES_PROJECT = _rel_type("references_project")
     _REL_BUILDS_TARGET = _rel_type("builds_target")
     _REL_DEFINED_IN_FILE = _rel_type("defined_in_file")
+    _FENCE_BY_EXT = {
+        ".py": "python",
+        ".pyi": "python",
+        ".java": "java",
+        ".kt": "kotlin",
+        ".kts": "kotlin",
+        ".swift": "swift",
+        ".ts": "typescript",
+        ".tsx": "tsx",
+        ".js": "javascript",
+        ".jsx": "jsx",
+        ".rs": "rust",
+        ".go": "go",
+        ".rb": "ruby",
+        ".cs": "csharp",
+        ".cpp": "cpp",
+        ".cc": "cpp",
+        ".cxx": "cpp",
+        ".c": "c",
+        ".h": "c",
+        ".hpp": "cpp",
+        ".m": "objective-c",
+        ".mm": "objective-cpp",
+        ".scala": "scala",
+        ".sql": "sql",
+        ".sh": "bash",
+        ".zsh": "bash",
+        ".md": "markdown",
+        ".json": "json",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".xml": "xml",
+        ".html": "html",
+        ".css": "css",
+    }
+
+    def _source_preview_fence(file_path: str | None) -> str:
+        _, ext = os.path.splitext(str(file_path or "").lower())
+        return _FENCE_BY_EXT.get(ext, "")
 
     def _is_low_signal_support_path(file_path: str | None) -> bool:
         norm = (file_path or "").replace("\\", "/").lower()
@@ -488,7 +527,8 @@ def register(mcp: FastMCP) -> None:
                                 start_line = max(1, int(rec["start_line"] or 1))
                                 snippet = "\n".join(lines_list[start_line - 1 : start_line + 79]).strip()
                                 if snippet:
-                                    out += [f"\n**Source preview:**\n```swift\n{snippet[:900]}\n```"]
+                                    fence = _source_preview_fence(rec.get("filepath"))
+                                    out += [f"\n**Source preview:**\n```{fence}\n{snippet[:900]}\n```"]
                                     return "\n".join(out)
                     except Exception:
                         pass
