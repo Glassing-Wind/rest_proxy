@@ -162,6 +162,38 @@ def register(mcp: FastMCP) -> None:
             score -= 60
         return (-score, -useful_import_count, -shared_imports, len(candidate_norm), candidate_norm)
 
+    def _structural_related_rank(
+        target_file_path: str,
+        candidate_path: str,
+        call_hits: int,
+        import_hits: int,
+        symbol_count: int,
+    ) -> tuple[int, int, int, int, int, str]:
+        target_norm = str(target_file_path or "").replace("\\", "/").strip("/")
+        candidate_norm = str(candidate_path or "").replace("\\", "/").strip("/")
+        target_dir = target_norm.rsplit("/", 1)[0] if "/" in target_norm else ""
+        candidate_dir = candidate_norm.rsplit("/", 1)[0] if "/" in candidate_norm else ""
+        target_parent = target_dir.rsplit("/", 1)[0] if "/" in target_dir else ""
+        score = 0
+        if candidate_dir and candidate_dir == target_dir:
+            score += 90
+        elif target_parent and candidate_dir.startswith(target_parent + "/"):
+            score += 45
+        elif target_dir and candidate_dir.split("/", 1)[0] == target_dir.split("/", 1)[0]:
+            score += 20
+        if _is_test_like_path(candidate_norm):
+            score -= 80
+        if _is_low_signal_support_path(candidate_norm):
+            score -= 60
+        return (
+            -score,
+            -call_hits,
+            -import_hits,
+            -symbol_count,
+            len(candidate_norm),
+            candidate_norm,
+        )
+
     def _extract_swift_type_mentions(text: str, local_symbols: list[str] | set[str] | None = None) -> list[str]:
         local = {str(item).strip() for item in (local_symbols or []) if str(item).strip()}
         ignored = {
@@ -1656,6 +1688,70 @@ def register(mcp: FastMCP) -> None:
             RETURN related_file, shared_imports, sample_imports
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                structural_call_records = await _execute_read(
+                    session,
+                    """
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:CALLS]-(caller:Node)<-[:CONTAINS]-(caller_file:File {project_id:$pid})
+                    WHERE target.name IS NOT NULL
+                      AND trim(target.name) <> ''
+                      AND caller_file <> owner
+                    RETURN caller_file.filepath AS related_file,
+                           target.name AS symbol
+                    ORDER BY related_file, symbol
+                    LIMIT 12
+                    """,
+                    pid=project_id,
+                    file_path=file_path,
+                    op="get_related_files_symbol_calls",
+                )
+                structural_inferred_call_records = await _execute_read(
+                    session,
+                    """
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:CALLS_INFERRED]-(caller:Node)<-[:CONTAINS]-(caller_file:File {project_id:$pid})
+                    WHERE target.name IS NOT NULL
+                      AND trim(target.name) <> ''
+                      AND caller_file <> owner
+                    RETURN caller_file.filepath AS related_file,
+                           target.name AS symbol
+                    ORDER BY related_file, symbol
+                    LIMIT 12
+                    """,
+                    pid=project_id,
+                    file_path=file_path,
+                    op="get_related_files_symbol_calls_inferred",
+                )
+                structural_import_records = await _execute_read(
+                    session,
+                    """
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File {project_id:$pid})
+                    WHERE target.name IS NOT NULL
+                      AND trim(target.name) <> ''
+                      AND importer <> owner
+                    RETURN importer.filepath AS related_file,
+                           target.name AS symbol
+                    ORDER BY related_file, symbol
+                    LIMIT 12
+                    """,
+                    pid=project_id,
+                    file_path=file_path,
+                    op="get_related_files_symbol_imports",
+                )
+                structural_implicit_import_records = await _execute_read(
+                    session,
+                    """
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File {project_id:$pid})
+                    WHERE target.name IS NOT NULL
+                      AND trim(target.name) <> ''
+                      AND importer <> owner
+                    RETURN importer.filepath AS related_file,
+                           target.name AS symbol
+                    ORDER BY related_file, symbol
+                    LIMIT 12
+                    """,
+                    pid=project_id,
+                    file_path=file_path,
+                    op="get_related_files_symbol_imports",
+                )
                 related = []
                 records = await _execute_read(
                     session,
@@ -1697,7 +1793,74 @@ def register(mcp: FastMCP) -> None:
                     )
                 )
                 related = [f"- {rec['related_file']} ({rec['reason']})" for rec in related_records]
-            if cargo_related or apple_related or related:
+                structural_rollup: dict[str, dict] = {}
+                for record in [*structural_call_records, *structural_inferred_call_records]:
+                    related_file = str(record.get("related_file") or "").strip()
+                    symbol = str(record.get("symbol") or "").strip()
+                    if not related_file or not symbol:
+                        continue
+                    entry = structural_rollup.setdefault(
+                        related_file,
+                        {"call_hits": 0, "import_hits": 0, "symbols": []},
+                    )
+                    entry["call_hits"] += 1
+                    entry["symbols"].append(symbol)
+                for record in [*structural_import_records, *structural_implicit_import_records]:
+                    related_file = str(record.get("related_file") or "").strip()
+                    symbol = str(record.get("symbol") or "").strip()
+                    if not related_file or not symbol:
+                        continue
+                    entry = structural_rollup.setdefault(
+                        related_file,
+                        {"call_hits": 0, "import_hits": 0, "symbols": []},
+                    )
+                    entry["import_hits"] += 1
+                    entry["symbols"].append(symbol)
+                structural_related_records: list[dict] = []
+                for related_file, counts in structural_rollup.items():
+                    if (
+                        not related_file
+                        or related_file == file_path
+                        or _is_low_signal_support_path(related_file)
+                    ):
+                        continue
+                    symbols = _dedupe_symbol_names(
+                        [str(item) for item in (counts.get("symbols") or []) if str(item).strip()]
+                    )
+                    call_hits = int(counts.get("call_hits") or 0)
+                    import_hits = int(counts.get("import_hits") or 0)
+                    if call_hits <= 0 and import_hits <= 0:
+                        continue
+                    reason_bits: list[str] = []
+                    if call_hits:
+                        reason_bits.append(f"calls {call_hits} symbol(s)")
+                    if import_hits:
+                        reason_bits.append(f"imports {import_hits} symbol(s)")
+                    if symbols:
+                        reason_bits.append(f"symbols: {', '.join(symbols[:3])}")
+                    structural_related_records.append(
+                        {
+                            "related_file": related_file,
+                            "call_hits": call_hits,
+                            "import_hits": import_hits,
+                            "symbols": symbols,
+                            "reason": "; ".join(reason_bits),
+                        }
+                    )
+                structural_related_records.sort(
+                    key=lambda rec: _structural_related_rank(
+                        file_path,
+                        str(rec.get("related_file") or ""),
+                        int(rec.get("call_hits") or 0),
+                        int(rec.get("import_hits") or 0),
+                        len(rec.get("symbols") or []),
+                    )
+                )
+                structural_related = [
+                    f"- {rec['related_file']} ({rec['reason']})"
+                    for rec in structural_related_records
+                ]
+            if cargo_related or apple_related or structural_related or related:
                 output = [
                     "Related Files:",
                     "",
@@ -1722,6 +1885,10 @@ def register(mcp: FastMCP) -> None:
                         f"{'- then inspect' if focus_lines else '- start with'} {apple_related[0][2:]}"
                     )
                     highlighted_entries.add(apple_related[0][2:])
+                if structural_related:
+                    prefix = "- then inspect" if focus_lines else "- start with"
+                    focus_lines.append(f"{prefix} {structural_related[0][2:]}")
+                    highlighted_entries.add(structural_related[0][2:])
                 if related:
                     prefix = "- then inspect" if focus_lines else "- start with"
                     focus_lines.append(f"{prefix} {related[0][2:]}")
@@ -1740,8 +1907,15 @@ def register(mcp: FastMCP) -> None:
                         for line in apple_related
                         if not (line.startswith("- ") and line[2:] in highlighted_entries)
                     )
+                if structural_related:
+                    output.append("Symbol graph:")
+                    output.extend(
+                        line
+                        for line in structural_related
+                        if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                    )
                 if related:
-                    if cargo_related or apple_related:
+                    if cargo_related or apple_related or structural_related:
                         output.append("Import graph:")
                     output.extend(
                         line

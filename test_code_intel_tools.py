@@ -1471,6 +1471,14 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_get_related_files_prefers_same_directory_impl_neighbors_over_generic_import_matches(self):
         async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+                return []
+            if "<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
             if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
                 return [
                     {
@@ -1509,6 +1517,61 @@ class CodeIntelToolTests(unittest.TestCase):
         tests_idx = output.index("Tests/NIOPosixTests/ChannelTests.swift")
         self.assertLess(socket_idx, tests_idx)
         self.assertNotIn("Sources/NIOCore/SocketAddresses.swift", output)
+
+    def test_get_related_files_prefers_symbol_usage_neighbors_before_semantic_fallback(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+                        "symbol": "Exchange",
+                    },
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+                return []
+            if "<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                ]
+            if "<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/okhttp",
+                        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Related Files:", output)
+        self.assertIn("Symbol graph:", output)
+        self.assertIn("RealCall.kt", output)
+        self.assertIn("ConnectInterceptor.kt", output)
+        self.assertNotIn("semantic co-mentions", output)
+        self.assertLess(
+            output.index("RealCall.kt"),
+            output.index("ConnectInterceptor.kt"),
+        )
 
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):
