@@ -1471,13 +1471,13 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_get_related_files_prefers_same_directory_impl_neighbors_over_generic_import_matches(self):
         async def fake_executor(cypher, **kwargs):
-            if "<-[:CALLS]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
                 return []
-            if "<-[:CALLS_INFERRED]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
                 return []
-            if "<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
                 return []
-            if "<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
                 return []
             if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
                 return [
@@ -1520,7 +1520,7 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_get_related_files_prefers_symbol_usage_neighbors_before_semantic_fallback(self):
         async def fake_executor(cypher, **kwargs):
-            if "<-[:CALLS]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
                 return [
                     {
                         "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
@@ -1535,16 +1535,16 @@ class CodeIntelToolTests(unittest.TestCase):
                         "symbol": "RealInterceptorChain",
                     },
                 ]
-            if "<-[:CALLS_INFERRED]-(caller:Node)<-[:CONTAINS]-(caller_file:File" in cypher:
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
                 return []
-            if "<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
                 return [
                     {
                         "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt",
                         "symbol": "RealInterceptorChain",
                     },
                 ]
-            if "<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
                 return []
             if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
                 return []

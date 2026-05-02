@@ -1691,7 +1691,8 @@ def register(mcp: FastMCP) -> None:
                 structural_call_records = await _execute_read(
                     session,
                     """
-                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:CALLS]-(caller:Node)<-[:CONTAINS]-(caller_file:File {project_id:$pid})
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS*1..]->(target:Node)<-[:CALLS]-(caller:Node)
+                    MATCH (caller_file:File {project_id:$pid})-[:CONTAINS*1..]->(caller)
                     WHERE target.name IS NOT NULL
                       AND trim(target.name) <> ''
                       AND caller_file <> owner
@@ -1707,7 +1708,8 @@ def register(mcp: FastMCP) -> None:
                 structural_inferred_call_records = await _execute_read(
                     session,
                     """
-                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:CALLS_INFERRED]-(caller:Node)<-[:CONTAINS]-(caller_file:File {project_id:$pid})
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS*1..]->(target:Node)<-[:CALLS_INFERRED]-(caller:Node)
+                    MATCH (caller_file:File {project_id:$pid})-[:CONTAINS*1..]->(caller)
                     WHERE target.name IS NOT NULL
                       AND trim(target.name) <> ''
                       AND caller_file <> owner
@@ -1723,7 +1725,7 @@ def register(mcp: FastMCP) -> None:
                 structural_import_records = await _execute_read(
                     session,
                     """
-                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File {project_id:$pid})
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File {project_id:$pid})
                     WHERE target.name IS NOT NULL
                       AND trim(target.name) <> ''
                       AND importer <> owner
@@ -1739,7 +1741,7 @@ def register(mcp: FastMCP) -> None:
                 structural_implicit_import_records = await _execute_read(
                     session,
                     """
-                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File {project_id:$pid})
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File {project_id:$pid})
                     WHERE target.name IS NOT NULL
                       AND trim(target.name) <> ''
                       AND importer <> owner
