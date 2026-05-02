@@ -23,8 +23,9 @@ def register(mcp: FastMCP) -> None:
 
         By default, only the provided seed URLs are crawled. Set
         LM_PROXY_DOCS_DISCOVER=1 to enable llms.txt/sitemap/link discovery.
-        Content is extracted as native markdown via crawl4ai, then chunked at
-        heading-section boundaries using an AST-aware splitter (tree-sitter markdown).
+        Content is extracted from crawled pages via the docs pipeline
+        (crawlee + trafilatura), then chunked at heading-section boundaries
+        using an AST-aware splitter (tree-sitter markdown).
         Each chunk includes a context_path breadcrumb (e.g. ['GRPCServer', 'Error Handling']).
         Idempotent: re-crawling updates existing chunks rather than duplicating.
 
