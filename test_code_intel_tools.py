@@ -1939,6 +1939,57 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertEqual(output.count("FrameCreator/Views/ContentView.swift"), 1)
         self.assertIn("FrameCreator/Views/InspectorView.swift", output)
 
+    def test_list_symbol_matches_prefers_types_and_formats_context(self):
+        async def fake_executor(cypher, **kwargs):
+            self.assertEqual(kwargs["q"], "Router")
+            self.assertEqual(kwargs["kinds"], ["Class", "Method"])
+            return [
+                {
+                    "kinds": ["Class", "Node"],
+                    "name": "Router",
+                    "qualified_name": "api.Router",
+                    "signature": None,
+                    "filepath": "src/api/router.py",
+                },
+                {
+                    "kinds": ["Method", "Node"],
+                    "name": "buildRouter",
+                    "qualified_name": "api.Router.buildRouter",
+                    "signature": "def buildRouter(self) -> Router",
+                    "filepath": "src/api/router_factory.py",
+                },
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/rental",
+                        "Router",
+                        kinds=["Class", "Method", "BogusKind"],
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Symbol matches for 'Router':", output)
+        self.assertIn("- Router (api.Router) (Class)  src/api/router.py", output)
+        self.assertIn(
+            "- buildRouter (api.Router.buildRouter) (Method)  src/api/router_factory.py"
+            " — def buildRouter(self) -> Router",
+            output,
+        )
+        self.assertLess(
+            output.index("src/api/router.py"),
+            output.index("src/api/router_factory.py"),
+        )
+
+    def test_list_symbol_matches_rejects_empty_query(self):
+        output = asyncio.run(self.mcp.tools["list_symbol_matches"]("/tmp/rental", "   "))
+        self.assertEqual(output, "Query is empty. Provide a symbol name substring to match.")
+
 
 if __name__ == "__main__":
     unittest.main()

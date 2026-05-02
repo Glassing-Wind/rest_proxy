@@ -136,6 +136,38 @@ def load_module(memory_store):
 
 
 class DevToolsTests(unittest.TestCase):
+    def test_grep_codebase_groups_hits_by_file_and_applies_glob(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        def fake_subprocess_run(cmd, **kwargs):
+            self.assertTrue(cmd[0].endswith("/rg") or cmd[0] == "rg")
+            self.assertIn("--glob", cmd)
+            self.assertIn("*.py", cmd)
+            self.assertIn("Router", cmd)
+            return types.SimpleNamespace(
+                stdout="\n".join(
+                    [
+                        "src/api/router.py:10:class Router:",
+                        "src/api/router.py:22:def buildRouter():",
+                        "tests/test_router.py:5:from src.api.router import Router",
+                    ]
+                )
+            )
+
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+            output = asyncio.run(
+                mcp.tools["grep_codebase"]("/tmp/repo", "Router", "*.py")
+            )
+
+        self.assertIn("## `Router` — 2 file(s)", output)
+        self.assertIn("**src/api/router.py**", output)
+        self.assertIn("L10: class Router:", output)
+        self.assertIn("L22: def buildRouter():", output)
+        self.assertIn("**tests/test_router.py**", output)
+
     def test_get_test_coverage_for_uses_semantic_test_chunk_fallback(self):
         memory_store = FakeMemoryStore(
             [("tests/test_workspace_registry.py", 3), ("spec/workspace_registry_spec.py", 1)]

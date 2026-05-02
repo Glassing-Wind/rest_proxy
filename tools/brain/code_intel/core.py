@@ -908,15 +908,15 @@ def register(mcp: FastMCP) -> None:
         """
         try:
             project_id = get_project_id(project_path)
+            q = (query or "").strip()
+            if not q:
+                return "Query is empty. Provide a symbol name substring to match."
+
             import graph_bootstrap
 
             _, _, _, _, proxy = get_memory_modules()
 
             driver = await graph_bootstrap.require_driver()
-
-            q = (query or "").strip()
-            if not q:
-                return "Query is empty. Provide a symbol name substring to match."
 
             kind_set = {
                 "Function",
