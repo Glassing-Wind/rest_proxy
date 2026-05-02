@@ -30,10 +30,10 @@ These are the tools we expect to reach for first during normal codebase work.
 | `get_indexing_health` | unit/script, live, mcp parity |
 | `resolve_graph_project` | unit/script, live, mcp parity |
 | `get_project_overview` | unit/script, live, mcp parity |
-| `search_codebase` | live, mcp parity, tool-choice |
-| `get_symbol_context` | live, mcp parity, tool-choice |
-| `find_references` | live, mcp parity, tool-choice |
-| `get_call_chain` | live, mcp parity, tool-choice |
+| `search_codebase` | unit/script, live, mcp parity, tool-choice |
+| `get_symbol_context` | unit/script, live, mcp parity, tool-choice |
+| `find_references` | unit/script, live, mcp parity, tool-choice |
+| `get_call_chain` | unit/script, live, mcp parity, tool-choice |
 | `get_directory_snapshot` | unit/script, live, mcp parity |
 | `find_definitions` | unit/script, mcp parity, tool-choice |
 | `list_symbol_matches` | unit/script, mcp parity |
