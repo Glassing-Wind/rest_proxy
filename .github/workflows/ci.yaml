@@ -61,6 +61,8 @@ jobs:
           path: .runtime/wheels
 
       - name: Install dependencies
+        env:
+          LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL: "1"
         run: bash scripts/install_ci_requirements.sh
 
       - name: Run gated CI checks
@@ -89,6 +91,8 @@ jobs:
           path: .runtime/wheels
 
       - name: Install dependencies
+        env:
+          LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL: "1"
         run: bash scripts/install_ci_requirements.sh
 
       - name: Run enterprise eval
@@ -202,6 +206,8 @@ jobs:
           path: .runtime/wheels
 
       - name: Install dependencies
+        env:
+          LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL: "1"
         run: bash scripts/install_ci_requirements.sh
 
       - name: Wait for Neo4j

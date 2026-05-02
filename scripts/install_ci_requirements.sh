@@ -7,10 +7,19 @@ cd "$ROOT_DIR"
 REQ_FILE="${1:-requirements-ci.txt}"
 WHEEL_DIR="${2:-.runtime/wheels}"
 FILTERED_REQ=".runtime/requirements-ci.filtered.txt"
+REQUIRE_WHEEL="${LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL:-0}"
 
 mkdir -p "$(dirname "$FILTERED_REQ")"
 
-REQ_FILE_ENV="$REQ_FILE" python - <<'PY'
+PYTHON_BIN="${LM_PROXY_PYTHON:-${LM_PROXY_INDEX_PYTHON:-}}"
+if [[ -z "$PYTHON_BIN" ]] && [[ -x "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python" ]]; then
+  PYTHON_BIN="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
+fi
+if [[ -z "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v python3 || command -v python)"
+fi
+
+REQ_FILE_ENV="$REQ_FILE" "$PYTHON_BIN" - <<'PY'
 import os
 from pathlib import Path
 
@@ -32,8 +41,16 @@ if [[ -d "$WHEEL_DIR" ]]; then
   wheels=("$WHEEL_DIR"/tree_sitter_language_pack-*.whl)
   shopt -u nullglob
   if (( ${#wheels[@]} > 0 )); then
+    echo "[ci-deps] Installing ts-pack wheel artifact: ${wheels[0]}"
     pip install --no-deps "${wheels[0]}"
+  elif [[ "$REQUIRE_WHEEL" == "1" || "$REQUIRE_WHEEL" == "true" || "$REQUIRE_WHEEL" == "yes" ]]; then
+    echo "[ci-deps] ERROR: ts-pack wheel artifact required but not found in $WHEEL_DIR" >&2
+    exit 1
   fi
+elif [[ "$REQUIRE_WHEEL" == "1" || "$REQUIRE_WHEEL" == "true" || "$REQUIRE_WHEEL" == "yes" ]]; then
+  echo "[ci-deps] ERROR: ts-pack wheel directory required but not found: $WHEEL_DIR" >&2
+  exit 1
 fi
 
+echo "[ci-deps] Installing remaining Python dependencies from $FILTERED_REQ"
 pip install -r "$FILTERED_REQ"

@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 WHEEL_DIR="${1:-.runtime/wheels}"
 mkdir -p "$WHEEL_DIR"
+rm -f "$WHEEL_DIR"/tree_sitter_language_pack-*.whl
 
 TS_PACK_SPEC="$(
   python - <<'PY'
@@ -26,4 +27,5 @@ else:
 PY
 )"
 
+echo "[ci-wheel] Building pinned ts-pack wheel from: $TS_PACK_SPEC"
 pip wheel --wheel-dir "$WHEEL_DIR" "$TS_PACK_SPEC"
