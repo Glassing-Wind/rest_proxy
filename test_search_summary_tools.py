@@ -98,6 +98,24 @@ class SearchSummaryToolTests(unittest.TestCase):
         self.assertEqual(kwargs["exclude_paths"], ["tests/*"])
         self.assertEqual(kwargs["symbol_prefix"], "App")
 
+    def test_get_symbol_imports_overview_forwards_include_implicit(self):
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            output = asyncio.run(
+                self.mcp.tools["get_symbol_imports_overview"](
+                    "/tmp/repo",
+                    limit=12,
+                    include_implicit=True,
+                )
+            )
+
+        self.assertEqual(output, "imports overview ok")
+        self.search_summaries_mod.get_symbol_imports_overview_impl.assert_awaited_once()
+        _, kwargs = self.search_summaries_mod.get_symbol_imports_overview_impl.await_args
+        self.assertEqual(kwargs["neo4j_db"], "neo4j")
+        self.assertEqual(kwargs["project_path"], "/tmp/repo")
+        self.assertEqual(kwargs["limit"], 12)
+        self.assertTrue(kwargs["include_implicit"])
+
     def test_get_symbol_imports_overview_returns_tool_error_shape(self):
         self.search_summaries_mod.get_symbol_imports_overview_impl = mock.AsyncMock(
             side_effect=RuntimeError("graph unavailable")

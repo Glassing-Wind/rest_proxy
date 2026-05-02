@@ -52,14 +52,14 @@ repo or investigation path justifies stronger coverage.
 
 | Tool | Current coverage |
 | --- | --- |
-| `get_related_files` | live, mcp parity, workflow |
+| `get_related_files` | unit/script, live, mcp parity, workflow |
 | `get_code_importance` | unit/script, live, mcp parity, workflow |
 | `get_repo_dependency_summary` | unit/script, live, mcp parity |
 | `get_flow_summary` | unit/script, live, mcp parity |
 | `get_app_flow_summary` | unit/script |
 | `get_backend_flow_summary` | unit/script, live, mcp parity |
 | `get_apple_build_summary` | unit/script, live, mcp parity, workflow |
-| `get_symbol_exports_summary` | live, mcp parity, workflow |
+| `get_symbol_exports_summary` | unit/script, live, mcp parity, workflow |
 | `query_graph` | unit/script, live |
 | `get_symbol_imports_overview` | unit/script, live, mcp parity, workflow |
 | `visualize_subgraph` | unit/script, live, mcp parity, workflow |
