@@ -1957,40 +1957,51 @@ def register(mcp: FastMCP) -> None:
                     highlighted_entries.add(related[0][2:])
                 if focus_lines:
                     output.extend(["", "Inspect First:", *focus_lines[:3]])
-                output.extend(
+                remaining_cargo_related = [
                     line
                     for line in cargo_related
                     if not (line.startswith("- ") and line[2:] in highlighted_entries)
-                )
-                if apple_related:
+                ]
+                output.extend(remaining_cargo_related)
+                remaining_apple_related = [
+                    line
+                    for line in apple_related
+                    if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                ]
+                if remaining_apple_related:
                     output.append("Apple build graph:")
-                    output.extend(
-                        line
-                        for line in apple_related
-                        if not (line.startswith("- ") and line[2:] in highlighted_entries)
-                    )
-                if structural_related:
+                    output.extend(remaining_apple_related)
+                remaining_structural_related = [
+                    line
+                    for line in structural_related
+                    if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                ]
+                if remaining_structural_related:
                     output.append("Symbol graph:")
-                    output.extend(
-                        line
-                        for line in structural_related
-                        if not (line.startswith("- ") and line[2:] in highlighted_entries)
-                    )
-                if structural_import_related:
+                    output.extend(remaining_structural_related)
+                remaining_structural_import_related = [
+                    line
+                    for line in structural_import_related
+                    if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                ]
+                if remaining_structural_import_related:
                     output.append("Symbol import graph:")
-                    output.extend(
-                        line
-                        for line in structural_import_related
-                        if not (line.startswith("- ") and line[2:] in highlighted_entries)
-                    )
-                if related:
-                    if cargo_related or apple_related or structural_related or structural_import_related:
+                    output.extend(remaining_structural_import_related)
+                remaining_related = [
+                    line
+                    for line in related
+                    if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                ]
+                if remaining_related:
+                    if (
+                        remaining_cargo_related
+                        or remaining_apple_related
+                        or remaining_structural_related
+                        or remaining_structural_import_related
+                        or focus_lines
+                    ):
                         output.append("Import graph:")
-                    output.extend(
-                        line
-                        for line in related
-                        if not (line.startswith("- ") and line[2:] in highlighted_entries)
-                    )
+                    output.extend(remaining_related)
                 return "\n".join(output)
 
             # Fallback: semantic co-mentions based on top symbols in the file

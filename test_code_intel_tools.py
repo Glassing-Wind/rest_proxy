@@ -1611,7 +1611,9 @@ class CodeIntelToolTests(unittest.TestCase):
             finally:
                 CURRENT_EXECUTOR = None
 
-        inspect_section = output.split("Inspect First:", 1)[1].split("Symbol graph:", 1)[0]
+        inspect_section = output.split("Inspect First:", 1)[1]
+        for marker in ("Symbol graph:", "Symbol import graph:", "Import graph:", "Apple build graph:"):
+            inspect_section = inspect_section.split(marker, 1)[0]
         self.assertIn("RealCall.kt", inspect_section)
         self.assertNotIn("RetryAndFollowUpInterceptor.kt", inspect_section)
         self.assertIn("Import graph:", output)
@@ -1666,6 +1668,42 @@ class CodeIntelToolTests(unittest.TestCase):
             output.index("Http2ExchangeCodec.kt"),
             output.index("JSSETest.kt"),
         )
+
+    def test_get_related_files_omits_empty_symbol_graph_section_after_highlight(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/ContentView.swift",
+                        "symbol": "SidebarView",
+                    }
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/FrameCreator",
+                        "FrameCreator/Views/SidebarView.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift", output)
+        self.assertNotIn("Symbol graph:\n", output)
 
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):
