@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import os
+import shutil
 import sys
 import urllib.error
 import urllib.request
@@ -17,12 +18,52 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from test_live_graph_tools import (  # noqa: E402
-    GRAPH_GOLDENS_PATH,
-    _build_tool_registry,
-    _install_mcp_stub,
-    _resolve_golden_params,
-)
+_LM_PROXY_FALLBACK_PYTHON = "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
+
+
+def _preferred_python() -> str | None:
+    for candidate in (
+        os.environ.get("LM_PROXY_PYTHON"),
+        os.environ.get("LM_PROXY_INDEX_PYTHON"),
+        _LM_PROXY_FALLBACK_PYTHON,
+        shutil.which("python3"),
+        shutil.which("python"),
+    ):
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _reexec_with_preferred_python_if_needed(exc: ModuleNotFoundError) -> None:
+    if os.environ.get("LM_PROXY_RUNTIME_REEXECED") == "1":
+        return
+    preferred = _preferred_python()
+    if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+        return
+    os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
+    os.execv(preferred, [preferred, __file__, *sys.argv[1:]])
+
+
+def _ensure_runtime_dependencies() -> None:
+    try:
+        import neo4j  # noqa: F401
+    except ModuleNotFoundError as exc:  # pragma: no cover - runtime guard
+        _reexec_with_preferred_python_if_needed(exc)
+        raise
+
+
+try:
+    from test_live_graph_tools import (  # noqa: E402
+        GRAPH_GOLDENS_PATH,
+        _build_tool_registry,
+        _install_mcp_stub,
+        _resolve_golden_params,
+    )
+except ModuleNotFoundError as exc:  # pragma: no cover - runtime guard
+    _reexec_with_preferred_python_if_needed(exc)
+    raise
+
+_ensure_runtime_dependencies()
 
 
 BASE_URL = "http://127.0.0.1:8001"

@@ -24,6 +24,25 @@ GRAPH_GOLDENS_PATH = os.path.join(REPO_ROOT, "benchmarks", "live_graph_goldens.j
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from _runtime import resolve_python_runtime
+
+
+def _ensure_runtime_dependencies() -> None:
+    try:
+        import neo4j  # noqa: F401
+    except ModuleNotFoundError:
+        if os.environ.get("LM_PROXY_RUNTIME_REEXECED") == "1":
+            raise
+        runtime = resolve_python_runtime()
+        preferred = str(runtime.get("python") or "")
+        if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+            raise
+        os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
+        os.execv(preferred, [preferred, __file__, *sys.argv[1:]])
+
+
+_ensure_runtime_dependencies()
+
 
 class FakeMCP:
     def __init__(self) -> None:

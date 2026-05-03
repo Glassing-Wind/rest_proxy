@@ -21,6 +21,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from _runtime import resolve_python_runtime
+
 DEFAULT_ARTIFACT_DIR = ROOT / ".runtime" / "enterprise_eval"
 
 
@@ -274,6 +279,7 @@ def write_enterprise_artifacts(payload: dict, artifact_dir: str | Path) -> dict:
 
 
 def main() -> int:
+    runtime = resolve_python_runtime()
     parser = argparse.ArgumentParser(
         description=(
             "Run enterprise retrieval trend evaluation and write artifacts. "
@@ -290,7 +296,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--python-bin",
-        default=sys.executable,
+        default=str(runtime.get("python") or sys.executable),
         help="Python executable for running live graph tests.",
     )
     parser.add_argument(

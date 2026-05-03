@@ -10,7 +10,7 @@ if [[ -z "$PYTHON_BIN" ]] && [[ -x "/opt/homebrew/Caskroom/miniforge/base/envs/l
   PYTHON_BIN="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
 fi
 if [[ -z "$PYTHON_BIN" ]]; then
-  PYTHON_BIN="$(command -v python || command -v python3)"
+  PYTHON_BIN="$(command -v python3 || command -v python)"
 fi
 
 echo "[graph-check] Running parser fact precision checks..."
