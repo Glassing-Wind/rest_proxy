@@ -197,6 +197,13 @@ def load_module(memory_store):
 
 
 class SearchCodebaseToolTests(unittest.TestCase):
+    def test_how_does_query_maps_to_implementation_explanation(self):
+        module = load_module(FakeMemoryStore({}))
+        self.assertEqual(
+            module.sem_helpers.implementation_query_class("how does interceptor chaining work in okhttp"),
+            "implementation_explanation",
+        )
+
     def test_search_codebase_demotes_doc_like_hits_when_metadata_enabled(self):
         rows_by_pid = {
             "proj123": [
@@ -397,6 +404,80 @@ class SearchCodebaseToolTests(unittest.TestCase):
         second_index = output.index("--- src/visit_controller.py ---")
         self.assertLess(first_index, second_index)
         self.assertNotIn("Score:", output)
+
+    def test_search_codebase_explanation_prefers_internal_impl_over_samples_and_public_api(self):
+        rows_by_pid = {
+            "proj123": [
+                (
+                    "okhttp/src/commonJvmAndroid/kotlin/okhttp3/Interceptor.kt",
+                    0,
+                    "interface Chain",
+                    "proj123",
+                    {
+                        "language": "kotlin",
+                        "file_symbols": ["Interceptor", "Chain"],
+                        "declared_symbols": ["Interceptor", "Chain"],
+                        "node_types": ["interface_declaration"],
+                    },
+                    0.30,
+                ),
+                (
+                    "samples/guide/src/main/java/okhttp3/recipes/LoggingInterceptors.java",
+                    0,
+                    "class LoggingInterceptors { Response intercept(Chain chain) { return chain.proceed(request); } }",
+                    "proj123",
+                    {
+                        "language": "java",
+                        "file_symbols": ["LoggingInterceptors", "intercept"],
+                        "declared_symbols": ["LoggingInterceptors", "intercept"],
+                        "node_types": ["class_declaration", "method_definition"],
+                    },
+                    0.40,
+                ),
+                (
+                    "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt",
+                    0,
+                    "object ConnectInterceptor : Interceptor { override fun intercept(chain: Interceptor.Chain): Response { return connectedChain.proceed(realChain.request) } }",
+                    "proj123",
+                    {
+                        "language": "kotlin",
+                        "file_symbols": ["ConnectInterceptor", "intercept"],
+                        "declared_symbols": ["ConnectInterceptor", "intercept"],
+                        "node_types": ["object_declaration", "function_definition"],
+                    },
+                    0.20,
+                ),
+            ]
+        }
+        module = load_module(FakeMemoryStore(rows_by_pid))
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            output = asyncio.run(
+                mcp.tools["search_codebase"](
+                    workspace_id="repo",
+                    query="how does interceptor chaining work in okhttp",
+                    k=3,
+                )
+            )
+
+        connect_index = output.index(
+            "--- okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt ---"
+        )
+        api_index = output.index("--- okhttp/src/commonJvmAndroid/kotlin/okhttp3/Interceptor.kt ---")
+        sample_index = output.index(
+            "--- samples/guide/src/main/java/okhttp3/recipes/LoggingInterceptors.java ---"
+        )
+        self.assertLess(connect_index, api_index)
+        self.assertLess(connect_index, sample_index)
 
 
 if __name__ == "__main__":

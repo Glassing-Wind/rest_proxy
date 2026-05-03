@@ -250,9 +250,7 @@ def implementation_query_class(query: str) -> str:
         if path_hints and ("entrypoint" in text or "main" in text):
             return "implementation_search"
         return "api_definition_lookup"
-    if re.search(r"\bhow does\b", text) and re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
-        return "implementation_explanation"
-    if "how does" in text and any(term in text for term in ("routing", "router", "handler", "server")):
+    if "how does" in text:
         return "implementation_explanation"
     if re.search(r"\b[a-z_][a-z0-9_]*\s*\(", text):
         return "symbol_lookup"
@@ -569,7 +567,9 @@ def is_usage_heavy_path(file_path: str | None) -> bool:
         or "/tests/" in norm
         or "/test/" in norm
         or "/e2e/" in norm
+        or norm.startswith("samples/")
         or "/examples/" in norm
+        or "/samples/" in norm
         or "/spec/" in norm
         or norm.endswith("_test.go")
         or norm.endswith("_spec.rb")
@@ -637,6 +637,7 @@ def implementation_rank_tuple(
         low_signal_support,
         doc_like,
         usage_heavy,
+        -role_priority,
         -callable_priority,
         -member_usage_priority,
         -dispatcher_priority,
@@ -645,7 +646,6 @@ def implementation_rank_tuple(
         -path_hint_priority,
         -basename_token_priority,
         -runtime_main_priority,
-        -role_priority,
         -node_type_priority,
         facade_surface,
         reexport_surface,
@@ -1096,7 +1096,12 @@ def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
     path = (file_path or "").replace("\\", "/").lower()
     if not path:
         return ""
-    if path.startswith("examples/") or "/examples/" in path:
+    if (
+        path.startswith("examples/")
+        or "/examples/" in path
+        or path.startswith("samples/")
+        or "/samples/" in path
+    ):
         return "example_usage"
     if any(segment in path for segment in ("/tests/", "/test/", "/e2e/", "/spec/")):
         return "test_usage"
@@ -1408,6 +1413,13 @@ NODE_TYPE_POLICY_DEFINITION = {
     "type_or_module": {"priority": 1, "score": 0.01},
 }
 
+NODE_TYPE_POLICY_EXPLANATION = {
+    "declaration": {"priority": 1, "score": -0.02},
+    "callsite": {"priority": 0, "score": -0.02},
+    "export": {"priority": 1, "score": 0.01},
+    "type_or_module": {"priority": 0, "score": 0.0},
+}
+
 NODE_TYPE_POLICY_IMPLEMENTATION = {
     "declaration": {"priority": 2, "score": 0.03},
     "callsite": {"priority": 1, "score": -0.01},
@@ -1419,6 +1431,8 @@ NODE_TYPE_POLICY_IMPLEMENTATION = {
 def implementation_node_type_policy(query_class: str) -> dict[str, dict[str, float | int]]:
     if query_class_prefers_usage(query_class):
         return NODE_TYPE_POLICY_USAGE
+    if query_class == "implementation_explanation":
+        return NODE_TYPE_POLICY_EXPLANATION
     if query_class_prefers_definitions(query_class):
         return NODE_TYPE_POLICY_DEFINITION
     return NODE_TYPE_POLICY_IMPLEMENTATION
@@ -1508,12 +1522,12 @@ ROLE_POLICY_USAGE = {
 }
 
 ROLE_POLICY_EXPLANATION = {
-    "public_api_definition": {"priority": 7, "score": 0.09},
-    "canonical_definition": {"priority": 6, "score": 0.06},
-    "internal_implementation": {"priority": 5, "score": 0.04},
+    "internal_implementation": {"priority": 7, "score": 0.09},
+    "canonical_definition": {"priority": 6, "score": 0.05},
+    "public_api_definition": {"priority": 5, "score": 0.02},
     "supporting_context": {"priority": 3, "score": 0.01},
     "usage_callsite": {"priority": 1, "score": -0.06},
-    "test_example": {"priority": 0, "score": -0.05},
+    "test_example": {"priority": 0, "score": -0.08},
     "generated_surface": {"priority": 0, "score": 0.0},
     "docs": {"priority": 0, "score": 0.0},
 }
