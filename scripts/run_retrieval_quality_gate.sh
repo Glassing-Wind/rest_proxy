@@ -13,6 +13,7 @@ fi
 echo "[retrieval-quality-gate] python=$PYTHON_BIN"
 
 cd "$ROOT_DIR"
+"$PYTHON_BIN" "$ROOT_DIR/scripts/check_brain_server_freshness.py" --restart-if-stale --quiet
 
 echo "[retrieval-quality-gate] running tool-choice eval suite..."
 "$PYTHON_BIN" "$ROOT_DIR/scripts/run_tool_choice_eval_suite.py"

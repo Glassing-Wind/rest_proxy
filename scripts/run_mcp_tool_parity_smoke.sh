@@ -13,4 +13,5 @@ fi
 echo "[mcp-tool-parity] python=$PYTHON_BIN"
 
 cd "$ROOT_DIR"
+"$PYTHON_BIN" "$ROOT_DIR/scripts/check_brain_server_freshness.py" --restart-if-stale --quiet
 "$PYTHON_BIN" "$ROOT_DIR/scripts/check_mcp_tool_parity.py" "$@"

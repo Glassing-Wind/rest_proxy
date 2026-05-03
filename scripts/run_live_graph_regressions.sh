@@ -138,4 +138,5 @@ echo "[live-graph-regressions] workspaces=${AVAILABLE_WORKSPACES[*]}"
 echo "[live-graph-regressions] cases=${CASES[*]}"
 
 cd "$ROOT_DIR"
+"$PYTHON_BIN" "$ROOT_DIR/scripts/check_brain_server_freshness.py" --restart-if-stale --quiet
 "$PYTHON_BIN" "$ROOT_DIR/test_live_graph_tools.py" "${AVAILABLE_WORKSPACES[@]}" "${ARGS[@]}" "$@"
