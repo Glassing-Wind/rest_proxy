@@ -204,6 +204,14 @@ class SearchCodebaseToolTests(unittest.TestCase):
             "implementation_explanation",
         )
 
+    def test_event_flow_query_infers_pipeline_filename_hint(self):
+        module = load_module(FakeMemoryStore({}))
+        hints = module.sem_helpers.implementation_inferred_filename_hints(
+            "how does inbound event flow work in swift-nio"
+        )
+        self.assertIn("channelpipeline.swift", hints)
+        self.assertIn("pipeline", hints)
+
     def test_search_codebase_demotes_doc_like_hits_when_metadata_enabled(self):
         rows_by_pid = {
             "proj123": [

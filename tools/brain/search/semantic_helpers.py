@@ -803,6 +803,10 @@ def implementation_inferred_filename_hints(query: str) -> list[str]:
             if token in generic:
                 continue
             hints.add(f"{token}controller.java")
+    if "flow" in text and "event" in text:
+        if "inbound" in text or "outbound" in text:
+            hints.add("channelpipeline.swift")
+        hints.add("pipeline")
     return sorted(hints)
 
 
