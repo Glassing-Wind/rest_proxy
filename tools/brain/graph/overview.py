@@ -67,6 +67,17 @@ _COMMON_SWIFT_TYPE_NAMES = {
     "Date",
     "Button",
 }
+_GENERATED_OVERVIEW_PATH_MARKERS = (
+    "/generated/",
+    "/pregeneratedspm/",
+    ".pb.swift",
+    ".grpc.swift",
+    ".generated.swift",
+    ".gen.swift",
+    ".gen.ts",
+    ".generated.ts",
+    "_generated.swift",
+)
 
 
 def _schema_cypher(text: str) -> str:
@@ -240,16 +251,7 @@ def _importance_penalty(filepath: str | None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
         return 0.08
-    if any(
-        token in norm
-        for token in (
-            "/gen/",
-            ".gen.ts",
-            ".generated.ts",
-            "_generated.swift",
-            "pregeneratedspm/",
-        )
-    ):
+    if any(token in norm for token in ("/gen/",) + _GENERATED_OVERVIEW_PATH_MARKERS):
         return 0.08
     if "/e2e/" in norm or norm.endswith((".spec.ts", ".spec.tsx")):
         return 0.24
@@ -321,6 +323,8 @@ def _is_overview_low_signal_key_file(filepath: str | None) -> bool:
     if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")):
         return True
     if norm.startswith(("tests/", "test/", "fixtures/", "examples/")):
+        return True
+    if any(marker in norm for marker in _GENERATED_OVERVIEW_PATH_MARKERS):
         return True
     if basename in {"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"}:
         return True

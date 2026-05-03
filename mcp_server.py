@@ -6,10 +6,9 @@ It is primarily used for local development and legacy environment support.
 """
 
 import asyncio
-import hashlib
-import json
 import sys
 from _mcp import mcp
+from _tool_fingerprint import compute_tool_fingerprint
 
 # --- MCP Protocol Guard ---
 # Redirect sys.stdout → stderr so third-party prints can't corrupt the JSON-RPC stream.
@@ -19,16 +18,13 @@ sys.stdout = sys.stderr
 
 
 def _compute_tool_fingerprint() -> str:
-    """Return a short hash of the registered tool names.
+    """Return a short hash of the registered tool names and source files.
 
     Used to detect whether a tool_list_changed broadcast from another agent
     actually represents a different tool set from the one we booted with.
     """
-    try:
-        tool_names = sorted(t.name for t in mcp._tool_manager.list_tools())
-    except Exception:
-        tool_names = []
-    return hashlib.sha256(json.dumps(tool_names).encode()).hexdigest()[:12]
+    fingerprint, _ = compute_tool_fingerprint(mcp)
+    return fingerprint
 
 
 # Computed once at import time for health and startup logs.

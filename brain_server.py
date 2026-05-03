@@ -13,7 +13,6 @@ Architecture:
 
 import asyncio
 import hashlib
-import json
 import os
 import resource
 import sys
@@ -48,17 +47,15 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
 from _mcp import mcp
+from _tool_fingerprint import compute_tool_fingerprint
 
 # ---------------------------------------------------------------------------
 # Tool fingerprint
 # ---------------------------------------------------------------------------
 
 def _compute_tool_fingerprint() -> str:
-    try:
-        tool_names = sorted(t.name for t in mcp._tool_manager.list_tools())
-    except Exception:
-        tool_names = []
-    return hashlib.sha256(json.dumps(tool_names).encode()).hexdigest()[:12]
+    fingerprint, _ = compute_tool_fingerprint(mcp)
+    return fingerprint
 
 
 BOOT_FINGERPRINT: str = _compute_tool_fingerprint()

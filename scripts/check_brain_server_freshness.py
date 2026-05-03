@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -18,6 +18,31 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+_LM_PROXY_FALLBACK_PYTHON = "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
+
+
+def _preferred_python() -> str | None:
+    for candidate in (
+        os.environ.get("LM_PROXY_PYTHON"),
+        os.environ.get("LM_PROXY_INDEX_PYTHON"),
+        _LM_PROXY_FALLBACK_PYTHON,
+        shutil.which("python3"),
+        shutil.which("python"),
+    ):
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def _reexec_with_preferred_python_if_needed(exc: ModuleNotFoundError) -> None:
+    if os.environ.get("LM_PROXY_RUNTIME_REEXECED") == "1":
+        return
+    preferred = _preferred_python()
+    if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+        return
+    os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
+    os.execv(preferred, [preferred, __file__, *sys.argv[1:]])
+
 
 def _request_json(url: str) -> dict:
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
@@ -26,12 +51,15 @@ def _request_json(url: str) -> dict:
 
 
 def _local_tool_fingerprint() -> tuple[str, int]:
-    from _mcp import get_mcp
+    try:
+        from _mcp import get_mcp
+        from _tool_fingerprint import compute_tool_fingerprint
+    except ModuleNotFoundError as exc:  # pragma: no cover - runtime guard
+        _reexec_with_preferred_python_if_needed(exc)
+        raise
 
     mcp = get_mcp()
-    tool_names = sorted(t.name for t in mcp._tool_manager.list_tools())
-    fingerprint = hashlib.sha256(json.dumps(tool_names).encode()).hexdigest()[:12]
-    return fingerprint, len(tool_names)
+    return compute_tool_fingerprint(mcp)
 
 
 def _brain_server_url(path: str) -> str:

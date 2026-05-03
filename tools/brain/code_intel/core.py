@@ -5,7 +5,7 @@ import os
 import re
 from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
-from _helpers import get_memory_modules, get_project_id
+from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from proxy.logging import debug_log
 from ts_diagnostics import normalize_ts_pack_result
 from tools.brain.code_intel import file_describe
@@ -1468,16 +1468,27 @@ def register(mcp: FastMCP) -> None:
             return f"Error identifying code communities: {str(e)}"
 
     @mcp.tool()
-    async def get_related_files(project_path: str, file_path: str) -> str:
+    async def get_related_files(
+        project_path: str | None = None,
+        file_path: str = "",
+        workspace_id: str | None = None,
+    ) -> str:
         """
         Find files that are structurally related to the target file.
 
         Args:
             project_path: Absolute path to the project root.
             file_path: Relative path to the file in the project.
+            workspace_id: Optional workspace identifier; preferred for MCP parity.
         """
         try:
-            project_id = get_project_id(project_path)
+            workspace_key = (workspace_id or project_path or "").strip()
+            if not workspace_key:
+                return "Workspace path is required."
+            if not str(file_path or "").strip():
+                return "File path is required."
+            project_path = get_workspace_path(workspace_key)
+            project_id = get_project_id(workspace_key)
             file_id = f"{project_id}:file:{file_path}"
             import graph_bootstrap
 

@@ -83,6 +83,7 @@ def load_code_intel_module():
     helpers_mod = types.ModuleType("_helpers")
     helpers_mod.get_memory_modules = lambda: (None, None, None, None, None)
     helpers_mod.get_project_id = lambda workspace_id: "proj123"
+    helpers_mod.get_workspace_path = lambda workspace_id: workspace_id
     proxy_logging = types.ModuleType("proxy.logging")
     proxy_logging.debug_log = lambda *args, **kwargs: None
     ts_diag = types.ModuleType("ts_diagnostics")
@@ -1403,6 +1404,41 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("semantic co-mentions", output)
         self.assertIn("FrameCreator/Views/ContentView.swift", output)
+
+    def test_get_related_files_accepts_workspace_id_keyword(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "Libraries/GRPC/ProxyServer/Sources/ProxyCPUServer.swift",
+                        "shared_imports": 3,
+                        "sample_imports": ["GRPCCore", "Logging", "Foundation"],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_workspace_path",
+                return_value="/tmp/draw-things-community",
+            ) as workspace_mock:
+                with mock.patch.object(self.module, "get_project_id", return_value="proj456") as project_id_mock:
+                    global CURRENT_EXECUTOR
+                    CURRENT_EXECUTOR = fake_executor
+                    try:
+                        output = asyncio.run(
+                            self.mcp.tools["get_related_files"](
+                                workspace_id="draw-things-community",
+                                file_path="Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            )
+                        )
+                    finally:
+                        CURRENT_EXECUTOR = None
+
+        workspace_mock.assert_called_once_with("draw-things-community")
+        project_id_mock.assert_called_once_with("draw-things-community")
+        self.assertIn("ProxyCPUServer.swift", output)
 
     def test_get_related_files_ignores_generic_c_bridge_import_only_matches(self):
         async def fake_executor(cypher, **kwargs):

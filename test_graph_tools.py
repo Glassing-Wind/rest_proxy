@@ -815,9 +815,8 @@ class GraphToolsTests(unittest.TestCase):
             with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
                 output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/opencode"))
 
-        config_index = output.index("packages/opencode/src/config/config.ts")
-        generated_index = output.index("packages/sdk/js/src/v2/gen/types.gen.ts")
-        self.assertLess(config_index, generated_index)
+        self.assertIn("packages/opencode/src/config/config.ts", output)
+        self.assertNotIn("packages/sdk/js/src/v2/gen/types.gen.ts", output)
 
     def test_project_overview_downweights_e2e_and_icon_heavy_files(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -925,6 +924,45 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("src/main/java/example/App.java", output)
         self.assertNotIn("Tests/AppTests.swift  (300 symbols", output)
         self.assertNotIn("inspect `mvnw.cmd` first", output)
+
+    def test_project_overview_skips_generated_protobuf_files_for_inspect_first(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 320}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 1400}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "Libraries", "files": 280, "syms": 1200}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {
+                        "fp": "Libraries/GRPC/Models/Sources/imageService/imageService.pb.swift",
+                        "n": 124,
+                        "ex": ["Request", "Response", "SamplerType"],
+                    },
+                    {
+                        "fp": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "n": 28,
+                        "ex": ["ImageGenerationServiceImpl", "handleGenerateImage"],
+                    },
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/draw-things-community"))
+
+        self.assertIn("Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift", output)
+        self.assertNotIn("imageService.pb.swift  (124 symbols", output)
+        self.assertIn(
+            "inspect `Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift` first",
+            output,
+        )
 
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
