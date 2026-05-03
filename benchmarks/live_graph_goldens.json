@@ -435,7 +435,7 @@
             "file_path": "FrameCreator/Views/SidebarView.swift"
           },
           "required_substrings": [
-            "Related Files (semantic co-mentions):",
+            "Related Files:",
             "Inspect First:",
             "FrameCreator/Views/ContentView.swift"
           ]
@@ -2410,7 +2410,7 @@
             "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
           },
           "required_substrings": [
-            "Related Files (semantic co-mentions):",
+            "Related Files:",
             "Inspect First:",
             "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
             "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt"
@@ -2643,7 +2643,7 @@
             "file_path": "FrameCreator/Views/SidebarView.swift"
           },
           "required_substrings": [
-            "Related Files (semantic co-mentions):",
+            "Related Files:",
             "Inspect First:",
             "FrameCreator/Views/ContentView.swift"
           ]
@@ -2667,7 +2667,7 @@
             "file_path": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt"
           },
           "required_substrings": [
-            "Related Files (semantic co-mentions):",
+            "Related Files:",
             "Inspect First:",
             "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt"
           ]
@@ -2942,18 +2942,18 @@
             "project_path": "$workspace_id",
             "file_path": "Sources/NIOCore/ChannelPipeline.swift"
           },
-          "required_substrings": [
-            "Related Files",
-            "Inspect First:",
-            "Sources/NIOCore/ChannelHandler.swift"
-          ]
+      "required_substrings": [
+        "Related Files",
+        "Inspect First:",
+        "Sources/NIOCore/Channel.swift"
+      ]
         }
       ],
-      "required_substrings": [
-        "Sources/NIOCore/ChannelPipeline.swift",
-        "Sources/NIOEmbedded/Embedded.swift",
-        "Sources/NIOCore/ChannelHandler.swift"
-      ]
+  "required_substrings": [
+    "Sources/NIOCore/ChannelPipeline.swift",
+    "Sources/NIOEmbedded/Embedded.swift",
+    "Sources/NIOCore/Channel.swift"
+  ]
     },
     {
       "id": "spring_petclinic_owner_orientation_workflow",
