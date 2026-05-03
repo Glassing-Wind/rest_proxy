@@ -327,6 +327,77 @@ class SearchCodebaseToolTests(unittest.TestCase):
 
         self.assertIn("--- src/service.py", output)
 
+    def test_search_codebase_omits_misleading_scalar_scores_in_output(self):
+        rows_by_pid = {
+            "proj123": [
+                (
+                    "src/owner_controller.py",
+                    0,
+                    "def owner_route(): pass",
+                    "proj123",
+                    {"language": "python", "file_symbols": ["owner_route"]},
+                    0.10,
+                ),
+                (
+                    "src/visit_controller.py",
+                    0,
+                    "def visit_route(): pass",
+                    "proj123",
+                    {"language": "python", "file_symbols": ["visit_route"]},
+                    0.40,
+                ),
+            ]
+        }
+        module = load_module(FakeMemoryStore(rows_by_pid))
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        def fake_enrich(result, **kwargs):
+            if result["file_path"].endswith("owner_controller.py"):
+                result["rank_score"] = 5.0
+            else:
+                result["rank_score"] = 4.0
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            with mock.patch.object(module.sem_helpers, "implementation_query_intent", return_value=True):
+                with mock.patch.object(module.sem_helpers, "implementation_query_class", return_value="entrypoint"):
+                    with mock.patch.object(module.sem_helpers, "implementation_query_member_exprs", return_value=set()):
+                        with mock.patch.object(module.sem_helpers, "implementation_query_path_hints", return_value=[]):
+                            with mock.patch.object(
+                                module.sem_helpers,
+                                "implementation_inferred_filename_hints",
+                                return_value=[],
+                            ):
+                                with mock.patch.object(
+                                    module.sem_helpers,
+                                    "implementation_expected_runtime_entrypoint_paths",
+                                    return_value=[],
+                                ):
+                                    with mock.patch.object(
+                                        module.sem_helpers,
+                                        "enrich_implementation_result",
+                                        side_effect=fake_enrich,
+                                    ):
+                                        output = asyncio.run(
+                                            mcp.tools["search_codebase"](
+                                                workspace_id="repo",
+                                                query="where is routing implemented",
+                                                k=2,
+                                            )
+                                        )
+
+        first_index = output.index("--- src/owner_controller.py ---")
+        second_index = output.index("--- src/visit_controller.py ---")
+        self.assertLess(first_index, second_index)
+        self.assertNotIn("Score:", output)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -312,9 +312,18 @@ def _overview_file_rank(filepath: str | None, symbol_count: int) -> float:
         score *= 0.005
     if norm.endswith((".cmd", ".bat")):
         score *= 0.02
-    if norm.endswith(".sh") and "/" not in norm:
-        score *= 0.05
+    if norm.endswith(".sh"):
+        score *= 0.2
+    if _is_overview_low_signal_shell_helper(basename):
+        score *= 0.2
     return score
+
+
+def _is_overview_low_signal_shell_helper(basename: str | None) -> bool:
+    value = str(basename or "").strip().lower()
+    if not value.endswith(".sh"):
+        return False
+    return any(token in value for token in ("install", "build", "setup", "bootstrap"))
 
 
 def _is_overview_low_signal_key_file(filepath: str | None) -> bool:
@@ -327,6 +336,8 @@ def _is_overview_low_signal_key_file(filepath: str | None) -> bool:
     if any(marker in norm for marker in _GENERATED_OVERVIEW_PATH_MARKERS):
         return True
     if basename in {"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"}:
+        return True
+    if _is_overview_low_signal_shell_helper(basename):
         return True
     return False
 

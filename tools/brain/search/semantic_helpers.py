@@ -2865,9 +2865,9 @@ def render_results(
     for index, result in enumerate(top, 1):
         project = pid_to_name.get(result["project_id"], result["project_id"])
         if multi:
-            lines.append(f"[{index}] [{project}] {result['file_path']}  (score: {result['rrf']:.4f})")
+            lines.append(f"[{index}] [{project}] {result['file_path']}")
         else:
-            lines.append(f"--- {result['file_path']} (Score: {result['rrf']:.4f}) ---")
+            lines.append(f"--- {result['file_path']} ---")
         if include_metadata:
             lines.extend(format_meta(coerce_meta(result)))
         lines.append(result["content"].strip())

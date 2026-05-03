@@ -964,6 +964,59 @@ class GraphToolsTests(unittest.TestCase):
             output,
         )
 
+    def test_project_overview_downweights_nested_shell_install_helpers(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 253}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 202}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "BGMApp", "files": 155, "syms": 116}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {
+                        "fp": "BGMDriver/BGMDriver/quick_install.sh",
+                        "n": 4,
+                        "ex": ["bold_face", "get_build_path", "read_quick_install_conf"],
+                    },
+                    {
+                        "fp": "BGMApp/BGMApp/Music Players/BGMSwinsian.m",
+                        "n": 2,
+                        "ex": ["unnamed"],
+                    },
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 1}]
+            if op == "apple_context_targets":
+                return [
+                    {
+                        "target": "Background Music",
+                        "project_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                        "bundled_files": 9,
+                    }
+                ]
+            if op == "apple_context_schemes":
+                return []
+            if op == "apple_context_schema_labels":
+                return [{"labels": ["XcodeWorkspace"]}]
+            if op == "apple_context_schema_relationship_types":
+                return [{"rels": ["REFERENCES_PROJECT"]}]
+            if op == "apple_context_workspaces":
+                return []
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/LoomBackgroundMusic"))
+
+        self.assertIn("inspect Apple build context first", output)
+        self.assertIn("BGMApp/BGMApp/Music Players/BGMSwinsian.m", output)
+        self.assertNotIn("inspect `BGMDriver/BGMDriver/quick_install.sh` first", output)
+        self.assertNotIn("BGMDriver/BGMDriver/quick_install.sh  (4 symbols", output)
+
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
             with mock.patch.object(

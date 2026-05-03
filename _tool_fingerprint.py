@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent
 
 
 def _tool_source_files(mcp) -> list[str]:
@@ -24,15 +27,35 @@ def _tool_source_files(mcp) -> list[str]:
     return sorted(paths)
 
 
+def _loaded_local_module_files() -> list[str]:
+    paths: set[str] = set()
+    for module in list(sys.modules.values()):
+        module_path = getattr(module, "__file__", None)
+        if not module_path:
+            continue
+        try:
+            resolved = Path(module_path).resolve()
+        except Exception:
+            continue
+        if resolved.suffix != ".py":
+            continue
+        try:
+            resolved.relative_to(REPO_ROOT)
+        except ValueError:
+            continue
+        paths.add(str(resolved))
+    return sorted(paths)
+
+
 def compute_tool_fingerprint(mcp) -> tuple[str, int]:
-    """Return a short fingerprint of tool names plus their implementation files."""
+    """Return a short fingerprint of tool names plus loaded local implementation files."""
     try:
         tools = sorted(mcp._tool_manager.list_tools(), key=lambda tool: tool.name)
     except Exception:
         return hashlib.sha256(b"[]").hexdigest()[:12], 0
 
     tool_names = [tool.name for tool in tools]
-    source_files = _tool_source_files(mcp)
+    source_files = sorted(set(_tool_source_files(mcp)) | set(_loaded_local_module_files()))
     source_hashes: list[dict[str, str]] = []
     for path in source_files:
         try:
