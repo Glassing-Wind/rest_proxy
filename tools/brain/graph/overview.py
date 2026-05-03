@@ -249,10 +249,13 @@ def _extract_swift_type_mentions(text: str, *, ignore: set[str] | None = None) -
 
 def _importance_penalty(filepath: str | None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
+    basename = os.path.basename(norm)
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
         return 0.08
     if any(token in norm for token in ("/gen/",) + _GENERATED_OVERVIEW_PATH_MARKERS):
         return 0.08
+    if basename.endswith("application.java") or basename.endswith("runtimehints.java"):
+        return 0.35
     if "/e2e/" in norm or norm.endswith((".spec.ts", ".spec.tsx")):
         return 0.24
     if "/storybook/" in norm or ".stories." in norm:
@@ -266,6 +269,7 @@ def _importance_penalty(filepath: str | None) -> float:
 
 def _backend_bridge_boost(filepath: str | None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
+    basename = os.path.basename(norm)
     if any(
         token in norm
         for token in (
@@ -277,6 +281,15 @@ def _backend_bridge_boost(filepath: str | None) -> float:
         )
     ):
         return 1.8
+    if (
+        "/controller/" in norm
+        or basename.endswith("controller.java")
+        or basename.endswith("serviceimpl.java")
+        or basename.endswith("endpoint.java")
+    ):
+        return 1.8
+    if basename.endswith("repository.java"):
+        return 1.25
     if any(token in norm for token in ("src/config/", "src/lib/", "src/models/")):
         return 1.12
     return 1.0

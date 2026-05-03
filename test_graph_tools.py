@@ -1017,6 +1017,53 @@ class GraphToolsTests(unittest.TestCase):
         self.assertNotIn("inspect `BGMDriver/BGMDriver/quick_install.sh` first", output)
         self.assertNotIn("BGMDriver/BGMDriver/quick_install.sh  (4 symbols", output)
 
+    def test_project_overview_prefers_java_controller_over_bootstrap_entrypoint(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 114}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 223}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "src", "files": 92, "syms": 42}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {
+                        "fp": "src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java",
+                        "n": 1,
+                        "ex": ["PetClinicApplication"],
+                    },
+                    {
+                        "fp": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                        "n": 1,
+                        "ex": ["OwnerController"],
+                    },
+                    {
+                        "fp": "src/main/java/org/springframework/samples/petclinic/PetClinicRuntimeHints.java",
+                        "n": 1,
+                        "ex": ["PetClinicRuntimeHints"],
+                    },
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/spring-petclinic-upstream"))
+
+        self.assertIn("OwnerController.java", output)
+        self.assertIn(
+            "inspect `src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java` first",
+            output,
+        )
+        self.assertLess(
+            output.index("OwnerController.java"),
+            output.index("PetClinicApplication.java"),
+        )
+
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):
         with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
             with mock.patch.object(
