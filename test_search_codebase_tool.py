@@ -113,6 +113,20 @@ def fake_graph_bootstrap_module():
     return graph_bootstrap
 
 
+def fake_mcp_modules():
+    mcp_pkg = types.ModuleType("mcp")
+    mcp_pkg.__path__ = []
+    mcp_server_pkg = types.ModuleType("mcp.server")
+    mcp_server_pkg.__path__ = []
+    mcp_mod = types.ModuleType("mcp.server.fastmcp")
+    mcp_mod.FastMCP = FakeMCP
+    return {
+        "mcp": mcp_pkg,
+        "mcp.server": mcp_server_pkg,
+        "mcp.server.fastmcp": mcp_mod,
+    }
+
+
 def load_module(memory_store):
     helpers_spec = importlib.util.spec_from_file_location(
         "tools.brain.search.semantic_helpers", HELPERS_PATH
@@ -162,15 +176,11 @@ def load_module(memory_store):
     brain_pkg.__path__ = []
     search_pkg = types.ModuleType("tools.brain.search")
     search_pkg.__path__ = []
-    mcp_mod = types.ModuleType("mcp.server.fastmcp")
-    mcp_mod.FastMCP = FakeMCP
-
     with mock.patch.dict(
         sys.modules,
         {
             "_helpers": helpers_mod,
             "embedding_service": fake_embedding_module(),
-            "mcp.server.fastmcp": mcp_mod,
             "proxy.logging": proxy_logging,
             "graph_bootstrap": graph_bootstrap,
             "tools": tools_pkg,
@@ -179,6 +189,7 @@ def load_module(memory_store):
             "tools.brain.search.core": search_core,
             "tools.brain.search.semantic_helpers": helpers_module,
             "tools.brain.search.fallbacks": fallbacks_module,
+            **fake_mcp_modules(),
         },
     ):
         spec.loader.exec_module(module)
@@ -216,6 +227,7 @@ class SearchCodebaseToolTests(unittest.TestCase):
             {
                 "graph_bootstrap": fake_graph_bootstrap_module(),
                 "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
             },
         ):
             output = asyncio.run(
@@ -264,6 +276,7 @@ class SearchCodebaseToolTests(unittest.TestCase):
             {
                 "graph_bootstrap": fake_graph_bootstrap_module(),
                 "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
             },
         ):
             output = asyncio.run(
@@ -278,6 +291,41 @@ class SearchCodebaseToolTests(unittest.TestCase):
         self.assertIn("src/service.py", output)
         self.assertNotIn("src/service.ts", output)
         self.assertIn("lang=python", output)
+
+    def test_search_codebase_accepts_singular_workspace_id(self):
+        rows_by_pid = {
+            "proj123": [
+                (
+                    "src/service.py",
+                    0,
+                    "def run_service(): pass",
+                    "proj123",
+                    {"language": "python", "file_symbols": ["run_service"]},
+                    0.90,
+                ),
+            ]
+        }
+        module = load_module(FakeMemoryStore(rows_by_pid))
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            output = asyncio.run(
+                mcp.tools["search_codebase"](
+                    workspace_id="repo",
+                    query="run service",
+                    k=3,
+                )
+            )
+
+        self.assertIn("--- src/service.py", output)
 
 
 if __name__ == "__main__":

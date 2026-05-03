@@ -296,8 +296,9 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def search_codebase(
-        workspace_ids: list,
-        query: str,
+        workspace_ids: list | None = None,
+        query: str | None = None,
+        workspace_id: str | None = None,
         k: int = 5,
         include_metadata: bool = False,
         dedupe_files: bool = True,
@@ -330,6 +331,7 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             workspace_ids: List of logical workspace IDs or absolute paths to search across.
+            workspace_id: Single logical workspace ID or absolute path for one-project search.
             query: Natural language or code snippet to search for.
             k: Total number of results to return (default 5).
             include_metadata: Show metadata lines in results (default False).
@@ -362,8 +364,20 @@ def register(mcp: FastMCP) -> None:
 
             memory_store, _, _, _, _ = get_memory_modules()
 
-            if not workspace_ids:
+            if not isinstance(query, str) or not query.strip():
+                return "Error: provide a non-empty query."
+
+            normalized_workspace_ids: list = list(workspace_ids or [])
+            if workspace_id is not None:
+                normalized_workspace_ids.append(workspace_id)
+            if not normalized_workspace_ids:
                 return "Error: provide at least one workspace ID or path."
+            deduped_workspace_ids: list = []
+            for value in normalized_workspace_ids:
+                if value in deduped_workspace_ids:
+                    continue
+                deduped_workspace_ids.append(value)
+            workspace_ids = deduped_workspace_ids
 
             multi = len(workspace_ids) > 1
 
