@@ -1573,6 +1573,50 @@ class CodeIntelToolTests(unittest.TestCase):
             output.index("ConnectInterceptor.kt"),
         )
 
+    def test_get_related_files_does_not_promote_shared_import_graph_into_inspect_first_when_structural_exists(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+                        "symbol": "RealInterceptorChain",
+                    }
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RetryAndFollowUpInterceptor.kt",
+                        "shared_imports": 8,
+                        "sample_imports": ["java.io.IOException", "java.net.Proxy", "okhttp3.Interceptor"],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/okhttp",
+                        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1].split("Symbol graph:", 1)[0]
+        self.assertIn("RealCall.kt", inspect_section)
+        self.assertNotIn("RetryAndFollowUpInterceptor.kt", inspect_section)
+        self.assertIn("Import graph:", output)
+        self.assertIn("RetryAndFollowUpInterceptor.kt", output)
+
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):
             if "f.louvainCommunity IS NOT NULL" in cypher:
