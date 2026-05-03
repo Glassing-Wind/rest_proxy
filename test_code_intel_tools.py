@@ -2274,6 +2274,76 @@ class CodeIntelToolTests(unittest.TestCase):
         output = asyncio.run(self.mcp.tools["list_symbol_matches"]("/tmp/rental", "   "))
         self.assertEqual(output, "Query is empty. Provide a symbol name substring to match.")
 
+    def test_list_symbol_matches_accepts_workspace_id_keyword(self):
+        async def fake_executor(cypher, **kwargs):
+            self.assertEqual(kwargs["q"], "infer_provider")
+            self.assertEqual(kwargs["pid"], "proj456")
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "pydantic_ai.providers.infer_provider",
+                    "signature": "def infer_provider(provider: str) -> Provider[Any]",
+                    "filepath": "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                }
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_project_id", return_value="proj456") as project_id_mock:
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["list_symbol_matches"](
+                            workspace_id="pydantic-ai",
+                            query="infer_provider",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        project_id_mock.assert_called_once_with("pydantic-ai")
+        self.assertIn("infer_provider", output)
+        self.assertIn("pydantic_ai.providers.infer_provider", output)
+
+    def test_list_symbol_matches_demotes_test_symbols_after_impl_symbols(self):
+        async def fake_executor(cypher, **kwargs):
+            self.assertIn("test_rank", cypher)
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "pydantic_ai.providers.infer_provider",
+                    "signature": None,
+                    "filepath": "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                },
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "test_infer_provider",
+                    "qualified_name": "tests.providers.test_provider_names.test_infer_provider",
+                    "signature": None,
+                    "filepath": "tests/providers/test_provider_names.py",
+                },
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/pydantic-ai",
+                        "infer_provider",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertLess(
+            output.index("pydantic_ai_slim/pydantic_ai/providers/__init__.py"),
+            output.index("tests/providers/test_provider_names.py"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

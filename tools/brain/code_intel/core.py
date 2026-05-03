@@ -986,19 +986,27 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def list_symbol_matches(
-        project_path: str, query: str, limit: int = 30, kinds: list | None = None
+        project_path: str | None = None,
+        query: str = "",
+        limit: int = 30,
+        kinds: list | None = None,
+        workspace_id: str | None = None,
     ) -> str:
         """
         List symbols whose name/signature contains a query string.
 
         Args:
             project_path: Absolute path to the project root.
+            workspace_id: Optional workspace identifier; preferred for MCP parity.
             query:        Substring to match against symbol name/signature.
             limit:        Max results to return (default 30).
         kinds:        Optional list of kinds to include (Function, Class, Enum, EnumCase, Protocol, Extension, etc.).
         """
         try:
-            project_id = get_project_id(project_path)
+            workspace_key = (workspace_id or project_path or "").strip()
+            if not workspace_key:
+                return "Workspace path is required."
+            project_id = get_project_id(workspace_key)
             q = (query or "").strip()
             if not q:
                 return "Query is empty. Provide a symbol name substring to match."
@@ -1056,11 +1064,19 @@ def register(mcp: FastMCP) -> None:
                        s.signature AS signature, s.filepath AS filepath,
                        CASE WHEN s.name CONTAINS $q THEN 0 ELSE 1 END AS name_match,
                        CASE
+                         WHEN toLower(s.filepath) CONTAINS '/tests/'
+                           OR toLower(s.filepath) CONTAINS '/test/'
+                           OR toLower(s.filepath) STARTS WITH 'tests/'
+                           OR toLower(s.filepath) STARTS WITH 'test/'
+                         THEN 1
+                         ELSE 0
+                       END AS test_rank,
+                       CASE
                          WHEN any(k in $type_kinds WHERE k IN labels(s)) THEN 0
                          WHEN any(k in $callable_kinds WHERE k IN labels(s)) THEN 1
                          ELSE 2
                        END AS kind_rank
-                ORDER BY name_match ASC, kind_rank ASC, size(s.name) ASC
+                ORDER BY name_match ASC, test_rank ASC, kind_rank ASC, size(s.name) ASC
                 LIMIT $limit
             """
 
