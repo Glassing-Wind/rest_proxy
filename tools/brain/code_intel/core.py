@@ -162,6 +162,18 @@ def register(mcp: FastMCP) -> None:
             score -= 60
         return (-score, -useful_import_count, -shared_imports, len(candidate_norm), candidate_norm)
 
+    def _shared_directory_depth(target_file_path: str, candidate_path: str) -> int:
+        target_dir = str(target_file_path or "").replace("\\", "/").strip("/").rsplit("/", 1)[0]
+        candidate_dir = str(candidate_path or "").replace("\\", "/").strip("/").rsplit("/", 1)[0]
+        if not target_dir or not candidate_dir:
+            return 0
+        depth = 0
+        for left, right in zip(target_dir.split("/"), candidate_dir.split("/")):
+            if left != right:
+                break
+            depth += 1
+        return depth
+
     def _structural_related_rank(
         target_file_path: str,
         candidate_path: str,
@@ -175,14 +187,21 @@ def register(mcp: FastMCP) -> None:
         candidate_dir = candidate_norm.rsplit("/", 1)[0] if "/" in candidate_norm else ""
         target_parent = target_dir.rsplit("/", 1)[0] if "/" in target_dir else ""
         score = 0
+        shared_depth = _shared_directory_depth(target_file_path, candidate_path)
         if candidate_dir and candidate_dir == target_dir:
             score += 90
         elif target_parent and candidate_dir.startswith(target_parent + "/"):
             score += 45
         elif target_dir and candidate_dir.split("/", 1)[0] == target_dir.split("/", 1)[0]:
             score += 20
+        if shared_depth >= 5:
+            score += 35
+        elif shared_depth >= 4:
+            score += 20
+        elif shared_depth >= 3:
+            score += 10
         if _is_test_like_path(candidate_norm):
-            score -= 80
+            score -= 120 if call_hits <= 0 else 80
         if _is_low_signal_support_path(candidate_norm):
             score -= 60
         return (
