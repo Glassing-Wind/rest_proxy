@@ -808,6 +808,12 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
         for caller in _dedupe_symbol_context_callers(rec["callers"] or [])
         if _is_language_compatible(rec.get("filepath"), caller.get("file"))
     ]
+    callers = _suppress_symbol_context_self_aliases(
+        callers,
+        target_name=rec.get("name") or symbol_name,
+        target_filepath=rec.get("filepath"),
+        target_start_line=rec.get("start_line"),
+    )
     callees = [
         callee
         for callee in (rec["callees"] or [])
@@ -869,6 +875,32 @@ def _dedupe_symbol_context_callers(callers: list[dict]) -> list[dict]:
         seen.add(key)
         deduped.append(caller)
     return deduped
+
+
+def _suppress_symbol_context_self_aliases(
+    callers: list[dict],
+    *,
+    target_name: str | None,
+    target_filepath: str | None,
+    target_start_line: int | None,
+) -> list[dict]:
+    normalized_name = str(target_name or "").strip()
+    normalized_filepath = str(target_filepath or "")
+    if not normalized_name or not normalized_filepath or not target_start_line:
+        return callers
+    filtered: list[dict] = []
+    for caller in callers:
+        caller_name = str(caller.get("name") or "").strip()
+        caller_filepath = str(caller.get("file") or "")
+        caller_line = caller.get("line")
+        if (
+            caller_name == normalized_name
+            and caller_filepath == normalized_filepath
+            and caller_line == target_start_line
+        ):
+            continue
+        filtered.append(caller)
+    return filtered
 
 
 def _language_family(filepath: str | None) -> str | None:

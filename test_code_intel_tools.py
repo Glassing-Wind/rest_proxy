@@ -1488,6 +1488,7 @@ class CodeIntelToolTests(unittest.TestCase):
         output = self.module.symbol_graph.format_symbol_context(
             {
                 "kind": "Class",
+                "name": "ImageGenerationServiceImpl",
                 "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
                 "start_line": 100,
                 "end_line": 1486,
@@ -1518,6 +1519,37 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("runAndBlock", rendered)
         self.assertIn("writeResponseSynchronously", rendered)
         self.assertNotIn("r2_sync_verification.py", rendered)
+
+    def test_symbol_context_hides_same_location_self_alias_caller(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [
+                    {
+                        "name": "generateImage",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "line": 552,
+                    },
+                    {
+                        "name": "generateImage",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "line": 348,
+                    },
+                ],
+                "callees": [],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("`generateImage`:348", rendered)
+        self.assertNotIn("`generateImage`:552", rendered)
 
     def test_symbol_context_ambiguity_dedupes_same_location_candidates(self):
         rendered = self.module.symbol_graph.format_symbol_context_ambiguity(
