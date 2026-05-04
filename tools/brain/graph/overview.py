@@ -207,6 +207,41 @@ def _rank_directory_snapshot_rows(
     return [item[4] for item in ranked[: max(1, limit)]]
 
 
+def _directory_snapshot_display_rows(
+    rows: list[dict] | None,
+    *,
+    path_key: str,
+    directory_path: str | None = None,
+) -> list[dict]:
+    items = list(rows or [])
+    if not items:
+        return items
+    directory_norm = (directory_path or "").replace("\\", "/").lower()
+    code_context = any(
+        token in directory_norm
+        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
+    )
+    if code_context:
+        preferred = [
+            row
+            for row in items
+            if (
+                _directory_snapshot_path_penalty(row.get(path_key))
+                + _directory_snapshot_context_penalty(row.get(path_key), directory_path)
+            )
+            < 40
+        ]
+        if not preferred:
+            context_safe = [
+                row
+                for row in items
+                if _directory_snapshot_context_penalty(row.get(path_key), directory_path) < 50
+                and _directory_snapshot_path_penalty(row.get(path_key)) < 40
+            ]
+            return context_safe
+    return items
+
+
 def _directory_snapshot_context_penalty(path: str | None, directory_path: str | None) -> int:
     norm = (path or "").replace("\\", "/").lower()
     directory_norm = (directory_path or "").replace("\\", "/").lower()
@@ -1362,11 +1397,21 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         limit=limit,
         directory_path=directory_path,
     )
+    r_inbound = _directory_snapshot_display_rows(
+        r_inbound,
+        path_key="caller",
+        directory_path=directory_path,
+    )
     r_outbound = _rank_directory_snapshot_rows(
         r_outbound,
         path_key="dependency",
         count_key="n_usages",
         limit=limit,
+        directory_path=directory_path,
+    )
+    r_outbound = _directory_snapshot_display_rows(
+        r_outbound,
+        path_key="dependency",
         directory_path=directory_path,
     )
 

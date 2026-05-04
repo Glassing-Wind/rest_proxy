@@ -403,6 +403,68 @@ class GraphToolsTests(unittest.TestCase):
         self.assertLess(prod_consumer_idx, test_consumer_idx)
         self.assertLess(prod_dep_idx, test_dep_idx)
 
+    def test_directory_snapshot_hides_only_static_config_and_test_consumers_in_code_dirs(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {"fp": "src/main/java/org/example/owner/OwnerController.java", "sym_count": 1, "samples": ["OwnerController"]},
+                    {"fp": "src/main/java/org/example/owner/PetController.java", "sym_count": 1, "samples": ["PetController"]},
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [
+                    {"caller": "src/main/resources/static/resources/css/app.css", "n_imports": 84, "signal": "import"},
+                    {"caller": "k8s/app.yml", "n_imports": 2, "signal": "import"},
+                    {"caller": "src/test/java/org/example/owner/OwnerControllerTests.java", "n_imports": 4, "signal": "import"},
+                ]
+            if op == "get_directory_snapshot_outbound":
+                return []
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op in {
+                "apple_context_targets",
+                "apple_context_schemes",
+                "apple_context_schema_labels",
+                "apple_context_schema_relationship_types",
+                "apple_context_workspaces",
+                "cargo_context_schema_labels",
+                "cargo_context_schema_relationship_types",
+                "cargo_context_crates",
+                "cargo_context_workspaces",
+                "cargo_context_dependencies",
+                "cargo_directory_schema_labels",
+                "cargo_directory_schema_relationship_types",
+                "cargo_directory_dependencies_outbound",
+                "cargo_directory_dependencies_inbound",
+                "get_directory_snapshot_inbound_file_graph_fallback",
+                "get_directory_snapshot_outbound_file_graph_fallback",
+                "get_directory_snapshot_inbound_symbol_call_fallback",
+                "get_directory_snapshot_outbound_symbol_call_fallback",
+                "get_directory_snapshot_local_symbols",
+                "get_directory_snapshot_external_symbols",
+            }:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["get_directory_snapshot"](
+                        "/tmp/spring-petclinic",
+                        "src/main/java/org/example/owner",
+                        8,
+                    )
+                )
+
+        self.assertIn("### 📥 Consumers: None found.", output)
+        self.assertNotIn("app.css", output)
+        self.assertNotIn("k8s/app.yml", output)
+        self.assertNotIn("OwnerControllerTests.java", output)
+
     def test_directory_snapshot_includes_cargo_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
