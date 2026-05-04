@@ -80,6 +80,68 @@ _GENERATED_OVERVIEW_PATH_MARKERS = (
 )
 
 
+def _semantic_file_roles_penalty(file_roles: set[str] | None) -> int:
+    roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
+    penalty = 0
+    if "generated_surface" in roles or "binding_surface" in roles:
+        penalty = max(penalty, 40)
+    if "example_surface" in roles:
+        penalty = max(penalty, 60)
+    if "benchmark_surface" in roles:
+        penalty = max(penalty, 60)
+    if "test_surface" in roles:
+        penalty = max(penalty, 70)
+    if "support_surface" in roles:
+        penalty = max(penalty, 40)
+    return penalty
+
+
+def _has_generated_support_surface(file_roles: set[str] | None) -> bool:
+    roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
+    return bool(
+        {"generated_surface", "binding_surface", "example_surface", "benchmark_surface", "test_surface", "support_surface"}
+        & roles
+    )
+
+
+async def _load_semantic_file_roles(conn, project_id: str, file_paths: list[str]) -> dict[str, set[str]]:
+    paths = [str(path).strip() for path in (file_paths or []) if str(path).strip()]
+    if not paths:
+        return {}
+    async with conn.cursor() as cur:
+        await cur.execute(
+            """
+            SELECT
+              file_path,
+              array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
+            FROM codebase_embeddings
+            LEFT JOIN LATERAL jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(metadata->'file_roles') = 'array'
+                THEN metadata->'file_roles'
+                ELSE '[]'::jsonb
+              END
+            ) AS role ON TRUE
+            WHERE project_id = %s
+              AND file_path = ANY(%s)
+            GROUP BY file_path
+            """,
+            (project_id, paths),
+        )
+        rows = await cur.fetchall()
+    out: dict[str, set[str]] = {}
+    for file_path, roles in rows:
+        normalized_path = str(file_path or "").strip()
+        if not normalized_path:
+            continue
+        out[normalized_path] = {
+            str(role).strip().lower()
+            for role in (roles or [])
+            if str(role).strip()
+        }
+    return out
+
+
 def _schema_cypher(text: str) -> str:
     replacements = {
         "__FILE__": FILE_LABEL,
@@ -123,11 +185,11 @@ def _is_low_signal_semantic_path(file_path: str | None) -> bool:
     return False
 
 
-def _directory_snapshot_path_penalty(file_path: str | None) -> int:
+def _directory_snapshot_path_penalty(file_path: str | None, file_roles: set[str] | None = None) -> int:
     norm = (file_path or "").replace("\\", "/").lower()
-    penalty = 0
+    penalty = _semantic_file_roles_penalty(file_roles)
     if _is_low_signal_semantic_path(norm):
-        penalty += 100
+        penalty = max(penalty, 100)
     if any(
         marker in norm
         for marker in (
@@ -139,7 +201,7 @@ def _directory_snapshot_path_penalty(file_path: str | None) -> int:
             ".gen.swift",
         )
     ):
-        penalty += 40
+        penalty = max(penalty, 40)
     if any(
         marker in norm
         for marker in (
@@ -154,7 +216,7 @@ def _directory_snapshot_path_penalty(file_path: str | None) -> int:
             "examples/",
         )
     ):
-        penalty += 60
+        penalty = max(penalty, 60)
     if any(
         marker in norm
         for marker in (
@@ -166,7 +228,7 @@ def _directory_snapshot_path_penalty(file_path: str | None) -> int:
             "e2e/",
         )
     ):
-        penalty += 70
+        penalty = max(penalty, 70)
     return penalty
 
 
@@ -237,6 +299,7 @@ def _rank_directory_snapshot_rows(
     count_key: str,
     limit: int,
     directory_path: str | None = None,
+    file_roles_by_path: dict[str, set[str]] | None = None,
 ) -> list[dict]:
     ranked: list[tuple[int, int, int, str, dict]] = []
     seen: set[str] = set()
@@ -247,7 +310,8 @@ def _rank_directory_snapshot_rows(
         seen.add(path)
         ranked.append(
             (
-                _directory_snapshot_path_penalty(path) + _directory_snapshot_context_penalty(path, directory_path),
+                _directory_snapshot_path_penalty(path, (file_roles_by_path or {}).get(path))
+                + _directory_snapshot_context_penalty(path, directory_path),
                 _directory_snapshot_signal_rank(row.get("signal")),
                 -int(row.get(count_key) or 0),
                 path,
@@ -263,6 +327,7 @@ def _directory_snapshot_display_rows(
     *,
     path_key: str,
     directory_path: str | None = None,
+    file_roles_by_path: dict[str, set[str]] | None = None,
 ) -> list[dict]:
     items = list(rows or [])
     if not items:
@@ -273,6 +338,11 @@ def _directory_snapshot_display_rows(
             for row in items
             if (
                 _directory_snapshot_path_penalty(row.get(path_key))
+                if file_roles_by_path is None
+                else _directory_snapshot_path_penalty(
+                    row.get(path_key),
+                    file_roles_by_path.get(str(row.get(path_key) or "").strip()),
+                )
                 + _directory_snapshot_context_penalty(row.get(path_key), directory_path)
             )
             < 40
@@ -282,7 +352,15 @@ def _directory_snapshot_display_rows(
                 row
                 for row in items
                 if _directory_snapshot_context_penalty(row.get(path_key), directory_path) < 50
-                and _directory_snapshot_path_penalty(row.get(path_key)) < 40
+                and (
+                    _directory_snapshot_path_penalty(row.get(path_key))
+                    if file_roles_by_path is None
+                    else _directory_snapshot_path_penalty(
+                        row.get(path_key),
+                        file_roles_by_path.get(str(row.get(path_key) or "").strip()),
+                    )
+                )
+                < 40
             ]
             return context_safe
     return items
@@ -292,13 +370,22 @@ def _directory_snapshot_display_files(
     rows: list[dict] | None,
     *,
     directory_path: str | None = None,
+    file_roles_by_path: dict[str, set[str]] | None = None,
 ) -> list[dict]:
     items = list(rows or [])
     if not items:
         return items
     if not _is_code_directory_context(directory_path):
         return items
-    preferred = [row for row in items if _directory_snapshot_path_penalty(row.get("fp")) < 40]
+    preferred = [
+        row
+        for row in items
+        if _directory_snapshot_path_penalty(
+            row.get("fp"),
+            (file_roles_by_path or {}).get(str(row.get("fp") or "").strip()),
+        )
+        < 40
+    ]
     return preferred or items
 
 
@@ -371,11 +458,22 @@ def _extract_swift_type_mentions(text: str, *, ignore: set[str] | None = None) -
     return out
 
 
-def _importance_penalty(filepath: str | None) -> float:
+def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
+    roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
         return 0.08
+    if "generated_surface" in roles or "binding_surface" in roles:
+        return 0.08
+    if "test_surface" in roles:
+        return 0.005
+    if "example_surface" in roles:
+        return 0.005
+    if "benchmark_surface" in roles:
+        return 0.02
+    if "support_surface" in roles:
+        return 0.2
     if any(token in norm for token in ("/gen/",) + _GENERATED_OVERVIEW_PATH_MARKERS):
         return 0.08
     if basename.endswith("application.java") or basename.endswith("runtimehints.java"):
@@ -436,11 +534,11 @@ def _overview_directory_penalty(top_dir: str | None) -> int:
     return 0
 
 
-def _overview_file_rank(filepath: str | None, symbol_count: int) -> float:
+def _overview_file_rank(filepath: str | None, symbol_count: int, file_roles: set[str] | None = None) -> float:
     base = float(symbol_count or 0) ** 0.85
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
-    score = base * _importance_penalty(filepath) * _backend_bridge_boost(filepath)
+    score = base * _importance_penalty(filepath, file_roles) * _backend_bridge_boost(filepath)
     if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")) or norm.startswith(
         ("tests/", "test/", "fixtures/", "examples/")
     ):
@@ -463,9 +561,12 @@ def _is_overview_low_signal_shell_helper(basename: str | None) -> bool:
     return any(token in value for token in ("install", "build", "setup", "bootstrap"))
 
 
-def _is_overview_low_signal_key_file(filepath: str | None) -> bool:
+def _is_overview_low_signal_key_file(filepath: str | None, file_roles: set[str] | None = None) -> bool:
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
+    roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
+    if {"generated_surface", "binding_surface", "test_surface", "example_surface", "benchmark_surface", "support_surface"} & roles:
+        return True
     if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")):
         return True
     if norm.startswith(("tests/", "test/", "fixtures/", "examples/")):
@@ -708,6 +809,7 @@ def _directory_snapshot_priority_lines(
     has_cargo_context: bool,
     apple_workspace_rows: list[dict],
     repo_linked_dependencies: list[str],
+    file_roles_by_path: dict[str, set[str]] | None = None,
 ) -> list[str]:
     priorities: list[str] = []
     directory_norm = (directory_path or "").replace("\\", "/").lower()
@@ -756,6 +858,7 @@ def _directory_snapshot_priority_lines(
             count_key="n_imports",
             directory_path=directory_path,
             max_penalty=40,
+            file_roles_by_path=file_roles_by_path,
         )
         if top:
             priorities.append(
@@ -766,7 +869,10 @@ def _directory_snapshot_priority_lines(
                 (
                     row
                     for row in file_rows[1:]
-                    if _directory_snapshot_path_penalty(row.get("fp")) < 40
+                    if _directory_snapshot_path_penalty(
+                        row.get("fp"),
+                        (file_roles_by_path or {}).get(str(row.get("fp") or "").strip()),
+                    ) < 40
                     and os.path.basename(str(row.get("fp") or "")).lower() != "package-info.java"
                 ),
                 None,
@@ -782,6 +888,7 @@ def _directory_snapshot_priority_lines(
             count_key="n_usages",
             directory_path=directory_path,
             max_penalty=40,
+            file_roles_by_path=file_roles_by_path,
         )
         if top:
             priorities.append(
@@ -794,9 +901,13 @@ def _directory_snapshot_priority_lines(
     return priorities[:4]
 
 
-def _directory_snapshot_file_rank(filepath: str | None, symbol_count: int) -> tuple[float, int, str]:
-    score = _overview_file_rank(filepath, symbol_count)
-    return (-score, _directory_snapshot_path_penalty(filepath), str(filepath or ""))
+def _directory_snapshot_file_rank(
+    filepath: str | None,
+    symbol_count: int,
+    file_roles: set[str] | None = None,
+) -> tuple[float, int, str]:
+    score = _overview_file_rank(filepath, symbol_count, file_roles)
+    return (-score, _directory_snapshot_path_penalty(filepath, file_roles), str(filepath or ""))
 
 
 def _best_directory_snapshot_row(
@@ -806,12 +917,16 @@ def _best_directory_snapshot_row(
     count_key: str,
     directory_path: str,
     max_penalty: int,
+    file_roles_by_path: dict[str, set[str]] | None = None,
 ) -> dict | None:
     candidates = [
         row
         for row in rows
         if (
-            _directory_snapshot_path_penalty(row.get(path_key))
+            _directory_snapshot_path_penalty(
+                row.get(path_key),
+                (file_roles_by_path or {}).get(str(row.get(path_key) or "").strip()),
+            )
             + _directory_snapshot_context_penalty(row.get(path_key), directory_path)
         )
         < max_penalty
@@ -821,7 +936,10 @@ def _best_directory_snapshot_row(
     return min(
         candidates,
         key=lambda row: (
-            _directory_snapshot_path_penalty(row.get(path_key))
+            _directory_snapshot_path_penalty(
+                row.get(path_key),
+                (file_roles_by_path or {}).get(str(row.get(path_key) or "").strip()),
+            )
             + _directory_snapshot_context_penalty(row.get(path_key), directory_path),
             _directory_snapshot_signal_rank(row.get("signal")),
             -int(row.get(count_key) or 0),
@@ -1431,31 +1549,55 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                         for score, fp in scored[:limit]
                     ]
 
-        r_inbound = _rank_directory_snapshot_rows(
-            r_inbound,
-            path_key="caller",
-            count_key="n_imports",
-            limit=limit,
-            directory_path=directory_path,
-        )
-        r_outbound = _rank_directory_snapshot_rows(
-            r_outbound,
-            path_key="dependency",
-            count_key="n_usages",
-            limit=limit,
-            directory_path=directory_path,
-        )
-        r_files = sorted(
-            r_files or [],
-            key=lambda rec: _directory_snapshot_file_rank(
-                rec.get("fp"),
-                int(rec.get("sym_count") or 0),
-            ),
-        )
+    memory_store, _, _, _, _ = get_memory_modules()
+    await memory_store.open_pool()
+    file_role_paths = {
+        str(rec.get("fp") or "").strip()
+        for rec in (r_files or [])
+        if str(rec.get("fp") or "").strip()
+    }
+    file_role_paths.update(
+        str(rec.get("caller") or "").strip()
+        for rec in (r_inbound or [])
+        if str(rec.get("caller") or "").strip()
+    )
+    file_role_paths.update(
+        str(rec.get("dependency") or "").strip()
+        for rec in (r_outbound or [])
+        if str(rec.get("dependency") or "").strip()
+    )
+    async with memory_store._pg_pool.connection() as conn:
+        file_roles_by_path = await _load_semantic_file_roles(conn, project_id, sorted(file_role_paths))
+
+    r_inbound = _rank_directory_snapshot_rows(
+        r_inbound,
+        path_key="caller",
+        count_key="n_imports",
+        limit=limit,
+        directory_path=directory_path,
+        file_roles_by_path=file_roles_by_path,
+    )
+    r_outbound = _rank_directory_snapshot_rows(
+        r_outbound,
+        path_key="dependency",
+        count_key="n_usages",
+        limit=limit,
+        directory_path=directory_path,
+        file_roles_by_path=file_roles_by_path,
+    )
+    r_files = sorted(
+        r_files or [],
+        key=lambda rec: _directory_snapshot_file_rank(
+            rec.get("fp"),
+            int(rec.get("sym_count") or 0),
+            file_roles_by_path.get(str(rec.get("fp") or "").strip()),
+        ),
+    )
 
     r_files = _directory_snapshot_display_files(
         r_files,
         directory_path=directory_path,
+        file_roles_by_path=file_roles_by_path,
     )[: max(1, limit)]
 
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
@@ -1474,6 +1616,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         bool(r_cargo_crates or r_cargo_workspaces or r_cargo_dependencies or r_cargo_dep_out or r_cargo_dep_in),
         r_apple_workspaces,
         repo_linked_dependencies,
+        file_roles_by_path=file_roles_by_path,
     )
     if priority_lines:
         lines.append("")
@@ -1486,11 +1629,13 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         count_key="n_imports",
         limit=limit,
         directory_path=directory_path,
+        file_roles_by_path=file_roles_by_path,
     )
     r_inbound = _directory_snapshot_display_rows(
         r_inbound,
         path_key="caller",
         directory_path=directory_path,
+        file_roles_by_path=file_roles_by_path,
     )
     r_outbound = _rank_directory_snapshot_rows(
         r_outbound,
@@ -1498,11 +1643,13 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         count_key="n_usages",
         limit=limit,
         directory_path=directory_path,
+        file_roles_by_path=file_roles_by_path,
     )
     r_outbound = _directory_snapshot_display_rows(
         r_outbound,
         path_key="dependency",
         directory_path=directory_path,
+        file_roles_by_path=file_roles_by_path,
     )
 
     lines.append("\n### 🏆 Top Files (by symbol density)")
@@ -1561,7 +1708,14 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     if r_inbound:
         lines.append("\n### 📥 Consumers (External files importing from here)")
         for rec in r_inbound:
-            suffix = " [generated/support]" if _directory_snapshot_path_penalty(rec.get("caller")) >= 40 else ""
+            caller_path = str(rec.get("caller") or "").strip()
+            caller_roles = file_roles_by_path.get(caller_path)
+            suffix = (
+                " [generated/support]"
+                if _has_generated_support_surface(caller_roles)
+                or _directory_snapshot_path_penalty(rec.get("caller"), caller_roles) >= 40
+                else ""
+            )
             lines.append(f"- `{rec['caller']}` (imports {rec['n_imports']} files){suffix}")
     else:
         lines.append("\n### 📥 Consumers: None found.")
@@ -1569,9 +1723,12 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     if r_outbound:
         lines.append("\n### 📤 Dependencies (External files imported by here)")
         for rec in r_outbound:
+            dependency_path = str(rec.get("dependency") or "").strip()
+            dependency_roles = file_roles_by_path.get(dependency_path)
             suffix = (
                 " [generated/support]"
-                if _directory_snapshot_path_penalty(rec.get("dependency")) >= 40
+                if _has_generated_support_surface(dependency_roles)
+                or _directory_snapshot_path_penalty(rec.get("dependency"), dependency_roles) >= 40
                 else ""
             )
             lines.append(f"- `{rec['dependency']}` (used by {rec['n_usages']} files){suffix}")
@@ -1646,23 +1803,6 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
             p=project_id,
             op="get_project_overview_key_files",
         )
-        key_files = []
-        ranked_key_rows = sorted(
-            r4,
-            key=lambda rec: (
-                _overview_file_rank(rec.get("fp"), int(rec.get("n") or 0)),
-                int(rec.get("n") or 0),
-            ),
-            reverse=True,
-        )
-        filtered_key_rows = [rec for rec in ranked_key_rows if not _is_overview_low_signal_key_file(rec.get("fp"))]
-        if filtered_key_rows:
-            ranked_key_rows = filtered_key_rows
-        ranked_key_rows = ranked_key_rows[:5]
-        for rec in ranked_key_rows:
-            ex = ", ".join(e for e in rec["ex"] if e)
-            key_files.append(f"  - {rec['fp']}  ({rec['n']} symbols: {ex})")
-
         if await has_apple_build_context(session, project_id):
             apple_targets, apple_schemes, apple_workspaces = await load_apple_build_context(
                 session, project_id, limit=5
@@ -1679,6 +1819,39 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
         async with memory_store._pg_pool.connection() as conn:
+            key_file_role_paths = [
+                str(rec.get("fp") or "").strip()
+                for rec in (r4 or [])
+                if str(rec.get("fp") or "").strip()
+            ]
+            key_file_roles_by_path = await _load_semantic_file_roles(conn, project_id, key_file_role_paths)
+            key_files = []
+            ranked_key_rows = sorted(
+                r4,
+                key=lambda rec: (
+                    _overview_file_rank(
+                        rec.get("fp"),
+                        int(rec.get("n") or 0),
+                        key_file_roles_by_path.get(str(rec.get("fp") or "").strip()),
+                    ),
+                    int(rec.get("n") or 0),
+                ),
+                reverse=True,
+            )
+            filtered_key_rows = [
+                rec
+                for rec in ranked_key_rows
+                if not _is_overview_low_signal_key_file(
+                    rec.get("fp"),
+                    key_file_roles_by_path.get(str(rec.get("fp") or "").strip()),
+                )
+            ]
+            if filtered_key_rows:
+                ranked_key_rows = filtered_key_rows
+            ranked_key_rows = ranked_key_rows[:5]
+            for rec in ranked_key_rows:
+                ex = ", ".join(e for e in rec["ex"] if e)
+                key_files.append(f"  - {rec['fp']}  ({rec['n']} symbols: {ex})")
             async with conn.cursor() as cur:
                 await cur.execute(
                     "SELECT count(*) FROM codebase_embeddings WHERE project_id=%s",
