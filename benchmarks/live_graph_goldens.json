@@ -2799,17 +2799,17 @@
           },
           "required_substrings": [
             "Related Files:",
-            "Inspect First:",
+            "Apple build graph:",
             "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme"
           ]
         }
-      ],
-      "required_substrings": [
-        "Food Truck.xcodeproj/project.pbxproj",
-        "App/Store/SubscriptionStoreView.swift",
-        "Inspect First:"
-      ]
-    },
+    ],
+    "required_substrings": [
+      "Food Truck.xcodeproj/project.pbxproj",
+      "App/Store/SubscriptionStoreView.swift",
+      "Apple build graph:"
+    ]
+  },
     {
       "id": "pydantic_ai_models_orientation_workflow",
       "workspace_name": "pydantic-ai",

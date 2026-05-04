@@ -2521,6 +2521,52 @@ class CodeIntelToolTests(unittest.TestCase):
             1,
         )
 
+    def test_get_related_files_does_not_highlight_low_signal_apple_project_context(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (project_file:File {project_id:$pid, filepath:$file_path})" in cypher:
+                return [
+                    {
+                        "related_file": "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme",
+                        "relation": "scheme builds a target from this project",
+                    },
+                    {
+                        "related_file": "App/Assets.xcassets/AppIcon.appiconset/Contents.json",
+                        "relation": "bundled by a target in this project",
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/appleproj",
+                        "Food Truck.xcodeproj/project.pbxproj",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Related Files:", output)
+        self.assertIn("Apple build graph:", output)
+        self.assertNotIn("Inspect First:", output)
+        self.assertIn(
+            "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme (scheme builds a target from this project)",
+            output,
+        )
+        self.assertIn(
+            "App/Assets.xcassets/AppIcon.appiconset/Contents.json (bundled by a target in this project)",
+            output,
+        )
+
     def test_get_related_files_semantic_fallback_does_not_repeat_highlighted_first_result(self):
         async def fake_executor(cypher, **kwargs):
             if "CALL db.labels()" in cypher:

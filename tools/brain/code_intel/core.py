@@ -143,6 +143,41 @@ def register(mcp: FastMCP) -> None:
             return True
         return False
 
+    def _apple_related_file_from_line(line: str) -> str:
+        value = str(line or "").strip()
+        if value.startswith("- "):
+            value = value[2:]
+        return value.split(" (", 1)[0].strip()
+
+    def _is_low_signal_apple_related_file(file_path: str | None) -> bool:
+        norm = (file_path or "").replace("\\", "/").lower()
+        if not norm:
+            return True
+        if norm.endswith(
+            (
+                ".xcscheme",
+                "contents.json",
+                ".svg",
+                ".plist",
+                ".storyboard",
+                ".xib",
+            )
+        ):
+            return True
+        return any(
+            marker in norm
+            for marker in (
+                ".xcassets/",
+                ".imageset/",
+                ".colorset/",
+                ".appiconset/",
+                ".symbolset/",
+                ".dataset/",
+                ".brandassets/",
+                ".stickerpack/",
+            )
+        )
+
     def _related_file_rank(target_file_path: str, candidate_path: str, useful_import_count: int, shared_imports: int) -> tuple[int, int, int, int, str]:
         target_norm = str(target_file_path or "").replace("\\", "/").strip("/")
         candidate_norm = str(candidate_path or "").replace("\\", "/").strip("/")
@@ -1966,10 +2001,19 @@ def register(mcp: FastMCP) -> None:
                         focus_lines.append(f"- then inspect {first_boundary[2:]}")
                         highlighted_entries.add(first_boundary[2:])
                 if apple_related:
-                    focus_lines.append(
-                        f"{'- then inspect' if focus_lines else '- start with'} {apple_related[0][2:]}"
+                    first_apple = next(
+                        (
+                            line
+                            for line in apple_related
+                            if not _is_low_signal_apple_related_file(_apple_related_file_from_line(line))
+                        ),
+                        None,
                     )
-                    highlighted_entries.add(apple_related[0][2:])
+                    if first_apple:
+                        focus_lines.append(
+                            f"{'- then inspect' if focus_lines else '- start with'} {first_apple[2:]}"
+                        )
+                        highlighted_entries.add(first_apple[2:])
                 if structural_related:
                     prefix = "- then inspect" if focus_lines else "- start with"
                     focus_lines.append(f"{prefix} {structural_related[0][2:]}")
