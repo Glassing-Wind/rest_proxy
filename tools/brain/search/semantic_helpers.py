@@ -1430,7 +1430,10 @@ def implementation_definition_hit(content: str | None, query: str) -> int:
     return hits
 
 
-def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int) -> int:
+def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int, meta: dict | None = None) -> int:
+    file_roles = implementation_file_roles(meta or {})
+    if "api_surface" in file_roles and definition_hit > 0:
+        return 1
     if definition_hit <= 0 or not file_path:
         return 0
     norm = (file_path or "").replace("\\", "/").lower()
@@ -1457,7 +1460,20 @@ def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int
 
 
 def implementation_runtime_main_entrypoint_hit(file_path: str | None, query: str) -> int:
-    if not implementation_query_prefers_runtime_main_entrypoint(query) or not file_path:
+    return implementation_runtime_main_entrypoint_hit_with_meta(file_path, query, None)
+
+
+def implementation_runtime_main_entrypoint_hit_with_meta(
+    file_path: str | None,
+    query: str,
+    meta: dict | None = None,
+) -> int:
+    file_roles = implementation_file_roles(meta or {})
+    if not implementation_query_prefers_runtime_main_entrypoint(query):
+        return 0
+    if "runtime_entrypoint_surface" in file_roles:
+        return 1
+    if not file_path:
         return 0
     norm = (file_path or "").replace("\\", "/").lower()
     runtime_main_suffixes = (
@@ -1624,6 +1640,9 @@ def implementation_facade_surface_hit(
         return 0
     if declared_symbol_hit > 0 or definition_hit > 0 or signature_hit > 0:
         return 0
+    file_roles = implementation_file_roles(meta)
+    if "library_facade_surface" in file_roles:
+        return 1
     node_types = implementation_node_types(meta)
     declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
     module_like = bool(node_types & MODULE_NODE_TYPES)
@@ -1754,13 +1773,13 @@ def implementation_result_role(
             if any(segment in path for segment in ("/tests/", "/test/", "/e2e/", "/examples/", "/spec/")):
                 return "test_example"
             return "usage_callsite"
-    if declaration_like and (api_entrypoint_hit > 0 or api_context_hit > 0):
+    if declaration_like and (api_entrypoint_hit > 0 or api_context_hit > 0 or "api_surface" in file_roles):
         return "public_api_definition"
     if declaration_like and export_hit > 0:
         return "canonical_definition"
     if declaration_like and definition_hit > 0:
         return "internal_implementation"
-    if "dispatcher_surface" in file_roles:
+    if "dispatcher_surface" in file_roles or "library_facade_surface" in file_roles:
         return "canonical_definition"
     if "profile_surface" in file_roles:
         return "supporting_context"
@@ -1965,10 +1984,12 @@ def enrich_implementation_result(
             int(result.get("implementation_definition_hit", 0) or 0),
             int(result.get("implementation_declared_symbol_hit", 0) or 0),
         ),
+        meta,
     )
-    result["implementation_runtime_main_entrypoint_hit"] = implementation_runtime_main_entrypoint_hit(
+    result["implementation_runtime_main_entrypoint_hit"] = implementation_runtime_main_entrypoint_hit_with_meta(
         result.get("file_path", ""),
         query,
+        meta,
     )
     result["implementation_usage_heavy_penalty"] = (
         query_class_prefers_definitions(query_class) and is_usage_heavy_path(result.get("file_path", ""))

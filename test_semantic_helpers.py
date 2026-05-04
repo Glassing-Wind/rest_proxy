@@ -700,6 +700,14 @@ class SemanticHelperTests(unittest.TestCase):
             module.implementation_api_entrypoint_hit("crates/ts-pack-cli/src/main.rs", 1),
             1,
         )
+        self.assertEqual(
+            module.implementation_api_entrypoint_hit(
+                "src/app/OwnerController.java",
+                1,
+                {"file_roles": ["api_surface"]},
+            ),
+            1,
+        )
 
     def test_implementation_entrypoint_boost_prefers_runtime_main_over_build_script(self):
         rows = [
@@ -743,6 +751,29 @@ class SemanticHelperTests(unittest.TestCase):
 
         rows.sort(key=module.implementation_rank_tuple)
         self.assertEqual(rows[0]["file_path"], "packages/desktop/src-tauri/src/main.rs")
+
+    def test_runtime_entrypoint_role_boosts_main_without_path_guess(self):
+        self.assertEqual(
+            module.implementation_runtime_main_entrypoint_hit_with_meta(
+                "apps/cli/bootstrap.py",
+                "where is the src/main entrypoint implemented",
+                {"file_roles": ["runtime_entrypoint_surface"]},
+            ),
+            1,
+        )
+
+    def test_library_facade_role_marks_facade_surface(self):
+        hit = module.implementation_facade_surface_hit(
+            "pkg/api.py",
+            {"file_roles": ["library_facade_surface"]},
+            symbol_hit=1,
+            declared_symbol_hit=0,
+            definition_hit=0,
+            signature_hit=0,
+            export_hit=0,
+            api_context_hit=0,
+        )
+        self.assertEqual(hit, 1)
 
     def test_implementation_query_path_hints_extract_repo_path(self):
         self.assertEqual(
