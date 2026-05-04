@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 from pathlib import Path
 
 try:
@@ -940,8 +941,14 @@ def _symbol_context_callee_rank(callee: dict, *, target_filepath: str | None) ->
         helper_penalty = 1
     else:
         helper_penalty = 0
+    if re.match(r"^[A-Z][A-Za-z0-9_]+$", name):
+        behavior_penalty = 2
+    elif name.startswith(("cached", "current", "default")):
+        behavior_penalty = 1
+    else:
+        behavior_penalty = 0
     same_file = 0 if filepath and target_filepath and filepath == target_filepath else 1
-    return (bucket, helper_penalty, same_file, filepath, name)
+    return (bucket, behavior_penalty, helper_penalty, same_file, filepath, name)
 
 
 def _rank_symbol_context_callees(callees: list[dict], *, target_filepath: str | None) -> list[dict]:

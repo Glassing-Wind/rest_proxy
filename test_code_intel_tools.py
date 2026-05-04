@@ -1597,6 +1597,51 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertLess(generate_index, generated_index)
         self.assertLess(generated_index, vendor_index)
 
+    def test_symbol_context_demotes_type_and_property_like_callees_below_behavioral_calls(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [],
+                "callees": [
+                    {
+                        "name": "ImageGeneratorDeviceType",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "cachedRawMaskTensor",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "cancel",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "emitTerminalEvent",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "grpcTraceTags",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                ],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        cancel_index = rendered.index("`cancel`")
+        emit_index = rendered.index("`emitTerminalEvent`")
+        type_index = rendered.index("`ImageGeneratorDeviceType`")
+        cached_index = rendered.index("`cachedRawMaskTensor`")
+        self.assertLess(cancel_index, type_index)
+        self.assertLess(emit_index, cached_index)
+
     def test_symbol_context_ambiguity_dedupes_same_location_candidates(self):
         rendered = self.module.symbol_graph.format_symbol_context_ambiguity(
             [
