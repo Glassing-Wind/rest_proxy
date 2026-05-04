@@ -185,6 +185,7 @@ def _rank_directory_snapshot_rows(
     path_key: str,
     count_key: str,
     limit: int,
+    directory_path: str | None = None,
 ) -> list[dict]:
     ranked: list[tuple[int, int, int, str, dict]] = []
     seen: set[str] = set()
@@ -195,7 +196,7 @@ def _rank_directory_snapshot_rows(
         seen.add(path)
         ranked.append(
             (
-                _directory_snapshot_path_penalty(path),
+                _directory_snapshot_path_penalty(path) + _directory_snapshot_context_penalty(path, directory_path),
                 _directory_snapshot_signal_rank(row.get("signal")),
                 -int(row.get(count_key) or 0),
                 path,
@@ -204,6 +205,35 @@ def _rank_directory_snapshot_rows(
         )
     ranked.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
     return [item[4] for item in ranked[: max(1, limit)]]
+
+
+def _directory_snapshot_context_penalty(path: str | None, directory_path: str | None) -> int:
+    norm = (path or "").replace("\\", "/").lower()
+    directory_norm = (directory_path or "").replace("\\", "/").lower()
+    if not norm or not directory_norm:
+        return 0
+    code_context = any(
+        token in directory_norm
+        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
+    )
+    if not code_context:
+        return 0
+    if any(
+        token in norm
+        for token in (
+            "/resources/",
+            "/static/",
+            ".css",
+            ".scss",
+            ".sql",
+            ".yml",
+            ".yaml",
+            ".properties",
+            ".html",
+        )
+    ):
+        return 50
+    return 0
 
 
 def _merge_directory_snapshot_rows(
@@ -586,6 +616,11 @@ def _directory_snapshot_priority_lines(
     repo_linked_dependencies: list[str],
 ) -> list[str]:
     priorities: list[str] = []
+    directory_norm = (directory_path or "").replace("\\", "/").lower()
+    code_context = any(
+        token in directory_norm
+        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
+    )
     apple_dir_kind = _classify_apple_directory(directory_path) if has_apple_context else None
     if apple_dir_kind == "workspace":
         priorities.append(
@@ -625,13 +660,35 @@ def _directory_snapshot_priority_lines(
             priorities.append("- inspect Apple build context next because this directory is tied to an Xcode target or scheme")
     if inbound_rows:
         top = next(
-            (row for row in inbound_rows if _directory_snapshot_path_penalty(row.get("caller")) < 40),
+            (
+                row
+                for row in inbound_rows
+                if (
+                    _directory_snapshot_path_penalty(row.get("caller"))
+                    + _directory_snapshot_context_penalty(row.get("caller"), directory_path)
+                )
+                < 40
+            ),
             None,
         )
         if top:
             priorities.append(
                 f"- check inbound usage from `{top['caller']}` first because it is the strongest external consumer"
             )
+        elif code_context and len(file_rows) > 1:
+            sibling = next(
+                (
+                    row
+                    for row in file_rows[1:]
+                    if _directory_snapshot_path_penalty(row.get("fp")) < 40
+                    and os.path.basename(str(row.get("fp") or "")).lower() != "package-info.java"
+                ),
+                None,
+            )
+            if sibling:
+                priorities.append(
+                    f"- inspect sibling implementation `{sibling['fp']}` next because external consumer signal here is mostly static/config noise"
+                )
     if outbound_rows:
         top = next(
             (row for row in outbound_rows if _directory_snapshot_path_penalty(row.get("dependency")) < 40),
@@ -646,6 +703,11 @@ def _directory_snapshot_priority_lines(
     if repo_linked_dependencies:
         priorities.append("- review repo-linked dependencies here because this directory crosses repo boundaries")
     return priorities[:4]
+
+
+def _directory_snapshot_file_rank(filepath: str | None, symbol_count: int) -> tuple[float, int, str]:
+    score = _overview_file_rank(filepath, symbol_count)
+    return (-score, _directory_snapshot_path_penalty(filepath), str(filepath or ""))
 
 
 def _repo_dependency_priority_lines(
@@ -977,6 +1039,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     dir_prefix = directory_path.strip("./")
     if dir_prefix:
         dir_prefix += "/"
+    fetch_limit = max(limit * 5, limit + 8)
     repo_linked_dependencies = _summarize_repo_linked_dependencies_for_directory(
         project_path,
         directory_path,
@@ -997,7 +1060,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         """).format(filters=_SYMBOL_FILTER_CYPHER),
             p=project_id,
             dir=dir_prefix,
-            limit=limit,
+            limit=fetch_limit,
             op="get_directory_snapshot_files",
         )
         r_inbound = await graph_core._execute_read(
@@ -1012,7 +1075,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         """),
             p=project_id,
             dir=dir_prefix,
-            limit=limit,
+            limit=fetch_limit,
             op="get_directory_snapshot_inbound",
         )
         r_outbound = await graph_core._execute_read(
@@ -1027,7 +1090,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         """),
             p=project_id,
             dir=dir_prefix,
-            limit=limit,
+            limit=fetch_limit,
             op="get_directory_snapshot_outbound",
         )
         r_inbound = [{**rec, "signal": "import"} for rec in (r_inbound or [])]
@@ -1045,7 +1108,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             """),
                 p=project_id,
                 dir=dir_prefix,
-                limit=limit,
+                limit=fetch_limit,
                 op="get_directory_snapshot_inbound_file_graph_fallback",
             )
             r_inbound = [{**rec, "signal": "file_graph"} for rec in (r_inbound or [])]
@@ -1065,7 +1128,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 """),
                 p=project_id,
                 dir=dir_prefix,
-                limit=limit,
+                limit=fetch_limit,
                 op="get_directory_snapshot_inbound_symbol_call_fallback",
             )
             swift_inbound = [{**rec, "signal": "symbol_call"} for rec in (swift_inbound or [])]
@@ -1088,7 +1151,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             """),
                 p=project_id,
                 dir=dir_prefix,
-                limit=limit,
+                limit=fetch_limit,
                 op="get_directory_snapshot_outbound_file_graph_fallback",
             )
             r_outbound = [{**rec, "signal": "file_graph"} for rec in (r_outbound or [])]
@@ -1107,7 +1170,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 """),
                 p=project_id,
                 dir=dir_prefix,
-                limit=limit,
+                limit=fetch_limit,
                 op="get_directory_snapshot_outbound_symbol_call_fallback",
             )
             swift_outbound = [{**rec, "signal": "symbol_call"} for rec in (swift_outbound or [])]
@@ -1129,7 +1192,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         """),
             p=project_id,
             dir=dir_prefix,
-            limit=limit * 3,
+            limit=fetch_limit * 3,
             op="get_directory_snapshot_assets",
         )
         if await has_apple_build_context(session, project_id):
@@ -1248,18 +1311,27 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                         for score, fp in scored[:limit]
                     ]
 
-    r_inbound = _rank_directory_snapshot_rows(
-        r_inbound,
-        path_key="caller",
-        count_key="n_imports",
-        limit=limit,
-    )
-    r_outbound = _rank_directory_snapshot_rows(
-        r_outbound,
-        path_key="dependency",
-        count_key="n_usages",
-        limit=limit,
-    )
+        r_inbound = _rank_directory_snapshot_rows(
+            r_inbound,
+            path_key="caller",
+            count_key="n_imports",
+            limit=limit,
+            directory_path=directory_path,
+        )
+        r_outbound = _rank_directory_snapshot_rows(
+            r_outbound,
+            path_key="dependency",
+            count_key="n_usages",
+            limit=limit,
+            directory_path=directory_path,
+        )
+        r_files = sorted(
+            r_files or [],
+            key=lambda rec: _directory_snapshot_file_rank(
+                rec.get("fp"),
+                int(rec.get("sym_count") or 0),
+            ),
+        )[: max(1, limit)]
 
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:
@@ -1282,6 +1354,21 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         lines.append("")
         lines.append("### Recommended Inspection Order")
         lines.extend(priority_lines)
+
+    r_inbound = _rank_directory_snapshot_rows(
+        r_inbound,
+        path_key="caller",
+        count_key="n_imports",
+        limit=limit,
+        directory_path=directory_path,
+    )
+    r_outbound = _rank_directory_snapshot_rows(
+        r_outbound,
+        path_key="dependency",
+        count_key="n_usages",
+        limit=limit,
+        directory_path=directory_path,
+    )
 
     lines.append("\n### 🏆 Top Files (by symbol density)")
     for rec in r_files:

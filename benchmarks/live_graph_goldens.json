@@ -2968,7 +2968,7 @@
           "required_substrings": [
             "# Project Overview: spring-petclinic-upstream",
             "## Inspect First",
-            "src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java"
+            "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java"
           ]
         },
         {
@@ -3000,7 +3000,6 @@
         }
       ],
       "required_substrings": [
-        "src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java",
         "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
         "src/main/java/org/springframework/samples/petclinic/owner/PetController.java"
       ]

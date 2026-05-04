@@ -500,6 +500,111 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("crate `desktop` (desktop) via `packages/desktop/src-tauri/Cargo.toml`", output)
         self.assertNotIn("crate `chrono` (chrono) via `(external crate)`", output)
 
+    def test_directory_snapshot_prefers_java_controller_and_demotes_static_resource_consumers(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"file_count": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {
+                        "fp": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+                        "sym_count": 1,
+                        "samples": ["Owner"],
+                    },
+                    {
+                        "fp": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                        "sym_count": 1,
+                        "samples": ["OwnerController"],
+                    },
+                    {
+                        "fp": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+                        "sym_count": 1,
+                        "samples": ["PetController"],
+                    },
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [
+                    {
+                        "caller": "src/main/resources/static/resources/css/petclinic.css",
+                        "n_imports": 84,
+                        "signal": "import",
+                    },
+                    {
+                        "caller": "src/test/java/org/springframework/samples/petclinic/owner/OwnerControllerTests.java",
+                        "n_imports": 4,
+                        "signal": "import",
+                    },
+                    {
+                        "caller": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+                        "n_imports": 3,
+                        "signal": "import",
+                    },
+                ]
+            if op == "get_directory_snapshot_outbound":
+                return []
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op in {
+                "get_directory_snapshot_local_symbols",
+                "get_directory_snapshot_external_symbols",
+            }:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["get_directory_snapshot"](
+                        "/tmp/spring-petclinic-upstream",
+                        "src/main/java/org/springframework/samples/petclinic/owner",
+                        12,
+                    )
+                )
+
+        self.assertIn(
+            "start with `src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java`",
+            output,
+        )
+        self.assertIn(
+            "check inbound usage from `src/main/java/org/springframework/samples/petclinic/owner/VisitController.java` first",
+            output,
+        )
+        self.assertLess(
+            output.index("OwnerController.java"),
+            output.index("Owner.java"),
+        )
+
+    def test_directory_snapshot_falls_back_to_sibling_impl_when_only_static_consumers_exist(self):
+        file_rows = [
+            {"fp": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java", "sym_count": 1},
+            {"fp": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java", "sym_count": 1},
+            {"fp": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java", "sym_count": 1},
+        ]
+        inbound_rows = [
+            {"caller": "src/main/resources/static/resources/css/petclinic.css", "n_imports": 84, "signal": "import"},
+            {"caller": "k8s/petclinic.yml", "n_imports": 2, "signal": "import"},
+        ]
+
+        lines = self.module.graph_overview._directory_snapshot_priority_lines(
+            "src/main/java/org/springframework/samples/petclinic/owner",
+            file_rows,
+            inbound_rows,
+            [],
+            [],
+            False,
+            False,
+            [],
+            [],
+        )
+
+        self.assertIn(
+            "- inspect sibling implementation `src/main/java/org/springframework/samples/petclinic/owner/PetController.java` next because external consumer signal here is mostly static/config noise",
+            lines,
+        )
+
     def test_directory_snapshot_demotes_generated_swift_consumers_and_dependencies(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
