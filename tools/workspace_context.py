@@ -99,7 +99,7 @@ def rebind_session_sync(workspace_id_or_path: str) -> None:
     from _jobs import client_session_id, _MAIN_LOOP
     import asyncio
     sid = client_session_id.get()
-    
+
     async def _do_resolve(session_id: Optional[str]):
         # Manually set the ContextVar inside the async task so resolve() sees it
         token = None
@@ -109,6 +109,11 @@ def rebind_session_sync(workspace_id_or_path: str) -> None:
             # We re-resolve context for the specific workspace root
             new_ctx = await resolve(workspace_id_or_path)
             await _rebind_session(session_id or "local", new_ctx)
+        except ModuleNotFoundError:
+            # Best-effort only: local scripts may not have optional config deps.
+            return
+        except Exception:
+            return
         finally:
             if token:
                 client_session_id.reset(token)
