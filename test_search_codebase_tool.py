@@ -204,6 +204,13 @@ class SearchCodebaseToolTests(unittest.TestCase):
             "implementation_explanation",
         )
 
+    def test_provider_wiring_query_infers_provider_path_hints(self):
+        module = load_module(FakeMemoryStore({}))
+        hints = module.sem_helpers.implementation_inferred_filename_hints(
+            "how does OpenAI provider wiring work"
+        )
+        self.assertIn("providers/openai.py", hints)
+
     def test_event_flow_query_infers_pipeline_filename_hint(self):
         module = load_module(FakeMemoryStore({}))
         hints = module.sem_helpers.implementation_inferred_filename_hints(
@@ -228,7 +235,7 @@ class SearchCodebaseToolTests(unittest.TestCase):
                 text = str(query)
                 if "WITH semantic AS" in text:
                     self._active_rows = []
-                elif "WITH matched_files AS" in text:
+                elif "matched_files AS" in text:
                     self._active_rows = [
                         (
                             "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
@@ -619,6 +626,88 @@ class SearchCodebaseToolTests(unittest.TestCase):
 
         self.assertIn("--- Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift ---", output)
         self.assertNotIn("--- Libraries/GRPC/Models/Sources/controlPanel/controlPanel.proto ---", output)
+
+    def test_search_codebase_provider_wiring_rescues_openai_provider_path(self):
+        rows_by_pid = {
+            "proj123": [
+                (
+                    "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                    0,
+                    "def infer_provider_class(provider: str): from .openai import OpenAIProvider; return OpenAIProvider",
+                    "proj123",
+                    {
+                        "language": "python",
+                        "file_symbols": ["infer_provider_class", "infer_provider"],
+                        "declared_symbols": ["infer_provider_class", "infer_provider"],
+                        "node_types": ["function_definition"],
+                    },
+                    0.60,
+                ),
+                (
+                    "pydantic_ai_slim/pydantic_ai/providers/litellm.py",
+                    0,
+                    "class LiteLLMProvider: profile = openai_model_profile(model_name)",
+                    "proj123",
+                    {
+                        "language": "python",
+                        "file_symbols": ["LiteLLMProvider", "model_profile"],
+                        "declared_symbols": ["LiteLLMProvider", "model_profile"],
+                        "node_types": ["class_definition", "function_definition"],
+                    },
+                    0.55,
+                ),
+            ]
+        }
+        module = load_module(FakeMemoryStore(rows_by_pid))
+        mcp = FakeMCP()
+        module.register(mcp)
+        rescue_rows = [
+            {
+                "file_path": "pydantic_ai_slim/pydantic_ai/providers/openai.py",
+                "chunk_index": 0,
+                "content": "class OpenAIProvider(Provider): pass",
+                "project_id": "proj123",
+                "metadata": {
+                    "language": "python",
+                    "file_symbols": ["OpenAIProvider"],
+                    "declared_symbols": ["OpenAIProvider"],
+                    "node_types": ["class_definition"],
+                },
+                "implementation_path_hint_hit": 1,
+                "rrf": 0.0,
+                "_definition_rescue": True,
+            }
+        ]
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            with mock.patch.object(
+                module,
+                "_load_path_hint_rows",
+                mock.AsyncMock(return_value=rescue_rows),
+            ):
+                output = asyncio.run(
+                    mcp.tools["search_codebase"](
+                        workspace_id="repo",
+                        query="how does OpenAI provider wiring work",
+                        k=3,
+                        include_metadata=False,
+                        mode="precise",
+                        fallback="none",
+                        exclude_tests=True,
+                    )
+                )
+
+        init_index = output.index("--- pydantic_ai_slim/pydantic_ai/providers/__init__.py ---")
+        openai_index = output.index("--- pydantic_ai_slim/pydantic_ai/providers/openai.py ---")
+        self.assertLess(init_index, openai_index)
+        self.assertNotIn("--- pydantic_ai_slim/pydantic_ai/providers/litellm.py ---", output)
 
 
 if __name__ == "__main__":

@@ -312,6 +312,8 @@ def implementation_query_relaxes_dir_cap(query: str) -> bool:
         return False
     if implementation_query_path_hints(query):
         return True
+    if implementation_inferred_filename_hints(query):
+        return True
     return bool(implementation_expected_runtime_entrypoint_paths(query))
 
 
@@ -332,6 +334,42 @@ def implementation_query_prefers_dispatchers(query: str) -> bool:
         "model selection",
     )
     return any(term in text for term in dispatcher_terms)
+
+
+def implementation_query_prefers_provider_wiring(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text or "provider" not in text:
+        return False
+    return implementation_query_prefers_dispatchers(query) or "openai" in text
+
+
+def implementation_provider_query_tokens(query: str) -> set[str]:
+    if not implementation_query_prefers_provider_wiring(query):
+        return set()
+    generic = {
+        "provider",
+        "providers",
+        "wiring",
+        "wire",
+        "work",
+        "works",
+        "selection",
+        "selected",
+        "dispatch",
+        "model",
+        "models",
+        "infer",
+        "inference",
+        "class",
+        "classes",
+        "how",
+        "does",
+    }
+    return {
+        token
+        for token in (implementation_query_symbols(query) | implementation_query_exact_identifiers(query))
+        if token and token not in generic
+    }
 
 
 def implementation_query_accepts_generated_surfaces(query: str) -> bool:
@@ -426,6 +464,7 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         "path_hint_bonus_search": 0.0,
         "path_hint_bonus_definition": 0.0,
         "controller_entity_bonus_weight": 0.0,
+        "provider_wiring_bonus_weight": 0.0,
         "dispatcher_bonus_weight": 0.0,
         "routing_bonus_weight": 0.0,
         "request_handler_bonus_weight": 0.0,
@@ -456,6 +495,7 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         policy["member_usage_bonus_search"] = 0.015
         policy["path_hint_bonus_search"] = 0.12
         policy["controller_entity_bonus_weight"] = 0.06
+        policy["provider_wiring_bonus_weight"] = 0.05
         policy["dispatcher_bonus_weight"] = 0.04
         policy["routing_bonus_weight"] = 0.04
         policy["request_handler_bonus_weight"] = 0.05
@@ -470,6 +510,7 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
     elif query_class == "implementation_explanation":
         policy["path_hint_bonus_definition"] = 0.08
         policy["controller_entity_bonus_weight"] = 0.05
+        policy["provider_wiring_bonus_weight"] = 0.05
         policy["dispatcher_bonus_weight"] = 0.04
         policy["routing_bonus_weight"] = 0.04
         policy["request_handler_bonus_weight"] = 0.05
@@ -487,6 +528,7 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         policy["allow_callable_bonus"] = True
     elif query_class_prefers_definitions(query_class):
         policy["path_hint_bonus_definition"] = 0.08
+        policy["provider_wiring_bonus_weight"] = 0.05
         policy["dispatcher_bonus_weight"] = 0.04
         policy["callable_bonus_weight"] = 0.03
         policy["declared_symbol_bonus_definition"] = 0.05
@@ -612,6 +654,7 @@ def implementation_rank_tuple(
     usage_heavy = 1 if result.get("implementation_usage_heavy_penalty") else 0
     callable_priority = int(result.get("implementation_callable_priority", 0) or 0)
     member_usage_priority = int(result.get("implementation_member_usage_priority", 0) or 0)
+    provider_wiring_priority = int(result.get("implementation_provider_wiring_priority", 0) or 0)
     dispatcher_priority = int(result.get("implementation_dispatcher_priority", 0) or 0)
     routing_priority = int(result.get("implementation_routing_priority", 0) or 0)
     handler_priority = int(result.get("implementation_request_handler_priority", 0) or 0)
@@ -639,6 +682,7 @@ def implementation_rank_tuple(
         doc_like,
         usage_heavy,
         -role_priority,
+        -provider_wiring_priority,
         -callable_priority,
         -member_usage_priority,
         -dispatcher_priority,
@@ -778,6 +822,10 @@ def implementation_inferred_filename_hints(query: str) -> list[str]:
     if not text:
         return []
     hints: set[str] = set()
+    if implementation_query_prefers_provider_wiring(query):
+        provider_tokens = sorted(implementation_provider_query_tokens(query))
+        for token in provider_tokens:
+            hints.add(f"providers/{token}.py")
     if implementation_query_prefers_request_routing(query):
         generic = {
             "request",
@@ -936,6 +984,63 @@ def implementation_dispatcher_priority(meta: dict, query: str) -> int:
         elif "provider" in symbol or "model" in symbol:
             priority = max(priority, 1)
     return priority
+
+
+def implementation_provider_wiring_priority(meta: dict, file_path: str | None, query: str) -> int:
+    provider_tokens = implementation_provider_query_tokens(query)
+    if not provider_tokens:
+        return 0
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    candidates: set[str] = set()
+    if isinstance(meta, dict):
+        for key in ("declared_symbols", "file_symbols"):
+            values = meta.get(key)
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                text = str(value).strip().lower()
+                if text:
+                    candidates.add(text)
+    priority = 0
+    if basename == "__init__.py" and {"infer_provider", "infer_provider_class"} & candidates:
+        priority = max(priority, 4)
+    for token in provider_tokens:
+        if f"/providers/{token}." in norm:
+            priority = max(priority, 3)
+        elif token in basename:
+            priority = max(priority, 2)
+        if f"{token}provider" in candidates:
+            priority = max(priority, 3)
+        elif any(token in symbol for symbol in candidates):
+            priority = max(priority, 1)
+    return priority
+
+
+def implementation_provider_wiring_penalty(meta: dict, file_path: str | None, query: str) -> float:
+    provider_tokens = implementation_provider_query_tokens(query)
+    if not provider_tokens:
+        return 0.0
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    candidates: set[str] = set()
+    if isinstance(meta, dict):
+        for key in ("declared_symbols", "file_symbols"):
+            values = meta.get(key)
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                text = str(value).strip().lower()
+                if text:
+                    candidates.add(text)
+    if "/providers/" not in norm:
+        return 0.14
+    if basename == "__init__.py" and {"infer_provider", "infer_provider_class"} & candidates:
+        return 0.0
+    for token in provider_tokens:
+        if f"/providers/{token}." in norm or f"{token}provider" in candidates:
+            return 0.0
+    return 0.10
 
 
 def implementation_routing_priority(meta: dict, file_path: str | None, query: str) -> int:
@@ -1648,6 +1753,11 @@ def enrich_implementation_result(
             query,
         )
     result["implementation_dispatcher_priority"] = implementation_dispatcher_priority(meta, query)
+    result["implementation_provider_wiring_priority"] = implementation_provider_wiring_priority(
+        meta,
+        result.get("file_path"),
+        query,
+    )
     result["implementation_routing_priority"] = implementation_routing_priority(
         meta,
         result.get("file_path"),
@@ -1759,6 +1869,11 @@ def enrich_implementation_result(
         low_signal_support=bool(result["low_signal_support_path"]),
         usage_heavy=bool(result["implementation_usage_heavy_penalty"]),
     )
+    provider_wiring_penalty = implementation_provider_wiring_penalty(
+        meta,
+        result.get("file_path"),
+        query,
+    )
     doc_penalty = float(support_surface_penalties["doc_penalty"])
     support_path_penalty = float(support_surface_penalties["support_path_penalty"])
     usage_penalty = float(support_surface_penalties["usage_penalty"])
@@ -1769,6 +1884,7 @@ def enrich_implementation_result(
     path_hint_bonus = 0.0
     basename_token_bonus = 0.0
     dispatcher_bonus = 0.0
+    provider_wiring_bonus = 0.0
     routing_bonus = 0.0
     request_handler_bonus = 0.0
     controller_entity_bonus = 0.0
@@ -1803,6 +1919,11 @@ def enrich_implementation_result(
     dispatcher_hits = int(result.get("implementation_dispatcher_priority", 0) or 0)
     if dispatcher_hits > 0 and bool(intent_policy["allow_dispatcher_bonus"]):
         dispatcher_bonus = float(intent_policy["dispatcher_bonus_weight"]) * min(dispatcher_hits, 3)
+    provider_wiring_hits = int(result.get("implementation_provider_wiring_priority", 0) or 0)
+    if provider_wiring_hits > 0:
+        provider_wiring_bonus = float(intent_policy["provider_wiring_bonus_weight"]) * min(
+            provider_wiring_hits, 4
+        )
     routing_hits = int(result.get("implementation_routing_priority", 0) or 0)
     if routing_hits > 0 and bool(intent_policy["allow_routing_bonus"]):
         routing_bonus = float(intent_policy["routing_bonus_weight"]) * min(routing_hits, 3)
@@ -1893,6 +2014,7 @@ def enrich_implementation_result(
         + declared_symbol_bonus
         + path_hint_bonus
         + basename_token_bonus
+        + provider_wiring_bonus
         + dispatcher_bonus
         + routing_bonus
         + request_handler_bonus
@@ -1911,6 +2033,7 @@ def enrich_implementation_result(
         - binding_surface_penalty
         - generated_surface_penalty
         - support_path_penalty
+        - provider_wiring_penalty
         - library_entrypoint_penalty
         - reexport_surface_penalty
         - facade_surface_penalty
@@ -1928,6 +2051,7 @@ def enrich_implementation_result(
         "declared_symbol_bonus": declared_symbol_bonus,
         "path_hint_bonus": path_hint_bonus,
         "basename_token_bonus": basename_token_bonus,
+        "provider_wiring_bonus": provider_wiring_bonus,
         "dispatcher_bonus": dispatcher_bonus,
         "routing_bonus": routing_bonus,
         "request_handler_bonus": request_handler_bonus,
@@ -1948,6 +2072,7 @@ def enrich_implementation_result(
         "binding_surface_penalty": binding_surface_penalty,
         "generated_surface_penalty": generated_surface_penalty,
         "support_path_penalty": support_path_penalty,
+        "provider_wiring_penalty": provider_wiring_penalty,
         "library_entrypoint_penalty": library_entrypoint_penalty,
         "usage_penalty": usage_penalty,
         "server_infra_penalty": server_infra_penalty,

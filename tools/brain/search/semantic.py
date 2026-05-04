@@ -596,6 +596,27 @@ def register(mcp: FastMCP) -> None:
                     "*Tests*",
                 ]
 
+            if (
+                impl_intent
+                and sem_helpers.implementation_query_prefers_provider_wiring(query)
+                and not include_paths
+            ):
+                provider_tokens = sorted(sem_helpers.implementation_provider_query_tokens(query))
+                if provider_tokens:
+                    include_paths = [
+                        "providers/__init__.py",
+                        "*/providers/__init__.py",
+                    ]
+                    for token in provider_tokens:
+                        include_paths.extend(
+                            [
+                                f"providers/{token}.py",
+                                f"*/providers/{token}.py",
+                            ]
+                        )
+                else:
+                    include_paths = ["providers/*", "*/providers/*"]
+
             if mode == "broad":
                 if max_per_dir == 2:
                     max_per_dir = 4
