@@ -242,6 +242,25 @@ def _directory_snapshot_display_rows(
     return items
 
 
+def _directory_snapshot_display_files(
+    rows: list[dict] | None,
+    *,
+    directory_path: str | None = None,
+) -> list[dict]:
+    items = list(rows or [])
+    if not items:
+        return items
+    directory_norm = (directory_path or "").replace("\\", "/").lower()
+    code_context = any(
+        token in directory_norm
+        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
+    )
+    if not code_context:
+        return items
+    preferred = [row for row in items if _directory_snapshot_path_penalty(row.get("fp")) < 40]
+    return preferred or items
+
+
 def _directory_snapshot_context_penalty(path: str | None, directory_path: str | None) -> int:
     norm = (path or "").replace("\\", "/").lower()
     directory_norm = (directory_path or "").replace("\\", "/").lower()
@@ -268,6 +287,8 @@ def _directory_snapshot_context_penalty(path: str | None, directory_path: str | 
         )
     ):
         return 50
+    if "/include/" in norm and norm.endswith((".h", ".hpp", ".hh")):
+        return 45
     return 0
 
 
@@ -694,17 +715,12 @@ def _directory_snapshot_priority_lines(
         else:
             priorities.append("- inspect Apple build context next because this directory is tied to an Xcode target or scheme")
     if inbound_rows:
-        top = next(
-            (
-                row
-                for row in inbound_rows
-                if (
-                    _directory_snapshot_path_penalty(row.get("caller"))
-                    + _directory_snapshot_context_penalty(row.get("caller"), directory_path)
-                )
-                < 40
-            ),
-            None,
+        top = _best_directory_snapshot_row(
+            inbound_rows,
+            path_key="caller",
+            count_key="n_imports",
+            directory_path=directory_path,
+            max_penalty=40,
         )
         if top:
             priorities.append(
@@ -725,9 +741,12 @@ def _directory_snapshot_priority_lines(
                     f"- inspect sibling implementation `{sibling['fp']}` next because external consumer signal here is mostly static/config noise"
                 )
     if outbound_rows:
-        top = next(
-            (row for row in outbound_rows if _directory_snapshot_path_penalty(row.get("dependency")) < 40),
-            None,
+        top = _best_directory_snapshot_row(
+            outbound_rows,
+            path_key="dependency",
+            count_key="n_usages",
+            directory_path=directory_path,
+            max_penalty=40,
         )
         if top:
             priorities.append(
@@ -743,6 +762,37 @@ def _directory_snapshot_priority_lines(
 def _directory_snapshot_file_rank(filepath: str | None, symbol_count: int) -> tuple[float, int, str]:
     score = _overview_file_rank(filepath, symbol_count)
     return (-score, _directory_snapshot_path_penalty(filepath), str(filepath or ""))
+
+
+def _best_directory_snapshot_row(
+    rows: list[dict],
+    *,
+    path_key: str,
+    count_key: str,
+    directory_path: str,
+    max_penalty: int,
+) -> dict | None:
+    candidates = [
+        row
+        for row in rows
+        if (
+            _directory_snapshot_path_penalty(row.get(path_key))
+            + _directory_snapshot_context_penalty(row.get(path_key), directory_path)
+        )
+        < max_penalty
+    ]
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda row: (
+            _directory_snapshot_path_penalty(row.get(path_key))
+            + _directory_snapshot_context_penalty(row.get(path_key), directory_path),
+            _directory_snapshot_signal_rank(row.get("signal")),
+            -int(row.get(count_key) or 0),
+            str(row.get(path_key) or ""),
+        ),
+    )
 
 
 def _repo_dependency_priority_lines(
@@ -1366,7 +1416,12 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 rec.get("fp"),
                 int(rec.get("sym_count") or 0),
             ),
-        )[: max(1, limit)]
+        )
+
+    r_files = _directory_snapshot_display_files(
+        r_files,
+        directory_path=directory_path,
+    )[: max(1, limit)]
 
     lines = [f"# Directory Snapshot: `{directory_path or '.'}/`"]
     if not r_files:

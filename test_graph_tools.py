@@ -639,6 +639,61 @@ class GraphToolsTests(unittest.TestCase):
             output.index("Owner.java"),
         )
 
+    def test_directory_snapshot_prefers_production_files_over_tests_in_code_dirs(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"file_count": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {
+                        "fp": "axum/src/routing/tests/mod.rs",
+                        "sym_count": 66,
+                        "samples": ["asterisk_in_route", "body_limited_by_default"],
+                    },
+                    {
+                        "fp": "axum/src/routing/tests/nest.rs",
+                        "sym_count": 32,
+                        "samples": ["asterisk_in_route", "colon_in_route"],
+                    },
+                    {
+                        "fp": "axum/src/routing/mod.rs",
+                        "sym_count": 12,
+                        "samples": ["take_route_or_internal_error", "traits"],
+                    },
+                    {
+                        "fp": "axum/src/routing/method_routing.rs",
+                        "sym_count": 11,
+                        "samples": ["any", "any_service"],
+                    },
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [{"caller": "axum-extra/src/routing/mod.rs", "n_imports": 1, "signal": "import"}]
+            if op == "get_directory_snapshot_outbound":
+                return [{"dependency": "axum/src/middleware/map_request.rs", "n_usages": 1, "signal": "import"}]
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op in {
+                "get_directory_snapshot_local_symbols",
+                "get_directory_snapshot_external_symbols",
+            }:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_directory_snapshot"]("/tmp/axum", "axum/src/routing", 12))
+
+        self.assertIn(
+            "start with `axum/src/routing/mod.rs` because it has the densest local symbol surface (12 symbols)",
+            output,
+        )
+        self.assertNotIn("start with `axum/src/routing/tests/mod.rs`", output)
+        self.assertLess(output.index("axum/src/routing/mod.rs"), output.index("axum/src/routing/method_routing.rs"))
+        self.assertNotIn("axum/src/routing/tests/mod.rs", output.split("### 📥 Consumers", 1)[0])
+
     def test_directory_snapshot_falls_back_to_sibling_impl_when_only_static_consumers_exist(self):
         file_rows = [
             {"fp": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java", "sym_count": 1},
@@ -729,6 +784,54 @@ class GraphToolsTests(unittest.TestCase):
             "FrameCreator/Services/Generation/DrawThingsGRPC/imageService.grpc.swift", deps_index
         )
         self.assertLess(editor_index, grpc_index)
+
+    def test_directory_snapshot_demotes_cross_language_include_headers_in_code_dirs(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"file_count": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {
+                        "fp": "Sources/NIOCore/ChannelPipeline.swift",
+                        "sym_count": 113,
+                        "samples": ["removeHandler0", "whitespace"],
+                    }
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [{"caller": "Sources/NIOFS/BufferedWriter.swift", "n_imports": 1, "signal": "import"}]
+            if op == "get_directory_snapshot_outbound":
+                return [
+                    {"dependency": "Sources/CNIOLinux/include/CNIOLinux.h", "n_usages": 8, "signal": "import"},
+                    {
+                        "dependency": "Sources/NIOConcurrencyHelpers/NIOThreadPoolWorkAvailable.swift",
+                        "n_usages": 6,
+                        "signal": "import",
+                    },
+                ]
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op in {
+                "get_directory_snapshot_local_symbols",
+                "get_directory_snapshot_external_symbols",
+            }:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_directory_snapshot"]("/tmp/swift-nio", "Sources/NIOCore", 12))
+
+        self.assertIn(
+            "check outbound dependency `Sources/NIOConcurrencyHelpers/NIOThreadPoolWorkAvailable.swift` because files here rely on it most often",
+            output,
+        )
+        deps_index = output.index("### 📤 Dependencies")
+        swift_index = output.index("Sources/NIOConcurrencyHelpers/NIOThreadPoolWorkAvailable.swift", deps_index)
+        header_index = output.index("Sources/CNIOLinux/include/CNIOLinux.h", deps_index)
+        self.assertLess(swift_index, header_index)
 
     def test_directory_snapshot_prefers_symbol_call_signal_over_import_volume(self):
         merged = self.module.graph_overview._merge_directory_snapshot_rows(
