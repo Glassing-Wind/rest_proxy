@@ -83,6 +83,10 @@ _GENERATED_OVERVIEW_PATH_MARKERS = (
 def _semantic_file_roles_penalty(file_roles: set[str] | None) -> int:
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
     penalty = 0
+    if "docs_surface" in roles:
+        penalty = max(penalty, 80)
+    if "config_surface" in roles:
+        penalty = max(penalty, 65)
     if "generated_surface" in roles or "binding_surface" in roles:
         penalty = max(penalty, 40)
     if "example_surface" in roles:
@@ -99,7 +103,16 @@ def _semantic_file_roles_penalty(file_roles: set[str] | None) -> int:
 def _has_generated_support_surface(file_roles: set[str] | None) -> bool:
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
     return bool(
-        {"generated_surface", "binding_surface", "example_surface", "benchmark_surface", "test_surface", "support_surface"}
+        {
+            "generated_surface",
+            "binding_surface",
+            "example_surface",
+            "benchmark_surface",
+            "test_surface",
+            "support_surface",
+            "docs_surface",
+            "config_surface",
+        }
         & roles
     )
 
@@ -531,6 +544,10 @@ def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
         return 0.08
+    if "docs_surface" in roles:
+        return 0.02
+    if "config_surface" in roles:
+        return 0.05
     if "generated_surface" in roles or "binding_surface" in roles:
         return 0.08
     if "test_surface" in roles:
@@ -662,7 +679,16 @@ def _is_overview_low_signal_key_file(filepath: str | None, file_roles: set[str] 
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
-    if {"generated_surface", "binding_surface", "test_surface", "example_surface", "benchmark_surface", "support_surface"} & roles:
+    if {
+        "generated_surface",
+        "binding_surface",
+        "test_surface",
+        "example_surface",
+        "benchmark_surface",
+        "support_surface",
+        "docs_surface",
+        "config_surface",
+    } & roles:
         return True
     if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")):
         return True

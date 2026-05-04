@@ -139,7 +139,14 @@ def _float_env(name: str) -> float | None:
         return None
 
 
-def is_doc_like_path(file_path: str | None) -> bool:
+def is_doc_like_path(file_path: str | None, file_roles: set[str] | None = None) -> bool:
+    roles = {
+        str(role).strip().lower()
+        for role in (file_roles or set())
+        if str(role).strip()
+    }
+    if "docs_surface" in roles:
+        return True
     if not file_path:
         return False
     norm = (file_path or "").replace("\\", "/").lower()
@@ -1322,6 +1329,10 @@ def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
     if isinstance(role, str) and role.strip():
         return role.strip().lower()
     file_roles = implementation_file_roles(meta)
+    if "docs_surface" in file_roles:
+        return "docs_support"
+    if "config_surface" in file_roles:
+        return "config_support"
     if "example_surface" in file_roles:
         return "example_usage"
     if "test_surface" in file_roles:
@@ -1718,8 +1729,10 @@ def implementation_result_role(
         return "generated_surface"
     if is_low_signal_binding_surface_path(file_path):
         return "generated_surface"
-    if is_doc_like_path(file_path):
+    if is_doc_like_path(file_path, file_roles):
         return "docs"
+    if "config_surface" in file_roles:
+        return "supporting_context"
     if chunk_role in {"example_usage", "test_usage"}:
         return "test_example"
     if chunk_role == "script_support":
@@ -1858,7 +1871,10 @@ def enrich_implementation_result(
 ) -> dict:
     meta = coerce_meta(result)
     result["_meta"] = meta
-    result["doc_like"] = is_doc_like_path(result.get("file_path"))
+    result["doc_like"] = is_doc_like_path(
+        result.get("file_path"),
+        implementation_file_roles(coerce_meta(result)),
+    )
     result["low_signal_parser_data"] = is_low_signal_parser_data_path(result.get("file_path"))
     result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(result.get("file_path"))
     result["generated_implementation_surface"] = is_generated_implementation_surface_path(result.get("file_path"))

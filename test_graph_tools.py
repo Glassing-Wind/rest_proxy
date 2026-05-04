@@ -1571,6 +1571,41 @@ class GraphToolsTests(unittest.TestCase):
             output.index("PetClinicApplication.java"),
         )
 
+    def test_project_overview_downweights_docs_and_config_surfaces_via_file_roles(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 40}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 80}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "src", "files": 10, "syms": 25}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {"fp": "docs/architecture.md", "n": 12, "ex": ["Architecture"]},
+                    {"fp": "mkdocs.yml", "n": 8, "ex": ["site_name"]},
+                    {"fp": "src/service.py", "n": 4, "ex": ["run", "handle"]},
+                ]
+            if op == "load_graph_file_roles":
+                return [
+                    {"fp": "docs/architecture.md", "roles": ["docs_surface"]},
+                    {"fp": "mkdocs.yml", "roles": ["config_surface"]},
+                    {"fp": "src/service.py", "roles": []},
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/example"))
+
+        self.assertIn("src/service.py", output)
+        self.assertNotIn("docs/architecture.md  (12 symbols", output)
+        self.assertNotIn("mkdocs.yml  (8 symbols", output)
+
     def test_project_overview_prefers_swift_nio_core_surfaces_over_utility_density(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")

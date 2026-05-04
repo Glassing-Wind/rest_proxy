@@ -497,6 +497,7 @@ class SemanticHelperTests(unittest.TestCase):
     def test_is_doc_like_path_flags_docs_and_markdown(self):
         self.assertTrue(module.is_doc_like_path("docs/guide.md"))
         self.assertTrue(module.is_doc_like_path("QUICKBOOKS_INTEGRATION_GUIDE.md"))
+        self.assertTrue(module.is_doc_like_path("src/guide.txt", {"docs_surface"}))
         self.assertFalse(module.is_doc_like_path("src/services/QuickBooksService.ts"))
 
     def test_implementation_query_intent_detects_code_seeking_queries(self):
@@ -1460,6 +1461,14 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(
             module.implementation_chunk_role({"file_roles": ["support_surface"]}, None),
             "script_support",
+        )
+        self.assertEqual(
+            module.implementation_chunk_role({"file_roles": ["docs_surface"]}, None),
+            "docs_support",
+        )
+        self.assertEqual(
+            module.implementation_chunk_role({"file_roles": ["config_surface"]}, None),
+            "config_support",
         )
 
     def test_candidate_relevance_score_prefers_rank_score(self):
