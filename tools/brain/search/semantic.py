@@ -506,6 +506,73 @@ def register(mcp: FastMCP) -> None:
                 all_results.extend(chunk)
 
             if not all_results:
+                if impl_intent and (path_hints or explicit_runtime_entrypoints):
+                    rescue_results: list[dict] = []
+                    if explicit_runtime_entrypoints:
+                        for pid in pid_to_name:
+                            async with memory_store._pg_pool.connection() as conn:
+                                await conn.execute("BEGIN")
+                                exact_rows = await _load_rescue_rows(
+                                    conn,
+                                    pid=pid,
+                                    file_paths=explicit_runtime_entrypoints,
+                                    member_exprs=member_exprs,
+                                )
+                            for r in exact_rows:
+                                r_meta = sem_helpers.coerce_meta(r)
+                                r["_meta"] = r_meta
+                                r["meta_score"] = sem_helpers.meta_score(r_meta)
+                                r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
+                                r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
+                                    r.get("file_path")
+                                )
+                                r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
+                                    r.get("file_path")
+                                )
+                                sem_helpers.enrich_implementation_result(
+                                    r,
+                                    query=query,
+                                    query_class=impl_query_class,
+                                    base_score=float(r.get("rrf", 0.0) or 0.0),
+                                    meta_boost=0.0,
+                                    base_bonus=0.22,
+                                )
+                            rescue_results.extend(exact_rows)
+                    if path_hints:
+                        for pid in pid_to_name:
+                            async with memory_store._pg_pool.connection() as conn:
+                                await conn.execute("BEGIN")
+                                rescue_rows = await _load_path_hint_rows(
+                                    conn,
+                                    pid=pid,
+                                    path_hints=path_hints,
+                                    max_files=min(max(fallback_max, 8), 16),
+                                )
+                            for r in rescue_rows:
+                                r_meta = sem_helpers.coerce_meta(r)
+                                r["_meta"] = r_meta
+                                r["meta_score"] = sem_helpers.meta_score(r_meta)
+                                r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
+                                r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
+                                    r.get("file_path")
+                                )
+                                r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
+                                    r.get("file_path")
+                                )
+                                sem_helpers.enrich_implementation_result(
+                                    r,
+                                    query=query,
+                                    query_class=impl_query_class,
+                                    base_score=float(r.get("rrf", 0.0) or 0.0),
+                                    meta_boost=0.0,
+                                    base_bonus=0.025,
+                                )
+                            rescue_results.extend(rescue_rows)
+                    if rescue_results:
+                        all_results = rescue_results
+                        all_results.sort(key=sem_helpers.implementation_rank_tuple)
+
+            if not all_results:
                 projects = ", ".join(f"'{n}'" for n in pid_to_name.values())
                 return f"No matching code found in {projects}.\nEnsure projects are indexed with index_workspace()."
 

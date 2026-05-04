@@ -9,6 +9,37 @@ Building an Enterprise-Grade Indexing Pipeline with:
 import os
 
 
+def _canonical_workspace_path(path: str | None) -> str:
+    raw = str(path or "").strip()
+    if not raw:
+        return ""
+    return os.path.realpath(os.path.abspath(raw)).rstrip(os.sep)
+
+
+def _indexed_project_match(workspace_id: str) -> tuple[str, str] | None:
+    candidate = _canonical_workspace_path(workspace_id)
+    candidate_base = os.path.basename(str(workspace_id or "").rstrip(os.sep))
+    if not candidate:
+        candidate_base = os.path.basename(str(workspace_id or "").rstrip(os.sep))
+    try:
+        from graphrag_core.indexing import watcher
+
+        indexed = watcher.load_indexed_projects()
+    except Exception:
+        return None
+    basename_matches: list[tuple[str, str]] = []
+    for project_id, entry in indexed.items():
+        project_path = _canonical_workspace_path(entry.get("project_path"))
+        if project_path and project_path == candidate:
+            return project_id, entry.get("project_path") or workspace_id
+        raw_path = str(entry.get("project_path") or "")
+        if candidate_base and os.path.basename(raw_path.rstrip(os.sep)) == candidate_base:
+            basename_matches.append((project_id, raw_path or workspace_id))
+    if len(basename_matches) == 1:
+        return basename_matches[0]
+    return None
+
+
 def get_memory_modules():
     """Lazy-load memory and proxy modules to speed up startup and prevent shutdown errors."""
     import memory.store as memory_store
@@ -76,14 +107,38 @@ class WorkspaceRegistry:
         """Get the physical project hash from a logical ID."""
         cls._load()
         entry = cls._mapping.get(workspace_id)
-        return entry["project_id"] if entry else None
+        if entry:
+            return entry["project_id"]
+        candidate = _canonical_workspace_path(workspace_id)
+        if not candidate:
+            return None
+        for mapped in cls._mapping.values():
+            mapped_path = _canonical_workspace_path(mapped.get("path"))
+            if mapped_path and mapped_path == candidate:
+                return mapped.get("project_id")
+        indexed_match = _indexed_project_match(workspace_id)
+        if indexed_match:
+            return indexed_match[0]
+        return None
 
     @classmethod
     def resolve_path(cls, workspace_id: str) -> str | None:
         """Get the local filesystem path from a logical ID."""
         cls._load()
         entry = cls._mapping.get(workspace_id)
-        return entry["path"] if entry else None
+        if entry:
+            return entry["path"]
+        candidate = _canonical_workspace_path(workspace_id)
+        if not candidate:
+            return None
+        for mapped in cls._mapping.values():
+            mapped_path = _canonical_workspace_path(mapped.get("path"))
+            if mapped_path and mapped_path == candidate:
+                return mapped.get("path")
+        indexed_match = _indexed_project_match(workspace_id)
+        if indexed_match:
+            return indexed_match[1]
+        return None
 
 
 def get_project_id(workspace_id: str) -> str:
@@ -103,7 +158,7 @@ def get_project_id(workspace_id: str) -> str:
     import os
 
     # Normalize: strip trailing slash, resolve absolute
-    path = os.path.abspath(workspace_id).rstrip(os.sep)
+    path = _canonical_workspace_path(workspace_id)
     return hashlib.md5(path.encode()).hexdigest()[:12]
 
 

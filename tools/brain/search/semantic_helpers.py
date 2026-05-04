@@ -535,6 +535,7 @@ def is_low_signal_binding_surface_path(file_path: str | None) -> bool:
     basename = norm.rsplit("/", 1)[-1]
     return (
         basename in {"models.cs", "types.go", "processresult.java", "processconfig.php"}
+        or basename.endswith(".proto")
         or basename.endswith("registry.java")
         or "/packages/csharp/" in norm
     )
@@ -803,6 +804,16 @@ def implementation_inferred_filename_hints(query: str) -> list[str]:
             if token in generic:
                 continue
             hints.add(f"{token}controller.java")
+        if "grpc" in text:
+            hints.update(
+                {
+                    "grpc/server",
+                    "server/sources",
+                    "serviceimpl",
+                    "serviceimpl.swift",
+                    "handler",
+                }
+            )
     if "flow" in text and "event" in text:
         if "inbound" in text or "outbound" in text:
             hints.add("channelpipeline.swift")

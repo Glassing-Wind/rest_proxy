@@ -212,6 +212,81 @@ class SearchCodebaseToolTests(unittest.TestCase):
         self.assertIn("channelpipeline.swift", hints)
         self.assertIn("pipeline", hints)
 
+    def test_grpc_routing_query_infers_serviceimpl_hints(self):
+        module = load_module(FakeMemoryStore({}))
+        hints = module.sem_helpers.implementation_inferred_filename_hints(
+            "how does gRPC server request routing work"
+        )
+        self.assertIn("grpc/server", hints)
+        self.assertIn("server/sources", hints)
+        self.assertIn("serviceimpl", hints)
+        self.assertIn("serviceimpl.swift", hints)
+
+    def test_search_codebase_rescues_impl_from_path_hints_when_primary_search_is_empty(self):
+        class RescueCursor(FakeCursor):
+            async def execute(self, query, params=None):
+                text = str(query)
+                if "WITH semantic AS" in text:
+                    self._active_rows = []
+                elif "WITH matched_files AS" in text:
+                    self._active_rows = [
+                        (
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            0,
+                            "func handleGenerateImage(request: Request) { generateImage() }",
+                            "proj123",
+                            {
+                                "language": "swift",
+                                "file_symbols": ["handleGenerateImage", "generateImage"],
+                                "declared_symbols": ["handleGenerateImage", "generateImage"],
+                                "node_types": ["class_declaration", "function_definition"],
+                            },
+                            1,
+                        )
+                    ]
+                else:
+                    self._active_rows = []
+                return None
+
+        class RescueConnection(FakeConnection):
+            def cursor(self):
+                return RescueCursor(self.rows_by_pid)
+
+        class RescuePool(FakePool):
+            def connection(self):
+                return RescueConnection(self.rows_by_pid)
+
+        class RescueMemoryStore(FakeMemoryStore):
+            def __init__(self):
+                self._pg_pool = RescuePool({})
+
+        module = load_module(RescueMemoryStore())
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            output = asyncio.run(
+                mcp.tools["search_codebase"](
+                    workspace_id="/Users/michaelmarler/Projects/draw-things-community",
+                    query="how does gRPC server request routing work",
+                    k=5,
+                    include_metadata=False,
+                    mode="precise",
+                    fallback="none",
+                    exclude_tests=True,
+                )
+            )
+
+        self.assertIn("--- Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift ---", output)
+        self.assertIn("handleGenerateImage", output)
+
     def test_search_codebase_demotes_doc_like_hits_when_metadata_enabled(self):
         rows_by_pid = {
             "proj123": [
@@ -486,6 +561,64 @@ class SearchCodebaseToolTests(unittest.TestCase):
         )
         self.assertLess(connect_index, api_index)
         self.assertLess(connect_index, sample_index)
+
+    def test_search_codebase_explanation_demotes_proto_schema_below_runtime_impl(self):
+        rows_by_pid = {
+            "proj123": [
+                (
+                    "Libraries/GRPC/Models/Sources/controlPanel/controlPanel.proto",
+                    0,
+                    'service ControlPanelService { rpc ManageGPUServer(GPUServerRequest) returns (GPUServerResponse); }',
+                    "proj123",
+                    {
+                        "language": "proto",
+                        "file_symbols": ["ControlPanelService", "ManageGPUServer"],
+                        "declared_symbols": ["ControlPanelService", "ManageGPUServer"],
+                        "node_types": ["service", "rpc"],
+                    },
+                    0.35,
+                ),
+                (
+                    "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    0,
+                    "public func generateImage(request: ServerRequest<ImageGenerationRequest>, context: ServerContext) async throws { try await self.handleGenerateImage(request: request.message, context: context) }",
+                    "proj123",
+                    {
+                        "language": "swift",
+                        "file_symbols": ["generateImage", "handleGenerateImage"],
+                        "declared_symbols": ["generateImage", "handleGenerateImage"],
+                        "node_types": ["class_declaration", "function_definition"],
+                    },
+                    0.30,
+                ),
+            ]
+        }
+        module = load_module(FakeMemoryStore(rows_by_pid))
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            output = asyncio.run(
+                mcp.tools["search_codebase"](
+                    workspace_id="repo",
+                    query="how does gRPC server request routing work",
+                    k=3,
+                    include_metadata=False,
+                    mode="precise",
+                    fallback="none",
+                    exclude_tests=True,
+                )
+            )
+
+        self.assertIn("--- Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift ---", output)
+        self.assertNotIn("--- Libraries/GRPC/Models/Sources/controlPanel/controlPanel.proto ---", output)
 
 
 if __name__ == "__main__":
