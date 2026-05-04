@@ -1448,6 +1448,20 @@ class SemanticHelperTests(unittest.TestCase):
             "test_usage",
         )
 
+    def test_implementation_chunk_role_prefers_ts_pack_file_roles_before_paths(self):
+        self.assertEqual(
+            module.implementation_chunk_role({"file_roles": ["example_surface"]}, None),
+            "example_usage",
+        )
+        self.assertEqual(
+            module.implementation_chunk_role({"file_roles": ["test_surface"]}, None),
+            "test_usage",
+        )
+        self.assertEqual(
+            module.implementation_chunk_role({"file_roles": ["support_surface"]}, None),
+            "script_support",
+        )
+
     def test_candidate_relevance_score_prefers_rank_score(self):
         row = {"rrf": 0.2, "rank_score": 0.9}
         self.assertEqual(module.candidate_relevance_score(row), 0.9)
@@ -1501,6 +1515,16 @@ class SemanticHelperTests(unittest.TestCase):
             api_entrypoint_hit=0,
         )
         self.assertEqual(role, "test_example")
+
+    def test_file_roles_can_mark_generated_surface_without_path_heuristics(self):
+        role = module.implementation_result_role(
+            "src/runtime/provider.py",
+            {"file_roles": ["generated_surface"], "node_types": ["function_definition"]},
+            definition_hit=1,
+            export_hit=0,
+            api_entrypoint_hit=0,
+        )
+        self.assertEqual(role, "generated_surface")
 
     def test_exact_member_usage_site_hit_requires_usage_context(self):
         self.assertTrue(

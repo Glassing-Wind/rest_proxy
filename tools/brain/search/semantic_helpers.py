@@ -1321,6 +1321,13 @@ def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
     role = meta.get("chunk_role")
     if isinstance(role, str) and role.strip():
         return role.strip().lower()
+    file_roles = implementation_file_roles(meta)
+    if "example_surface" in file_roles:
+        return "example_usage"
+    if "test_surface" in file_roles:
+        return "test_usage"
+    if "support_surface" in file_roles:
+        return "script_support"
     path = (file_path or "").replace("\\", "/").lower()
     if not path:
         return ""
@@ -1703,6 +1710,10 @@ def implementation_result_role(
     api_context_hit = implementation_api_context_hit(meta)
     chunk_role = implementation_chunk_role(meta, file_path)
     file_roles = implementation_file_roles(meta)
+    if "generated_surface" in file_roles:
+        return "generated_surface"
+    if "binding_surface" in file_roles:
+        return "generated_surface"
     if is_generated_implementation_surface_path(file_path):
         return "generated_surface"
     if is_low_signal_binding_surface_path(file_path):
