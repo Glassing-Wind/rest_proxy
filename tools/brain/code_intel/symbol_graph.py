@@ -828,7 +828,11 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
         out.append(f"**Called by** ({len(callers)}):")
         for caller in callers:
             line = f":{caller['line']}" if caller.get("line") else ""
-            out.append(f"  - `{caller['name']}`{line}  in {caller.get('file', '?')}")
+            caller_name = str(caller.get("name") or "").strip()
+            formatted_name = caller_name
+            if caller_name and not _is_file_like_symbol_context_name(caller_name):
+                formatted_name = f"`{caller_name}`"
+            out.append(f"  - {formatted_name}{line}  in {caller.get('file', '?')}")
     if callees:
         out.append(f"\n**Calls** ({len(callees)}):")
         for callee in callees:
@@ -877,6 +881,14 @@ def _dedupe_symbol_context_callers(callers: list[dict]) -> list[dict]:
         seen.add(key)
         deduped.append(caller)
     return deduped
+
+
+def _is_file_like_symbol_context_name(name: str | None) -> bool:
+    value = str(name or "").strip()
+    if not value:
+        return False
+    _, ext = os.path.splitext(value)
+    return bool(ext and "/" not in value and "." in value)
 
 
 def _suppress_symbol_context_self_aliases(

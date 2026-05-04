@@ -46,6 +46,73 @@ _GDS_OK_RE = re.compile(r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Done —
 _GDS_SKIP_RE = re.compile(r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Skipped — (?P<detail>.+)")
 
 
+async def _promote_semantic_file_roles_async(project_id: str) -> dict[str, int]:
+    pg_dsn = os.getenv("LM_PROXY_PG_DSN", "").strip()
+    if not project_id or not pg_dsn:
+        return {"files": 0, "matched": 0, "non_empty": 0}
+
+    try:
+        import asyncpg
+        import graph_bootstrap
+    except Exception:
+        return {"files": 0, "matched": 0, "non_empty": 0}
+
+    conn = await asyncpg.connect(pg_dsn)
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT
+              file_path,
+              array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
+            FROM codebase_embeddings
+            LEFT JOIN LATERAL jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(metadata->'file_roles') = 'array'
+                THEN metadata->'file_roles'
+                ELSE '[]'::jsonb
+              END
+            ) AS role ON TRUE
+            WHERE project_id = $1
+            GROUP BY file_path
+            """,
+            project_id,
+        )
+    finally:
+        await conn.close()
+
+    batch = []
+    non_empty = 0
+    for row in rows:
+        file_path = str(row["file_path"] or "").strip()
+        if not file_path:
+            continue
+        roles = sorted({str(role).strip() for role in (row["roles"] or []) if str(role).strip()})
+        if roles:
+            non_empty += 1
+        batch.append({"filepath": file_path, "roles": roles})
+    if not batch:
+        return {"files": 0, "matched": 0, "non_empty": 0}
+
+    driver = await graph_bootstrap.require_driver()
+    async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+        result = await session.run(
+            """
+            UNWIND $batch AS item
+            MATCH (f:File {project_id:$pid, filepath:item.filepath})
+            SET f.semantic_file_roles = item.roles
+            RETURN count(f) AS matched
+            """,
+            pid=project_id,
+            batch=batch,
+        )
+        record = await result.single()
+    return {
+        "files": len(batch),
+        "matched": int((record or {}).get("matched") or 0),
+        "non_empty": non_empty,
+    }
+
+
 def _ensure_jobs_runtime_dir() -> Path:
     _RUNTIME_JOBS_DIR.mkdir(parents=True, exist_ok=True)
     return _RUNTIME_JOBS_DIR
@@ -148,12 +215,39 @@ def _load_persisted_job(job_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _job_needs_reconcile(job: dict[str, Any] | None) -> bool:
+    if not isinstance(job, dict):
+        return False
+    status = str(job.get("status") or "").strip().lower()
+    return status in {"running", "cancelling"}
+
+
 def load_job_record(job_id: str) -> dict[str, Any] | None:
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
         if job:
-            return dict(job)
-    return _load_persisted_job(job_id)
+            cached = dict(job)
+        else:
+            cached = None
+    if cached:
+        if _job_needs_reconcile(cached):
+            return _reconcile_job_process_state(job_id) or cached
+        return cached
+
+    persisted = _load_persisted_job(job_id)
+    if not persisted:
+        return None
+    if not _job_needs_reconcile(persisted):
+        return persisted
+
+    with _JOBS_LOCK:
+        existing = _JOBS.get(job_id)
+        if existing:
+            cached = dict(existing)
+        else:
+            _JOBS[job_id] = dict(persisted)
+            cached = dict(_JOBS[job_id])
+    return _reconcile_job_process_state(job_id) or cached
 
 
 def _job_processes_alive(job: dict[str, Any] | None) -> bool:
@@ -425,6 +519,15 @@ async def _post_index_maintenance_async(project_id: str, sem_rc: int | None) -> 
             rows = await _read_summary(session)
         if rows:
             run_summary = rows[0]
+
+    if sem_rc == 0:
+        promotion = await _promote_semantic_file_roles_async(project_id)
+        if promotion["files"] > 0:
+            sys.stderr.write(
+                "[lm-proxy:index-jobs] semantic file role post-maintenance promotion "
+                f"matched={promotion['matched']} files={promotion['files']} non_empty={promotion['non_empty']}\n"
+            )
+            sys.stderr.flush()
 
     return run_summary
 

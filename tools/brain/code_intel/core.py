@@ -1828,6 +1828,38 @@ def register(mcp: FastMCP) -> None:
                     file_path=file_path,
                     op="get_related_files_symbol_calls_inferred",
                 )
+                structural_file_call_records = await _execute_read(
+                    session,
+                    """
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS*1..]->(target:Node)<-[:CALLS]-(caller_file:File {project_id:$pid})
+                    WHERE target.name IS NOT NULL
+                      AND trim(target.name) <> ''
+                      AND caller_file <> owner
+                    RETURN caller_file.filepath AS related_file,
+                           target.name AS symbol
+                    ORDER BY related_file, symbol
+                    LIMIT 12
+                    """,
+                    pid=project_id,
+                    file_path=file_path,
+                    op="get_related_files_file_calls",
+                )
+                structural_file_inferred_call_records = await _execute_read(
+                    session,
+                    """
+                    MATCH (owner:File {project_id:$pid, filepath:$file_path})-[:CONTAINS*1..]->(target:Node)<-[:CALLS_INFERRED]-(caller_file:File {project_id:$pid})
+                    WHERE target.name IS NOT NULL
+                      AND trim(target.name) <> ''
+                      AND caller_file <> owner
+                    RETURN caller_file.filepath AS related_file,
+                           target.name AS symbol
+                    ORDER BY related_file, symbol
+                    LIMIT 12
+                    """,
+                    pid=project_id,
+                    file_path=file_path,
+                    op="get_related_files_file_calls_inferred",
+                )
                 structural_import_records = await _execute_read(
                     session,
                     """
@@ -1902,7 +1934,12 @@ def register(mcp: FastMCP) -> None:
                 )
                 related = [f"- {rec['related_file']} ({rec['reason']})" for rec in related_records]
                 structural_call_rollup: dict[str, dict] = {}
-                for record in [*structural_call_records, *structural_inferred_call_records]:
+                for record in [
+                    *structural_call_records,
+                    *structural_inferred_call_records,
+                    *structural_file_call_records,
+                    *structural_file_inferred_call_records,
+                ]:
                     related_file = str(record.get("related_file") or "").strip()
                     symbol = str(record.get("symbol") or "").strip()
                     if not related_file or not symbol:
@@ -2146,6 +2183,10 @@ def register(mcp: FastMCP) -> None:
                     prefix = "- then inspect" if focus_lines else "- start with"
                     focus_lines.append(f"{prefix} {structural_import_related[0][2:]}")
                     highlighted_entries.add(structural_import_related[0][2:])
+                elif same_directory_related:
+                    prefix = "- then inspect" if focus_lines else "- start with"
+                    focus_lines.append(f"{prefix} {same_directory_related[0][2:]}")
+                    highlighted_entries.add(same_directory_related[0][2:])
                 if related and not (cargo_related or apple_related or structural_related or structural_import_related):
                     prefix = "- then inspect" if focus_lines else "- start with"
                     focus_lines.append(f"{prefix} {related[0][2:]}")

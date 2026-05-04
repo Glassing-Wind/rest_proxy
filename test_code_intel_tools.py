@@ -1484,6 +1484,118 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("`ContentView`:4", rendered)
         self.assertNotIn("`ContentView.swift`", rendered)
 
+    def test_symbol_context_formats_file_level_caller_without_code_ticks(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Struct",
+                "filepath": "FrameCreator/Views/SidebarView.swift",
+                "start_line": 3,
+                "end_line": 20,
+                "signature": "struct SidebarView: View",
+                "callers": [
+                    {
+                        "name": "ContentView.swift",
+                        "file": "FrameCreator/Views/ContentView.swift",
+                        "line": None,
+                    },
+                ],
+                "callees": [],
+                "external_callees": [],
+            },
+            "SidebarView",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("ContentView.swift  in FrameCreator/Views/ContentView.swift", rendered)
+        self.assertNotIn("`ContentView.swift`", rendered)
+
+    def test_find_references_includes_file_level_graph_callers(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN DISTINCT f.filepath AS fp" in cypher:
+                return [
+                    {
+                        "fp": "FrameCreator/Views/SidebarView.swift",
+                        "sl": 3,
+                        "cn": "SidebarView",
+                        "tpid": "proj123",
+                    }
+                ]
+            if "MATCH (f:File {project_id: row.pid, filepath: row.fp})-[:CONTAINS]->(s:Node)" in cypher:
+                return [
+                    {
+                        "pid": "proj123",
+                        "fp": "FrameCreator/Views/ContentView.swift",
+                        "symbol_name": "ContentView",
+                        "sl": 4,
+                    }
+                ]
+            if "MATCH (caller:File)-[:CALLS|CALLS_INFERRED]->(target)" in cypher:
+                return [
+                    {
+                        "fp": "FrameCreator/Views/ContentView.swift",
+                        "sl": None,
+                        "cn": "ContentView.swift",
+                        "tpid": "proj123",
+                    }
+                ]
+            if "MATCH (target:ExternalSymbol)" in cypher:
+                return []
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module.references,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["find_references"](
+                            "/tmp/FrameCreator",
+                            "SidebarView",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("### Functional References (Graph)", output)
+        self.assertIn("FrameCreator/Views/SidebarView.swift:3 (SidebarView) [Project: proj123]", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift:4 (ContentView) [Project: proj123]", output)
+
     def test_symbol_context_filters_cross_language_noise_for_swift_symbol(self):
         output = self.module.symbol_graph.format_symbol_context(
             {
@@ -2082,6 +2194,107 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Sibling implementation files:", output)
         self.assertIn("Sources/NIOPosix/Bootstrap.swift", output)
         self.assertNotIn("Tests/NIOPosixTests/ChannelTests.swift", output)
+
+    def test_get_related_files_uses_same_directory_neighbors_for_inspect_first_when_other_signals_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/CanvasView.swift",
+                        "sym_count": 5,
+                        "sym_examples": ["CanvasView", "CheckerboardBackground", "Data"],
+                    },
+                    {
+                        "related_file": "FrameCreator/Views/SettingsView.swift",
+                        "sym_count": 2,
+                        "sym_examples": ["SettingsView"],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/FrameCreator",
+                        "FrameCreator/Views/SidebarView.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        self.assertIn("FrameCreator/Views/CanvasView.swift", output)
+        self.assertIn("Sibling implementation files:", output)
+
+    def test_get_related_files_prefers_file_level_graph_callers_before_same_directory_fallback(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS]-(caller_file:File" in cypher:
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/ContentView.swift",
+                        "symbol": "SidebarView",
+                    }
+                ]
+            if "<-[:CALLS_INFERRED]-(caller_file:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/CanvasView.swift",
+                        "sym_count": 5,
+                        "sym_examples": ["CanvasView", "CheckerboardBackground", "Data"],
+                    }
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/FrameCreator",
+                        "FrameCreator/Views/SidebarView.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertIn("FrameCreator/Views/ContentView.swift", inspect_section)
+        self.assertLess(
+            output.index("FrameCreator/Views/ContentView.swift"),
+            output.index("FrameCreator/Views/CanvasView.swift"),
+        )
 
     def test_get_related_files_does_not_promote_shared_import_graph_into_inspect_first_when_structural_exists(self):
         async def fake_executor(cypher, **kwargs):

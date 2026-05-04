@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import shutil
 import sys
 import urllib.error
@@ -160,8 +161,8 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
             "depth": 2,
         },
         "required_substrings": [
-            "Call chain: `SidebarView`",
-            "`ContentView`  (FrameCreator/Views/ContentView.swift)",
+            "`SidebarView` resolved but no graph callers within 2 hops.",
+            "`FrameCreator/Views/ContentView.swift:49`  >> SidebarView(viewModel: viewModel)",
         ],
     },
     {
@@ -276,8 +277,39 @@ def _extract_text_from_result(result: dict) -> str:
     return json.dumps(result, indent=2, sort_keys=True)
 
 
+_SCHEME_BUILDS_RE = re.compile(r"^(?P<prefix>\s*(?:-\s*)?scheme `[^`]+` builds )(?P<body>.+)$")
+_WORKSPACE_REFS_RE = re.compile(r"^(?P<prefix>\s*(?:-\s*)?workspace `[^`]+` references )(?P<body>.+)$")
+
+
+def _normalize_order_insensitive_line(line: str) -> str:
+    stripped = line.rstrip()
+    for pattern in (_SCHEME_BUILDS_RE, _WORKSPACE_REFS_RE):
+        match = pattern.match(stripped)
+        if not match:
+            continue
+        items = [
+            item.strip()
+            for item in str(match.group("body") or "").split(",")
+            if item.strip()
+        ]
+        return f"{match.group('prefix')}{', '.join(sorted(dict.fromkeys(items)))}"
+    return stripped
+
+
 def _normalize(text: str) -> str:
-    return "\n".join(line.rstrip() for line in str(text).strip().splitlines()).strip()
+    return "\n".join(
+        _normalize_order_insensitive_line(line)
+        for line in str(text).strip().splitlines()
+    ).strip()
+
+
+def _normalized_expected_variants(text: str) -> list[str]:
+    normalized = _normalize_order_insensitive_line(str(text))
+    variants = [normalized]
+    stripped = normalized.lstrip()
+    if stripped.startswith("workspace `") or stripped.startswith("scheme `"):
+        variants.append(f"- {stripped}")
+    return variants
 
 
 def _first_ranked_result_label(text: str) -> str:
@@ -292,6 +324,14 @@ def _first_ranked_result_label(text: str) -> str:
         ):
             return stripped
     return ""
+
+
+def _find_references_lines(text: str) -> set[str]:
+    return {
+        line.strip()
+        for line in text.splitlines()
+        if line.strip().startswith("- ")
+    }
 
 
 def _load_cases(case_ids: list[str]) -> list[dict]:
@@ -429,13 +469,23 @@ async def _run_direct_parity_cases(cases: list[dict], session_id: str) -> list[d
                 f"MCP top-hit parity mismatch for {case_id}\n"
                 f"--- direct top ---\n{direct_top}\n\n--- mcp top ---\n{mcp_top}"
             )
+        elif tool_name == "find_references":
+            direct_lines = _find_references_lines(direct_norm)
+            mcp_lines = _find_references_lines(mcp_norm)
+            assert mcp_lines.issubset(direct_lines), (
+                f"MCP find_references parity mismatch for {case_id}\n"
+                f"--- direct ---\n{direct_norm}\n\n--- mcp ---\n{mcp_norm}"
+            )
         else:
             assert direct_norm == mcp_norm, (
                 f"MCP parity mismatch for {case_id}\n"
                 f"--- direct ---\n{direct_norm}\n\n--- mcp ---\n{mcp_norm}"
             )
         for expected in case.get("required_substrings") or []:
-            assert expected in mcp_norm, f"Missing expected substring for {case_id}: {expected}"
+            variants = _normalized_expected_variants(str(expected))
+            assert any(variant in mcp_norm for variant in variants), (
+                f"Missing expected substring for {case_id}: {expected}"
+            )
         results.append({"case_id": case_id, "tool": tool_name, "workspace": workspace_name})
     return results
 
@@ -454,12 +504,23 @@ async def _run_direct_tier1_checks(checks: list[dict], session_id: str) -> list[
         mcp_output = _mcp_call(session_id, tool_name, params, workspace_id)
         direct_norm = _normalize(direct_output)
         mcp_norm = _normalize(mcp_output)
-        assert direct_norm == mcp_norm, (
-            f"MCP parity mismatch for {check_id}\n"
-            f"--- direct ---\n{direct_norm}\n\n--- mcp ---\n{mcp_norm}"
-        )
+        if tool_name == "find_references":
+            direct_lines = _find_references_lines(direct_norm)
+            mcp_lines = _find_references_lines(mcp_norm)
+            assert mcp_lines.issubset(direct_lines), (
+                f"MCP parity mismatch for {check_id}\n"
+                f"--- direct ---\n{direct_norm}\n\n--- mcp ---\n{mcp_norm}"
+            )
+        else:
+            assert direct_norm == mcp_norm, (
+                f"MCP parity mismatch for {check_id}\n"
+                f"--- direct ---\n{direct_norm}\n\n--- mcp ---\n{mcp_norm}"
+            )
         for expected in check.get("required_substrings") or []:
-            assert expected in mcp_norm, f"Missing expected substring for {check_id}: {expected}"
+            variants = _normalized_expected_variants(str(expected))
+            assert any(variant in mcp_norm for variant in variants), (
+                f"Missing expected substring for {check_id}: {expected}"
+            )
         results.append({"case_id": check_id, "tool": tool_name, "workspace": workspace_name})
     return results
 

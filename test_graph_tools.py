@@ -298,6 +298,53 @@ class GraphToolsTests(unittest.TestCase):
             output,
         )
 
+    def test_project_overview_normalizes_apple_scheme_target_order(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "project_overview_files":
+                return [{"n": 10}]
+            if op == "project_overview_symbols":
+                return [{"n": 5}]
+            if op == "project_overview_dirs":
+                return [{"dir": "BGMApp", "n": 5, "files": 5}]
+            if op == "project_overview_key_files":
+                return [{"fp": "BGMApp/BGMApp/AppDelegate.swift", "n": 2, "ex": ["AppDelegate"]}]
+            if op == "apple_context_presence":
+                return [{"n": 1}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            if op == "apple_context_targets":
+                return [
+                    {
+                        "target": "Background Music",
+                        "project_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                        "bundled_files": 9,
+                    }
+                ]
+            if op == "apple_context_schemes":
+                return [
+                    {
+                        "scheme": "Background Music",
+                        "targets": ["Background Music", "BGMAppUITests", "BGMAppUnitTests"],
+                    }
+                ]
+            if op == "apple_context_schema_labels":
+                return [{"labels": []}]
+            if op == "apple_context_schema_relationship_types":
+                return [{"rels": []}]
+            if op == "apple_context_workspaces":
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/loombackgroundmusic"))
+
+        self.assertIn(
+            "scheme `Background Music` builds BGMAppUnitTests, BGMAppUITests, Background Music",
+            output,
+        )
+
     def test_directory_snapshot_falls_back_to_file_graph_for_swift_coupling(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -402,6 +449,53 @@ class GraphToolsTests(unittest.TestCase):
         test_dep_idx = output.index("Tests/NIOCoreTests/ByteBufferSpanTests.swift")
         self.assertLess(prod_consumer_idx, test_consumer_idx)
         self.assertLess(prod_dep_idx, test_dep_idx)
+
+    def test_directory_snapshot_prefers_swift_nio_posix_runtime_surfaces_over_utility_density(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {"fp": "Sources/NIOPosix/System.swift", "sym_count": 66, "samples": ["accept", "bind", "close"]},
+                    {"fp": "Sources/NIOPosix/BaseSocketChannel.swift", "sym_count": 12, "samples": ["readEOF", "register0"]},
+                    {"fp": "Sources/NIOPosix/Bootstrap.swift", "sym_count": 10, "samples": ["bootstrap", "bind"]},
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [{"caller": "Sources/NIOEchoClient/main.swift", "n_imports": 3, "signal": "import"}]
+            if op == "get_directory_snapshot_outbound":
+                return [{"dependency": "Sources/NIOCore/AsyncAwaitSupport.swift", "n_usages": 3, "signal": "import"}]
+            if op in {
+                "get_directory_snapshot_assets",
+                "apple_context_targets",
+                "apple_context_schemes",
+                "apple_context_schema_labels",
+                "apple_context_schema_relationship_types",
+                "apple_context_workspaces",
+                "cargo_context_schema_labels",
+                "cargo_context_schema_relationship_types",
+                "cargo_context_crates",
+                "cargo_context_workspaces",
+                "cargo_context_dependencies",
+                "cargo_directory_schema_labels",
+                "cargo_directory_schema_relationship_types",
+                "cargo_directory_dependencies_outbound",
+                "cargo_directory_dependencies_inbound",
+                "get_directory_snapshot_local_symbols",
+                "get_directory_snapshot_external_symbols",
+            }:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_directory_snapshot"]("/tmp/swift-nio", "Sources/NIOPosix", 8))
+
+        self.assertIn("Sources/NIOPosix/BaseSocketChannel.swift", output)
+        self.assertIn("Sources/NIOEchoClient/main.swift", output)
+        self.assertIn("Sources/NIOCore/AsyncAwaitSupport.swift", output)
 
     def test_directory_snapshot_hides_only_static_config_and_test_consumers_in_code_dirs(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -1420,6 +1514,50 @@ class GraphToolsTests(unittest.TestCase):
         self.assertLess(
             output.index("OwnerController.java"),
             output.index("PetClinicApplication.java"),
+        )
+
+    def test_project_overview_prefers_swift_nio_core_surfaces_over_utility_density(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_project_overview_file_count":
+                return [{"files": 748}]
+            if op == "get_project_overview_symbol_count":
+                return [{"syms": 15793}]
+            if op == "get_project_overview_dirs":
+                return [{"top_dir": "Sources", "files": 372, "syms": 2132}]
+            if op == "get_project_overview_key_files":
+                return [
+                    {
+                        "fp": "Sources/NIOPosix/System.swift",
+                        "n": 66,
+                        "ex": ["accept", "bind", "close"],
+                    },
+                    {
+                        "fp": "Sources/NIOCore/ChannelPipeline.swift",
+                        "n": 31,
+                        "ex": ["addHandler", "removeHandler", "fireChannelRead"],
+                    },
+                    {
+                        "fp": "Sources/NIOCore/ByteBuffer-aux.swift",
+                        "n": 41,
+                        "ex": ["_getNullTerminatedStringLength", "_setStringSlowpath", "buffer"],
+                    },
+                ]
+            if op == "apple_context_presence":
+                return [{"n": 0}]
+            if op == "cargo_context_presence":
+                return [{"file_count": 0}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/swift-nio"))
+
+        self.assertIn("Sources/NIOCore/ChannelPipeline.swift", output)
+        self.assertIn("inspect `Sources/NIOCore/ChannelPipeline.swift` first", output)
+        self.assertLess(
+            output.index("Sources/NIOCore/ChannelPipeline.swift"),
+            output.index("Sources/NIOPosix/System.swift"),
         )
 
     def test_get_flow_summary_apple_mode_dispatches_to_apple_summary(self):

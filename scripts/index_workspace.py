@@ -680,31 +680,52 @@ async def _promote_semantic_file_roles_to_graph(
     project_id: str,
     manifest_paths: List[str],
 ) -> None:
-    if not manifest_paths or not memory_store._pg_pool_available():
+    if not manifest_paths:
         return
     file_roles_rows: list[tuple[str, list[str]]] = []
-    async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
-        async with conn.cursor() as cur:
-            await cur.execute(
-                """
-                SELECT
-                  file_path,
-                  array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
-                FROM codebase_embeddings
-                LEFT JOIN LATERAL jsonb_array_elements_text(
-                  CASE
-                    WHEN jsonb_typeof(metadata->'file_roles') = 'array'
-                    THEN metadata->'file_roles'
-                    ELSE '[]'::jsonb
-                  END
-                ) AS role ON TRUE
-                WHERE project_id = %s
-                  AND file_path = ANY(%s)
-                GROUP BY file_path
-                """,
-                (project_id, manifest_paths),
+    query = """
+        SELECT
+          file_path,
+          array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
+        FROM codebase_embeddings
+        LEFT JOIN LATERAL jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(metadata->'file_roles') = 'array'
+            THEN metadata->'file_roles'
+            ELSE '[]'::jsonb
+          END
+        ) AS role ON TRUE
+        WHERE project_id = %s
+          AND file_path = ANY(%s)
+        GROUP BY file_path
+    """
+    if memory_store._pg_pool_available():
+        async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+            async with conn.cursor() as cur:
+                await cur.execute(query, (project_id, manifest_paths))
+                file_roles_rows = await cur.fetchall()
+    else:
+        pg_dsn = os.getenv("LM_PROXY_PG_DSN", "").strip()
+        if not pg_dsn:
+            print(
+                "[lm-proxy:indexer] WARN: semantic file role graph promotion skipped: no PG DSN",
+                file=sys.stderr,
+                flush=True,
             )
-            file_roles_rows = await cur.fetchall()
+            return
+        try:
+            import psycopg
+        except Exception as exc:
+            print(
+                f"[lm-proxy:indexer] WARN: semantic file role graph promotion skipped: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        async with await psycopg.AsyncConnection.connect(pg_dsn) as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(query, (project_id, manifest_paths))
+                file_roles_rows = await cur.fetchall()
 
     role_map = {
         str(file_path or "").strip(): sorted(
@@ -736,15 +757,24 @@ async def _promote_semantic_file_roles_to_graph(
     driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
     try:
         with driver.session(database=neo4j_db) as session:
-            session.run(
+            matched = session.run(
                 """
                 UNWIND $batch AS item
                 MATCH (f:File {project_id:$pid, filepath:item.filepath})
                 SET f.semantic_file_roles = item.roles
+                RETURN count(f) AS matched
                 """,
                 pid=project_id,
                 batch=batch,
-            ).consume()
+            ).single()
+            matched_count = int((matched or {}).get("matched") or 0)
+            non_empty_count = sum(1 for item in batch if item["roles"])
+            print(
+                "[lm-proxy:indexer] Semantic file role graph promotion — "
+                f"matched={matched_count} files={len(batch)} non_empty={non_empty_count}",
+                file=sys.stderr,
+                flush=True,
+            )
     except Exception as exc:
         print(
             f"[lm-proxy:indexer] WARN: semantic file role graph promotion failed: {exc}",

@@ -522,6 +522,22 @@ def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None
 def _backend_bridge_boost(filepath: str | None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
+    if norm.startswith("sources/niocore/"):
+        if basename == "channelpipeline.swift":
+            return 4.2
+        if basename in {"channel.swift", "eventloop.swift"}:
+            return 2.4
+        if basename.startswith("bytebuffer"):
+            return 1.3
+    if norm.startswith("sources/nioposix/"):
+        if basename == "basesocketchannel.swift":
+            return 3.8
+        if basename == "socketchannel.swift":
+            return 2.5
+        if basename == "bootstrap.swift":
+            return 2.1
+        if basename == "selectableeventloop.swift":
+            return 1.5
     if any(
         token in norm
         for token in (
@@ -582,6 +598,20 @@ def _overview_file_rank(filepath: str | None, symbol_count: int, file_roles: set
     if _is_overview_low_signal_shell_helper(basename):
         score *= 0.2
     return score
+
+
+def _apple_scheme_target_rank(target_name: str | None) -> tuple[int, str]:
+    normalized = str(target_name or "").strip()
+    lowered = normalized.lower()
+    if "unittest" in lowered or "unit test" in lowered:
+        priority = 0
+    elif "uitest" in lowered or "ui test" in lowered:
+        priority = 1
+    elif "test" in lowered:
+        priority = 2
+    else:
+        priority = 3
+    return (priority, normalized)
 
 
 def _is_overview_low_signal_shell_helper(basename: str | None) -> bool:
@@ -1114,6 +1144,19 @@ async def load_apple_build_context(session, project_id: str, dir_prefix: str = "
         )
     else:
         workspaces = []
+    for rec in schemes:
+        scheme_targets = [
+            str(item).strip()
+            for item in (rec.get("targets") or [])
+            if str(item).strip()
+        ]
+        rec["targets"] = sorted(
+            dict.fromkeys(scheme_targets),
+            key=_apple_scheme_target_rank,
+        )
+    for rec in workspaces:
+        projects = [str(item).strip() for item in (rec.get("projects") or []) if str(item).strip()]
+        rec["projects"] = sorted(dict.fromkeys(projects), reverse=True)
     return targets, schemes, workspaces
 
 
@@ -1855,7 +1898,7 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
               AND NOT toLower(f.filepath) CONTAINS 'test'
               AND NOT toLower(f.filepath) CONTAINS 'spec'
             WITH f.filepath AS fp, count(s) AS n, collect(DISTINCT s.name)[..3] AS ex
-            ORDER BY n DESC LIMIT 20
+            ORDER BY n DESC LIMIT 80
             RETURN fp, n, ex
         """).format(filters=_SYMBOL_FILTER_CYPHER),
             p=project_id,

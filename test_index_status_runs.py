@@ -35,6 +35,7 @@ def load_indexing_module():
     jobs_mod = types.ModuleType("_jobs")
     jobs_mod._JOBS = {}
     jobs_mod._JOBS_LOCK = mock.MagicMock()
+    jobs_mod.claim_project_job_lock = lambda *args, **kwargs: (True, None)
     jobs_mod._drain_proc_output = lambda *args, **kwargs: None
     jobs_mod._finalize_job = lambda *args, **kwargs: None
     jobs_mod._job_control_paths = lambda job_id: {
@@ -43,6 +44,7 @@ def load_indexing_module():
         "semantic_log_path": f"/tmp/{job_id}/semantic.log",
     }
     jobs_mod._persist_job_state = lambda *args, **kwargs: None
+    jobs_mod._release_project_job_lock = lambda *args, **kwargs: None
     jobs_mod._render_job_logs = lambda job: list(job.get("logs") or [])
     jobs_mod.load_job_record = lambda job_id: jobs_mod._JOBS.get(job_id)
     jobs_mod.register_main_loop = lambda *args, **kwargs: None
