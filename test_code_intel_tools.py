@@ -707,6 +707,87 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Multiple exact matches found for `Config`", output)
         self.assertIn("packages/opencode/src/control-plane/adaptors/worktree.ts", output)
 
+    def test_get_symbol_context_prefers_runtime_impl_over_generated_surface_without_ambiguity(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "generateImage",
+                        "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                        "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "start_line": 552,
+                        "end_line": 1218,
+                        "signature": "private func generateImage(",
+                        "parent_file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 3,
+                        "callees_out": 10,
+                    },
+                    {
+                        "kind": "Method",
+                        "name": "generateImage",
+                        "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                        "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "start_line": 552,
+                        "end_line": 1218,
+                        "signature": "private func generateImage(",
+                        "parent_file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 3,
+                        "callees_out": 10,
+                    },
+                    {
+                        "kind": "Function",
+                        "name": "generateImage",
+                        "qualified_name": "ImageService.generateImage",
+                        "filepath": "Libraries/GRPC/Models/Sources/imageService/imageService.grpc.swift",
+                        "start_line": 1268,
+                        "end_line": 1300,
+                        "signature": "public func generateImage<Result>(",
+                        "parent_file": "Libraries/GRPC/Models/Sources/imageService/imageService.grpc.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 1,
+                        "callees_out": 0,
+                    },
+                    {
+                        "kind": "Function",
+                        "name": "generateImage",
+                        "qualified_name": "ScriptExecutor.generateImage",
+                        "filepath": "Libraries/Scripting/Sources/ScriptExecutor.swift",
+                        "start_line": 320,
+                        "end_line": 370,
+                        "signature": "func generateImage(_ args: [String: Any])",
+                        "parent_file": "Libraries/Scripting/Sources/ScriptExecutor.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 1,
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/draw-things-community",
+                        "generateImage",
+                        include_source_preview=False,
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("ImageGenerationServiceImpl.swift", output)
+        self.assertIn("private func generateImage(", output)
+        self.assertNotIn("Multiple exact matches found", output)
+
     def test_get_symbol_context_uses_file_path_to_disambiguate(self):
         async def fake_executor(cypher, **kwargs):
             if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
@@ -1437,6 +1518,48 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("runAndBlock", rendered)
         self.assertIn("writeResponseSynchronously", rendered)
         self.assertNotIn("r2_sync_verification.py", rendered)
+
+    def test_symbol_context_ambiguity_dedupes_same_location_candidates(self):
+        rendered = self.module.symbol_graph.format_symbol_context_ambiguity(
+            [
+                {
+                    "kind": "Function",
+                    "name": "generateImage",
+                    "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                    "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    "start_line": 552,
+                    "end_line": 1218,
+                    "signature": "private func generateImage(",
+                    "callers_in": 3,
+                    "callees_out": 10,
+                },
+                {
+                    "kind": "Method",
+                    "name": "generateImage",
+                    "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                    "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    "start_line": 552,
+                    "end_line": 1218,
+                    "signature": "private func generateImage(",
+                    "callers_in": 3,
+                    "callees_out": 10,
+                },
+                {
+                    "kind": "Function",
+                    "name": "generateImage",
+                    "qualified_name": "ImageService.generateImage",
+                    "filepath": "Libraries/GRPC/Models/Sources/imageService/imageService.grpc.swift",
+                    "start_line": 1268,
+                    "end_line": 1300,
+                    "signature": "public func generateImage<Result>(",
+                    "callers_in": 1,
+                    "callees_out": 0,
+                },
+            ],
+            symbol_name="generateImage",
+        )
+
+        self.assertEqual(rendered.count("ImageGenerationServiceImpl.swift:552"), 1)
 
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):

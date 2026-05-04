@@ -192,6 +192,8 @@ def _symbol_path_penalty(filepath: str | None) -> int:
             ".generated.ts",
             ".generated.js",
             "_generated.swift",
+            ".grpc.swift",
+            ".pb.swift",
         )
     ):
         return 5
@@ -378,7 +380,21 @@ def rank_symbol_context_candidates(
             candidate.get("start_line") or 0,
         )
     )
-    return ranked
+    deduped: list[dict] = []
+    seen_keys: set[tuple[str, int | None, int | None, str, str]] = set()
+    for candidate in ranked:
+        key = (
+            str(candidate.get("filepath") or ""),
+            candidate.get("start_line"),
+            candidate.get("end_line"),
+            str(candidate.get("signature") or ""),
+            str(candidate.get("qualified_name") or candidate.get("name") or ""),
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped.append(candidate)
+    return deduped
 
 
 def pick_symbol_context_candidate(
@@ -426,6 +442,21 @@ def should_disambiguate_symbol_context(
     distinct_kinds = {c.get("kind") for c in candidates if c.get("kind")}
     top_score = int(ranked[0].get("symbol_context_score") or 0)
     second_score = int(ranked[1].get("symbol_context_score") or 0)
+    top_penalty = _symbol_path_penalty(ranked[0].get("filepath"))
+    second_penalty = _symbol_path_penalty(ranked[1].get("filepath"))
+    top_signature = str(ranked[0].get("signature") or "").lstrip().lower()
+    second_signature = str(ranked[1].get("signature") or "").lstrip().lower()
+    if (
+        top_penalty <= 2
+        and second_penalty >= 4
+        and (top_score - second_score) >= 4
+        and not top_signature.startswith(("pub ", "public "))
+        and (
+            second_signature.startswith(("pub ", "public "))
+            or second_penalty >= 5
+        )
+    ):
+        return False
     if len(distinct_paths) >= 5 and (top_score - second_score) <= 24:
         return True
     if len(distinct_paths) >= 3 and len(distinct_kinds) >= 2 and (top_score - second_score) <= 16:
