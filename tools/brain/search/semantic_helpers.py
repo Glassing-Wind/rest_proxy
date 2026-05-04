@@ -406,6 +406,22 @@ def implementation_query_prefers_request_routing(query: str) -> bool:
     return any(term in text for term in request_terms) and any(term in text for term in routing_terms)
 
 
+def implementation_noise_exclude_patterns(query: str) -> list[str]:
+    text = (query or "").strip().lower()
+    if not text:
+        return []
+    patterns: list[str] = []
+    if implementation_query_prefers_request_routing(query) and "grpc" in text:
+        patterns.extend(
+            [
+                "*Browser.swift",
+                "*Advertiser.swift",
+                "*Signer.swift",
+            ]
+        )
+    return patterns
+
+
 def implementation_support_surface_penalties(
     file_path: str | None,
     *,
@@ -1173,11 +1189,13 @@ def implementation_controller_entity_hit(meta: dict, file_path: str | None, quer
 def implementation_server_infra_penalty(meta: dict, file_path: str | None, query: str) -> float:
     if not implementation_query_prefers_request_routing(query):
         return 0.0
+    text = (query or "").strip().lower()
+    grpc_routing_query = "grpc" in text
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
     penalty = 0.0
     if any(token in basename for token in ("browser.swift", "advertiser.swift", "signer.swift")):
-        penalty = max(penalty, 0.08)
+        penalty = max(penalty, 0.18 if grpc_routing_query else 0.08)
     candidates: set[str] = set()
     if isinstance(meta, dict):
         for key in ("declared_symbols", "file_symbols"):
@@ -1190,7 +1208,7 @@ def implementation_server_infra_penalty(meta: dict, file_path: str | None, query
                     candidates.add(text)
     infra_prefixes = ("netservice", "advertise", "resolve", "discover", "browse", "completeboost")
     if any(symbol.startswith(infra_prefixes) for symbol in candidates):
-        penalty = max(penalty, 0.08)
+        penalty = max(penalty, 0.18 if grpc_routing_query else 0.08)
     return penalty
 
 

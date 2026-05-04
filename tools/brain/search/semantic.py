@@ -596,6 +596,9 @@ def register(mcp: FastMCP) -> None:
                     "*Tests*",
                 ]
 
+            if impl_intent:
+                exclude_paths = (exclude_paths or []) + sem_helpers.implementation_noise_exclude_patterns(query)
+
             if (
                 impl_intent
                 and sem_helpers.implementation_query_prefers_provider_wiring(query)

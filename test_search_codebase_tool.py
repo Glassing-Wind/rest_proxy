@@ -627,6 +627,93 @@ class SearchCodebaseToolTests(unittest.TestCase):
         self.assertIn("--- Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift ---", output)
         self.assertNotIn("--- Libraries/GRPC/Models/Sources/controlPanel/controlPanel.proto ---", output)
 
+    def test_search_codebase_grpc_routing_demotes_discovery_and_signing_infra(self):
+        rows_by_pid = {
+            "proj123": [
+                (
+                    "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    0,
+                    "public func generateImage(request: ServerRequest<ImageGenerationRequest>, context: ServerContext) async throws { try await self.handleGenerateImage(request: request.message, context: context) }",
+                    "proj123",
+                    {
+                        "language": "swift",
+                        "file_symbols": ["generateImage", "handleGenerateImage"],
+                        "declared_symbols": ["generateImage", "handleGenerateImage"],
+                        "node_types": ["class_declaration", "function_definition"],
+                    },
+                    0.30,
+                ),
+                (
+                    "Libraries/GRPC/Server/Sources/GRPCServiceBrowser.swift",
+                    0,
+                    "public func netServiceDidResolveAddress(_ sender: NetService) { delegate?.didFindService(descriptor) }",
+                    "proj123",
+                    {
+                        "language": "swift",
+                        "file_symbols": ["netServiceDidResolveAddress"],
+                        "declared_symbols": ["netServiceDidResolveAddress"],
+                        "node_types": ["class_declaration", "function_definition"],
+                    },
+                    0.34,
+                ),
+                (
+                    "Libraries/GRPC/Server/Sources/GRPCServerAdvertiser.swift",
+                    0,
+                    "public func startAdvertising(port: Int32, TLS: Bool) { netService.publish() }",
+                    "proj123",
+                    {
+                        "language": "swift",
+                        "file_symbols": ["startAdvertising"],
+                        "declared_symbols": ["startAdvertising"],
+                        "node_types": ["class_declaration", "function_definition"],
+                    },
+                    0.33,
+                ),
+                (
+                    "Libraries/GRPC/ProxyServer/Sources/ProxyMessageSigner.swift",
+                    0,
+                    "public func completeBoost(action: CompletionCode, generationId: String, amount: Int, logger: Logger) async {}",
+                    "proj123",
+                    {
+                        "language": "swift",
+                        "file_symbols": ["completeBoost"],
+                        "declared_symbols": ["completeBoost"],
+                        "node_types": ["class_declaration", "function_definition"],
+                    },
+                    0.32,
+                ),
+            ]
+        }
+        module = load_module(FakeMemoryStore(rows_by_pid))
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            output = asyncio.run(
+                mcp.tools["search_codebase"](
+                    workspace_id="repo",
+                    query="how does gRPC server request routing work",
+                    k=4,
+                    include_metadata=False,
+                    mode="precise",
+                    fallback="none",
+                    exclude_tests=True,
+                )
+        )
+
+        impl_index = output.index("--- Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift ---")
+        self.assertGreaterEqual(impl_index, 0)
+        self.assertNotIn("--- Libraries/GRPC/Server/Sources/GRPCServiceBrowser.swift ---", output)
+        self.assertNotIn("--- Libraries/GRPC/Server/Sources/GRPCServerAdvertiser.swift ---", output)
+        self.assertNotIn("--- Libraries/GRPC/ProxyServer/Sources/ProxyMessageSigner.swift ---", output)
+
     def test_search_codebase_provider_wiring_rescues_openai_provider_path(self):
         rows_by_pid = {
             "proj123": [
@@ -708,6 +795,15 @@ class SearchCodebaseToolTests(unittest.TestCase):
         openai_index = output.index("--- pydantic_ai_slim/pydantic_ai/providers/openai.py ---")
         self.assertLess(init_index, openai_index)
         self.assertNotIn("--- pydantic_ai_slim/pydantic_ai/providers/litellm.py ---", output)
+
+    def test_grpc_routing_query_adds_noise_exclude_patterns(self):
+        module = load_module(FakeMemoryStore({}))
+        patterns = module.sem_helpers.implementation_noise_exclude_patterns(
+            "how does gRPC server request routing work"
+        )
+        self.assertIn("*Browser.swift", patterns)
+        self.assertIn("*Advertiser.swift", patterns)
+        self.assertIn("*Signer.swift", patterns)
 
 
 if __name__ == "__main__":
