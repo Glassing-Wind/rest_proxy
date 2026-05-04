@@ -419,12 +419,20 @@ def implementation_noise_exclude_patterns(query: str) -> list[str]:
                 "*Signer.swift",
             ]
         )
+        if not implementation_query_accepts_generated_surfaces(query):
+            patterns.extend(
+                [
+                    "*.grpc.swift",
+                    "*.pb.swift",
+                ]
+            )
     return patterns
 
 
 def implementation_support_surface_penalties(
     file_path: str | None,
     *,
+    meta: dict | None = None,
     query: str,
     query_class: str,
     doc_like: bool,
@@ -439,6 +447,7 @@ def implementation_support_surface_penalties(
     if doc_like:
         penalties["doc_penalty"] = 0.05
     norm = (file_path or "").replace("\\", "/").lower()
+    file_roles = implementation_file_roles(meta or {})
     template_like = "/templates/" in norm or norm.endswith(".html")
     if template_like and not implementation_query_prefers_supporting_context(query):
         penalties["support_path_penalty"] = max(
@@ -449,6 +458,19 @@ def implementation_support_surface_penalties(
         penalties["support_path_penalty"] = max(
             penalties["support_path_penalty"],
             0.05 if query_class_prefers_definitions(query_class) else 0.03,
+        )
+    if (
+        (
+            "/profiles/" in norm
+            or "profile_surface" in file_roles
+        )
+        and implementation_query_prefers_dispatchers(query)
+        and "profile" not in implementation_query_symbols(query)
+        and "profile" not in implementation_query_exact_identifiers(query)
+    ):
+        penalties["support_path_penalty"] = max(
+            penalties["support_path_penalty"],
+            0.35 if query_class_prefers_definitions(query_class) else 0.18,
         )
     if usage_heavy:
         penalties["usage_penalty"] = 0.04 if query_class_prefers_definitions(query_class) else 0.0
@@ -807,6 +829,12 @@ def implementation_query_exact_identifiers(query: str) -> set[str]:
             continue
         if token.startswith("$") or "_" in token or any(ch.isupper() for ch in token[1:]):
             identifiers.add(lowered)
+    query_symbols = implementation_query_symbols(raw)
+    if implementation_query_prefers_dispatchers(raw):
+        if "model" in query_symbols or "models" in query_symbols:
+            identifiers.add("infer_model")
+        if "provider" in query_symbols or "providers" in query_symbols:
+            identifiers.update({"infer_provider", "infer_provider_class"})
     return identifiers
 
 
@@ -838,6 +866,10 @@ def implementation_inferred_filename_hints(query: str) -> list[str]:
     if not text:
         return []
     hints: set[str] = set()
+    if implementation_query_prefers_dispatchers(query):
+        query_symbols = implementation_query_symbols(query)
+        if "model" in query_symbols or "models" in query_symbols:
+            hints.add("models/__init__.py")
     if implementation_query_prefers_provider_wiring(query):
         provider_tokens = sorted(implementation_provider_query_tokens(query))
         for token in provider_tokens:
@@ -975,11 +1007,15 @@ def implementation_exact_identifier_hit(meta: dict, query: str) -> int:
     return sum(1 for identifier in identifiers if identifier in candidates)
 
 
-def implementation_dispatcher_priority(meta: dict, query: str) -> int:
+def implementation_dispatcher_priority(meta: dict, file_path: str | None, query: str) -> int:
     if not implementation_query_prefers_dispatchers(query):
         return 0
     if not isinstance(meta, dict):
         return 0
+    norm = (file_path or "").replace("\\", "/").lower()
+    basename = norm.rsplit("/", 1)[-1]
+    symbol_roles = implementation_declared_symbol_roles(meta)
+    file_roles = implementation_file_roles(meta)
     candidates: set[str] = set()
     for key in ("declared_symbols", "file_symbols"):
         values = meta.get(key)
@@ -989,9 +1025,20 @@ def implementation_dispatcher_priority(meta: dict, query: str) -> int:
             text = str(value).strip().lower()
             if text:
                 candidates.add(text)
-    if not candidates:
-        return 0
     priority = 0
+    if "dispatcher_surface" in file_roles:
+        priority = max(priority, 3)
+    for lowered_roles in symbol_roles.values():
+        if "canonical_dispatcher" in lowered_roles:
+            priority = max(priority, 4)
+        elif "model_selector" in lowered_roles or "provider_selector" in lowered_roles:
+            priority = max(priority, 3)
+        elif "dispatcher" in lowered_roles:
+            priority = max(priority, 2)
+    if not candidates:
+        return priority
+    if basename == "__init__.py" and "infer_model" in candidates:
+        priority = max(priority, 4)
     for symbol in candidates:
         if symbol in {"infer_model", "infer_provider", "infer_provider_class"}:
             priority = max(priority, 3)
@@ -1008,6 +1055,8 @@ def implementation_provider_wiring_priority(meta: dict, file_path: str | None, q
         return 0
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
+    symbol_roles = implementation_declared_symbol_roles(meta)
+    file_roles = implementation_file_roles(meta)
     candidates: set[str] = set()
     if isinstance(meta, dict):
         for key in ("declared_symbols", "file_symbols"):
@@ -1019,6 +1068,13 @@ def implementation_provider_wiring_priority(meta: dict, file_path: str | None, q
                 if text:
                     candidates.add(text)
     priority = 0
+    if "provider_dispatcher_surface" in file_roles:
+        priority = max(priority, 3)
+    for lowered_roles in symbol_roles.values():
+        if "canonical_dispatcher" in lowered_roles and "provider_selector" in lowered_roles:
+            priority = max(priority, 4)
+        elif "provider_selector" in lowered_roles:
+            priority = max(priority, 3)
     if basename == "__init__.py" and {"infer_provider", "infer_provider_class"} & candidates:
         priority = max(priority, 4)
     for token in provider_tokens:
@@ -1223,6 +1279,40 @@ def implementation_member_usages(meta: dict) -> set[str]:
         for expr in member_usages
         if str(expr).strip()
     }
+
+
+def implementation_file_roles(meta: dict) -> set[str]:
+    if not isinstance(meta, dict):
+        return set()
+    file_roles = meta.get("file_roles")
+    if not isinstance(file_roles, list):
+        return set()
+    return {
+        str(role).strip().lower()
+        for role in file_roles
+        if str(role).strip()
+    }
+
+
+def implementation_declared_symbol_roles(meta: dict) -> dict[str, set[str]]:
+    if not isinstance(meta, dict):
+        return {}
+    raw = meta.get("declared_symbol_roles")
+    if not isinstance(raw, dict):
+        return {}
+    roles: dict[str, set[str]] = {}
+    for symbol, symbol_roles in raw.items():
+        normalized = str(symbol).strip().lower()
+        if not normalized or not isinstance(symbol_roles, list):
+            continue
+        lowered = {
+            str(role).strip().lower()
+            for role in symbol_roles
+            if str(role).strip()
+        }
+        if lowered:
+            roles[normalized] = lowered
+    return roles
 
 
 def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
@@ -1612,6 +1702,7 @@ def implementation_result_role(
     callsite_like = bool(node_types & CALLSITE_NODE_TYPES)
     api_context_hit = implementation_api_context_hit(meta)
     chunk_role = implementation_chunk_role(meta, file_path)
+    file_roles = implementation_file_roles(meta)
     if is_generated_implementation_surface_path(file_path):
         return "generated_surface"
     if is_low_signal_binding_surface_path(file_path):
@@ -1621,6 +1712,10 @@ def implementation_result_role(
     if chunk_role in {"example_usage", "test_usage"}:
         return "test_example"
     if chunk_role == "script_support":
+        return "supporting_context"
+    if chunk_role == "canonical_dispatcher_definition":
+        return "canonical_definition"
+    if chunk_role == "profile_definition":
         return "supporting_context"
     if chunk_role == "usage" and definition_hit <= 0 and export_hit <= 0:
         return "usage_callsite"
@@ -1641,6 +1736,10 @@ def implementation_result_role(
         return "canonical_definition"
     if declaration_like and definition_hit > 0:
         return "internal_implementation"
+    if "dispatcher_surface" in file_roles:
+        return "canonical_definition"
+    if "profile_surface" in file_roles:
+        return "supporting_context"
     if callsite_like:
         return "usage_callsite"
     if is_usage_heavy_path(file_path):
@@ -1770,7 +1869,11 @@ def enrich_implementation_result(
             result.get("file_path"),
             query,
         )
-    result["implementation_dispatcher_priority"] = implementation_dispatcher_priority(meta, query)
+    result["implementation_dispatcher_priority"] = implementation_dispatcher_priority(
+        meta,
+        result.get("file_path"),
+        query,
+    )
     result["implementation_provider_wiring_priority"] = implementation_provider_wiring_priority(
         meta,
         result.get("file_path"),
@@ -1881,6 +1984,7 @@ def enrich_implementation_result(
         generated_surface_penalty = 0.0
     support_surface_penalties = implementation_support_surface_penalties(
         result.get("file_path"),
+        meta=meta,
         query=query,
         query_class=query_class,
         doc_like=bool(result["doc_like"]),

@@ -248,6 +248,31 @@ def register(mcp: FastMCP) -> None:
             candidate_norm,
         )
 
+    def _same_directory_rank(
+        target_file_path: str,
+        candidate_path: str,
+        sym_count: int,
+        shared_depth: int,
+    ) -> tuple[int, int, int, str]:
+        target_norm = str(target_file_path or "").replace("\\", "/").strip("/")
+        candidate_norm = str(candidate_path or "").replace("\\", "/").strip("/")
+        target_dir = target_norm.rsplit("/", 1)[0] if "/" in target_norm else ""
+        candidate_dir = candidate_norm.rsplit("/", 1)[0] if "/" in candidate_norm else ""
+        score = 0
+        if candidate_dir and candidate_dir == target_dir:
+            score += 100
+        if shared_depth >= 5:
+            score += 35
+        elif shared_depth >= 4:
+            score += 20
+        elif shared_depth >= 3:
+            score += 10
+        if _is_test_like_path(candidate_norm):
+            score -= 120
+        if _is_low_signal_support_path(candidate_norm):
+            score -= 60
+        return (-score, -sym_count, len(candidate_norm), candidate_norm)
+
     def _extract_swift_type_mentions(text: str, local_symbols: list[str] | set[str] | None = None) -> list[str]:
         local = {str(item).strip() for item in (local_symbols or []) if str(item).strip()}
         ignored = {
@@ -1980,7 +2005,106 @@ def register(mcp: FastMCP) -> None:
                     for rec in structural_import_related_records
                     if str(rec.get("related_file") or "") not in structural_related_paths
                 ]
-            if cargo_related or apple_related or structural_related or structural_import_related or related:
+                target_dir = str(file_path or "").replace("\\", "/").strip("/").rsplit("/", 1)[0]
+                same_directory_runtime_hits = 0
+                if target_dir:
+                    for record in [*structural_related_records, *structural_import_related_records]:
+                        related_file = str(record.get("related_file") or "").strip()
+                        related_dir = related_file.replace("\\", "/").strip("/").rsplit("/", 1)[0]
+                        if (
+                            related_dir == target_dir
+                            and not _is_low_signal_support_path(related_file)
+                            and not _is_test_like_path(related_file)
+                        ):
+                            same_directory_runtime_hits += 1
+                thin_structural_surface = same_directory_runtime_hits < 2
+                same_directory_records: list[dict] = []
+                if thin_structural_surface:
+                    if target_dir:
+                        sibling_rows = await _execute_read(
+                            session,
+                            """
+                            MATCH (f:File {project_id:$pid})
+                            WHERE f.filepath STARTS WITH $target_dir_prefix
+                              AND f.filepath <> $file_path
+                            OPTIONAL MATCH (f)-[:CONTAINS]->(s)
+                            WHERE s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait
+                               OR s:Enum OR s:Protocol OR s:Extension OR s:TypeAlias OR s:AssociatedType
+                            WITH f, count(s) AS sym_count, collect(DISTINCT s.name)[..3] AS sym_examples
+                            WHERE sym_count > 0
+                            RETURN f.filepath AS related_file, sym_count, sym_examples
+                            ORDER BY sym_count DESC, related_file
+                            LIMIT 12
+                            """,
+                            pid=project_id,
+                            file_path=file_path,
+                            target_dir_prefix=target_dir + "/",
+                            op="get_related_files_same_directory",
+                        )
+                        existing_related_paths = {
+                            *structural_related_paths,
+                            *{
+                                str(rec.get("related_file") or "")
+                                for rec in structural_import_related_records
+                            },
+                        }
+                        for record in sibling_rows:
+                            related_file = str(record.get("related_file") or "").strip()
+                            if (
+                                not related_file
+                                or related_file == file_path
+                                or related_file in existing_related_paths
+                                or _is_low_signal_support_path(related_file)
+                                or _is_test_like_path(related_file)
+                            ):
+                                continue
+                            symbols = _dedupe_symbol_names(
+                                [
+                                    str(item)
+                                    for item in (record.get("sym_examples") or [])
+                                    if str(item).strip()
+                                ]
+                            )
+                            sym_count = int(record.get("sym_count") or 0)
+                            if sym_count <= 0:
+                                continue
+                            same_directory_records.append(
+                                {
+                                    "related_file": related_file,
+                                    "sym_count": sym_count,
+                                    "symbols": symbols,
+                                    "shared_depth": _shared_directory_depth(file_path, related_file),
+                                    "reason": (
+                                        f"same directory implementation, symbols: {sym_count}"
+                                        + (
+                                            f"; samples: {', '.join(symbols[:3])}"
+                                            if symbols
+                                            else ""
+                                        )
+                                    ),
+                                }
+                            )
+                        same_directory_records.sort(
+                            key=lambda rec: _same_directory_rank(
+                                file_path,
+                                str(rec.get("related_file") or ""),
+                                int(rec.get("sym_count") or 0),
+                                int(rec.get("shared_depth") or 0),
+                            )
+                        )
+                        same_directory_records = same_directory_records[:5]
+                same_directory_related = [
+                    f"- {rec['related_file']} ({rec['reason']})"
+                    for rec in same_directory_records
+                ]
+            if (
+                cargo_related
+                or apple_related
+                or structural_related
+                or structural_import_related
+                or same_directory_related
+                or related
+            ):
                 output = [
                     "Related Files:",
                     "",
@@ -2058,6 +2182,9 @@ def register(mcp: FastMCP) -> None:
                 if remaining_structural_import_related:
                     output.append("Symbol import graph:")
                     output.extend(remaining_structural_import_related)
+                if same_directory_related:
+                    output.append("Sibling implementation files:")
+                    output.extend(same_directory_related)
                 remaining_related = [
                     line
                     for line in related

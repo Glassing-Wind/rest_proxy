@@ -122,12 +122,18 @@ async def _load_path_hint_rows(
     *,
     pid: str,
     path_hints: list[str],
+    identifier_exprs: list[str] | None = None,
     max_files: int = 12,
 ) -> list[dict]:
     normalized_hints = [
         f"%{str(hint).strip().lower()}%"
         for hint in (path_hints or [])
         if str(hint).strip()
+    ]
+    identifier_exprs = [
+        str(expr).strip().lower()
+        for expr in (identifier_exprs or [])
+        if str(expr).strip()
     ]
     if not normalized_hints:
         return []
@@ -176,21 +182,47 @@ async def _load_path_hint_rows(
             ranked AS (
                 SELECT c.file_path, c.chunk_index, c.content, c.project_id, c.metadata,
                        m.path_hint_hit, m.code_rank,
+                       CASE
+                           WHEN cardinality(%(identifier_exprs)s::text[]) > 0
+                                AND EXISTS (
+                                    SELECT 1
+                                    FROM unnest(%(identifier_exprs)s::text[]) AS expr(value)
+                                    WHERE lower(c.content) LIKE ('%%' || expr.value || '%%')
+                                )
+                           THEN 1
+                           ELSE 0
+                       END AS exact_identifier_text_hit,
                        ROW_NUMBER() OVER (
                            PARTITION BY c.file_path
-                           ORDER BY c.chunk_index ASC
+                           ORDER BY
+                               CASE
+                                   WHEN cardinality(%(identifier_exprs)s::text[]) > 0
+                                        AND EXISTS (
+                                            SELECT 1
+                                            FROM unnest(%(identifier_exprs)s::text[]) AS expr(value)
+                                            WHERE lower(c.content) LIKE ('%%' || expr.value || '%%')
+                                        )
+                                   THEN 1
+                                   ELSE 0
+                               END DESC,
+                               c.chunk_index ASC
                        ) AS chunk_rank
                 FROM codebase_embeddings c
                 JOIN matched_files m
                   ON m.file_path = c.file_path
                 WHERE c.project_id = %(pid)s
             )
-            SELECT file_path, chunk_index, content, project_id, metadata, path_hint_hit
+            SELECT file_path, chunk_index, content, project_id, metadata, path_hint_hit, exact_identifier_text_hit
             FROM ranked
             WHERE chunk_rank <= 6
-            ORDER BY path_hint_hit DESC, code_rank ASC, file_path, chunk_index
+            ORDER BY exact_identifier_text_hit DESC, path_hint_hit DESC, code_rank ASC, file_path, chunk_index
             """,
-            {"pid": pid, "patterns": normalized_hints, "max_files": max_files},
+            {
+                "pid": pid,
+                "patterns": normalized_hints,
+                "identifier_exprs": identifier_exprs,
+                "max_files": max_files,
+            },
         )
         rows = await cur.fetchall()
     return [
@@ -201,6 +233,7 @@ async def _load_path_hint_rows(
             "project_id": r[3],
             "metadata": r[4],
             "implementation_path_hint_hit": int(r[5] or 0),
+            "implementation_exact_identifier_text_hit": int(r[6] or 0),
             "rrf": 0.0,
             "_definition_rescue": True,
         }
@@ -383,6 +416,7 @@ def register(mcp: FastMCP) -> None:
 
             impl_intent = sem_helpers.implementation_query_intent(query)
             impl_query_class = sem_helpers.implementation_query_class(query)
+            exact_identifiers = sorted(sem_helpers.implementation_query_exact_identifiers(query))
             member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
             path_hints = sem_helpers.implementation_query_path_hints(query)
             inferred_filename_hints = sem_helpers.implementation_inferred_filename_hints(query)
@@ -546,6 +580,7 @@ def register(mcp: FastMCP) -> None:
                                     conn,
                                     pid=pid,
                                     path_hints=path_hints,
+                                    identifier_exprs=exact_identifiers,
                                     max_files=min(max(fallback_max, 8), 16),
                                 )
                             for r in rescue_rows:
@@ -565,7 +600,7 @@ def register(mcp: FastMCP) -> None:
                                     query_class=impl_query_class,
                                     base_score=float(r.get("rrf", 0.0) or 0.0),
                                     meta_boost=0.0,
-                                    base_bonus=0.025,
+                                    base_bonus=0.14 if int(r.get("implementation_exact_identifier_text_hit", 0) or 0) > 0 else 0.025,
                                 )
                             rescue_results.extend(rescue_rows)
                     if rescue_results:
@@ -619,7 +654,6 @@ def register(mcp: FastMCP) -> None:
                         )
                 else:
                     include_paths = ["providers/*", "*/providers/*"]
-
             if mode == "broad":
                 if max_per_dir == 2:
                     max_per_dir = 4
@@ -836,6 +870,7 @@ def register(mcp: FastMCP) -> None:
                                 conn,
                                 pid=pid,
                                 path_hints=path_hints,
+                                identifier_exprs=exact_identifiers,
                                 max_files=min(max(fallback_max, 8), 16),
                             )
                         for r in rescue_rows:
@@ -858,7 +893,7 @@ def register(mcp: FastMCP) -> None:
                                 query_class=impl_query_class,
                                 base_score=float(r.get("rrf", 0.0) or 0.0),
                                 meta_boost=0.0,
-                                base_bonus=0.025,
+                                base_bonus=0.14 if int(r.get("implementation_exact_identifier_text_hit", 0) or 0) > 0 else 0.025,
                             )
                         rescue_results.extend(rescue_rows)
                 if rescue_results:
@@ -1249,6 +1284,26 @@ def register(mcp: FastMCP) -> None:
 
             if impl_intent:
                 all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                if (
+                    sem_helpers.implementation_query_prefers_dispatchers(query)
+                    and "profile" not in sem_helpers.implementation_query_symbols(query)
+                    and "profile" not in sem_helpers.implementation_query_exact_identifiers(query)
+                ):
+                    non_profile_results: list[dict] = []
+                    for r in all_results:
+                        meta = sem_helpers.coerce_meta(r)
+                        file_roles = sem_helpers.implementation_file_roles(meta)
+                        chunk_role = sem_helpers.implementation_chunk_role(meta, r.get("file_path"))
+                        norm = (r.get("file_path") or "").replace("\\", "/").lower()
+                        if (
+                            "/profiles/" in norm
+                            or "profile_surface" in file_roles
+                            or chunk_role == "profile_definition"
+                        ):
+                            continue
+                        non_profile_results.append(r)
+                    if non_profile_results:
+                        all_results = non_profile_results
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)
             all_results = sem_helpers.cap_per_dir(all_results, max_per_dir)

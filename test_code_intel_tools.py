@@ -2022,6 +2022,67 @@ class CodeIntelToolTests(unittest.TestCase):
             output.index("ConnectInterceptor.kt"),
         )
 
+    def test_get_related_files_surfaces_same_directory_runtime_neighbors_when_graph_is_thin(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return [
+                    {
+                        "related_file": "Sources/NIOPosix/BaseSocketChannel.swift",
+                        "symbol": "cancelWritesOnClose",
+                    },
+                    {
+                        "related_file": "Sources/NIOPosix/BaseSocketChannel.swift",
+                        "symbol": "flushNow",
+                    },
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return [
+                    {
+                        "related_file": "Benchmarks/Benchmarks/NIOPosixBenchmarks/Benchmarks.swift",
+                        "symbol": "DatagramChannel",
+                    },
+                ]
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "Sources/NIOPosix/Bootstrap.swift",
+                        "sym_count": 10,
+                        "sym_examples": ["bootstrap", "bind"],
+                    },
+                    {
+                        "related_file": "Tests/NIOPosixTests/ChannelTests.swift",
+                        "sym_count": 22,
+                        "sym_examples": ["testBind", "testClose"],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/swift-nio",
+                        "Sources/NIOPosix/SocketChannel.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Sibling implementation files:", output)
+        self.assertIn("Sources/NIOPosix/Bootstrap.swift", output)
+        self.assertNotIn("Tests/NIOPosixTests/ChannelTests.swift", output)
+
     def test_get_related_files_does_not_promote_shared_import_graph_into_inspect_first_when_structural_exists(self):
         async def fake_executor(cypher, **kwargs):
             if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:

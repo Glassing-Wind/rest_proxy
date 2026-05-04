@@ -23,6 +23,8 @@ _JOBS: Dict[str, Dict[str, Any]] = {}
 _JOBS_LOCK = threading.Lock()
 _MAX_LOG_LINES = 200  # ring-buffer size per job
 _RUNTIME_JOBS_DIR = Path(__file__).resolve().parent / ".runtime" / "jobs"
+_PROJECT_LOCKS_DIR = Path(__file__).resolve().parent / ".runtime" / "project_locks"
+_PROJECT_LOCK_STALE_S = 6 * 60 * 60
 
 # The main asyncio event loop, captured at server startup.
 # _finalize_job runs in a worker thread and must schedule async work
@@ -49,6 +51,11 @@ def _ensure_jobs_runtime_dir() -> Path:
     return _RUNTIME_JOBS_DIR
 
 
+def _ensure_project_locks_dir() -> Path:
+    _PROJECT_LOCKS_DIR.mkdir(parents=True, exist_ok=True)
+    return _PROJECT_LOCKS_DIR
+
+
 def _job_dir(job_id: str) -> Path:
     return _ensure_jobs_runtime_dir() / job_id
 
@@ -69,6 +76,21 @@ def _job_control_paths(job_id: str) -> dict[str, str]:
         "struct_log_path": str(_job_log_path(job_id, "struct")),
         "semantic_log_path": str(_job_log_path(job_id, "semantic")),
     }
+
+
+def _project_lock_path(project_id: str) -> Path:
+    safe = str(project_id or "").strip() or "unknown"
+    return _ensure_project_locks_dir() / f"{safe}.json"
+
+
+def _load_project_lock(project_id: str) -> dict[str, Any] | None:
+    path = _project_lock_path(project_id)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 def _job_runtime_fields(job: dict[str, Any]) -> dict[str, Any]:
@@ -132,6 +154,83 @@ def load_job_record(job_id: str) -> dict[str, Any] | None:
         if job:
             return dict(job)
     return _load_persisted_job(job_id)
+
+
+def _job_processes_alive(job: dict[str, Any] | None) -> bool:
+    if not isinstance(job, dict):
+        return False
+    for key in ("struct_pid", "sem_pid"):
+        if _process_alive(job.get(key)):
+            return True
+    return False
+
+
+def _release_project_job_lock(project_id: str, job_id: str) -> None:
+    if not project_id or not job_id:
+        return
+    path = _project_lock_path(project_id)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        payload = None
+    if isinstance(payload, dict) and payload.get("job_id") != job_id:
+        return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+
+def claim_project_job_lock(
+    project_id: str,
+    job_id: str,
+    *,
+    project_path: str,
+) -> tuple[bool, dict[str, Any] | None]:
+    path = _project_lock_path(project_id)
+    payload = {
+        "job_id": job_id,
+        "project_id": project_id,
+        "project_path": project_path,
+        "created_at": time.time(),
+        "pid": os.getpid(),
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+
+    while True:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            existing = _load_project_lock(project_id) or {}
+            existing_job_id = str(existing.get("job_id") or "").strip()
+            existing_job = load_job_record(existing_job_id) if existing_job_id else None
+            if existing_job_id and existing_job:
+                alive = _job_processes_alive(existing_job)
+                status = str(existing_job.get("status") or "")
+                if alive or status == "running":
+                    return False, existing_job
+            created_at = float(existing.get("created_at") or 0.0)
+            if created_at and (time.time() - created_at) < _PROJECT_LOCK_STALE_S:
+                return False, existing_job or existing
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
+            except OSError:
+                return False, existing_job
+            continue
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(raw)
+        except Exception:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            raise
+        return True, None
 
 
 def _process_alive(pid: int | None) -> bool:
@@ -543,6 +642,10 @@ def _reconcile_job_process_state(job_id: str) -> dict[str, Any] | None:
                     os.remove(manifest_path)
                 except OSError:
                     pass
+            _release_project_job_lock(
+                str(job.get("project_id") or ""),
+                job_id,
+            )
         should_run_post_index_maintenance = bool(
             both_finished and not job.get("post_index_maintenance_done")
         )
@@ -598,6 +701,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
             else:
                 _JOBS[job_id]["status"] = "done" if ok else "failed"
                 _JOBS[job_id]["finished_at"] = _t.time()
+    _release_project_job_lock(project_id, job_id)
     _persist_job_state(job_id)
 
     _run_post_index_maintenance(job_id)

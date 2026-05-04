@@ -283,7 +283,13 @@ def _normalize(text: str) -> str:
 def _first_ranked_result_label(text: str) -> str:
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith("--- ") and " (Score:" in stripped:
+        if (
+            stripped.startswith("--- ")
+            and " (Score:" in stripped
+        ) or (
+            stripped.startswith("--- ")
+            and stripped.endswith(" ---")
+        ):
             return stripped
     return ""
 

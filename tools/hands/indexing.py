@@ -13,10 +13,12 @@ from mcp.server.fastmcp import FastMCP
 from _jobs import (
     _JOBS,
     _JOBS_LOCK,
+    claim_project_job_lock,
     _drain_proc_output,
     _finalize_job,
     _job_control_paths,
     _persist_job_state,
+    _release_project_job_lock,
     _reconcile_job_process_state,
     _render_job_logs,
     load_job_record,
@@ -318,6 +320,9 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
               - "rebuild": Wipes all existing project data and starts fresh.
               - "cleanup": Only removes orphaned/deleted files from the index.
     """
+    claimed_lock = False
+    project_id = ""
+    job_id = ""
     try:
         import time, uuid
 
@@ -328,6 +333,42 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
 
         project_path = get_workspace_path(workspace_id)
         project_id = get_project_id(workspace_id)
+        current_session = client_session_id.get()
+        job_id = str(uuid.uuid4())[:8]
+        with _JOBS_LOCK:
+            # Atomic in-process guard for this server instance.
+            for existing_id, existing_job in _JOBS.items():
+                if (
+                    existing_job.get("project_id") == project_id
+                    and existing_job.get("status") == "running"
+                ):
+                    return (
+                        f"⚠️  Indexing already running for this project.\n"
+                        f"  job_id: {existing_id}\n"
+                        f"  elapsed: {time.time() - existing_job['started_at']:.0f}s\n"
+                        f"\nUse get_index_status('{existing_id}') to monitor progress."
+                    )
+        claimed, blocking_job = claim_project_job_lock(
+            project_id,
+            job_id,
+            project_path=project_path,
+        )
+        if not claimed:
+            blocking_id = str((blocking_job or {}).get("job_id") or "").strip() or "unknown"
+            elapsed = None
+            if isinstance(blocking_job, dict) and blocking_job.get("started_at"):
+                elapsed = max(0.0, time.time() - float(blocking_job["started_at"]))
+            lines = [
+                "⚠️  Indexing already running for this project.",
+                f"  job_id: {blocking_id}",
+            ]
+            if elapsed is not None:
+                lines.append(f"  elapsed: {elapsed:.0f}s")
+            if blocking_id != "unknown":
+                lines.append("")
+                lines.append(f"Use get_index_status('{blocking_id}') to monitor progress.")
+            return "\n".join(lines)
+        claimed_lock = True
         # __file__ is tools/hands/indexing.py — step up two levels to rest_proxy/
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         runtime_dir = os.path.join(base_dir, ".runtime")
@@ -419,26 +460,13 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                     _debug_log("semantic_prune_failed", project_id=project_id, error=str(exc))
 
         if mode == "cleanup":
+            _release_project_job_lock(project_id, job_id)
+            claimed_lock = False
             return f"Cleanup complete for project '{project_path}' (ID: {project_id}). Orphaned nodes and chunks removed."
 
         # ── Launch Indexing Subprocesses ──────────────────────────────────────
-        current_session = client_session_id.get()
+        control_paths = _job_control_paths(job_id)
         with _JOBS_LOCK:
-            # Atomic check: Is this project already being indexed?
-            for existing_id, existing_job in _JOBS.items():
-                if (
-                    existing_job.get("project_id") == project_id
-                    and existing_job.get("status") == "running"
-                ):
-                    return (
-                        f"⚠️  Indexing already running for this project.\n"
-                        f"  job_id: {existing_id}\n"
-                        f"  elapsed: {time.time() - existing_job['started_at']:.0f}s\n"
-                        f"\nUse get_index_status('{existing_id}') to monitor progress."
-                    )
-
-            job_id = str(uuid.uuid4())[:8]
-            control_paths = _job_control_paths(job_id)
             _JOBS[job_id] = {
                 "status": "running",
                 "session_id": current_session,
@@ -562,6 +590,8 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             f"A file parse summary will appear when the job completes."
         )
     except Exception as e:
+        if claimed_lock and project_id and job_id:
+            _release_project_job_lock(project_id, job_id)
         return f"Error starting indexing: {e}"
 
 
