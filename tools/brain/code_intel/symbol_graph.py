@@ -772,8 +772,17 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
     if rec["signature"]:
         out.append(f"**Signature:** `{rec['signature']}`\n")
 
-    callers = _dedupe_symbol_context_callers(rec["callers"] or [])
-    callees = [c for c in (rec["callees"] or []) if c.get("name")]
+    callers = [
+        caller
+        for caller in _dedupe_symbol_context_callers(rec["callers"] or [])
+        if _is_language_compatible(rec.get("filepath"), caller.get("file"))
+    ]
+    callees = [
+        callee
+        for callee in (rec["callees"] or [])
+        if callee.get("name")
+        and _is_language_compatible(rec.get("filepath"), callee.get("file"))
+    ]
     external_callees = [c for c in (rec.get("external_callees") or []) if c.get("name")]
 
     if callers:
@@ -829,6 +838,44 @@ def _dedupe_symbol_context_callers(callers: list[dict]) -> list[dict]:
         seen.add(key)
         deduped.append(caller)
     return deduped
+
+
+def _language_family(filepath: str | None) -> str | None:
+    normalized = (filepath or "").replace("\\", "/").lower()
+    if not normalized:
+        return None
+    _, ext = os.path.splitext(normalized)
+    if ext in {".py", ".pyi"}:
+        return "python"
+    if ext in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}:
+        return "web"
+    if ext in {".java", ".kt", ".kts", ".scala", ".groovy"}:
+        return "jvm"
+    if ext in {".swift", ".m", ".mm", ".h"}:
+        return "apple"
+    if ext in {".c", ".cc", ".cpp", ".cxx", ".hpp"}:
+        return "native"
+    if ext == ".rs":
+        return "rust"
+    if ext == ".go":
+        return "go"
+    if ext == ".rb":
+        return "ruby"
+    if ext == ".cs":
+        return "csharp"
+    return None
+
+
+def _is_language_compatible(root_filepath: str | None, candidate_filepath: str | None) -> bool:
+    root_family = _language_family(root_filepath)
+    candidate_family = _language_family(candidate_filepath)
+    if not root_family or not candidate_family:
+        return True
+    if root_family == candidate_family:
+        return True
+    if {root_family, candidate_family} <= {"apple", "native"}:
+        return True
+    return False
 
 
 def exact_call_graph_guidance(
@@ -913,6 +960,12 @@ def format_call_chain_rows(
         chain = rec["chain"]
         files = rec["files"]
         lines = rec.get("lines") or []
+        if any(
+            not _is_language_compatible(resolved_filepath, file_path)
+            for file_path in files[1:]
+            if file_path
+        ):
+            continue
         compact_chain: list[tuple[str | None, str | None, int | None]] = []
         for idx, name in enumerate(chain):
             file_path = files[idx] if idx < len(files) else None

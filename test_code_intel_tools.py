@@ -1050,6 +1050,108 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertNotIn("`iife`", output)
         self.assertNotIn("`fn`", output)
 
+    def test_get_call_chain_empty_graph_message_is_language_neutral(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "processNewVisitForm",
+                        "qualified_name": "OwnerController.processNewVisitForm",
+                        "signature": None,
+                        "filepath": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+                        "rank": 0,
+                        "path_rank": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/spring-petclinic-upstream",
+                        "processNewVisitForm",
+                        depth=3,
+                        direction="down",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("resolved but no callees within 3 hops", output)
+        self.assertIn("call graph edges are available", output)
+        self.assertNotIn("Swift CALLS edges", output)
+
+    def test_get_call_chain_filters_cross_language_noise_from_swift_paths(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "handleGenerateImage",
+                        "qualified_name": "ImageGenerationServiceImpl.handleGenerateImage",
+                        "signature": None,
+                        "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "rank": 0,
+                        "path_rank": 0,
+                        "callers_in": 1,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return [
+                    {
+                        "chain": [
+                            "handleGenerateImage",
+                            "writeResponseSynchronously",
+                            "sync",
+                        ],
+                        "files": [
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Scripts/ServerManagement/GPUScript/UpdateModels/r2_sync_verification.py",
+                        ],
+                        "lines": [220, 1400, 72],
+                    },
+                    {
+                        "chain": [
+                            "handleGenerateImage",
+                            "writeResponseSynchronously",
+                            "write",
+                        ],
+                        "files": [
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Libraries/GRPC/Server/Sources/ImageGenerationClientWrapper.swift",
+                        ],
+                        "lines": [220, 1400, 88],
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/draw-things-community",
+                        "handleGenerateImage",
+                        depth=3,
+                        direction="down",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("writeResponseSynchronously", output)
+        self.assertIn("ImageGenerationClientWrapper.swift", output)
+        self.assertNotIn("r2_sync_verification.py", output)
+
     def test_get_call_chain_prefers_same_package_runtime_hops_for_monorepo_entrypoint(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:
@@ -1300,6 +1402,41 @@ class CodeIntelToolTests(unittest.TestCase):
         rendered = "\n".join(output)
         self.assertIn("`ContentView`:4", rendered)
         self.assertNotIn("`ContentView.swift`", rendered)
+
+    def test_symbol_context_filters_cross_language_noise_for_swift_symbol(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Class",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 100,
+                "end_line": 1486,
+                "signature": "final class ImageGenerationServiceImpl",
+                "callers": [
+                    {
+                        "name": "runAndBlock",
+                        "file": "Apps/gRPCServerCLI/gRPCServerCLI.swift",
+                        "line": 511,
+                    }
+                ],
+                "callees": [
+                    {
+                        "name": "sync",
+                        "file": "Scripts/ServerManagement/GPUScript/UpdateModels/r2_sync_verification.py",
+                    },
+                    {
+                        "name": "writeResponseSynchronously",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                ],
+                "external_callees": [],
+            },
+            "ImageGenerationServiceImpl",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("runAndBlock", rendered)
+        self.assertIn("writeResponseSynchronously", rendered)
+        self.assertNotIn("r2_sync_verification.py", rendered)
 
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):

@@ -792,7 +792,7 @@ def register(mcp: FastMCP) -> None:
                             return "\n".join(lines)
                     message = (
                         f"`{resolved_name}` resolved but no {hop_label}s within {depth} hops.\n"
-                        "Make sure the project is indexed and Swift CALLS edges are available."
+                        "Make sure the project is indexed and call graph edges are available."
                     )
                     guidance = symbol_graph.exact_call_graph_guidance(
                         resolved_filepath,
