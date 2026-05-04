@@ -151,7 +151,7 @@ async def _load_graph_file_roles(session, project_id: str, file_paths: list[str]
         """
         MATCH (f:File {project_id:$pid})
         WHERE f.filepath IN $paths
-        RETURN f.filepath AS fp, coalesce(f.semantic_file_roles, []) AS roles
+        RETURN f.filepath AS fp, f.semantic_file_roles AS roles
         """,
         pid=project_id,
         paths=paths,
@@ -162,7 +162,7 @@ async def _load_graph_file_roles(session, project_id: str, file_paths: list[str]
         path = str(row.get("fp") or "").strip()
         if not path:
             continue
-        roles = row.get("roles") or []
+        roles = row.get("roles")
         if isinstance(roles, list):
             out[path] = {
                 str(role).strip().lower()
@@ -170,6 +170,43 @@ async def _load_graph_file_roles(session, project_id: str, file_paths: list[str]
                 if str(role).strip()
             }
     return out
+
+
+async def _promote_graph_file_roles(
+    session,
+    project_id: str,
+    file_roles_by_path: dict[str, set[str]],
+) -> None:
+    batch = [
+        {
+            "filepath": path,
+            "roles": sorted(
+                {
+                    str(role).strip().lower()
+                    for role in (roles or set())
+                    if str(role).strip()
+                }
+            ),
+        }
+        for path, roles in (file_roles_by_path or {}).items()
+        if str(path).strip()
+    ]
+    if not batch:
+        return
+    try:
+        await graph_core._execute_write(
+            session,
+            """
+            UNWIND $batch AS item
+            MATCH (f:File {project_id:$pid, filepath:item.filepath})
+            SET f.semantic_file_roles = item.roles
+            """,
+            pid=project_id,
+            batch=batch,
+            operation="promote_graph_file_roles",
+        )
+    except Exception:
+        return
 
 
 def _schema_cypher(text: str) -> str:
@@ -1666,9 +1703,15 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
     file_roles_by_path = dict(graph_file_roles_by_path)
     if missing_role_paths:
         async with memory_store._pg_pool.connection() as conn:
-            file_roles_by_path.update(
-                await _load_semantic_file_roles(conn, project_id, missing_role_paths)
+            fallback_roles_by_path = await _load_semantic_file_roles(
+                conn, project_id, missing_role_paths
             )
+            file_roles_by_path.update(fallback_roles_by_path)
+        if fallback_roles_by_path:
+            async with driver.session(database=neo4j_db) as write_session:
+                await _promote_graph_file_roles(
+                    write_session, project_id, fallback_roles_by_path
+                )
 
     r_inbound = _rank_directory_snapshot_rows(
         r_inbound,
@@ -1939,9 +1982,14 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
             ]
             key_file_roles_by_path = dict(graph_key_file_roles_by_path)
             if missing_key_role_paths:
-                key_file_roles_by_path.update(
-                    await _load_semantic_file_roles(conn, project_id, missing_key_role_paths)
+                fallback_key_roles_by_path = await _load_semantic_file_roles(
+                    conn, project_id, missing_key_role_paths
                 )
+                key_file_roles_by_path.update(fallback_key_roles_by_path)
+                if fallback_key_roles_by_path:
+                    await _promote_graph_file_roles(
+                        session, project_id, fallback_key_roles_by_path
+                    )
             key_files = []
             ranked_key_rows = sorted(
                 r4,

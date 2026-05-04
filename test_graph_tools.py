@@ -105,7 +105,11 @@ def load_tools_module():
     async def _execute_read(*args, **kwargs):
         return []
 
+    async def _execute_write(*args, **kwargs):
+        return None
+
     graph_core_mod._execute_read = _execute_read
+    graph_core_mod._execute_write = _execute_write
     graph_core_mod._get_cli_flow_summary = mock.AsyncMock(return_value="No CLI flows found.")
     graph_core_mod._summarize_batches = lambda *args, **kwargs: (0, 0, 0)
     graph_core_mod.get_last_graph_build_metric = lambda: None
@@ -1048,6 +1052,57 @@ class GraphToolsTests(unittest.TestCase):
 
         self.assertEqual(ranked[0]["caller"], "FrameCreator/Views/ContentView.swift")
         self.assertEqual(ranked[0]["signal"], "symbol_call")
+
+    def test_load_graph_file_roles_ignores_missing_graph_property(self):
+        async def fake_execute_read(session, query, **kwargs):
+            return [
+                {"fp": "src/generated.ts", "roles": ["generated_surface", "support_surface"]},
+                {"fp": "src/app.ts", "roles": None},
+                {"fp": "src/view.ts", "roles": []},
+            ]
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            result = asyncio.run(
+                self.module.graph_overview._load_graph_file_roles(
+                    object(),
+                    "proj123",
+                    ["src/generated.ts", "src/app.ts", "src/view.ts"],
+                )
+            )
+
+        self.assertEqual(result["src/generated.ts"], {"generated_surface", "support_surface"})
+        self.assertEqual(result["src/view.ts"], set())
+        self.assertNotIn("src/app.ts", result)
+
+    def test_promote_graph_file_roles_normalizes_and_writes_batch(self):
+        write_calls = []
+
+        async def fake_execute_write(session, query, **kwargs):
+            write_calls.append({"session": session, "query": query, "kwargs": kwargs})
+            return None
+
+        with mock.patch.object(self.module.graph_core, "_execute_write", side_effect=fake_execute_write):
+            asyncio.run(
+                self.module.graph_overview._promote_graph_file_roles(
+                    object(),
+                    "proj123",
+                    {
+                        "src/generated.ts": {"Generated_Surface", " support_surface "},
+                        "src/app.ts": set(),
+                    },
+                )
+            )
+
+        self.assertEqual(len(write_calls), 1)
+        self.assertEqual(write_calls[0]["kwargs"]["pid"], "proj123")
+        self.assertEqual(
+            write_calls[0]["kwargs"]["batch"],
+            [
+                {"filepath": "src/generated.ts", "roles": ["generated_surface", "support_surface"]},
+                {"filepath": "src/app.ts", "roles": []},
+            ],
+        )
+        self.assertEqual(write_calls[0]["kwargs"]["operation"], "promote_graph_file_roles")
 
     def test_repo_dependency_summary_includes_inspect_first_guidance(self):
         with mock.patch.object(
