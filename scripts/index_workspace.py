@@ -676,6 +676,85 @@ def _set_semantic_run_status(
         driver.close()
 
 
+async def _promote_semantic_file_roles_to_graph(
+    project_id: str,
+    manifest_paths: List[str],
+) -> None:
+    if not manifest_paths or not memory_store._pg_pool_available():
+        return
+    file_roles_rows: list[tuple[str, list[str]]] = []
+    async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT
+                  file_path,
+                  array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
+                FROM codebase_embeddings
+                LEFT JOIN LATERAL jsonb_array_elements_text(
+                  CASE
+                    WHEN jsonb_typeof(metadata->'file_roles') = 'array'
+                    THEN metadata->'file_roles'
+                    ELSE '[]'::jsonb
+                  END
+                ) AS role ON TRUE
+                WHERE project_id = %s
+                  AND file_path = ANY(%s)
+                GROUP BY file_path
+                """,
+                (project_id, manifest_paths),
+            )
+            file_roles_rows = await cur.fetchall()
+
+    role_map = {
+        str(file_path or "").strip(): sorted(
+            {
+                str(role).strip()
+                for role in (roles or [])
+                if str(role).strip()
+            }
+        )
+        for file_path, roles in file_roles_rows
+        if str(file_path or "").strip()
+    }
+    batch = [
+        {"filepath": path, "roles": role_map.get(path, [])}
+        for path in manifest_paths
+        if path
+    ]
+    if not batch:
+        return
+    try:
+        import neo4j
+    except Exception:
+        return
+
+    neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
+    neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
+    neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            session.run(
+                """
+                UNWIND $batch AS item
+                MATCH (f:File {project_id:$pid, filepath:item.filepath})
+                SET f.semantic_file_roles = item.roles
+                """,
+                pid=project_id,
+                batch=batch,
+            ).consume()
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] WARN: semantic file role graph promotion failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+    finally:
+        driver.close()
+
+
 async def index_project(
     target_dir: str,
     project_id: str,
@@ -1009,6 +1088,8 @@ async def index_project(
                 file=sys.stderr,
                 flush=True,
             )
+
+    await _promote_semantic_file_roles_to_graph(project_id, manifest_paths)
 
     elapsed = time.time() - t0
     print(

@@ -142,6 +142,36 @@ async def _load_semantic_file_roles(conn, project_id: str, file_paths: list[str]
     return out
 
 
+async def _load_graph_file_roles(session, project_id: str, file_paths: list[str]) -> dict[str, set[str]]:
+    paths = [str(path).strip() for path in (file_paths or []) if str(path).strip()]
+    if not paths:
+        return {}
+    rows = await graph_core._execute_read(
+        session,
+        """
+        MATCH (f:File {project_id:$pid})
+        WHERE f.filepath IN $paths
+        RETURN f.filepath AS fp, coalesce(f.semantic_file_roles, []) AS roles
+        """,
+        pid=project_id,
+        paths=paths,
+        op="load_graph_file_roles",
+    )
+    out: dict[str, set[str]] = {}
+    for row in rows or []:
+        path = str(row.get("fp") or "").strip()
+        if not path:
+            continue
+        roles = row.get("roles") or []
+        if isinstance(roles, list):
+            out[path] = {
+                str(role).strip().lower()
+                for role in roles
+                if str(role).strip()
+            }
+    return out
+
+
 def _schema_cypher(text: str) -> str:
     replacements = {
         "__FILE__": FILE_LABEL,
@@ -1478,6 +1508,26 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             dir=dir_prefix,
             op="get_directory_snapshot_external_symbols",
         )
+        initial_file_role_paths = {
+            str(rec.get("fp") or "").strip()
+            for rec in (r_files or [])
+            if str(rec.get("fp") or "").strip()
+        }
+        initial_file_role_paths.update(
+            str(rec.get("caller") or "").strip()
+            for rec in (r_inbound or [])
+            if str(rec.get("caller") or "").strip()
+        )
+        initial_file_role_paths.update(
+            str(rec.get("dependency") or "").strip()
+            for rec in (r_outbound or [])
+            if str(rec.get("dependency") or "").strip()
+        )
+        graph_file_roles_by_path = await _load_graph_file_roles(
+            session,
+            project_id,
+            sorted(initial_file_role_paths),
+        )
 
     local_symbols = {
         str(rec.get("name") or "").strip()
@@ -1566,8 +1616,16 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         for rec in (r_outbound or [])
         if str(rec.get("dependency") or "").strip()
     )
-    async with memory_store._pg_pool.connection() as conn:
-        file_roles_by_path = await _load_semantic_file_roles(conn, project_id, sorted(file_role_paths))
+    missing_role_paths = [
+        path for path in sorted(file_role_paths)
+        if path and path not in graph_file_roles_by_path
+    ]
+    file_roles_by_path = dict(graph_file_roles_by_path)
+    if missing_role_paths:
+        async with memory_store._pg_pool.connection() as conn:
+            file_roles_by_path.update(
+                await _load_semantic_file_roles(conn, project_id, missing_role_paths)
+            )
 
     r_inbound = _rank_directory_snapshot_rows(
         r_inbound,
@@ -1815,6 +1873,15 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
             )
         else:
             cargo_crates, cargo_workspaces, cargo_dependencies = [], [], []
+        graph_key_file_roles_by_path = await _load_graph_file_roles(
+            session,
+            project_id,
+            [
+                str(rec.get("fp") or "").strip()
+                for rec in (r4 or [])
+                if str(rec.get("fp") or "").strip()
+            ],
+        )
 
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
@@ -1824,7 +1891,14 @@ async def get_project_overview_impl(*, driver, neo4j_db: str, workspace_id: str)
                 for rec in (r4 or [])
                 if str(rec.get("fp") or "").strip()
             ]
-            key_file_roles_by_path = await _load_semantic_file_roles(conn, project_id, key_file_role_paths)
+            missing_key_role_paths = [
+                path for path in key_file_role_paths if path and path not in graph_key_file_roles_by_path
+            ]
+            key_file_roles_by_path = dict(graph_key_file_roles_by_path)
+            if missing_key_role_paths:
+                key_file_roles_by_path.update(
+                    await _load_semantic_file_roles(conn, project_id, missing_key_role_paths)
+                )
             key_files = []
             ranked_key_rows = sorted(
                 r4,
