@@ -210,6 +210,8 @@ daemon restart:
 See also:
 
 - [docs/mcp_conformance_checklist.md](/Users/michaelmarler/Projects/rest_proxy/docs/mcp_conformance_checklist.md)
+- [docs/mcp_tool_coverage_tiers.md](/Users/michaelmarler/Projects/rest_proxy/docs/mcp_tool_coverage_tiers.md)
+- [docs/tool_trust_status.md](/Users/michaelmarler/Projects/rest_proxy/docs/tool_trust_status.md)
 
 ## Retrieval Quality Gate
 
