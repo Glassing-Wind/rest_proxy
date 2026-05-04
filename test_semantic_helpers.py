@@ -762,6 +762,24 @@ class SemanticHelperTests(unittest.TestCase):
             1,
         )
 
+    def test_implementation_api_entrypoint_hit_uses_roles_before_path_fallback(self):
+        self.assertEqual(
+            module.implementation_api_entrypoint_hit(
+                "apps/cli/bootstrap.py",
+                1,
+                {"file_roles": ["runtime_entrypoint_surface"]},
+            ),
+            1,
+        )
+        self.assertEqual(
+            module.implementation_api_entrypoint_hit(
+                "src/main.rs",
+                1,
+                {"file_roles": []},
+            ),
+            0,
+        )
+
     def test_library_facade_role_marks_facade_surface(self):
         hit = module.implementation_facade_surface_hit(
             "pkg/api.py",
@@ -1500,6 +1518,12 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(
             module.implementation_chunk_role({"file_roles": ["config_surface"]}, None),
             "config_support",
+        )
+
+    def test_implementation_chunk_role_skips_path_fallback_when_file_roles_are_present(self):
+        self.assertEqual(
+            module.implementation_chunk_role({"file_roles": []}, "examples/python_smoke/main.py"),
+            "",
         )
 
     def test_candidate_relevance_score_prefers_rank_score(self):

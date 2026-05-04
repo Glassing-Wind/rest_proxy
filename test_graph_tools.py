@@ -1606,6 +1606,17 @@ class GraphToolsTests(unittest.TestCase):
         self.assertNotIn("docs/architecture.md  (12 symbols", output)
         self.assertNotIn("mkdocs.yml  (8 symbols", output)
 
+    def test_overview_path_fallbacks_only_apply_when_file_roles_are_missing(self):
+        overview = self.mcp.tools["get_project_overview"].__globals__["graph_overview"]
+        self.assertTrue(overview._is_overview_low_signal_key_file("examples/demo.py", None))
+        self.assertFalse(overview._is_overview_low_signal_key_file("examples/demo.py", set()))
+        self.assertLess(
+            overview._overview_file_rank("src/http/OwnerResource.kt", 8, None),
+            overview._overview_file_rank("src/http/OwnerResource.kt", 8, {"api_surface"}),
+        )
+        self.assertTrue(overview._is_overview_low_signal_key_file("generated/foo.grpc.swift", None))
+        self.assertTrue(overview._is_overview_low_signal_key_file("generated/foo.grpc.swift", set()))
+
     def test_project_overview_prefers_swift_nio_core_surfaces_over_utility_density(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")

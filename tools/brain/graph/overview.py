@@ -80,6 +80,10 @@ _GENERATED_OVERVIEW_PATH_MARKERS = (
 )
 
 
+def _file_roles_known(file_roles: set[str] | None) -> bool:
+    return file_roles is not None
+
+
 def _semantic_file_roles_penalty(file_roles: set[str] | None) -> int:
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
     penalty = 0
@@ -542,6 +546,7 @@ def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
+    roles_known = _file_roles_known(file_roles)
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
         return 0.08
     if "docs_surface" in roles:
@@ -562,9 +567,9 @@ def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None
         return 0.08
     if basename.endswith("application.java") or basename.endswith("runtimehints.java"):
         return 0.35
-    if "/e2e/" in norm or norm.endswith((".spec.ts", ".spec.tsx")):
+    if not roles_known and ("/e2e/" in norm or norm.endswith((".spec.ts", ".spec.tsx"))):
         return 0.24
-    if "/storybook/" in norm or ".stories." in norm:
+    if not roles_known and ("/storybook/" in norm or ".stories." in norm):
         return 0.22
     if "/components/icons/" in norm:
         return 0.16
@@ -573,9 +578,11 @@ def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None
     return 1.0
 
 
-def _backend_bridge_boost(filepath: str | None) -> float:
+def _backend_bridge_boost(filepath: str | None, file_roles: set[str] | None = None) -> float:
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
+    roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
+    roles_known = _file_roles_known(file_roles)
     if norm.startswith("sources/niocore/"):
         if basename == "channelpipeline.swift":
             return 4.2
@@ -592,6 +599,12 @@ def _backend_bridge_boost(filepath: str | None) -> float:
             return 2.1
         if basename == "selectableeventloop.swift":
             return 1.5
+    if "api_surface" in roles or "runtime_entrypoint_surface" in roles:
+        return 1.8
+    if "library_facade_surface" in roles:
+        return 1.12
+    if roles_known:
+        return 1.0
     if any(
         token in norm
         for token in (
@@ -638,9 +651,11 @@ def _overview_file_rank(filepath: str | None, symbol_count: int, file_roles: set
     base = float(symbol_count or 0) ** 0.85
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
-    score = base * _importance_penalty(filepath, file_roles) * _backend_bridge_boost(filepath)
-    if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")) or norm.startswith(
-        ("tests/", "test/", "fixtures/", "examples/")
+    roles_known = _file_roles_known(file_roles)
+    score = base * _importance_penalty(filepath, file_roles) * _backend_bridge_boost(filepath, file_roles)
+    if not roles_known and (
+        any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/"))
+        or norm.startswith(("tests/", "test/", "fixtures/", "examples/"))
     ):
         score *= 0.005
     if basename in {"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"}:
@@ -679,6 +694,7 @@ def _is_overview_low_signal_key_file(filepath: str | None, file_roles: set[str] 
     norm = (filepath or "").replace("\\", "/").lower()
     basename = os.path.basename(norm)
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
+    roles_known = _file_roles_known(file_roles)
     if {
         "generated_surface",
         "binding_surface",
@@ -690,10 +706,11 @@ def _is_overview_low_signal_key_file(filepath: str | None, file_roles: set[str] 
         "config_surface",
     } & roles:
         return True
-    if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")):
-        return True
-    if norm.startswith(("tests/", "test/", "fixtures/", "examples/")):
-        return True
+    if not roles_known:
+        if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")):
+            return True
+        if norm.startswith(("tests/", "test/", "fixtures/", "examples/")):
+            return True
     if any(marker in norm for marker in _GENERATED_OVERVIEW_PATH_MARKERS):
         return True
     if basename in {"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"}:
