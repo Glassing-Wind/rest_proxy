@@ -833,6 +833,94 @@ class GraphToolsTests(unittest.TestCase):
         header_index = output.index("Sources/CNIOLinux/include/CNIOLinux.h", deps_index)
         self.assertLess(swift_index, header_index)
 
+    def test_directory_snapshot_demotes_apple_assets_and_build_support_in_code_dirs(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_context_presence":
+                return [{"n": 1}]
+            if op == "cargo_context_presence":
+                return [{"n": 0}]
+            if op == "get_directory_snapshot_files":
+                return [
+                    {
+                        "fp": "App/Store/SubscriptionStoreView.swift",
+                        "sym_count": 15,
+                        "samples": ["binding", "subscriptionOptionCell"],
+                    }
+                ]
+            if op == "get_directory_snapshot_inbound":
+                return [
+                    {
+                        "caller": "FoodTruckKit/Sources/Assets.xcassets/donut/donut.symbolset/donut.svg",
+                        "n_imports": 55,
+                        "signal": "import",
+                    },
+                    {
+                        "caller": "Food Truck.xcodeproj/project.pbxproj",
+                        "n_imports": 11,
+                        "signal": "import",
+                    },
+                    {
+                        "caller": "FoodTruckKit/Sources/Order/Order.swift",
+                        "n_imports": 5,
+                        "signal": "import",
+                    },
+                ]
+            if op == "get_directory_snapshot_outbound":
+                return [
+                    {
+                        "dependency": "Food Truck.xcodeproj/xcshareddata/xcschemes/FoodTruckKit.xcscheme",
+                        "n_usages": 37,
+                        "signal": "import",
+                    },
+                    {
+                        "dependency": "FoodTruckKit/Sources/Donut/DonutView.swift",
+                        "n_usages": 9,
+                        "signal": "import",
+                    },
+                ]
+            if op == "get_directory_snapshot_assets":
+                return []
+            if op == "apple_context_targets":
+                return [{"target": "Food Truck", "project_file": "Food Truck.xcodeproj/project.pbxproj", "bundled_files": 7}]
+            if op == "apple_context_schemes":
+                return [{"scheme": "Food Truck", "targets": ["Food Truck"]}]
+            if op == "apple_context_schema_labels":
+                return [{"labels": []}]
+            if op == "apple_context_schema_relationship_types":
+                return [{"rels": []}]
+            if op == "apple_context_workspaces":
+                return []
+            if op in {
+                "get_directory_snapshot_local_symbols",
+                "get_directory_snapshot_external_symbols",
+            }:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["get_directory_snapshot"]("/tmp/sample-food-truck", "App", 12))
+
+        self.assertIn(
+            "check inbound usage from `FoodTruckKit/Sources/Order/Order.swift` first because it is the strongest external consumer",
+            output,
+        )
+        self.assertIn(
+            "check outbound dependency `FoodTruckKit/Sources/Donut/DonutView.swift` because files here rely on it most often",
+            output,
+        )
+        consumers_index = output.index("### 📥 Consumers")
+        order_index = output.index("FoodTruckKit/Sources/Order/Order.swift", consumers_index)
+        asset_index = output.index("FoodTruckKit/Sources/Assets.xcassets/donut/donut.symbolset/donut.svg", consumers_index)
+        project_index = output.index("Food Truck.xcodeproj/project.pbxproj", consumers_index)
+        self.assertLess(order_index, asset_index)
+        self.assertLess(order_index, project_index)
+        deps_index = output.index("### 📤 Dependencies")
+        donut_index = output.index("FoodTruckKit/Sources/Donut/DonutView.swift", deps_index)
+        scheme_index = output.index("Food Truck.xcodeproj/xcshareddata/xcschemes/FoodTruckKit.xcscheme", deps_index)
+        self.assertLess(donut_index, scheme_index)
+
     def test_directory_snapshot_prefers_symbol_call_signal_over_import_volume(self):
         merged = self.module.graph_overview._merge_directory_snapshot_rows(
             [

@@ -170,6 +170,38 @@ def _directory_snapshot_path_penalty(file_path: str | None) -> int:
     return penalty
 
 
+def _is_apple_support_path(file_path: str | None) -> bool:
+    norm = (file_path or "").replace("\\", "/").lower()
+    if not norm:
+        return False
+    if norm.endswith(
+        (
+            ".xcodeproj/project.pbxproj",
+            ".xcworkspace/contents.xcworkspacedata",
+            ".xcscheme",
+            "contents.json",
+            ".svg",
+            ".plist",
+            ".storyboard",
+            ".xib",
+        )
+    ):
+        return True
+    return any(
+        marker in norm
+        for marker in (
+            ".xcassets/",
+            ".imageset/",
+            ".colorset/",
+            ".appiconset/",
+            ".symbolset/",
+            ".dataset/",
+            ".brandassets/",
+            ".stickerpack/",
+        )
+    )
+
+
 def _directory_snapshot_signal_rank(signal: str | None) -> int:
     return {
         "symbol_call": 0,
@@ -177,6 +209,25 @@ def _directory_snapshot_signal_rank(signal: str | None) -> int:
         "semantic": 2,
         "import": 3,
     }.get(str(signal or "").strip().lower(), 4)
+
+
+def _is_code_directory_context(directory_path: str | None) -> bool:
+    directory_norm = (directory_path or "").replace("\\", "/").lower().strip("/")
+    if not directory_norm:
+        return False
+    return any(
+        token in directory_norm
+        for token in (
+            "src/main/java",
+            "src/test/java",
+            "src/",
+            "sources/",
+            "pydantic_ai/",
+            "okhttp/",
+            "app/",
+            "widgets/",
+        )
+    ) or directory_norm in {"src", "sources", "app", "widgets"}
 
 
 def _rank_directory_snapshot_rows(
@@ -216,12 +267,7 @@ def _directory_snapshot_display_rows(
     items = list(rows or [])
     if not items:
         return items
-    directory_norm = (directory_path or "").replace("\\", "/").lower()
-    code_context = any(
-        token in directory_norm
-        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
-    )
-    if code_context:
+    if _is_code_directory_context(directory_path):
         preferred = [
             row
             for row in items
@@ -250,12 +296,7 @@ def _directory_snapshot_display_files(
     items = list(rows or [])
     if not items:
         return items
-    directory_norm = (directory_path or "").replace("\\", "/").lower()
-    code_context = any(
-        token in directory_norm
-        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
-    )
-    if not code_context:
+    if not _is_code_directory_context(directory_path):
         return items
     preferred = [row for row in items if _directory_snapshot_path_penalty(row.get("fp")) < 40]
     return preferred or items
@@ -263,14 +304,9 @@ def _directory_snapshot_display_files(
 
 def _directory_snapshot_context_penalty(path: str | None, directory_path: str | None) -> int:
     norm = (path or "").replace("\\", "/").lower()
-    directory_norm = (directory_path or "").replace("\\", "/").lower()
-    if not norm or not directory_norm:
+    if not norm or not directory_path:
         return 0
-    code_context = any(
-        token in directory_norm
-        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
-    )
-    if not code_context:
+    if not _is_code_directory_context(directory_path):
         return 0
     if any(
         token in norm
@@ -286,6 +322,8 @@ def _directory_snapshot_context_penalty(path: str | None, directory_path: str | 
             ".html",
         )
     ):
+        return 50
+    if _is_apple_support_path(norm):
         return 50
     if "/include/" in norm and norm.endswith((".h", ".hpp", ".hh")):
         return 45
@@ -673,10 +711,7 @@ def _directory_snapshot_priority_lines(
 ) -> list[str]:
     priorities: list[str] = []
     directory_norm = (directory_path or "").replace("\\", "/").lower()
-    code_context = any(
-        token in directory_norm
-        for token in ("src/main/java", "src/test/java", "src/", "sources/", "pydantic_ai/", "okhttp/")
-    )
+    code_context = _is_code_directory_context(directory_path)
     apple_dir_kind = _classify_apple_directory(directory_path) if has_apple_context else None
     if apple_dir_kind == "workspace":
         priorities.append(
