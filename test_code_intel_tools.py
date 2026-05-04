@@ -1642,6 +1642,36 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertLess(cancel_index, type_index)
         self.assertLess(emit_index, cached_index)
 
+    def test_symbol_context_limits_same_file_callee_clutter_before_cross_file_edges(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [],
+                "callees": [
+                    {"name": "cancel", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "emitTerminalEvent", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "grpcTraceTags", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "cachedRawMaskTensor", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "generate", "file": "Apps/DrawThingsCLI/DrawThingsCLI.swift"},
+                    {"name": "ImageGeneratorTrace", "file": "Libraries/ImageGenerator/Sources/ImageGeneratorProtocol.swift"},
+                ],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        second_same_file_index = rendered.index("`emitTerminalEvent`")
+        cross_file_index = rendered.index("`generate`")
+        later_same_file_index = rendered.index("`grpcTraceTags`")
+        self.assertLess(second_same_file_index, cross_file_index)
+        self.assertLess(cross_file_index, later_same_file_index)
+
     def test_symbol_context_ambiguity_dedupes_same_location_candidates(self):
         rendered = self.module.symbol_graph.format_symbol_context_ambiguity(
             [

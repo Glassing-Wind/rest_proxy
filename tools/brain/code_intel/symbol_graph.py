@@ -956,7 +956,24 @@ def _rank_symbol_context_callees(callees: list[dict], *, target_filepath: str | 
         (dict(callee) for callee in callees),
         key=lambda callee: _symbol_context_callee_rank(callee, target_filepath=target_filepath),
     )
-    return ranked
+    if not target_filepath:
+        return ranked
+    same_file: list[dict] = []
+    cross_file: list[dict] = []
+    for callee in ranked:
+        if str(callee.get("file") or "") == str(target_filepath):
+            same_file.append(callee)
+        else:
+            cross_file.append(callee)
+
+    if len(same_file) <= 2 or not cross_file:
+        return ranked
+
+    diversified: list[dict] = []
+    diversified.extend(same_file[:2])
+    diversified.extend(cross_file)
+    diversified.extend(same_file[2:])
+    return diversified
 
 
 def _language_family(filepath: str | None) -> str | None:
