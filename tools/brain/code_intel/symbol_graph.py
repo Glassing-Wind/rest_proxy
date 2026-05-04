@@ -820,6 +820,7 @@ def format_symbol_context(rec: dict, symbol_name: str) -> list[str]:
         if callee.get("name")
         and _is_language_compatible(rec.get("filepath"), callee.get("file"))
     ]
+    callees = _rank_symbol_context_callees(callees, target_filepath=rec.get("filepath"))
     external_callees = [c for c in (rec.get("external_callees") or []) if c.get("name")]
 
     if callers:
@@ -901,6 +902,54 @@ def _suppress_symbol_context_self_aliases(
             continue
         filtered.append(caller)
     return filtered
+
+
+def _symbol_context_callee_rank(callee: dict, *, target_filepath: str | None) -> tuple:
+    filepath = str(callee.get("file") or "").replace("\\", "/")
+    normalized = filepath.lower()
+    name = str(callee.get("name") or "")
+    target_dir = ""
+    if target_filepath:
+        target_dir = os.path.dirname(str(target_filepath).replace("\\", "/"))
+
+    if any(token in normalized for token in ("/vendors/", "/vendor/", "vendors/", "vendor/")):
+        bucket = 5
+    elif any(
+        token in normalized
+        for token in (
+            "/generated/",
+            "/gen/",
+            "pregeneratedspm",
+            ".gen.",
+            "_generated.",
+            ".grpc.swift",
+            ".pb.swift",
+        )
+    ):
+        bucket = 4
+    elif any(token in normalized for token in ("/tests/", "/test/", "/fixtures/", ".spec.", ".stories.")):
+        bucket = 6
+    elif filepath and target_dir and filepath.startswith(target_dir + "/"):
+        bucket = 0
+    elif any(token in normalized for token in ("/apps/", "apps/", "/sources/", "sources/", "/libraries/", "libraries/")):
+        bucket = 1
+    else:
+        bucket = 2
+
+    if name.startswith(("with", "get", "set")) and bucket <= 2:
+        helper_penalty = 1
+    else:
+        helper_penalty = 0
+    same_file = 0 if filepath and target_filepath and filepath == target_filepath else 1
+    return (bucket, helper_penalty, same_file, filepath, name)
+
+
+def _rank_symbol_context_callees(callees: list[dict], *, target_filepath: str | None) -> list[dict]:
+    ranked = sorted(
+        (dict(callee) for callee in callees),
+        key=lambda callee: _symbol_context_callee_rank(callee, target_filepath=target_filepath),
+    )
+    return ranked
 
 
 def _language_family(filepath: str | None) -> str | None:

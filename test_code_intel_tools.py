@@ -1551,6 +1551,52 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("`generateImage`:348", rendered)
         self.assertNotIn("`generateImage`:552", rendered)
 
+    def test_symbol_context_ranks_runtime_callees_ahead_of_vendor_and_generated(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [],
+                "callees": [
+                    {
+                        "name": "withUnsafeMutableBytes",
+                        "file": "Vendors/ZIPFoundation/Sources/ZIPFoundation/Data+Compression.swift",
+                    },
+                    {
+                        "name": "ImageGenerationSignpostProto",
+                        "file": "Libraries/GRPC/Models/Sources/imageService/imageService.pb.swift",
+                    },
+                    {
+                        "name": "cancel",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "grpcTraceTags",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "generate",
+                        "file": "Apps/DrawThingsCLI/DrawThingsCLI.swift",
+                    },
+                ],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        cancel_index = rendered.index("`cancel`")
+        generate_index = rendered.index("`generate`")
+        generated_index = rendered.index("`ImageGenerationSignpostProto`")
+        vendor_index = rendered.index("`withUnsafeMutableBytes`")
+        self.assertLess(cancel_index, generated_index)
+        self.assertLess(generate_index, generated_index)
+        self.assertLess(generated_index, vendor_index)
+
     def test_symbol_context_ambiguity_dedupes_same_location_candidates(self):
         rendered = self.module.symbol_graph.format_symbol_context_ambiguity(
             [
