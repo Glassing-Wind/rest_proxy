@@ -187,8 +187,11 @@ def register(mcp: FastMCP) -> None:
             )
         )
 
+    def _file_roles_present(raw_roles) -> bool:
+        return isinstance(raw_roles, list)
+
     def _normalize_file_roles(raw_roles) -> set[str]:
-        if not isinstance(raw_roles, list):
+        if not _file_roles_present(raw_roles):
             return set()
         return {
             str(role).strip().lower()
@@ -242,6 +245,8 @@ def register(mcp: FastMCP) -> None:
         family = roles & _IMPLEMENTATION_FAMILY_ROLES
         if family:
             return family
+        if _file_roles_present(raw_roles):
+            return set()
         return _fallback_file_family_roles(file_path)
 
     def _family_overlap_score(
@@ -1897,16 +1902,16 @@ def register(mcp: FastMCP) -> None:
                     session,
                     """
                     MATCH (f:File {project_id:$pid, filepath:$file_path})
-                    RETURN coalesce(f.semantic_file_roles, []) AS file_roles
+                    RETURN f.semantic_file_roles AS file_roles
                     LIMIT 1
                     """,
                     pid=project_id,
                     file_path=file_path,
                     op="get_related_files_target_roles",
                 )
-                target_file_roles = []
+                target_file_roles = None
                 if target_file_role_rows:
-                    target_file_roles = target_file_role_rows[0].get("file_roles") or []
+                    target_file_roles = target_file_role_rows[0].get("file_roles")
                 structural_call_records = await _execute_read(
                     session,
                     """
@@ -1917,7 +1922,7 @@ def register(mcp: FastMCP) -> None:
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
                            target.name AS symbol,
-                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
+                           caller_file.semantic_file_roles AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1935,7 +1940,7 @@ def register(mcp: FastMCP) -> None:
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
                            target.name AS symbol,
-                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
+                           caller_file.semantic_file_roles AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1952,7 +1957,7 @@ def register(mcp: FastMCP) -> None:
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
                            target.name AS symbol,
-                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
+                           caller_file.semantic_file_roles AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1969,7 +1974,7 @@ def register(mcp: FastMCP) -> None:
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
                            target.name AS symbol,
-                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
+                           caller_file.semantic_file_roles AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1986,7 +1991,7 @@ def register(mcp: FastMCP) -> None:
                       AND importer <> owner
                     RETURN importer.filepath AS related_file,
                            target.name AS symbol,
-                           coalesce(importer.semantic_file_roles, []) AS file_roles
+                           importer.semantic_file_roles AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -2003,7 +2008,7 @@ def register(mcp: FastMCP) -> None:
                       AND importer <> owner
                     RETURN importer.filepath AS related_file,
                            target.name AS symbol,
-                           coalesce(importer.semantic_file_roles, []) AS file_roles
+                           importer.semantic_file_roles AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -2065,12 +2070,12 @@ def register(mcp: FastMCP) -> None:
                         continue
                     entry = structural_call_rollup.setdefault(
                         related_file,
-                        {"call_hits": 0, "symbols": [], "file_roles": []},
+                        {"call_hits": 0, "symbols": [], "file_roles": None},
                     )
                     entry["call_hits"] += 1
                     entry["symbols"].append(symbol)
-                    if record.get("file_roles") and not entry["file_roles"]:
-                        entry["file_roles"] = record.get("file_roles") or []
+                    if _file_roles_present(record.get("file_roles")) and entry["file_roles"] is None:
+                        entry["file_roles"] = record.get("file_roles")
                 structural_import_rollup: dict[str, dict] = {}
                 for record in [*structural_import_records, *structural_implicit_import_records]:
                     related_file = str(record.get("related_file") or "").strip()
@@ -2079,12 +2084,12 @@ def register(mcp: FastMCP) -> None:
                         continue
                     entry = structural_import_rollup.setdefault(
                         related_file,
-                        {"import_hits": 0, "symbols": [], "file_roles": []},
+                        {"import_hits": 0, "symbols": [], "file_roles": None},
                     )
                     entry["import_hits"] += 1
                     entry["symbols"].append(symbol)
-                    if record.get("file_roles") and not entry["file_roles"]:
-                        entry["file_roles"] = record.get("file_roles") or []
+                    if _file_roles_present(record.get("file_roles")) and entry["file_roles"] is None:
+                        entry["file_roles"] = record.get("file_roles")
                 structural_related_records: list[dict] = []
                 for related_file, counts in structural_call_rollup.items():
                     if (
@@ -2109,7 +2114,7 @@ def register(mcp: FastMCP) -> None:
                             "related_file": related_file,
                             "call_hits": call_hits,
                             "symbols": symbols,
-                            "file_roles": counts.get("file_roles") or [],
+                            "file_roles": counts.get("file_roles"),
                             "reason": "; ".join(reason_bits),
                         }
                     )
@@ -2118,7 +2123,7 @@ def register(mcp: FastMCP) -> None:
                         file_path,
                         target_file_roles,
                         str(rec.get("related_file") or ""),
-                        rec.get("file_roles") or [],
+                        rec.get("file_roles"),
                         int(rec.get("call_hits") or 0),
                         0,
                         len(rec.get("symbols") or []),
@@ -2146,7 +2151,7 @@ def register(mcp: FastMCP) -> None:
                             "related_file": related_file,
                             "import_hits": import_hits,
                             "symbols": symbols,
-                            "file_roles": counts.get("file_roles") or [],
+                            "file_roles": counts.get("file_roles"),
                             "reason": "; ".join(reason_bits),
                         }
                     )
@@ -2155,7 +2160,7 @@ def register(mcp: FastMCP) -> None:
                         file_path,
                         target_file_roles,
                         str(rec.get("related_file") or ""),
-                        rec.get("file_roles") or [],
+                        rec.get("file_roles"),
                         0,
                         int(rec.get("import_hits") or 0),
                         len(rec.get("symbols") or []),
@@ -2201,7 +2206,7 @@ def register(mcp: FastMCP) -> None:
                             RETURN f.filepath AS related_file,
                                    sym_count,
                                    sym_examples,
-                                   coalesce(f.semantic_file_roles, []) AS file_roles
+                                   f.semantic_file_roles AS file_roles
                             ORDER BY related_file
                             LIMIT 60
                             """,
@@ -2242,7 +2247,7 @@ def register(mcp: FastMCP) -> None:
                                     "related_file": related_file,
                                     "sym_count": sym_count,
                                     "symbols": symbols,
-                                    "file_roles": record.get("file_roles") or [],
+                                    "file_roles": record.get("file_roles"),
                                     "shared_depth": _shared_directory_depth(file_path, related_file),
                                     "reason": (
                                         f"same directory implementation, symbols: {sym_count}"
@@ -2259,7 +2264,7 @@ def register(mcp: FastMCP) -> None:
                                 file_path,
                                 target_file_roles,
                                 str(rec.get("related_file") or ""),
-                                rec.get("file_roles") or [],
+                                rec.get("file_roles"),
                                 int(rec.get("sym_count") or 0),
                                 int(rec.get("shared_depth") or 0),
                             )
