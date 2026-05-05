@@ -46,6 +46,19 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                         "semantic_recall_missing": 1,
                     },
                 },
+                "dispatcher_telemetry_summary": {
+                    "total_events": 3,
+                    "rescue_applied_rate": 0.3333,
+                    "semantic_top_exact_hit_rate": 0.3333,
+                    "final_top_exact_hit_rate": 1.0,
+                    "semantic_top_contract_hit_rate": 0.3333,
+                    "implementation_ranking_top_contract_hit_rate": 0.6667,
+                    "final_top_contract_hit_rate": 1.0,
+                    "diagnosis_counts": {
+                        "ranking_or_promotion_needed": 1,
+                        "semantic_recall_missing_contract_candidate": 2,
+                    },
+                },
                 "retrieval_query_class_counts": {"usage_lookup": 2, "implementation_search": 3},
             },
             "trend_summary": {
@@ -66,6 +79,10 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("Final dispatcher selection top-hit rate: `1.0000`", text)
         self.assertIn("Final dispatcher selection contract top-hit rate: `1.0000`", text)
         self.assertIn("Dispatcher anchor contract: `focused_dispatcher_anchor_v1` (version `1`)", text)
+        self.assertIn("### Live Dispatcher Telemetry", text)
+        self.assertIn("Total events: `3`", text)
+        self.assertIn("Rescue applied rate: `0.3333`", text)
+        self.assertIn("Live diagnosis `semantic_recall_missing_contract_candidate`: 2", text)
         self.assertIn("- `implementation_search`: 3", text)
 
     def test_render_pr_comment_includes_marker_and_alert_header(self):

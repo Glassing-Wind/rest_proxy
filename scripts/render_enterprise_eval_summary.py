@@ -20,6 +20,7 @@ def render_summary(payload: dict) -> str:
     best = enterprise.get("best_retrieval_config") or {}
     metrics = best.get("metrics") or {}
     dispatcher = enterprise.get("dispatcher_summary") or {}
+    dispatcher_telemetry = enterprise.get("dispatcher_telemetry_summary") or {}
     attention = list(trend.get("attention_needed") or [])
     query_counts = enterprise.get("retrieval_query_class_counts") or {}
 
@@ -77,6 +78,33 @@ def render_summary(payload: dict) -> str:
         if diagnosis_counts:
             for name in sorted(diagnosis_counts):
                 lines.append(f"- Dispatcher diagnosis `{name}`: {diagnosis_counts[name]}")
+    if dispatcher_telemetry:
+        lines.append("")
+        lines.append("### Live Dispatcher Telemetry")
+        lines.append("")
+        lines.append(f"- Total events: `{dispatcher_telemetry.get('total_events', 0)}`")
+        lines.append(
+            f"- Rescue applied rate: `{_fmt_metric(dispatcher_telemetry.get('rescue_applied_rate'))}`"
+        )
+        lines.append(
+            f"- Semantic top exact-hit rate: `{_fmt_metric(dispatcher_telemetry.get('semantic_top_exact_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Final top exact-hit rate: `{_fmt_metric(dispatcher_telemetry.get('final_top_exact_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Semantic top contract-hit rate: `{_fmt_metric(dispatcher_telemetry.get('semantic_top_contract_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Ranking top contract-hit rate: `{_fmt_metric(dispatcher_telemetry.get('implementation_ranking_top_contract_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Final top contract-hit rate: `{_fmt_metric(dispatcher_telemetry.get('final_top_contract_hit_rate'))}`"
+        )
+        diagnosis_counts = dispatcher_telemetry.get("diagnosis_counts") or {}
+        if diagnosis_counts:
+            for name in sorted(diagnosis_counts):
+                lines.append(f"- Live diagnosis `{name}`: {diagnosis_counts[name]}")
     if query_counts:
         lines.append("")
         lines.append("### Query Classes")
