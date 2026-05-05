@@ -812,6 +812,19 @@ class SemanticHelperTests(unittest.TestCase):
         )
         self.assertEqual(hit, 1)
 
+    def test_facade_surface_hit_skips_inference_when_file_roles_are_present(self):
+        hit = module.implementation_facade_surface_hit(
+            "pkg/api.py",
+            {"file_roles": [], "node_types": ["module"], "chunk_role": "definition"},
+            symbol_hit=1,
+            declared_symbol_hit=0,
+            definition_hit=0,
+            signature_hit=0,
+            export_hit=1,
+            api_context_hit=1,
+        )
+        self.assertEqual(hit, 0)
+
     def test_implementation_query_path_hints_extract_repo_path(self):
         self.assertEqual(
             module.implementation_query_path_hints(

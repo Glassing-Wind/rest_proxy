@@ -1668,8 +1668,11 @@ def implementation_facade_surface_hit(
     if declared_symbol_hit > 0 or definition_hit > 0 or signature_hit > 0:
         return 0
     file_roles = implementation_file_roles(meta)
+    has_file_roles = implementation_has_file_roles(meta)
     if "library_facade_surface" in file_roles:
         return 1
+    if has_file_roles:
+        return 0
     node_types = implementation_node_types(meta)
     declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
     module_like = bool(node_types & MODULE_NODE_TYPES)
