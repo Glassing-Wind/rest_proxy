@@ -60,6 +60,15 @@ def register(mcp: FastMCP) -> None:
         r"(^|/)(session-ses_[^/]+\.md|agents\.md|readme(?:\.[^/]+)?|changelog(?:\.[^/]+)?)$",
         re.IGNORECASE,
     )
+    _IMPLEMENTATION_FAMILY_ROLES = {
+        "controller_surface",
+        "view_surface",
+        "service_surface",
+        "repository_surface",
+        "validator_surface",
+        "formatter_surface",
+        "client_surface",
+    }
     _REL_BUNDLES_FILE = _rel_type("bundles_file")
     _REL_REFERENCES_PROJECT = _rel_type("references_project")
     _REL_BUILDS_TARGET = _rel_type("builds_target")
@@ -178,6 +187,80 @@ def register(mcp: FastMCP) -> None:
             )
         )
 
+    def _normalize_file_roles(raw_roles) -> set[str]:
+        if not isinstance(raw_roles, list):
+            return set()
+        return {
+            str(role).strip().lower()
+            for role in raw_roles
+            if str(role).strip()
+        }
+
+    def _fallback_file_family_roles(file_path: str | None) -> set[str]:
+        norm = (file_path or "").replace("\\", "/").lower()
+        basename = os.path.basename(norm)
+        roles: set[str] = set()
+        if (
+            "/controller/" in norm
+            or basename.endswith("controller.java")
+            or basename.endswith("endpoint.java")
+            or basename.endswith("handler.go")
+        ):
+            roles.add("controller_surface")
+        if (
+            "/views/" in norm
+            or "/viewmodels/" in norm
+            or basename.endswith("view.swift")
+            or basename.endswith("view.tsx")
+            or basename.endswith("view.jsx")
+        ):
+            roles.add("view_surface")
+        if (
+            basename.endswith("service.java")
+            or basename.endswith("serviceimpl.java")
+            or basename.endswith("service.swift")
+            or basename.endswith("service.py")
+        ):
+            roles.add("service_surface")
+        if basename.endswith("repository.java") or basename.endswith("repository.kt"):
+            roles.add("repository_surface")
+        if basename.endswith("validator.java") or basename.endswith("validator.py"):
+            roles.add("validator_surface")
+        if basename.endswith("formatter.java") or basename.endswith("formatter.py"):
+            roles.add("formatter_surface")
+        if (
+            basename.endswith("client.swift")
+            or basename.endswith("client.py")
+            or basename.endswith("client.rs")
+            or basename.endswith("client.kt")
+        ):
+            roles.add("client_surface")
+        return roles
+
+    def _implementation_family_roles(file_path: str | None, raw_roles) -> set[str]:
+        roles = _normalize_file_roles(raw_roles)
+        family = roles & _IMPLEMENTATION_FAMILY_ROLES
+        if family:
+            return family
+        return _fallback_file_family_roles(file_path)
+
+    def _family_overlap_score(
+        target_file_path: str,
+        target_roles,
+        candidate_path: str,
+        candidate_roles,
+    ) -> int:
+        target_family = _implementation_family_roles(target_file_path, target_roles)
+        candidate_family = _implementation_family_roles(candidate_path, candidate_roles)
+        overlap = target_family & candidate_family
+        if overlap:
+            return 45
+        target_normalized = _normalize_file_roles(target_roles)
+        candidate_normalized = _normalize_file_roles(candidate_roles)
+        if "api_surface" in target_normalized and "api_surface" in candidate_normalized:
+            return 20
+        return 0
+
     def _related_file_rank(target_file_path: str, candidate_path: str, useful_import_count: int, shared_imports: int) -> tuple[int, int, int, int, str]:
         target_norm = str(target_file_path or "").replace("\\", "/").strip("/")
         candidate_norm = str(candidate_path or "").replace("\\", "/").strip("/")
@@ -211,7 +294,9 @@ def register(mcp: FastMCP) -> None:
 
     def _structural_related_rank(
         target_file_path: str,
+        target_roles,
         candidate_path: str,
+        candidate_roles,
         call_hits: int,
         import_hits: int,
         symbol_count: int,
@@ -229,6 +314,12 @@ def register(mcp: FastMCP) -> None:
             score += 45
         elif target_dir and candidate_dir.split("/", 1)[0] == target_dir.split("/", 1)[0]:
             score += 20
+        score += _family_overlap_score(
+            target_file_path,
+            target_roles,
+            candidate_path,
+            candidate_roles,
+        )
         if shared_depth >= 5:
             score += 35
         elif shared_depth >= 4:
@@ -250,7 +341,9 @@ def register(mcp: FastMCP) -> None:
 
     def _same_directory_rank(
         target_file_path: str,
+        target_roles,
         candidate_path: str,
+        candidate_roles,
         sym_count: int,
         shared_depth: int,
     ) -> tuple[int, int, int, str]:
@@ -261,6 +354,12 @@ def register(mcp: FastMCP) -> None:
         score = 0
         if candidate_dir and candidate_dir == target_dir:
             score += 100
+        score += _family_overlap_score(
+            target_file_path,
+            target_roles,
+            candidate_path,
+            candidate_roles,
+        )
         if shared_depth >= 5:
             score += 35
         elif shared_depth >= 4:
@@ -1794,6 +1893,20 @@ def register(mcp: FastMCP) -> None:
             RETURN related_file, shared_imports, sample_imports
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                target_file_role_rows = await _execute_read(
+                    session,
+                    """
+                    MATCH (f:File {project_id:$pid, filepath:$file_path})
+                    RETURN coalesce(f.semantic_file_roles, []) AS file_roles
+                    LIMIT 1
+                    """,
+                    pid=project_id,
+                    file_path=file_path,
+                    op="get_related_files_target_roles",
+                )
+                target_file_roles = []
+                if target_file_role_rows:
+                    target_file_roles = target_file_role_rows[0].get("file_roles") or []
                 structural_call_records = await _execute_read(
                     session,
                     """
@@ -1803,7 +1916,8 @@ def register(mcp: FastMCP) -> None:
                       AND trim(target.name) <> ''
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
-                           target.name AS symbol
+                           target.name AS symbol,
+                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1820,7 +1934,8 @@ def register(mcp: FastMCP) -> None:
                       AND trim(target.name) <> ''
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
-                           target.name AS symbol
+                           target.name AS symbol,
+                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1836,7 +1951,8 @@ def register(mcp: FastMCP) -> None:
                       AND trim(target.name) <> ''
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
-                           target.name AS symbol
+                           target.name AS symbol,
+                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1852,7 +1968,8 @@ def register(mcp: FastMCP) -> None:
                       AND trim(target.name) <> ''
                       AND caller_file <> owner
                     RETURN caller_file.filepath AS related_file,
-                           target.name AS symbol
+                           target.name AS symbol,
+                           coalesce(caller_file.semantic_file_roles, []) AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1868,7 +1985,8 @@ def register(mcp: FastMCP) -> None:
                       AND trim(target.name) <> ''
                       AND importer <> owner
                     RETURN importer.filepath AS related_file,
-                           target.name AS symbol
+                           target.name AS symbol,
+                           coalesce(importer.semantic_file_roles, []) AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1884,7 +2002,8 @@ def register(mcp: FastMCP) -> None:
                       AND trim(target.name) <> ''
                       AND importer <> owner
                     RETURN importer.filepath AS related_file,
-                           target.name AS symbol
+                           target.name AS symbol,
+                           coalesce(importer.semantic_file_roles, []) AS file_roles
                     ORDER BY related_file, symbol
                     LIMIT 12
                     """,
@@ -1946,10 +2065,12 @@ def register(mcp: FastMCP) -> None:
                         continue
                     entry = structural_call_rollup.setdefault(
                         related_file,
-                        {"call_hits": 0, "symbols": []},
+                        {"call_hits": 0, "symbols": [], "file_roles": []},
                     )
                     entry["call_hits"] += 1
                     entry["symbols"].append(symbol)
+                    if record.get("file_roles") and not entry["file_roles"]:
+                        entry["file_roles"] = record.get("file_roles") or []
                 structural_import_rollup: dict[str, dict] = {}
                 for record in [*structural_import_records, *structural_implicit_import_records]:
                     related_file = str(record.get("related_file") or "").strip()
@@ -1958,10 +2079,12 @@ def register(mcp: FastMCP) -> None:
                         continue
                     entry = structural_import_rollup.setdefault(
                         related_file,
-                        {"import_hits": 0, "symbols": []},
+                        {"import_hits": 0, "symbols": [], "file_roles": []},
                     )
                     entry["import_hits"] += 1
                     entry["symbols"].append(symbol)
+                    if record.get("file_roles") and not entry["file_roles"]:
+                        entry["file_roles"] = record.get("file_roles") or []
                 structural_related_records: list[dict] = []
                 for related_file, counts in structural_call_rollup.items():
                     if (
@@ -1986,13 +2109,16 @@ def register(mcp: FastMCP) -> None:
                             "related_file": related_file,
                             "call_hits": call_hits,
                             "symbols": symbols,
+                            "file_roles": counts.get("file_roles") or [],
                             "reason": "; ".join(reason_bits),
                         }
                     )
                 structural_related_records.sort(
                     key=lambda rec: _structural_related_rank(
                         file_path,
+                        target_file_roles,
                         str(rec.get("related_file") or ""),
+                        rec.get("file_roles") or [],
                         int(rec.get("call_hits") or 0),
                         0,
                         len(rec.get("symbols") or []),
@@ -2020,13 +2146,16 @@ def register(mcp: FastMCP) -> None:
                             "related_file": related_file,
                             "import_hits": import_hits,
                             "symbols": symbols,
+                            "file_roles": counts.get("file_roles") or [],
                             "reason": "; ".join(reason_bits),
                         }
                     )
                 structural_import_related_records.sort(
                     key=lambda rec: _structural_related_rank(
                         file_path,
+                        target_file_roles,
                         str(rec.get("related_file") or ""),
+                        rec.get("file_roles") or [],
                         0,
                         int(rec.get("import_hits") or 0),
                         len(rec.get("symbols") or []),
@@ -2069,9 +2198,12 @@ def register(mcp: FastMCP) -> None:
                                OR s:Enum OR s:Protocol OR s:Extension OR s:TypeAlias OR s:AssociatedType
                             WITH f, count(s) AS sym_count, collect(DISTINCT s.name)[..3] AS sym_examples
                             WHERE sym_count > 0
-                            RETURN f.filepath AS related_file, sym_count, sym_examples
-                            ORDER BY sym_count DESC, related_file
-                            LIMIT 12
+                            RETURN f.filepath AS related_file,
+                                   sym_count,
+                                   sym_examples,
+                                   coalesce(f.semantic_file_roles, []) AS file_roles
+                            ORDER BY related_file
+                            LIMIT 60
                             """,
                             pid=project_id,
                             file_path=file_path,
@@ -2110,6 +2242,7 @@ def register(mcp: FastMCP) -> None:
                                     "related_file": related_file,
                                     "sym_count": sym_count,
                                     "symbols": symbols,
+                                    "file_roles": record.get("file_roles") or [],
                                     "shared_depth": _shared_directory_depth(file_path, related_file),
                                     "reason": (
                                         f"same directory implementation, symbols: {sym_count}"
@@ -2124,7 +2257,9 @@ def register(mcp: FastMCP) -> None:
                         same_directory_records.sort(
                             key=lambda rec: _same_directory_rank(
                                 file_path,
+                                target_file_roles,
                                 str(rec.get("related_file") or ""),
+                                rec.get("file_roles") or [],
                                 int(rec.get("sym_count") or 0),
                                 int(rec.get("shared_depth") or 0),
                             )
@@ -2175,22 +2310,57 @@ def register(mcp: FastMCP) -> None:
                             f"{'- then inspect' if focus_lines else '- start with'} {first_apple[2:]}"
                         )
                         highlighted_entries.add(first_apple[2:])
-                if structural_related:
+                structural_focus = next(
+                    (
+                        line
+                        for line in structural_related
+                        if line.startswith("- ") and line[2:] not in highlighted_entries
+                    ),
+                    None,
+                )
+                if structural_focus:
                     prefix = "- then inspect" if focus_lines else "- start with"
-                    focus_lines.append(f"{prefix} {structural_related[0][2:]}")
-                    highlighted_entries.add(structural_related[0][2:])
-                elif structural_import_related:
-                    prefix = "- then inspect" if focus_lines else "- start with"
-                    focus_lines.append(f"{prefix} {structural_import_related[0][2:]}")
-                    highlighted_entries.add(structural_import_related[0][2:])
-                elif same_directory_related:
-                    prefix = "- then inspect" if focus_lines else "- start with"
-                    focus_lines.append(f"{prefix} {same_directory_related[0][2:]}")
-                    highlighted_entries.add(same_directory_related[0][2:])
+                    focus_lines.append(f"{prefix} {structural_focus[2:]}")
+                    highlighted_entries.add(structural_focus[2:])
+                else:
+                    structural_import_focus = next(
+                        (
+                            line
+                            for line in structural_import_related
+                            if line.startswith("- ") and line[2:] not in highlighted_entries
+                        ),
+                        None,
+                    )
+                    if structural_import_focus:
+                        prefix = "- then inspect" if focus_lines else "- start with"
+                        focus_lines.append(f"{prefix} {structural_import_focus[2:]}")
+                        highlighted_entries.add(structural_import_focus[2:])
+                    else:
+                        same_directory_focus = next(
+                            (
+                                line
+                                for line in same_directory_related
+                                if line.startswith("- ") and line[2:] not in highlighted_entries
+                            ),
+                            None,
+                        )
+                        if same_directory_focus:
+                            prefix = "- then inspect" if focus_lines else "- start with"
+                            focus_lines.append(f"{prefix} {same_directory_focus[2:]}")
+                            highlighted_entries.add(same_directory_focus[2:])
                 if related and not (cargo_related or apple_related or structural_related or structural_import_related):
-                    prefix = "- then inspect" if focus_lines else "- start with"
-                    focus_lines.append(f"{prefix} {related[0][2:]}")
-                    highlighted_entries.add(related[0][2:])
+                    related_focus = next(
+                        (
+                            line
+                            for line in related
+                            if line.startswith("- ") and line[2:] not in highlighted_entries
+                        ),
+                        None,
+                    )
+                    if related_focus:
+                        prefix = "- then inspect" if focus_lines else "- start with"
+                        focus_lines.append(f"{prefix} {related_focus[2:]}")
+                        highlighted_entries.add(related_focus[2:])
                 if focus_lines:
                     output.extend(["", "Inspect First:", *focus_lines[:3]])
                 remaining_cargo_related = [
@@ -2223,9 +2393,14 @@ def register(mcp: FastMCP) -> None:
                 if remaining_structural_import_related:
                     output.append("Symbol import graph:")
                     output.extend(remaining_structural_import_related)
-                if same_directory_related:
+                remaining_same_directory_related = [
+                    line
+                    for line in same_directory_related
+                    if not (line.startswith("- ") and line[2:] in highlighted_entries)
+                ]
+                if remaining_same_directory_related:
                     output.append("Sibling implementation files:")
-                    output.extend(same_directory_related)
+                    output.extend(remaining_same_directory_related)
                 remaining_related = [
                     line
                     for line in related

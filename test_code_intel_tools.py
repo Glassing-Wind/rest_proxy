@@ -2242,6 +2242,60 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("FrameCreator/Views/CanvasView.swift", output)
         self.assertIn("Sibling implementation files:", output)
 
+    def test_get_related_files_prefers_same_family_sibling_roles_over_symbol_count(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 5,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+                        "sym_count": 1,
+                        "sym_examples": ["PetController"],
+                        "file_roles": ["api_surface", "controller_surface"],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertIn("PetController.java", inspect_section)
+        self.assertLess(
+            output.index("PetController.java"),
+            output.index("Pet.java"),
+        )
+
     def test_get_related_files_prefers_file_level_graph_callers_before_same_directory_fallback(self):
         async def fake_executor(cypher, **kwargs):
             if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
