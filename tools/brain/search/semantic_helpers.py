@@ -415,6 +415,13 @@ def implementation_query_prefers_request_routing(query: str) -> bool:
     return any(term in text for term in request_terms) and any(term in text for term in routing_terms)
 
 
+def implementation_query_prefers_command_definition(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return False
+    return ("command" in text or "subcommand" in text) and "enum" in text
+
+
 def implementation_noise_exclude_patterns(query: str) -> list[str]:
     text = (query or "").strip().lower()
     if not text:
@@ -691,7 +698,7 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
 
 def implementation_rank_tuple(
     result: dict,
-) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
+) -> tuple[int | float, ...]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
     low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
@@ -703,6 +710,7 @@ def implementation_rank_tuple(
     member_usage_priority = int(result.get("implementation_member_usage_priority", 0) or 0)
     provider_wiring_priority = int(result.get("implementation_provider_wiring_priority", 0) or 0)
     dispatcher_priority = int(result.get("implementation_dispatcher_priority", 0) or 0)
+    command_definition_priority = int(result.get("implementation_command_definition_priority", 0) or 0)
     routing_priority = int(result.get("implementation_routing_priority", 0) or 0)
     handler_priority = int(result.get("implementation_request_handler_priority", 0) or 0)
     path_hint_priority = int(result.get("implementation_path_hint_hit", 0) or 0)
@@ -734,6 +742,7 @@ def implementation_rank_tuple(
         -callable_priority,
         -member_usage_priority,
         -dispatcher_priority,
+        -command_definition_priority,
         -handler_priority,
         -routing_priority,
         -path_hint_priority,
@@ -1220,6 +1229,25 @@ def implementation_dispatcher_priority(meta: dict, file_path: str | None, query:
             priority = max(priority, 2)
         elif "provider" in symbol or "model" in symbol:
             priority = max(priority, 1)
+    return priority
+
+
+def implementation_command_definition_priority(meta: dict, file_path: str | None, query: str) -> int:
+    if not implementation_query_prefers_command_definition(query):
+        return 0
+    if not isinstance(meta, dict):
+        return 0
+    symbol_roles = implementation_declared_symbol_roles(meta)
+    file_roles = implementation_file_roles(meta)
+    priority = 0
+    if "command_surface" in file_roles:
+        priority = max(priority, 3)
+    for lowered_roles in symbol_roles.values():
+        if "command_enum" in lowered_roles:
+            priority = max(priority, 5)
+    norm = (file_path or "").replace("\\", "/").lower()
+    if norm.endswith("/src/lib.rs") or norm.endswith("/src/main.rs"):
+        priority = max(priority, 4 if priority > 0 else 0)
     return priority
 
 
@@ -2143,6 +2171,11 @@ def enrich_implementation_result(
         result.get("file_path"),
         query,
     )
+    result["implementation_command_definition_priority"] = implementation_command_definition_priority(
+        meta,
+        result.get("file_path"),
+        query,
+    )
     result["implementation_provider_wiring_priority"] = implementation_provider_wiring_priority(
         meta,
         result.get("file_path"),
@@ -2295,6 +2328,7 @@ def enrich_implementation_result(
     basename_token_bonus = 0.0
     view_body_bonus = 0.0
     dispatcher_bonus = 0.0
+    command_definition_bonus = 0.0
     provider_wiring_bonus = 0.0
     routing_bonus = 0.0
     request_handler_bonus = 0.0
@@ -2333,6 +2367,9 @@ def enrich_implementation_result(
     dispatcher_hits = int(result.get("implementation_dispatcher_priority", 0) or 0)
     if dispatcher_hits > 0 and bool(intent_policy["allow_dispatcher_bonus"]):
         dispatcher_bonus = float(intent_policy["dispatcher_bonus_weight"]) * min(dispatcher_hits, 3)
+    command_definition_hits = int(result.get("implementation_command_definition_priority", 0) or 0)
+    if command_definition_hits > 0 and query_class_prefers_definitions(query_class):
+        command_definition_bonus = 0.035 * min(command_definition_hits, 3)
     provider_wiring_hits = int(result.get("implementation_provider_wiring_priority", 0) or 0)
     if provider_wiring_hits > 0:
         provider_wiring_bonus = float(intent_policy["provider_wiring_bonus_weight"]) * min(
@@ -2431,6 +2468,7 @@ def enrich_implementation_result(
         + view_body_bonus
         + provider_wiring_bonus
         + dispatcher_bonus
+        + command_definition_bonus
         + routing_bonus
         + request_handler_bonus
         + controller_entity_bonus
@@ -2469,6 +2507,7 @@ def enrich_implementation_result(
         "view_body_bonus": view_body_bonus,
         "provider_wiring_bonus": provider_wiring_bonus,
         "dispatcher_bonus": dispatcher_bonus,
+        "command_definition_bonus": command_definition_bonus,
         "routing_bonus": routing_bonus,
         "request_handler_bonus": request_handler_bonus,
         "controller_entity_bonus": controller_entity_bonus,

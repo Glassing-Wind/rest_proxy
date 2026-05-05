@@ -741,6 +741,58 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertIn("commands", module.implementation_query_definition_subject_identifiers(query))
         self.assertGreaterEqual(module.implementation_definition_hit(content, query), 1)
 
+    def test_command_surface_metadata_promotes_rust_command_enum_definition(self):
+        query = "where is the uv command enum defined"
+        rows = [
+            {
+                "file_path": "docs/reference/cli.md",
+                "project_id": "bench",
+                "rrf": 0.94,
+                "rank_score": 0.94,
+                "content": "The uv Commands enum controls subcommands.",
+                "metadata": current_contract_meta(
+                    {
+                        "chunk_role": "definition",
+                        "declared_symbols": ["Commands"],
+                    },
+                    file_roles=["docs_surface"],
+                ),
+            },
+            {
+                "file_path": "crates/uv-cli/src/lib.rs",
+                "project_id": "bench",
+                "rrf": 0.72,
+                "rank_score": 0.72,
+                "content": "#[derive(Subcommand)]\npub enum Commands {\n    Auth(AuthNamespace),\n}",
+                "metadata": current_contract_meta(
+                    {
+                        "chunk_role": "definition",
+                        "declared_symbols": ["Commands"],
+                        "file_symbols": ["Commands"],
+                        "declared_symbol_roles": {"Commands": ["command_enum"]},
+                    },
+                    file_roles=["command_surface", "library_facade_surface"],
+                ),
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["file_path"], "crates/uv-cli/src/lib.rs")
+        self.assertGreater(enriched[0]["implementation_command_definition_priority"], 0)
+
     def test_request_routing_query_infers_controller_filename_hint(self):
         hints = module.implementation_inferred_filename_hints(
             "where is owner request routing implemented in spring petclinic"
