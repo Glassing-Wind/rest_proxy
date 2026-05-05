@@ -1307,6 +1307,10 @@ def implementation_has_file_roles(meta: dict) -> bool:
     return isinstance(meta.get("file_roles"), list)
 
 
+def implementation_allows_path_fallback(meta: dict) -> bool:
+    return not implementation_has_file_roles(meta)
+
+
 def implementation_declared_symbol_roles(meta: dict) -> dict[str, set[str]]:
     if not isinstance(meta, dict):
         return {}
@@ -1345,7 +1349,7 @@ def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
         return "test_usage"
     if "support_surface" in file_roles:
         return "script_support"
-    if implementation_has_file_roles(meta):
+    if not implementation_allows_path_fallback(meta):
         return ""
     path = (file_path or "").replace("\\", "/").lower()
     if not path:
@@ -1443,7 +1447,7 @@ def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int
     file_roles = implementation_file_roles(metadata)
     if {"api_surface", "runtime_entrypoint_surface", "library_facade_surface"} & file_roles and definition_hit > 0:
         return 1
-    if implementation_has_file_roles(metadata):
+    if not implementation_allows_path_fallback(metadata):
         return 0
     if definition_hit <= 0 or not file_path:
         return 0
@@ -1485,7 +1489,7 @@ def implementation_runtime_main_entrypoint_hit_with_meta(
         return 0
     if "runtime_entrypoint_surface" in file_roles:
         return 1
-    if implementation_has_file_roles(metadata):
+    if not implementation_allows_path_fallback(metadata):
         return 0
     if not file_path:
         return 0
@@ -1596,7 +1600,7 @@ def implementation_exact_signature_symbol_hit(content: str | None, query: str) -
 
 def implementation_export_hit(content: str | None, file_path: str | None, meta: dict) -> int:
     file_roles = implementation_file_roles(meta)
-    has_file_roles = implementation_has_file_roles(meta)
+    allows_path_fallback = implementation_allows_path_fallback(meta)
     node_types = implementation_node_types(meta)
     path = (file_path or "").replace("\\", "/").lower()
     text = (content or "").lower()
@@ -1604,7 +1608,7 @@ def implementation_export_hit(content: str | None, file_path: str | None, meta: 
     if node_types & EXPORT_NODE_TYPES:
         score += 1
     if (
-        not has_file_roles
+        allows_path_fallback
         and ("/src/lib.rs" in path or path.endswith("/lib.rs") or path.endswith("/__init__.py"))
     ):
         if "pub fn " in text or "pub use " in text or "__all__" in text or "export " in text:
@@ -1630,7 +1634,7 @@ def implementation_reexport_surface_hit(
     file_roles = implementation_file_roles(meta)
     if "library_facade_surface" in file_roles:
         return 1
-    if implementation_has_file_roles(meta):
+    if not implementation_allows_path_fallback(meta):
         return 0
     path = (file_path or "").replace("\\", "/").lower()
     text = (content or "").lower()
@@ -1668,10 +1672,9 @@ def implementation_facade_surface_hit(
     if declared_symbol_hit > 0 or definition_hit > 0 or signature_hit > 0:
         return 0
     file_roles = implementation_file_roles(meta)
-    has_file_roles = implementation_has_file_roles(meta)
     if "library_facade_surface" in file_roles:
         return 1
-    if has_file_roles:
+    if not implementation_allows_path_fallback(meta):
         return 0
     node_types = implementation_node_types(meta)
     declaration_like = bool(node_types & DECLARATION_NODE_TYPES)
@@ -1770,18 +1773,18 @@ def implementation_result_role(
     api_context_hit = implementation_api_context_hit(meta)
     chunk_role = implementation_chunk_role(meta, file_path)
     file_roles = implementation_file_roles(meta)
-    has_file_roles = implementation_has_file_roles(meta)
+    allows_path_fallback = implementation_allows_path_fallback(meta)
     if "generated_surface" in file_roles:
         return "generated_surface"
     if "binding_surface" in file_roles:
         return "generated_surface"
-    if not has_file_roles and is_generated_implementation_surface_path(file_path):
+    if allows_path_fallback and is_generated_implementation_surface_path(file_path):
         return "generated_surface"
-    if not has_file_roles and is_low_signal_binding_surface_path(file_path):
+    if allows_path_fallback and is_low_signal_binding_surface_path(file_path):
         return "generated_surface"
     if "docs_surface" in file_roles:
         return "docs"
-    if not has_file_roles and is_doc_like_path(file_path, file_roles):
+    if allows_path_fallback and is_doc_like_path(file_path, file_roles):
         return "docs"
     if "config_surface" in file_roles:
         return "supporting_context"
@@ -1801,7 +1804,7 @@ def implementation_result_role(
         return "canonical_definition"
     if chunk_role == "definition" and definition_hit > 0:
         return "internal_implementation"
-    if not has_file_roles and is_usage_heavy_path(file_path):
+    if allows_path_fallback and is_usage_heavy_path(file_path):
         if callsite_like and definition_hit <= 0 and export_hit <= 0:
             if any(segment in path for segment in ("/tests/", "/test/", "/e2e/", "/examples/", "/spec/")):
                 return "test_example"
@@ -1818,7 +1821,7 @@ def implementation_result_role(
         return "supporting_context"
     if callsite_like:
         return "usage_callsite"
-    if not has_file_roles and is_usage_heavy_path(file_path):
+    if allows_path_fallback and is_usage_heavy_path(file_path):
         return "test_example"
     return "internal_implementation" if declaration_like else "supporting_context"
 
