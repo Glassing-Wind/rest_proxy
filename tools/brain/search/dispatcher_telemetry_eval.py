@@ -142,11 +142,23 @@ def summarize_events(events: list[dict]) -> dict:
     }
 
 
-def evaluate_telemetry(path: str | None = None) -> dict:
+def _latest_contract_eligible_events(events: list[dict], limit: int) -> list[dict]:
+    if limit <= 0:
+        return []
+    eligible = [event for event in events if _is_contract_eligible(_telemetry(event))]
+    if len(eligible) <= limit:
+        return eligible
+    return eligible[-limit:]
+
+
+def evaluate_telemetry(path: str | None = None, *, recent_limit: int = 10) -> dict:
     events = load_events(path)
+    recent_events = _latest_contract_eligible_events(events, recent_limit)
     return {
         "telemetry_path": str(Path(path) if path else DEFAULT_TELEMETRY_PATH),
         "summary": summarize_events(events),
+        "recent_limit": recent_limit,
+        "recent_summary": summarize_events(recent_events),
     }
 
 

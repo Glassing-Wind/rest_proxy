@@ -66,9 +66,9 @@ def run_dispatcher_eval() -> dict:
     return dispatcher_eval.evaluate_benchmarks()
 
 
-def run_dispatcher_telemetry_eval(path: str | None = None) -> dict:
+def run_dispatcher_telemetry_eval(path: str | None = None, *, recent_limit: int = 10) -> dict:
     dispatcher_telemetry_eval = _load_dispatcher_telemetry_eval()
-    return dispatcher_telemetry_eval.evaluate_telemetry(path)
+    return dispatcher_telemetry_eval.evaluate_telemetry(path, recent_limit=recent_limit)
 
 
 def run_live_graph_goldens(workspaces: list[str], python_bin: str) -> dict:
@@ -140,6 +140,7 @@ def build_enterprise_summary(payload: dict) -> dict:
     retrieval_summary = retrieval.get("summary") or {}
     dispatcher_summary = dispatcher.get("summary") or {}
     dispatcher_telemetry_summary = dispatcher_telemetry.get("summary") or {}
+    dispatcher_telemetry_recent_summary = dispatcher_telemetry.get("recent_summary") or {}
     best = _best_retrieval_config(retrieval_summary)
 
     regressions: list[dict] = []
@@ -166,6 +167,7 @@ def build_enterprise_summary(payload: dict) -> dict:
         "retrieval_regressions": regressions,
         "dispatcher_summary": dispatcher_summary,
         "dispatcher_telemetry_summary": dispatcher_telemetry_summary,
+        "dispatcher_telemetry_recent_summary": dispatcher_telemetry_recent_summary,
     }
 
 
@@ -348,11 +350,20 @@ def main() -> int:
         default="",
         help="Optional path to dispatcher telemetry NDJSON. Defaults to .runtime/dispatcher_telemetry.ndjson.",
     )
+    parser.add_argument(
+        "--dispatcher-telemetry-recent-limit",
+        type=int,
+        default=10,
+        help="How many recent contract-eligible dispatcher telemetry events to summarize separately.",
+    )
     args = parser.parse_args()
 
     retrieval = run_retrieval_eval()
     dispatcher = run_dispatcher_eval()
-    dispatcher_telemetry = run_dispatcher_telemetry_eval(args.dispatcher_telemetry_path or None)
+    dispatcher_telemetry = run_dispatcher_telemetry_eval(
+        args.dispatcher_telemetry_path or None,
+        recent_limit=max(int(args.dispatcher_telemetry_recent_limit or 0), 0),
+    )
     graph = (
         {"skipped": True, "reason": "skip_graph"}
         if args.skip_graph

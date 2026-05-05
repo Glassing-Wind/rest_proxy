@@ -60,7 +60,18 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                         "ranking_or_promotion_needed": 1,
                         "semantic_recall_missing_contract_candidate": 2,
                     },
-                }
+                },
+                "recent_summary": {
+                    "contract_eligible_events": 2,
+                    "rescue_applied_rate": 0.5,
+                    "semantic_top_contract_hit_rate": 0.5,
+                    "implementation_ranking_top_contract_hit_rate": 1.0,
+                    "final_top_contract_hit_rate": 1.0,
+                    "diagnosis_counts": {
+                        "ranking_surfaces_contract": 1,
+                        "semantic_recall_missing_contract_candidate": 1,
+                    },
+                },
             },
             "live_graph_goldens": {
                 "ok": True,
@@ -77,6 +88,7 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             1.0,
         )
         self.assertEqual(summary["dispatcher_telemetry_summary"]["total_events"], 3)
+        self.assertEqual(summary["dispatcher_telemetry_recent_summary"]["contract_eligible_events"], 2)
 
     def test_build_summary_collects_only_configs_with_alerts(self):
         mod = _load_module()

@@ -61,6 +61,17 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                         "semantic_recall_missing_contract_candidate": 2,
                     },
                 },
+                "dispatcher_telemetry_recent_summary": {
+                    "contract_eligible_events": 2,
+                    "rescue_applied_rate": 0.5000,
+                    "semantic_top_contract_hit_rate": 0.5000,
+                    "implementation_ranking_top_contract_hit_rate": 1.0000,
+                    "final_top_contract_hit_rate": 1.0000,
+                    "diagnosis_counts": {
+                        "ranking_surfaces_contract": 1,
+                        "semantic_recall_missing_contract_candidate": 1,
+                    },
+                },
                 "retrieval_query_class_counts": {"usage_lookup": 2, "implementation_search": 3},
             },
             "trend_summary": {
@@ -87,6 +98,10 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("Ignored no-signal events: `1`", text)
         self.assertIn("Rescue applied rate: `0.3333`", text)
         self.assertIn("Live diagnosis `semantic_recall_missing_contract_candidate`: 2", text)
+        self.assertIn("### Recent Dispatcher Telemetry", text)
+        self.assertIn("Recent contract-eligible events: `2`", text)
+        self.assertIn("Recent final top contract-hit rate: `1.0000`", text)
+        self.assertIn("Recent diagnosis `ranking_surfaces_contract`: 1", text)
         self.assertIn("- `implementation_search`: 3", text)
 
     def test_render_pr_comment_includes_marker_and_alert_header(self):

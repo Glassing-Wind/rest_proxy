@@ -21,6 +21,7 @@ def render_summary(payload: dict) -> str:
     metrics = best.get("metrics") or {}
     dispatcher = enterprise.get("dispatcher_summary") or {}
     dispatcher_telemetry = enterprise.get("dispatcher_telemetry_summary") or {}
+    dispatcher_telemetry_recent = enterprise.get("dispatcher_telemetry_recent_summary") or {}
     attention = list(trend.get("attention_needed") or [])
     query_counts = enterprise.get("retrieval_query_class_counts") or {}
 
@@ -111,6 +112,29 @@ def render_summary(payload: dict) -> str:
         if diagnosis_counts:
             for name in sorted(diagnosis_counts):
                 lines.append(f"- Live diagnosis `{name}`: {diagnosis_counts[name]}")
+    if dispatcher_telemetry_recent:
+        lines.append("")
+        lines.append("### Recent Dispatcher Telemetry")
+        lines.append("")
+        lines.append(
+            f"- Recent contract-eligible events: `{dispatcher_telemetry_recent.get('contract_eligible_events', 0)}`"
+        )
+        lines.append(
+            f"- Recent rescue applied rate: `{_fmt_metric(dispatcher_telemetry_recent.get('rescue_applied_rate'))}`"
+        )
+        lines.append(
+            f"- Recent semantic top contract-hit rate: `{_fmt_metric(dispatcher_telemetry_recent.get('semantic_top_contract_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Recent ranking top contract-hit rate: `{_fmt_metric(dispatcher_telemetry_recent.get('implementation_ranking_top_contract_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Recent final top contract-hit rate: `{_fmt_metric(dispatcher_telemetry_recent.get('final_top_contract_hit_rate'))}`"
+        )
+        diagnosis_counts = dispatcher_telemetry_recent.get("diagnosis_counts") or {}
+        if diagnosis_counts:
+            for name in sorted(diagnosis_counts):
+                lines.append(f"- Recent diagnosis `{name}`: {diagnosis_counts[name]}")
     if query_counts:
         lines.append("")
         lines.append("### Query Classes")
