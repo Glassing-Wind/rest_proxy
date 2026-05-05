@@ -75,6 +75,54 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(len(module.cap_per_file(rows, 1)), 2)
         self.assertEqual(len(module.cap_per_dir(rows, 1)), 2)
 
+    def test_dedupe_files_prefers_best_implementation_chunk_per_file(self):
+        query = "where is model inference selected"
+        query_class = module.implementation_query_class(query)
+        weaker = {
+            "file_path": "pkg/models/__init__.py",
+            "project_id": "p",
+            "rrf": 0.40,
+            "content": "// File: pkg/models/__init__.py\ndef helper():\n    return None\n",
+            "metadata": current_contract_meta(
+                {
+                    "declared_symbols": ["helper"],
+                    "node_types": ["function_definition"],
+                },
+                file_roles=["library_facade_surface"],
+            ),
+        }
+        stronger = {
+            "file_path": "pkg/models/__init__.py",
+            "project_id": "p",
+            "rrf": 0.20,
+            "content": (
+                "// File: pkg/models/__init__.py\n"
+                "// Semantic role: canonical model inference selection dispatcher\n"
+                "def infer_model(model_name: str):\n    return model_name\n"
+            ),
+            "metadata": current_contract_meta(
+                {
+                    "declared_symbols": ["infer_model"],
+                    "declared_symbol_roles": {
+                        "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
+                    },
+                    "chunk_role": "canonical_dispatcher_definition",
+                    "node_types": ["function_definition"],
+                },
+                file_roles=["dispatcher_surface", "model_dispatcher_surface", "library_facade_surface"],
+            ),
+        }
+        for row in (weaker, stronger):
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row["rrf"]),
+            )
+        deduped = module.dedupe_files([weaker, stronger])
+        self.assertEqual(len(deduped), 1)
+        self.assertIn("infer_model", deduped[0]["content"])
+
     def test_analyze_near_duplicate_results_uses_lower_level_contract(self):
         rows = [
             {"file_path": "src/a.py", "project_id": "p", "rrf": 1.0, "content": "same-a"},

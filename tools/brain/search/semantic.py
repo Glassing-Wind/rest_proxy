@@ -238,8 +238,8 @@ async def _load_path_hint_rows(
             "content": r[2],
             "project_id": r[3],
             "metadata": r[4],
-            "implementation_path_hint_hit": int(r[5] or 0),
-            "implementation_exact_identifier_text_hit": int(r[6] or 0),
+            "implementation_path_hint_hit": int((r[5] if len(r) > 5 else 0) or 0),
+            "implementation_exact_identifier_text_hit": int((r[6] if len(r) > 6 else 0) or 0),
             "rrf": 0.0,
             "_definition_rescue": True,
         }
@@ -1275,6 +1275,7 @@ def register(mcp: FastMCP) -> None:
             duplicate_trace: dict | None = None
 
             if dedupe_files:
+                pre_duplicate_results = list(all_results)
                 if duplicate_trace_enabled or duplicate_telemetry_enabled or any(duplicate_experiments.values()):
                     duplicate_trace = sem_helpers.rerank_retrieval_results_contract(
                         all_results,
@@ -1286,6 +1287,34 @@ def register(mcp: FastMCP) -> None:
                     reranked = duplicate_trace.get("results") if isinstance(duplicate_trace, dict) else None
                     if isinstance(reranked, list) and reranked:
                         all_results = reranked
+                if impl_intent and sem_helpers.implementation_query_prefers_dispatchers(query):
+                    exact_dispatcher_identifiers = sem_helpers.implementation_query_exact_identifiers(query)
+                    if exact_dispatcher_identifiers:
+                        preserved_dispatchers: list[dict] = []
+                        for candidate in pre_duplicate_results:
+                            meta = sem_helpers.coerce_meta(candidate)
+                            declared_symbols = {
+                                str(symbol).strip().lower()
+                                for symbol in (meta.get("declared_symbols") or [])
+                                if str(symbol).strip()
+                            }
+                            if (
+                                int(candidate.get("implementation_dispatcher_priority", 0) or 0) < 5
+                                or not (declared_symbols & exact_dispatcher_identifiers)
+                            ):
+                                continue
+                            preserved_dispatchers.append(candidate)
+                        if preserved_dispatchers:
+                            seen_files = {
+                                (row.get("project_id"), row.get("file_path"))
+                                for row in all_results
+                            }
+                            for candidate in preserved_dispatchers:
+                                marker = (candidate.get("project_id"), candidate.get("file_path"))
+                                if marker in seen_files:
+                                    continue
+                                all_results.append(candidate)
+                                seen_files.add(marker)
                 if impl_intent:
                     all_results.sort(key=sem_helpers.implementation_rank_tuple)
                 all_results = sem_helpers.dedupe_files(all_results)
@@ -1408,66 +1437,39 @@ def register(mcp: FastMCP) -> None:
                         strong_dispatchers.sort(key=sem_helpers.implementation_rank_tuple)
                         other_results.sort(key=sem_helpers.implementation_rank_tuple)
                         all_results = strong_dispatchers + other_results
-                if sem_helpers.implementation_query_prefers_request_routing(query) and path_hints:
-                    top_probe = all_results[: min(3, len(all_results))]
-                    has_strong_routing_surface = any(
-                        int(r.get("implementation_controller_entity_hit", 0) or 0) >= 2
-                        or int(r.get("implementation_request_handler_priority", 0) or 0) >= 2
-                        or int(r.get("implementation_routing_priority", 0) or 0) >= 2
-                        for r in top_probe
-                    )
-                    if not has_strong_routing_surface:
-                        routing_rescue_results: list[dict] = []
-                        for pid in pid_to_name:
-                            async with memory_store._pg_pool.connection() as conn:
-                                await conn.execute("BEGIN")
-                                rescue_rows = await _load_path_hint_rows(
-                                    conn,
-                                    pid=pid,
-                                    path_hints=path_hints,
-                                    identifier_exprs=exact_identifiers,
-                                    max_files=min(max(fallback_max, 8), 16),
-                                )
-                            for r in rescue_rows:
-                                r_meta = sem_helpers.coerce_meta(r)
-                                r["_meta"] = r_meta
-                                r["meta_score"] = sem_helpers.meta_score(r_meta)
-                                r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                                r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
-                                    r.get("file_path")
-                                )
-                                r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
-                                    r.get("file_path")
-                                )
-                                sem_helpers.enrich_implementation_result(
-                                    r,
-                                    query=query,
-                                    query_class=impl_query_class,
-                                    base_score=float(r.get("rrf", 0.0) or 0.0),
-                                    meta_boost=0.0,
-                                    base_bonus=0.12
-                                    if int(r.get("implementation_path_hint_hit", 0) or 0) > 0
-                                    else 0.02,
-                                )
-                                if (
-                                    int(r.get("implementation_controller_entity_hit", 0) or 0) < 2
-                                    and int(r.get("implementation_request_handler_priority", 0) or 0) < 2
-                                    and int(r.get("implementation_routing_priority", 0) or 0) < 2
-                                ):
-                                    continue
-                                routing_rescue_results.append(r)
-                        if routing_rescue_results:
-                            replacement_files = {
-                                (r.get("project_id"), r.get("file_path"))
-                                for r in routing_rescue_results
-                            }
-                            all_results = [
+                    exact_dispatcher_matches: list[dict] = []
+                    for r in all_results:
+                        meta = sem_helpers.coerce_meta(r)
+                        file_roles = sem_helpers.implementation_file_roles(meta)
+                        chunk_role = sem_helpers.implementation_chunk_role(meta, r.get("file_path"))
+                        declared_symbols = {
+                            str(symbol).strip().lower()
+                            for symbol in (meta.get("declared_symbols") or [])
+                            if str(symbol).strip()
+                        }
+                        if (
+                            int(r.get("implementation_dispatcher_priority", 0) or 0) >= 5
+                            and (declared_symbols & exact_dispatcher_identifiers)
+                            and "profile_surface" not in file_roles
+                            and chunk_role != "profile_definition"
+                        ):
+                            exact_dispatcher_matches.append(r)
+                    if exact_dispatcher_matches:
+                        exact_dispatcher_matches.sort(key=sem_helpers.implementation_rank_tuple)
+                        best_dispatcher = exact_dispatcher_matches[0]
+                        all_results = [
+                            best_dispatcher,
+                            *[
                                 r
                                 for r in all_results
-                                if (r.get("project_id"), r.get("file_path")) not in replacement_files
-                            ]
-                            all_results.extend(routing_rescue_results)
-                            all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                                if not (
+                                    r.get("project_id") == best_dispatcher.get("project_id")
+                                    and r.get("file_path") == best_dispatcher.get("file_path")
+                                    and r.get("chunk_index") == best_dispatcher.get("chunk_index")
+                                )
+                            ],
+                        ]
+                if sem_helpers.implementation_query_prefers_request_routing(query) and path_hints:
                     strong_routing_results: list[dict] = []
                     other_results: list[dict] = []
                     for r in all_results:

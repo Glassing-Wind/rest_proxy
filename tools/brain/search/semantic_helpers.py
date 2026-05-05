@@ -3414,15 +3414,33 @@ def coerce_meta(result: dict) -> dict:
 
 
 def dedupe_files(results: list[dict]) -> list[dict]:
-    seen_files: set[str] = set()
-    deduped: list[dict] = []
+    def _has_implementation_ranking(result: dict) -> bool:
+        return any(
+            key in result
+            for key in (
+                "implementation_role_priority",
+                "implementation_dispatcher_priority",
+                "implementation_command_definition_priority",
+                "implementation_routing_priority",
+                "implementation_request_handler_priority",
+            )
+        )
+
+    chosen_by_file: dict[str, dict] = {}
+    file_order: list[str] = []
     for result in results:
         file_path = result.get("file_path")
-        if not file_path or file_path in seen_files:
+        if not file_path:
             continue
-        seen_files.add(file_path)
-        deduped.append(result)
-    return deduped
+        existing = chosen_by_file.get(file_path)
+        if existing is None:
+            chosen_by_file[file_path] = result
+            file_order.append(file_path)
+            continue
+        if _has_implementation_ranking(result) and _has_implementation_ranking(existing):
+            if implementation_rank_tuple(result) < implementation_rank_tuple(existing):
+                chosen_by_file[file_path] = result
+    return [chosen_by_file[file_path] for file_path in file_order]
 
 
 def cap_per_file(results: list[dict], max_per_file: int) -> list[dict]:
