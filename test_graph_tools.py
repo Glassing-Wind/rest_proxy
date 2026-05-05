@@ -26,6 +26,9 @@ class FakeMCP:
 
 
 class FakeCursor:
+    def __init__(self, rows=None):
+        self.rows = list(rows or [])
+
     async def __aenter__(self):
         return self
 
@@ -41,10 +44,13 @@ class FakeCursor:
         return (42,)
 
     async def fetchall(self):
-        return []
+        return list(self.rows)
 
 
 class FakeConnection:
+    def __init__(self, cursor=None):
+        self._cursor = cursor or FakeCursor()
+
     async def __aenter__(self):
         return self
 
@@ -52,7 +58,7 @@ class FakeConnection:
         return False
 
     def cursor(self):
-        return FakeCursor()
+        return self._cursor
 
 
 class FakePool:
@@ -1069,6 +1075,27 @@ class GraphToolsTests(unittest.TestCase):
                     ["src/generated.ts", "src/app.ts", "src/view.ts"],
                 )
             )
+
+        self.assertEqual(result["src/generated.ts"], {"generated_surface", "support_surface"})
+        self.assertEqual(result["src/view.ts"], set())
+        self.assertNotIn("src/app.ts", result)
+
+    def test_load_semantic_file_roles_ignores_missing_semantic_metadata_field(self):
+        result = asyncio.run(
+            self.module.graph_overview._load_semantic_file_roles(
+                FakeConnection(
+                    FakeCursor(
+                        [
+                            ("src/generated.ts", True, ["generated_surface", "support_surface"]),
+                            ("src/app.ts", False, []),
+                            ("src/view.ts", True, []),
+                        ]
+                    )
+                ),
+                "proj123",
+                ["src/generated.ts", "src/app.ts", "src/view.ts"],
+            )
+        )
 
         self.assertEqual(result["src/generated.ts"], {"generated_surface", "support_surface"})
         self.assertEqual(result["src/view.ts"], set())

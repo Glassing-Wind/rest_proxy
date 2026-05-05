@@ -1,5 +1,4 @@
 import asyncio
-import importlib.util
 import os
 import sys
 import tempfile
@@ -14,9 +13,9 @@ MODULE_PATH = REPO_ROOT / "scripts" / "index_workspace.py"
 
 
 def load_index_workspace_module():
-    spec = importlib.util.spec_from_file_location("index_workspace_under_test", MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
+    module = types.ModuleType("index_workspace_under_test")
+    module.__file__ = str(MODULE_PATH)
+    module.__package__ = ""
     dotenv_mod = types.ModuleType("dotenv")
     dotenv_mod.load_dotenv = lambda *args, **kwargs: None
 
@@ -66,7 +65,7 @@ def load_index_workspace_module():
     }
 
     with mock.patch.dict(sys.modules, stub_modules):
-        spec.loader.exec_module(module)
+        exec(compile(MODULE_PATH.read_text(encoding="utf-8"), str(MODULE_PATH), "exec"), module.__dict__)
     return module
 
 
@@ -483,9 +482,10 @@ class FakeTsPack:
 
 
 class FakeCursor:
-    def __init__(self):
+    def __init__(self, rows=None):
         self.calls = []
         self.rowcount = 2
+        self._rows = list(rows or [])
 
     async def __aenter__(self):
         return self
@@ -495,6 +495,9 @@ class FakeCursor:
 
     async def execute(self, query, params):
         self.calls.append((query, params))
+
+    async def fetchall(self):
+        return list(self._rows)
 
 
 class FakeConnection:
@@ -523,6 +526,70 @@ class IndexWorkspaceTests(unittest.TestCase):
     def setUp(self):
         self.module = load_index_workspace_module()
         self.module._TS_PACK_INIT_DONE = True
+
+    def test_promote_semantic_file_roles_to_graph_skips_legacy_rows_without_emitted_roles(self):
+        self.module.memory_store._pg_pool_available = lambda: True
+        self.module.memory_store._pg_pool = FakePool(
+            FakeCursor(
+                [
+                    ("src/generated.ts", True, ["Generated_Surface", " support_surface "]),
+                    ("src/empty.ts", True, []),
+                    ("src/legacy.ts", False, []),
+                ]
+            )
+        )
+        captured = {}
+
+        class _Result:
+            def single(self):
+                return {"matched": 2}
+
+        class _Session:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def run(self, query, **kwargs):
+                captured["query"] = query
+                captured["kwargs"] = kwargs
+                return _Result()
+
+        class _Driver:
+            def session(self, database=None):
+                captured["database"] = database
+                return _Session()
+
+            def close(self):
+                captured["closed"] = True
+
+        class _GraphDatabase:
+            @staticmethod
+            def driver(uri, auth=None):
+                captured["uri"] = uri
+                captured["auth"] = auth
+                return _Driver()
+
+        neo4j_mod = types.SimpleNamespace(GraphDatabase=_GraphDatabase)
+
+        with mock.patch.dict(sys.modules, {"neo4j": neo4j_mod}):
+            asyncio.run(
+                self.module._promote_semantic_file_roles_to_graph(
+                    "proj123",
+                    ["src/generated.ts", "src/empty.ts", "src/legacy.ts"],
+                )
+            )
+
+        self.assertEqual(
+            captured["kwargs"]["batch"],
+            [
+                {"filepath": "src/generated.ts", "roles": ["Generated_Surface", "support_surface"]},
+                {"filepath": "src/empty.ts", "roles": []},
+            ],
+        )
+        self.assertEqual(captured["kwargs"]["pid"], "proj123")
+        self.assertTrue(captured["closed"])
 
     def test_get_latest_successful_struct_run_id_ignores_stale_project_pointer(self):
         captured = {}

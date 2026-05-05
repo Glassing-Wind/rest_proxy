@@ -686,6 +686,7 @@ async def _promote_semantic_file_roles_to_graph(
     query = """
         SELECT
           file_path,
+          bool_or(jsonb_typeof(metadata->'file_roles') = 'array') AS has_file_roles,
           array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
         FROM codebase_embeddings
         LEFT JOIN LATERAL jsonb_array_elements_text(
@@ -735,13 +736,13 @@ async def _promote_semantic_file_roles_to_graph(
                 if str(role).strip()
             }
         )
-        for file_path, roles in file_roles_rows
-        if str(file_path or "").strip()
+        for file_path, has_file_roles, roles in file_roles_rows
+        if str(file_path or "").strip() and has_file_roles
     }
     batch = [
-        {"filepath": path, "roles": role_map.get(path, [])}
+        {"filepath": path, "roles": role_map[path]}
         for path in manifest_paths
-        if path
+        if path and path in role_map
     ]
     if not batch:
         return

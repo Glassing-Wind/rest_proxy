@@ -130,6 +130,7 @@ async def _load_semantic_file_roles(conn, project_id: str, file_paths: list[str]
             """
             SELECT
               file_path,
+              bool_or(jsonb_typeof(metadata->'file_roles') = 'array') AS has_file_roles,
               array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
             FROM codebase_embeddings
             LEFT JOIN LATERAL jsonb_array_elements_text(
@@ -147,9 +148,9 @@ async def _load_semantic_file_roles(conn, project_id: str, file_paths: list[str]
         )
         rows = await cur.fetchall()
     out: dict[str, set[str]] = {}
-    for file_path, roles in rows:
+    for file_path, has_file_roles, roles in rows:
         normalized_path = str(file_path or "").strip()
-        if not normalized_path:
+        if not normalized_path or not has_file_roles:
             continue
         out[normalized_path] = {
             str(role).strip().lower()
