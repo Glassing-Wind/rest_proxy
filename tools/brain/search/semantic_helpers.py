@@ -1595,13 +1595,21 @@ def implementation_exact_signature_symbol_hit(content: str | None, query: str) -
 
 
 def implementation_export_hit(content: str | None, file_path: str | None, meta: dict) -> int:
+    file_roles = implementation_file_roles(meta)
+    has_file_roles = implementation_has_file_roles(meta)
     node_types = implementation_node_types(meta)
     path = (file_path or "").replace("\\", "/").lower()
     text = (content or "").lower()
     score = 0
     if node_types & EXPORT_NODE_TYPES:
         score += 1
-    if "/src/lib.rs" in path or path.endswith("/lib.rs") or path.endswith("/__init__.py"):
+    if (
+        not has_file_roles
+        and ("/src/lib.rs" in path or path.endswith("/lib.rs") or path.endswith("/__init__.py"))
+    ):
+        if "pub fn " in text or "pub use " in text or "__all__" in text or "export " in text:
+            score += 1
+    if {"library_facade_surface", "api_surface"} & file_roles:
         if "pub fn " in text or "pub use " in text or "__all__" in text or "export " in text:
             score += 1
     if re.search(r"\bpub\s+use\b", text) or re.search(r"\bexport\s+(?:\{|\*)", text):

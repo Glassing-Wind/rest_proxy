@@ -780,6 +780,25 @@ class SemanticHelperTests(unittest.TestCase):
             0,
         )
 
+    def test_implementation_export_hit_skips_path_bonus_when_file_roles_are_present(self):
+        content = "from .unified_indexer import process_repository_indexing\n__all__ = ['process_repository_indexing']"
+        self.assertEqual(
+            module.implementation_export_hit(
+                content,
+                "indexer/__init__.py",
+                {"file_roles": []},
+            ),
+            0,
+        )
+        self.assertGreaterEqual(
+            module.implementation_export_hit(
+                content,
+                "indexer/__init__.py",
+                {"file_roles": ["library_facade_surface"]},
+            ),
+            1,
+        )
+
     def test_library_facade_role_marks_facade_surface(self):
         hit = module.implementation_facade_surface_hit(
             "pkg/api.py",
