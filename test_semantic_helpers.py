@@ -476,6 +476,119 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(event["topic"], "neo4j")
         self.assertEqual(event["telemetry"]["experimental_suppressions"], 1)
 
+    def test_dispatcher_contract_telemetry_distinguishes_missing_contract_from_missing_recall(self):
+        semantic_candidates = [
+            {
+                "file_path": "pkg/models/__init__.py",
+                "project_id": "p",
+                "implementation_dispatcher_priority": 6,
+                "metadata": current_contract_meta(
+                    {
+                        "declared_symbols": ["infer_model"],
+                        "declared_symbol_roles": {
+                            "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
+                        },
+                    },
+                    file_roles=["dispatcher_surface", "model_dispatcher_surface"],
+                ),
+            }
+        ]
+        final_results = [
+            {
+                "file_path": "pkg/models/__init__.py",
+                "project_id": "p",
+                "implementation_dispatcher_priority": 6,
+                "metadata": current_contract_meta(
+                    {
+                        "declared_symbols": ["infer_model"],
+                        "declared_symbol_roles": {
+                            "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
+                        },
+                        "focused_dispatcher_anchor_contract_version": 1,
+                        "semantic_contract_capabilities": ["focused_dispatcher_anchor_v1"],
+                    },
+                    file_roles=["dispatcher_surface", "model_dispatcher_surface"],
+                ),
+            }
+        ]
+        telemetry = module.dispatcher_contract_telemetry(
+            query="where is model inference selected",
+            query_class="api_definition_lookup",
+            semantic_candidates=semantic_candidates,
+            ranked_candidates=semantic_candidates,
+            final_results=final_results,
+            rescue_applied=True,
+        )
+        self.assertEqual(telemetry["diagnosis"], "contract_missing_from_semantic_candidates_but_recovered")
+        self.assertEqual(telemetry["semantic_contract_match_count"], 0)
+        self.assertTrue(telemetry["final_top"]["contract_hit"])
+
+    def test_dispatcher_contract_telemetry_reports_semantic_recall_missing_contract_candidate(self):
+        non_dispatcher = {
+            "file_path": "pkg/embeddings/__init__.py",
+            "project_id": "p",
+            "implementation_dispatcher_priority": 0,
+            "metadata": current_contract_meta(
+                {"declared_symbols": ["EmbeddingsModel"]},
+                file_roles=["library_facade_surface"],
+            ),
+        }
+        recovered = {
+            "file_path": "pkg/models/__init__.py",
+            "project_id": "p",
+            "implementation_dispatcher_priority": 6,
+            "metadata": current_contract_meta(
+                {
+                    "declared_symbols": ["infer_model"],
+                    "declared_symbol_roles": {
+                        "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
+                    },
+                    "focused_dispatcher_anchor_contract_version": 1,
+                    "semantic_contract_capabilities": ["focused_dispatcher_anchor_v1"],
+                },
+                file_roles=["dispatcher_surface", "model_dispatcher_surface"],
+            ),
+        }
+        telemetry = module.dispatcher_contract_telemetry(
+            query="where is model inference selected",
+            query_class="api_definition_lookup",
+            semantic_candidates=[non_dispatcher],
+            ranked_candidates=[non_dispatcher],
+            final_results=[recovered],
+            rescue_applied=True,
+        )
+        self.assertEqual(telemetry["diagnosis"], "semantic_recall_missing_contract_candidate")
+        self.assertEqual(telemetry["semantic_exact_match_count"], 0)
+        self.assertTrue(telemetry["final_top"]["contract_hit"])
+
+    def test_append_dispatcher_telemetry_event_writes_ndjson(self):
+        telemetry = {
+            "query_class": "api_definition_lookup",
+            "diagnosis": "semantic_recall_missing_contract_candidate",
+            "dispatcher_anchor_contract_capability": "focused_dispatcher_anchor_v1",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "dispatcher.ndjson")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "LM_PROXY_DISPATCHER_TELEMETRY": "1",
+                    "LM_PROXY_DISPATCHER_TELEMETRY_PATH": target,
+                },
+                clear=False,
+            ):
+                module.append_dispatcher_telemetry_event(
+                    telemetry,
+                    query="where is model inference selected",
+                    tool="search_codebase",
+                    topic="pydantic-ai",
+                )
+            with open(target, "r", encoding="utf-8") as fh:
+                event = json.loads(fh.read().strip())
+        self.assertEqual(event["tool"], "search_codebase")
+        self.assertEqual(event["topic"], "pydantic-ai")
+        self.assertEqual(event["telemetry"]["diagnosis"], "semantic_recall_missing_contract_candidate")
+
     def test_context_payload_uses_source_url_when_file_path_missing(self):
         payload = json.loads(
             module._context_payload(

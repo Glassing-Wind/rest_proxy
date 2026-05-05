@@ -1290,9 +1290,14 @@ def register(mcp: FastMCP) -> None:
                 if impl_intent:
                     all_results.sort(key=sem_helpers.implementation_rank_tuple)
                 all_results = sem_helpers.dedupe_files(all_results)
+                pre_dispatcher_recovery_results = list(all_results)
+            else:
+                pre_duplicate_results = list(all_results)
+                pre_dispatcher_recovery_results = list(all_results)
 
             if impl_intent:
                 all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                dispatcher_rescue_applied = False
                 if (
                     sem_helpers.implementation_query_prefers_dispatchers(query)
                     and "profile" not in sem_helpers.implementation_query_symbols(query)
@@ -1372,6 +1377,7 @@ def register(mcp: FastMCP) -> None:
                                     continue
                                 rescue_results.append(r)
                         if rescue_results:
+                            dispatcher_rescue_applied = True
                             replacement_files = {
                                 (r.get("project_id"), r.get("file_path"))
                                 for r in rescue_results
@@ -1440,6 +1446,44 @@ def register(mcp: FastMCP) -> None:
                                 )
                             ],
                         ]
+                dispatcher_contract_trace = sem_helpers.dispatcher_contract_telemetry(
+                    query=query,
+                    query_class=impl_query_class,
+                    semantic_candidates=pre_duplicate_results,
+                    ranked_candidates=pre_dispatcher_recovery_results,
+                    final_results=all_results,
+                    rescue_applied=dispatcher_rescue_applied,
+                )
+                if dispatcher_contract_trace:
+                    sem_helpers.append_dispatcher_telemetry_event(
+                        dispatcher_contract_trace,
+                        query=query,
+                        tool="search_codebase",
+                        topic="",
+                    )
+                    debug_log(
+                        "dispatcher_contract_telemetry",
+                        query=query,
+                        query_class=dispatcher_contract_trace.get("query_class"),
+                        diagnosis=dispatcher_contract_trace.get("diagnosis"),
+                        rescue_applied=dispatcher_contract_trace.get("rescue_applied"),
+                        exact_identifiers=dispatcher_contract_trace.get("exact_identifiers"),
+                        semantic_exact_match_count=dispatcher_contract_trace.get("semantic_exact_match_count"),
+                        semantic_contract_match_count=dispatcher_contract_trace.get("semantic_contract_match_count"),
+                        ranked_exact_match_count=dispatcher_contract_trace.get("ranked_exact_match_count"),
+                        ranked_contract_match_count=dispatcher_contract_trace.get("ranked_contract_match_count"),
+                        final_exact_match_count=dispatcher_contract_trace.get("final_exact_match_count"),
+                        final_contract_match_count=dispatcher_contract_trace.get("final_contract_match_count"),
+                        semantic_top=dispatcher_contract_trace.get("semantic_top"),
+                        ranked_top=dispatcher_contract_trace.get("ranked_top"),
+                        final_top=dispatcher_contract_trace.get("final_top"),
+                        dispatcher_anchor_contract_capability=dispatcher_contract_trace.get(
+                            "dispatcher_anchor_contract_capability"
+                        ),
+                        dispatcher_anchor_contract_version=dispatcher_contract_trace.get(
+                            "dispatcher_anchor_contract_version"
+                        ),
+                    )
                 if sem_helpers.implementation_query_prefers_request_routing(query) and path_hints:
                     strong_routing_results: list[dict] = []
                     other_results: list[dict] = []

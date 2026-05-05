@@ -10,7 +10,12 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from _semantic_contract import has_current_semantic_contract
+from _semantic_contract import (
+    FOCUSED_DISPATCHER_ANCHOR_CAPABILITY,
+    FOCUSED_DISPATCHER_ANCHOR_CONTRACT_VERSION,
+    has_current_semantic_contract,
+    has_focused_dispatcher_anchor_contract,
+)
 
 
 def merge_duplicate_experiments(mode: str, experiments: dict | None) -> dict:
@@ -122,6 +127,42 @@ def append_duplicate_telemetry_event(
         "telemetry": trace.get("telemetry", {}),
         "suppression_policy": trace.get("suppression_policy", "exact_only"),
         "experiments": trace.get("experiments", {}),
+    }
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, sort_keys=True) + "\n")
+    except Exception:
+        return
+
+
+def dispatcher_telemetry_enabled() -> bool:
+    raw = os.getenv("LM_PROXY_DISPATCHER_TELEMETRY", "1").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
+def append_dispatcher_telemetry_event(
+    telemetry: dict,
+    *,
+    query: str,
+    tool: str,
+    topic: str = "",
+) -> None:
+    if not dispatcher_telemetry_enabled() or not isinstance(telemetry, dict):
+        return
+    path = os.getenv("LM_PROXY_DISPATCHER_TELEMETRY_PATH", "").strip()
+    if path:
+        target = Path(os.path.expanduser(path))
+    else:
+        target = Path(__file__).resolve().parents[3] / ".runtime" / "dispatcher_telemetry.ndjson"
+    event = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "tool": tool,
+        "topic": topic,
+        "query": (query or "")[:500],
+        "telemetry": telemetry,
     }
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -877,6 +918,98 @@ def implementation_query_exact_identifiers(query: str) -> set[str]:
             identifiers.update({"infer_provider", "infer_provider_class"})
     identifiers.update(implementation_query_definition_subject_identifiers(raw))
     return identifiers
+
+
+def dispatcher_contract_telemetry(
+    *,
+    query: str,
+    query_class: str | None,
+    semantic_candidates: list[dict],
+    ranked_candidates: list[dict],
+    final_results: list[dict],
+    rescue_applied: bool,
+) -> dict | None:
+    exact_identifiers = implementation_query_exact_identifiers(query)
+    if not implementation_query_prefers_dispatchers(query) or not exact_identifiers:
+        return None
+
+    def _declared(row: dict) -> set[str]:
+        meta = coerce_meta(row)
+        return {
+            str(symbol).strip().lower()
+            for symbol in (meta.get("declared_symbols") or [])
+            if str(symbol).strip()
+        }
+
+    def _exact_matches(rows: list[dict]) -> list[dict]:
+        matches: list[dict] = []
+        for row in rows or []:
+            if int(row.get("implementation_dispatcher_priority", 0) or 0) < 5:
+                continue
+            if _declared(row) & exact_identifiers:
+                matches.append(row)
+        return matches
+
+    def _contract_matches(rows: list[dict]) -> list[dict]:
+        return [row for row in _exact_matches(rows) if has_focused_dispatcher_anchor_contract(coerce_meta(row))]
+
+    def _top_snapshot(rows: list[dict]) -> dict:
+        top = rows[0] if rows else {}
+        top_meta = coerce_meta(top)
+        top_declared = sorted(_declared(top)) if isinstance(top, dict) else []
+        top_exact = bool(top_declared and (set(top_declared) & exact_identifiers))
+        top_contract = bool(top_exact and has_focused_dispatcher_anchor_contract(top_meta))
+        return {
+            "file_path": top.get("file_path") if isinstance(top, dict) else None,
+            "declared_symbols": top_declared,
+            "exact_hit": top_exact,
+            "contract_hit": top_contract,
+        }
+
+    semantic_exact = _exact_matches(semantic_candidates)
+    semantic_contract = _contract_matches(semantic_candidates)
+    ranked_exact = _exact_matches(ranked_candidates)
+    ranked_contract = _contract_matches(ranked_candidates)
+    final_exact = _exact_matches(final_results)
+    final_contract = _contract_matches(final_results)
+
+    semantic_top = _top_snapshot(semantic_candidates)
+    ranked_top = _top_snapshot(ranked_candidates)
+    final_top = _top_snapshot(final_results)
+
+    diagnosis = "no_exact_dispatcher_signal"
+    if semantic_contract:
+        diagnosis = "ranking_or_promotion_needed"
+        if ranked_top["contract_hit"]:
+            diagnosis = "ranking_surfaces_contract"
+        elif final_top["contract_hit"] and rescue_applied:
+            diagnosis = "rescue_or_final_promotion_surfaces_contract"
+        elif final_top["contract_hit"]:
+            diagnosis = "final_promotion_surfaces_contract"
+    elif semantic_exact:
+        diagnosis = "contract_missing_from_semantic_candidates"
+        if final_top["contract_hit"]:
+            diagnosis = "contract_missing_from_semantic_candidates_but_recovered"
+    elif final_top["contract_hit"]:
+        diagnosis = "semantic_recall_missing_contract_candidate"
+
+    return {
+        "query_class": query_class or implementation_query_class(query),
+        "exact_identifiers": sorted(exact_identifiers),
+        "dispatcher_anchor_contract_capability": FOCUSED_DISPATCHER_ANCHOR_CAPABILITY,
+        "dispatcher_anchor_contract_version": FOCUSED_DISPATCHER_ANCHOR_CONTRACT_VERSION,
+        "rescue_applied": bool(rescue_applied),
+        "diagnosis": diagnosis,
+        "semantic_exact_match_count": len(semantic_exact),
+        "semantic_contract_match_count": len(semantic_contract),
+        "ranked_exact_match_count": len(ranked_exact),
+        "ranked_contract_match_count": len(ranked_contract),
+        "final_exact_match_count": len(final_exact),
+        "final_contract_match_count": len(final_contract),
+        "semantic_top": semantic_top,
+        "ranked_top": ranked_top,
+        "final_top": final_top,
+    }
 
 
 DECLARATION_KIND_TERMS = {
