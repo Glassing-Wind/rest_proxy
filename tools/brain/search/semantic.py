@@ -1287,34 +1287,6 @@ def register(mcp: FastMCP) -> None:
                     reranked = duplicate_trace.get("results") if isinstance(duplicate_trace, dict) else None
                     if isinstance(reranked, list) and reranked:
                         all_results = reranked
-                if impl_intent and sem_helpers.implementation_query_prefers_dispatchers(query):
-                    exact_dispatcher_identifiers = sem_helpers.implementation_query_exact_identifiers(query)
-                    if exact_dispatcher_identifiers:
-                        preserved_dispatchers: list[dict] = []
-                        for candidate in pre_duplicate_results:
-                            meta = sem_helpers.coerce_meta(candidate)
-                            declared_symbols = {
-                                str(symbol).strip().lower()
-                                for symbol in (meta.get("declared_symbols") or [])
-                                if str(symbol).strip()
-                            }
-                            if (
-                                int(candidate.get("implementation_dispatcher_priority", 0) or 0) < 5
-                                or not (declared_symbols & exact_dispatcher_identifiers)
-                            ):
-                                continue
-                            preserved_dispatchers.append(candidate)
-                        if preserved_dispatchers:
-                            seen_files = {
-                                (row.get("project_id"), row.get("file_path"))
-                                for row in all_results
-                            }
-                            for candidate in preserved_dispatchers:
-                                marker = (candidate.get("project_id"), candidate.get("file_path"))
-                                if marker in seen_files:
-                                    continue
-                                all_results.append(candidate)
-                                seen_files.add(marker)
                 if impl_intent:
                     all_results.sort(key=sem_helpers.implementation_rank_tuple)
                 all_results = sem_helpers.dedupe_files(all_results)
@@ -1343,8 +1315,7 @@ def register(mcp: FastMCP) -> None:
                         all_results = non_profile_results
                 if sem_helpers.implementation_query_prefers_dispatchers(query) and path_hints:
                     exact_dispatcher_identifiers = sem_helpers.implementation_query_exact_identifiers(query)
-                    top_probe = all_results[: min(3, len(all_results))]
-                    has_strong_dispatcher = any(
+                    has_exact_dispatcher = any(
                         int(r.get("implementation_dispatcher_priority", 0) or 0) >= 5
                         and (
                             {
@@ -1354,9 +1325,9 @@ def register(mcp: FastMCP) -> None:
                             }
                             & exact_dispatcher_identifiers
                         )
-                        for r in top_probe
+                        for r in all_results
                     )
-                    if not has_strong_dispatcher:
+                    if not has_exact_dispatcher:
                         rescue_results: list[dict] = []
                         for pid in pid_to_name:
                             async with memory_store._pg_pool.connection() as conn:

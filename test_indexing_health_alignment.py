@@ -392,11 +392,75 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             module, "get_memory_modules", return_value=(fake_memory, None, None, None, None)
         ), mock.patch.object(module, "build_manifest", return_value=manifest), mock.patch(
             "os.path.exists", return_value=True
-        ), mock.patch("os.path.getmtime", return_value=1000.0):
+        ), mock.patch("os.path.getmtime", return_value=1000.0), mock.patch(
+            "os.path.getsize", return_value=1
+        ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
         self.assertIn("Files in structural index: 2", output)
         self.assertIn("Files in semantic index:   2", output)
+        self.assertIn("**Sync Status**: ✅ Healthy", output)
+        self.assertIn("**Run Alignment**:        ✅ Aligned", output)
+        self.assertIn("No actions required. Everything looks healthy!", output)
+
+    def test_health_treats_verified_coverage_as_aligned_even_when_semantic_struct_run_lags(self):
+        module = load_indexing_module()
+        fake_memory = FakePgMemoryStore(
+            {
+                "select file_path, bool_or(coalesce((metadata->>'semantic_contract_version')::int, 0) = %s) as current_contract from codebase_embeddings": [
+                    ("src/app.py", True),
+                    ("src/lib.py", True),
+                ],
+                "select file_path, count(*) from codebase_embeddings": [],
+            }
+        )
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_indexing_health_files":
+                return [
+                    {
+                        "fp": "src/app.py",
+                        "ts": None,
+                        "vts": None,
+                        "parsed": True,
+                    },
+                    {
+                        "fp": "src/lib.py",
+                        "ts": None,
+                        "vts": None,
+                        "parsed": True,
+                    },
+                ]
+            if op == "get_indexing_health_runs":
+                return [
+                    {
+                        "struct_active_run_id": "struct-2",
+                        "struct_last_successful_run_id": "struct-2",
+                        "struct_index_status": "done",
+                        "semantic_active_run_id": "sem-2",
+                        "semantic_last_successful_run_id": "sem-2",
+                        "semantic_target_struct_run_id": "struct-1",
+                        "semantic_active_struct_run_id": "struct-1",
+                        "semantic_index_status": "done",
+                    }
+                ]
+            return []
+
+        manifest = [
+            {"rel_path": "src/app.py", "abs_path": "/tmp/repo/src/app.py"},
+            {"rel_path": "src/lib.py", "abs_path": "/tmp/repo/src/lib.py"},
+        ]
+
+        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch.object(
+            module, "get_memory_modules", return_value=(fake_memory, None, None, None, None)
+        ), mock.patch.object(module, "build_manifest", return_value=manifest), mock.patch(
+            "os.path.exists", return_value=True
+        ), mock.patch("os.path.getmtime", return_value=1000.0), mock.patch(
+            "os.path.getsize", return_value=1
+        ):
+            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+
         self.assertIn("**Sync Status**: ✅ Healthy", output)
         self.assertIn("**Run Alignment**:        ✅ Aligned", output)
         self.assertIn("No actions required. Everything looks healthy!", output)

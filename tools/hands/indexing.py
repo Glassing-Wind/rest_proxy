@@ -1160,6 +1160,8 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         coverage_verified = (
             struct_index_status == "done"
             and semantic_index_status == "done"
+            and bool(manifest_paths)
+            and bool(semantic_expected_paths)
             and not missing
             and not stale_graph
             and not stale_vector
@@ -1167,7 +1169,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             and semantic_expected_paths.issubset(semantic_present_paths)
             and semantic_expected_paths.issubset(semantic_current_contract_paths)
         )
-        if coverage_verified and not semantic_reference_struct_run:
+        if coverage_verified:
             aligned = True
     lines.append(f"  - **Run Alignment**:        {'✅ Aligned' if aligned else '⚠️ Not aligned'}")
 
