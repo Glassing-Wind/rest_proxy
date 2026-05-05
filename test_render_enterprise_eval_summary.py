@@ -32,6 +32,15 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                         "false_separation_rate": 0.0,
                     },
                 },
+                "dispatcher_summary": {
+                    "semantic_candidate_hit_rate": 0.5,
+                    "implementation_ranking_top_hit_rate": 0.5,
+                    "final_dispatcher_selection_top_hit_rate": 1.0,
+                    "diagnosis_counts": {
+                        "ranking_fixed": 1,
+                        "semantic_recall_missing": 1,
+                    },
+                },
                 "retrieval_query_class_counts": {"usage_lookup": 2, "implementation_search": 3},
             },
             "trend_summary": {
@@ -46,6 +55,9 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("Attention needed: `best_config_changed`", text)
         self.assertIn("`group_representatives`", text)
         self.assertIn("| `mrr` | 0.9500 | 0.0100 | `improved` |", text)
+        self.assertIn("### Dispatcher Eval", text)
+        self.assertIn("Semantic candidate hit rate: `0.5000`", text)
+        self.assertIn("Final dispatcher selection top-hit rate: `1.0000`", text)
         self.assertIn("- `implementation_search`: 3", text)
 
     def test_render_pr_comment_includes_marker_and_alert_header(self):

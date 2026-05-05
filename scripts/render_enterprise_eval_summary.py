@@ -19,6 +19,7 @@ def render_summary(payload: dict) -> str:
     trend = payload.get("trend_summary") or {}
     best = enterprise.get("best_retrieval_config") or {}
     metrics = best.get("metrics") or {}
+    dispatcher = enterprise.get("dispatcher_summary") or {}
     attention = list(trend.get("attention_needed") or [])
     query_counts = enterprise.get("retrieval_query_class_counts") or {}
 
@@ -44,6 +45,23 @@ def render_summary(payload: dict) -> str:
         lines.append(
             f"| `{name}` | {_fmt_metric(metrics.get(name))} | {_fmt_metric(delta)} | `{status}` |"
         )
+    if dispatcher:
+        lines.append("")
+        lines.append("### Dispatcher Eval")
+        lines.append("")
+        lines.append(
+            f"- Semantic candidate hit rate: `{_fmt_metric(dispatcher.get('semantic_candidate_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Implementation ranking top-hit rate: `{_fmt_metric(dispatcher.get('implementation_ranking_top_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Final dispatcher selection top-hit rate: `{_fmt_metric(dispatcher.get('final_dispatcher_selection_top_hit_rate'))}`"
+        )
+        diagnosis_counts = dispatcher.get("diagnosis_counts") or {}
+        if diagnosis_counts:
+            for name in sorted(diagnosis_counts):
+                lines.append(f"- Dispatcher diagnosis `{name}`: {diagnosis_counts[name]}")
     if query_counts:
         lines.append("")
         lines.append("### Query Classes")

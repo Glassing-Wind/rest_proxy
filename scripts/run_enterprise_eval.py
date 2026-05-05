@@ -38,9 +38,23 @@ def _load_duplicate_eval():
     return module
 
 
+def _load_dispatcher_eval():
+    module_path = ROOT / "tools" / "brain" / "search" / "dispatcher_eval.py"
+    spec = importlib.util.spec_from_file_location("enterprise_dispatcher_eval", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 def run_retrieval_eval() -> dict:
     duplicate_eval = _load_duplicate_eval()
     return duplicate_eval.evaluate_benchmarks()
+
+
+def run_dispatcher_eval() -> dict:
+    dispatcher_eval = _load_dispatcher_eval()
+    return dispatcher_eval.evaluate_benchmarks()
 
 
 def run_live_graph_goldens(workspaces: list[str], python_bin: str) -> dict:
@@ -106,8 +120,10 @@ def _best_retrieval_config(summary: dict) -> dict:
 
 def build_enterprise_summary(payload: dict) -> dict:
     retrieval = payload.get("retrieval_eval") or {}
+    dispatcher = payload.get("dispatcher_eval") or {}
     live_graph = payload.get("live_graph_goldens") or {}
     retrieval_summary = retrieval.get("summary") or {}
+    dispatcher_summary = dispatcher.get("summary") or {}
     best = _best_retrieval_config(retrieval_summary)
 
     regressions: list[dict] = []
@@ -132,6 +148,7 @@ def build_enterprise_summary(payload: dict) -> dict:
         "retrieval_query_class_counts": retrieval.get("query_class_counts") or {},
         "retrieval_alerts": retrieval.get("alerts") or {},
         "retrieval_regressions": regressions,
+        "dispatcher_summary": dispatcher_summary,
     }
 
 
@@ -312,6 +329,7 @@ def main() -> int:
     args = parser.parse_args()
 
     retrieval = run_retrieval_eval()
+    dispatcher = run_dispatcher_eval()
     graph = (
         {"skipped": True, "reason": "skip_graph"}
         if args.skip_graph
@@ -319,6 +337,7 @@ def main() -> int:
     )
     payload = {
         "retrieval_eval": retrieval,
+        "dispatcher_eval": dispatcher,
         "live_graph_goldens": graph,
     }
     payload["enterprise_summary"] = build_enterprise_summary(payload)

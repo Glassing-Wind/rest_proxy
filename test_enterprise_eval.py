@@ -32,6 +32,14 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                 "query_class_counts": {"usage_lookup": 2},
                 "cases": [],
             },
+            "dispatcher_eval": {
+                "summary": {
+                    "semantic_candidate_hit_rate": 0.5,
+                    "implementation_ranking_top_hit_rate": 0.5,
+                    "final_dispatcher_selection_top_hit_rate": 1.0,
+                    "diagnosis_counts": {"ranking_fixed": 1, "semantic_recall_missing": 1},
+                }
+            },
             "live_graph_goldens": {
                 "ok": True,
                 "skipped": False,
@@ -42,6 +50,10 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         self.assertTrue(summary["live_graph_ok"])
         self.assertEqual(summary["best_retrieval_config"]["name"], "group_representatives")
         self.assertEqual(summary["retrieval_query_class_counts"], {"usage_lookup": 2})
+        self.assertEqual(
+            summary["dispatcher_summary"]["final_dispatcher_selection_top_hit_rate"],
+            1.0,
+        )
 
     def test_build_summary_collects_only_configs_with_alerts(self):
         mod = _load_module()
@@ -61,6 +73,7 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                     }
                 ],
             },
+            "dispatcher_eval": {"summary": {}},
             "live_graph_goldens": {
                 "ok": False,
                 "skipped": True,
@@ -79,6 +92,7 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         payload = {
             "enterprise_summary": {"live_graph_ok": True},
             "retrieval_eval": {"summary": {"group_representatives": {"mrr": 0.95}}},
+            "dispatcher_eval": {"summary": {"final_dispatcher_selection_top_hit_rate": 1.0}},
             "live_graph_goldens": {"ok": True, "workspaces": ["/tmp/repo"]},
         }
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -93,6 +107,13 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             self.assertIn("artifact_meta", latest_payload)
             self.assertEqual(latest_payload["artifact_meta"]["timestamp"], result["timestamp"])
             self.assertEqual(history_payload["enterprise_summary"]["live_graph_ok"], True)
+
+    def test_run_dispatcher_eval_returns_summary(self):
+        mod = _load_module()
+        report = mod.run_dispatcher_eval()
+        self.assertIn("summary", report)
+        self.assertIn("cases", report)
+        self.assertIn("final_dispatcher_selection_top_hit_rate", report["summary"])
 
     def test_build_trend_summary_computes_metric_deltas_from_previous_latest(self):
         mod = _load_module()
