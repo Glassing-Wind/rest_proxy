@@ -16,8 +16,14 @@ def load_index_workspace_module():
     module = types.ModuleType("index_workspace_under_test")
     module.__file__ = str(MODULE_PATH)
     module.__package__ = ""
+    module.__dict__["__name__"] = "index_workspace_under_test"
     dotenv_mod = types.ModuleType("dotenv")
     dotenv_mod.load_dotenv = lambda *args, **kwargs: None
+    neo4j_mod = types.ModuleType("neo4j")
+    neo4j_mod.GraphDatabase = types.SimpleNamespace(driver=lambda *args, **kwargs: None)
+
+    runtime_mod = types.ModuleType("_runtime")
+    runtime_mod.resolve_python_runtime = lambda: {"python": sys.executable}
 
     memory_pkg = types.ModuleType("memory")
     memory_store_mod = types.ModuleType("memory.store")
@@ -56,16 +62,24 @@ def load_index_workspace_module():
     embedding_mod.get_embedding_service = lambda: _EmbeddingService()
     embedding_mod._CONCURRENCY = 2
 
+    local_embeddings_mod = types.ModuleType("local_embeddings")
+    local_embeddings_mod.get_lmstudio_provider = lambda: None
+
     stub_modules = {
+        "_runtime": runtime_mod,
         "dotenv": dotenv_mod,
+        "neo4j": neo4j_mod,
         "memory": memory_pkg,
         "memory.store": memory_store_mod,
         "memory.bootstrap": memory_bootstrap_mod,
         "embedding_service": embedding_mod,
+        "local_embeddings": local_embeddings_mod,
     }
 
     with mock.patch.dict(sys.modules, stub_modules):
-        exec(compile(MODULE_PATH.read_text(encoding="utf-8"), str(MODULE_PATH), "exec"), module.__dict__)
+        source = MODULE_PATH.read_text(encoding="utf-8")
+        source = source.split("# ── CLI ", 1)[0]
+        exec(compile(source, str(MODULE_PATH), "exec"), module.__dict__)
     return module
 
 
