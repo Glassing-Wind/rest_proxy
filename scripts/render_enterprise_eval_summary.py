@@ -84,6 +84,12 @@ def render_summary(payload: dict) -> str:
         lines.append("")
         lines.append(f"- Total events: `{dispatcher_telemetry.get('total_events', 0)}`")
         lines.append(
+            f"- Contract-eligible events: `{dispatcher_telemetry.get('contract_eligible_events', 0)}`"
+        )
+        ignored = int(dispatcher_telemetry.get("ignored_no_signal_events", 0) or 0)
+        if ignored:
+            lines.append(f"- Ignored no-signal events: `{ignored}`")
+        lines.append(
             f"- Rescue applied rate: `{_fmt_metric(dispatcher_telemetry.get('rescue_applied_rate'))}`"
         )
         lines.append(

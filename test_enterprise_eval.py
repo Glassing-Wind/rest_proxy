@@ -48,6 +48,8 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             "dispatcher_telemetry_eval": {
                 "summary": {
                     "total_events": 3,
+                    "contract_eligible_events": 3,
+                    "ignored_no_signal_events": 0,
                     "rescue_applied_rate": 0.3333,
                     "semantic_top_exact_hit_rate": 0.3333,
                     "final_top_exact_hit_rate": 1.0,

@@ -48,6 +48,8 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                 },
                 "dispatcher_telemetry_summary": {
                     "total_events": 3,
+                    "contract_eligible_events": 2,
+                    "ignored_no_signal_events": 1,
                     "rescue_applied_rate": 0.3333,
                     "semantic_top_exact_hit_rate": 0.3333,
                     "final_top_exact_hit_rate": 1.0,
@@ -81,6 +83,8 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("Dispatcher anchor contract: `focused_dispatcher_anchor_v1` (version `1`)", text)
         self.assertIn("### Live Dispatcher Telemetry", text)
         self.assertIn("Total events: `3`", text)
+        self.assertIn("Contract-eligible events: `2`", text)
+        self.assertIn("Ignored no-signal events: `1`", text)
         self.assertIn("Rescue applied rate: `0.3333`", text)
         self.assertIn("Live diagnosis `semantic_recall_missing_contract_candidate`: 2", text)
         self.assertIn("- `implementation_search`: 3", text)

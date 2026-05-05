@@ -24,6 +24,17 @@ class DispatcherTelemetryEvalTests(unittest.TestCase):
             {
                 "tool": "search_codebase",
                 "telemetry": {
+                    "query_class": "implementation_search",
+                    "diagnosis": "no_exact_dispatcher_signal",
+                    "rescue_applied": False,
+                    "semantic_top": {"exact_hit": False, "contract_hit": False},
+                    "ranked_top": {"exact_hit": False, "contract_hit": False},
+                    "final_top": {"exact_hit": False, "contract_hit": False},
+                },
+            },
+            {
+                "tool": "search_codebase",
+                "telemetry": {
                     "query_class": "api_definition_lookup",
                     "diagnosis": "semantic_recall_missing_contract_candidate",
                     "rescue_applied": True,
@@ -45,8 +56,11 @@ class DispatcherTelemetryEvalTests(unittest.TestCase):
             },
         ]
         summary = mod.summarize_events(events)
-        self.assertEqual(summary["total_events"], 2)
-        self.assertEqual(summary["tool_counts"], {"search_codebase": 2})
+        self.assertEqual(summary["total_events"], 3)
+        self.assertEqual(summary["contract_eligible_events"], 2)
+        self.assertEqual(summary["ignored_no_signal_events"], 1)
+        self.assertEqual(summary["tool_counts"], {"search_codebase": 3})
+        self.assertEqual(summary["overall_diagnosis_counts"]["no_exact_dispatcher_signal"], 1)
         self.assertEqual(
             summary["diagnosis_counts"],
             {
@@ -87,6 +101,7 @@ class DispatcherTelemetryEvalTests(unittest.TestCase):
             report = mod.evaluate_telemetry(str(target))
         self.assertEqual(report["telemetry_path"], str(target))
         self.assertEqual(report["summary"]["total_events"], 1)
+        self.assertEqual(report["summary"]["contract_eligible_events"], 1)
         self.assertEqual(report["summary"]["diagnosis_counts"], {"ranking_or_promotion_needed": 1})
 
 
