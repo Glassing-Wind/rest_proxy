@@ -1479,11 +1479,14 @@ def implementation_runtime_main_entrypoint_hit_with_meta(
     query: str,
     meta: dict | None = None,
 ) -> int:
-    file_roles = implementation_file_roles(meta or {})
+    metadata = meta or {}
+    file_roles = implementation_file_roles(metadata)
     if not implementation_query_prefers_runtime_main_entrypoint(query):
         return 0
     if "runtime_entrypoint_surface" in file_roles:
         return 1
+    if implementation_has_file_roles(metadata):
+        return 0
     if not file_path:
         return 0
     norm = (file_path or "").replace("\\", "/").lower()

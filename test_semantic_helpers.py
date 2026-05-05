@@ -1526,6 +1526,25 @@ class SemanticHelperTests(unittest.TestCase):
             "",
         )
 
+    def test_runtime_entrypoint_hit_skips_path_fallback_when_file_roles_are_present(self):
+        query = "where is the main entrypoint in cmd/server"
+        self.assertEqual(
+            module.implementation_runtime_main_entrypoint_hit_with_meta(
+                "cmd/server/main.go",
+                query,
+                {"file_roles": []},
+            ),
+            0,
+        )
+        self.assertEqual(
+            module.implementation_runtime_main_entrypoint_hit_with_meta(
+                "cmd/server/main.go",
+                query,
+                {"file_roles": ["runtime_entrypoint_surface"]},
+            ),
+            1,
+        )
+
     def test_candidate_relevance_score_prefers_rank_score(self):
         row = {"rrf": 0.2, "rank_score": 0.9}
         self.assertEqual(module.candidate_relevance_score(row), 0.9)
