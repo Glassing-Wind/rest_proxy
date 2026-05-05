@@ -26,6 +26,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from _runtime import resolve_python_runtime
+from _semantic_contract import SEMANTIC_CONTRACT_VERSION
 
 
 def _ensure_runtime_dependencies() -> None:
@@ -159,6 +160,8 @@ def _validate_semantic_chunk_contract(chunks: List[Dict], file_path: str, ts_pac
                 f"ts_pack semantic chunk contract violation for {file_path} chunk {index}: "
                 f"missing fields {', '.join(missing)}"
             )
+        metadata.setdefault("file_roles", [])
+        metadata["semantic_contract_version"] = SEMANTIC_CONTRACT_VERSION
 
 
 def _skip_diagnostic_files_enabled() -> bool:
@@ -686,7 +689,10 @@ async def _promote_semantic_file_roles_to_graph(
     query = """
         SELECT
           file_path,
-          bool_or(jsonb_typeof(metadata->'file_roles') = 'array') AS has_file_roles,
+          bool_or(
+            jsonb_typeof(metadata->'file_roles') = 'array'
+            AND coalesce((metadata->>'semantic_contract_version')::int, 0) = %s
+          ) AS has_file_roles,
           array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
         FROM codebase_embeddings
         LEFT JOIN LATERAL jsonb_array_elements_text(
@@ -702,8 +708,10 @@ async def _promote_semantic_file_roles_to_graph(
     """
     if memory_store._pg_pool_available():
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+            if not hasattr(conn, "cursor"):
+                return
             async with conn.cursor() as cur:
-                await cur.execute(query, (project_id, manifest_paths))
+                await cur.execute(query, (SEMANTIC_CONTRACT_VERSION, project_id, manifest_paths))
                 file_roles_rows = await cur.fetchall()
     else:
         pg_dsn = os.getenv("LM_PROXY_PG_DSN", "").strip()
@@ -725,7 +733,7 @@ async def _promote_semantic_file_roles_to_graph(
             return
         async with await psycopg.AsyncConnection.connect(pg_dsn) as conn:
             async with conn.cursor() as cur:
-                await cur.execute(query, (project_id, manifest_paths))
+                await cur.execute(query, (SEMANTIC_CONTRACT_VERSION, project_id, manifest_paths))
                 file_roles_rows = await cur.fetchall()
 
     role_map = {
@@ -762,11 +770,13 @@ async def _promote_semantic_file_roles_to_graph(
                 """
                 UNWIND $batch AS item
                 MATCH (f:File {project_id:$pid, filepath:item.filepath})
-                SET f.semantic_file_roles = item.roles
+                SET f.semantic_file_roles = item.roles,
+                    f.semantic_contract_version = $semantic_contract_version
                 RETURN count(f) AS matched
                 """,
                 pid=project_id,
                 batch=batch,
+                semantic_contract_version=SEMANTIC_CONTRACT_VERSION,
             ).single()
             matched_count = int((matched or {}).get("matched") or 0)
             non_empty_count = sum(1 for item in batch if item["roles"])
@@ -904,6 +914,7 @@ async def index_project(
     )
 
     manifest_paths = [entry.get("rel_path") or "" for entry in manifest]
+    driver_error: str | None = None
     try:
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
             from embedding_service import _CONCURRENCY as CONCURRENCY
@@ -1038,6 +1049,7 @@ async def index_project(
                     progress_fn=_progress,
                 )
     except Exception as exc:
+        driver_error = str(exc)
         print(
             f"[lm-proxy:indexer] WARN: semantic index driver failed: {exc}",
             file=sys.stderr,
@@ -1061,6 +1073,9 @@ async def index_project(
             "written": 0,
             "rounds": 0,
         }
+
+    if driver_error is not None:
+        return 0
 
     if rebuild and index_result.get("wiped"):
         print(

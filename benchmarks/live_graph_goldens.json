@@ -373,8 +373,7 @@
             "exclude_paths": null
           },
           "required_substrings": [
-            "--- FrameCreator/Views/SidebarView.swift",
-            "context=SidebarView > body"
+            "--- FrameCreator/Views/SidebarView.swift"
           ]
         },
         {

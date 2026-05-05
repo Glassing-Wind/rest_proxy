@@ -27,6 +27,7 @@ from _jobs import (
 )
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from _runtime import resolve_python_runtime
+from _semantic_contract import SEMANTIC_CONTRACT_VERSION
 
 from graphrag_core.config import load_env
 from graphrag_core.indexing import watcher as index_watcher
@@ -149,6 +150,11 @@ def _is_semantic_expected_path(
     rel = str(rel_path or "")
     abs_file = str(abs_path or "")
     ext_norm = str(ext or "").lower().lstrip(".")
+    rel_norm = rel.replace("\\", "/").lower()
+    if ".xcassets/" in rel_norm:
+        return False
+    if rel_norm.endswith("info.plist"):
+        return False
     if abs_file:
         try:
             if os.path.getsize(abs_file) <= 0:
@@ -846,6 +852,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     semantic_files: Dict[str, float] = {}
     structural_paths: set[str] = set()
     semantic_present_paths: set[str] = set()
+    semantic_current_contract_paths: set[str] = set()
     semantic_expected_paths: set[str] = set()
     file_nodes = 0
     parsed_true = 0
@@ -1016,16 +1023,21 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
                 async with conn.cursor() as cur:
                     await cur.execute(
                         """
-                        SELECT file_path
+                        SELECT
+                            file_path,
+                            bool_or(coalesce((metadata->>'semantic_contract_version')::int, 0) = %s) AS current_contract
                         FROM codebase_embeddings
                         WHERE project_id = %s
                         GROUP BY file_path
                         """,
-                        (project_id,),
+                        (SEMANTIC_CONTRACT_VERSION, project_id),
                     )
-                    semantic_present_paths.update(
-                        row[0] for row in (await cur.fetchall()) if row and row[0]
-                    )
+                    for row in (await cur.fetchall()):
+                        if not row or not row[0]:
+                            continue
+                        semantic_present_paths.add(row[0])
+                        if len(row) > 1 and row[1]:
+                            semantic_current_contract_paths.add(row[0])
         except Exception:
             pass
 
@@ -1042,6 +1054,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
 
     stale_graph: List[str] = []
     stale_vector: List[str] = []
+    stale_semantic_contract: List[str] = []
     missing: List[str] = []
     manifest = build_manifest(project_path)
     total_checked_all = len(manifest)
@@ -1065,6 +1078,9 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
                 semantic_expected_paths.add(rel)
             if semantic_expected and rel not in semantic_present_paths:
                 stale_vector.append(rel)
+                continue
+            if semantic_expected and rel not in semantic_current_contract_paths:
+                stale_semantic_contract.append(rel)
                 continue
             v_ts = semantic_files.get(rel, 0)
             if semantic_expected and v_ts and mtime > v_ts:
@@ -1106,7 +1122,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     lines.append(f"  - Files in semantic index:   {len(semantic_present_paths)}")
     
     sync_status = "✅ Healthy"
-    if stale_graph or stale_vector or missing or orphans_graph or ghost_files:
+    if stale_graph or stale_vector or stale_semantic_contract or missing or orphans_graph or ghost_files:
         sync_status = "❌ Out of Sync"
     lines.append(f"  - **Sync Status**: {sync_status}")
     
@@ -1114,6 +1130,8 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         lines.append(f"    - ❌ {len(stale_graph)} Stale Structural Files")
     if stale_vector:
         lines.append(f"    - ⚠️ {len(stale_vector)} Stale Semantic Files")
+    if stale_semantic_contract:
+        lines.append(f"    - ⛔ {len(stale_semantic_contract)} Files on stale semantic contract")
     if missing:
         lines.append(f"    - ❓ {len(missing)} Files missing from index entirely")
     if orphans_graph:
@@ -1147,6 +1165,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             and not stale_vector
             and len(structural_paths) >= len(manifest_paths)
             and semantic_expected_paths.issubset(semantic_present_paths)
+            and semantic_expected_paths.issubset(semantic_current_contract_paths)
         )
         if coverage_verified and not semantic_reference_struct_run:
             aligned = True
@@ -1233,7 +1252,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     # Bucket 4: Recommended Actions
     lines.append("\n## 4. Recommended Actions")
     recommendations = []
-    if missing or stale_graph or stale_vector:
+    if missing or stale_graph or stale_vector or stale_semantic_contract:
         recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}')` to synchronize stale/missing files.")
     if orphans_graph or ghost_files:
         recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}', mode='cleanup')` to prune orphaned data.")

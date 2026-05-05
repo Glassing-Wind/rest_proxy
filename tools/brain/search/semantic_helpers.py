@@ -10,6 +10,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _semantic_contract import has_current_semantic_contract
+
 
 def merge_duplicate_experiments(mode: str, experiments: dict | None) -> dict:
     merged = duplicate_experiment_flags_from_env(mode)
@@ -689,7 +691,7 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
 
 def implementation_rank_tuple(
     result: dict,
-) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
+) -> tuple[int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, float, float]:
     """Rank implementation-intent results with code first, then docs/parser data last."""
     low_signal_parser_data = 1 if result.get("low_signal_parser_data") else 0
     low_signal_binding_surface = 1 if result.get("low_signal_binding_surface") else 0
@@ -705,6 +707,7 @@ def implementation_rank_tuple(
     handler_priority = int(result.get("implementation_request_handler_priority", 0) or 0)
     path_hint_priority = int(result.get("implementation_path_hint_hit", 0) or 0)
     basename_token_priority = int(result.get("implementation_basename_token_hit", 0) or 0)
+    view_body_priority = int(result.get("implementation_view_body_priority", 0) or 0)
     runtime_main_priority = int(result.get("implementation_runtime_main_entrypoint_hit", 0) or 0)
     role_priority = int(result.get("implementation_role_priority", 0) or 0)
     node_type_priority = int(result.get("implementation_node_type_priority", 0) or 0)
@@ -735,6 +738,7 @@ def implementation_rank_tuple(
         -routing_priority,
         -path_hint_priority,
         -basename_token_priority,
+        -view_body_priority,
         -runtime_main_priority,
         -node_type_priority,
         facade_surface,
@@ -783,6 +787,16 @@ def implementation_query_symbols(query: str) -> set[str]:
         "pack",
         "index",
         "ts",
+        "defined",
+        "define",
+        "definition",
+        "enum",
+        "struct",
+        "class",
+        "trait",
+        "protocol",
+        "interface",
+        "type",
     }
     symbols = {
         token
@@ -826,6 +840,16 @@ def implementation_query_exact_identifiers(query: str) -> set[str]:
         "ts",
         "implemented",
         "implementation",
+        "defined",
+        "define",
+        "definition",
+        "enum",
+        "struct",
+        "class",
+        "trait",
+        "protocol",
+        "interface",
+        "type",
     }
     identifiers: set[str] = set()
     for token in re.findall(r"[$A-Za-z_][A-Za-z0-9_]*", raw):
@@ -842,7 +866,133 @@ def implementation_query_exact_identifiers(query: str) -> set[str]:
             identifiers.add("infer_model")
         if "provider" in query_symbols or "providers" in query_symbols:
             identifiers.update({"infer_provider", "infer_provider_class"})
+    identifiers.update(implementation_query_definition_subject_identifiers(raw))
     return identifiers
+
+
+DECLARATION_KIND_TERMS = {
+    "enum": "enum",
+    "struct": "struct",
+    "class": "class",
+    "trait": "trait",
+    "protocol": "protocol",
+    "interface": "interface",
+    "type": "type",
+}
+
+
+def implementation_query_definition_kind(query: str) -> str:
+    tokens = [token.lower() for token in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", query or "")]
+    for token in tokens:
+        kind = DECLARATION_KIND_TERMS.get(token)
+        if kind:
+            return kind
+    return ""
+
+
+def _definition_subject_base(token: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9_]+", "", (token or "").strip().lower())
+    if len(cleaned) >= 5 and cleaned.endswith("ies"):
+        return cleaned[:-3] + "y"
+    if len(cleaned) >= 4 and cleaned.endswith("ses"):
+        return cleaned[:-2]
+    if len(cleaned) >= 4 and cleaned.endswith("s") and not cleaned.endswith("ss"):
+        return cleaned[:-1]
+    return cleaned
+
+
+def implementation_query_definition_subject_identifiers(query: str) -> set[str]:
+    kind = implementation_query_definition_kind(query)
+    if not kind:
+        return set()
+    tokens = [token.lower() for token in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", query or "")]
+    if not tokens:
+        return set()
+    stopwords = {
+        "where",
+        "what",
+        "how",
+        "is",
+        "the",
+        "a",
+        "an",
+        "defined",
+        "define",
+        "definition",
+        "public",
+        "api",
+        "entrypoint",
+        "implementation",
+        "implemented",
+        "in",
+        "of",
+        "for",
+    }
+    try:
+        kind_index = tokens.index(kind)
+    except ValueError:
+        return set()
+    for token in reversed(tokens[:kind_index]):
+        if token in stopwords or len(token) < 3:
+            continue
+        base = _definition_subject_base(token)
+        if len(base) < 3:
+            continue
+        variants = {base}
+        if not base.endswith("s"):
+            variants.add(f"{base}s")
+        if "_" in base:
+            variants.add("".join(part.capitalize() for part in base.split("_") if part))
+        else:
+            variants.add(base.capitalize())
+        return {variant.lower() for variant in variants if variant}
+    return set()
+
+
+def _implementation_definition_declaration_patterns(query: str) -> list[str]:
+    kind = implementation_query_definition_kind(query)
+    identifiers = implementation_query_definition_subject_identifiers(query)
+    if not kind or not identifiers:
+        return []
+    patterns_by_kind = {
+        "enum": [
+            r"\bpub\s+enum\s+{ident}\b",
+            r"\benum\s+{ident}\b",
+        ],
+        "struct": [
+            r"\bpub\s+struct\s+{ident}\b",
+            r"\bstruct\s+{ident}\b",
+        ],
+        "class": [
+            r"\bclass\s+{ident}\b",
+            r"\bfinal\s+class\s+{ident}\b",
+            r"\bpublic\s+class\s+{ident}\b",
+        ],
+        "trait": [
+            r"\bpub\s+trait\s+{ident}\b",
+            r"\btrait\s+{ident}\b",
+        ],
+        "protocol": [
+            r"\bprotocol\s+{ident}\b",
+            r"\bpublic\s+protocol\s+{ident}\b",
+        ],
+        "interface": [
+            r"\binterface\s+{ident}\b",
+            r"\bpublic\s+interface\s+{ident}\b",
+        ],
+        "type": [
+            r"\btype\s+{ident}\b",
+            r"\btypealias\s+{ident}\b",
+            r"\bpub\s+type\s+{ident}\b",
+        ],
+    }
+    templates = patterns_by_kind.get(kind, [])
+    patterns: list[str] = []
+    for identifier in identifiers:
+        escaped = re.escape(identifier)
+        for template in templates:
+            patterns.append(template.format(ident=escaped))
+    return patterns
 
 
 def implementation_query_member_exprs(query: str) -> set[str]:
@@ -873,14 +1023,23 @@ def implementation_inferred_filename_hints(query: str) -> list[str]:
     if not text:
         return []
     hints: set[str] = set()
+    query_symbols = implementation_query_symbols(query)
     if implementation_query_prefers_dispatchers(query):
-        query_symbols = implementation_query_symbols(query)
         if "model" in query_symbols or "models" in query_symbols:
             hints.add("models/__init__.py")
     if implementation_query_prefers_provider_wiring(query):
         provider_tokens = sorted(implementation_provider_query_tokens(query))
         for token in provider_tokens:
             hints.add(f"providers/{token}.py")
+    view_like_tokens = {
+        token
+        for token in query_symbols
+        if token in {"sidebar", "toolbar", "panel", "inspector", "canvas", "editor", "modal", "sheet"}
+    }
+    if view_like_tokens:
+        for token in view_like_tokens:
+            hints.add(f"{token}view.swift")
+            hints.add(f"views/{token}view.swift")
     if implementation_query_prefers_request_routing(query):
         generic = {
             "request",
@@ -1037,7 +1196,12 @@ def implementation_dispatcher_priority(meta: dict, file_path: str | None, query:
         priority = max(priority, 3)
     for lowered_roles in symbol_roles.values():
         if "canonical_dispatcher" in lowered_roles:
-            priority = max(priority, 4)
+            if "model_selector" in lowered_roles:
+                priority = max(priority, 6)
+            elif "provider_selector" in lowered_roles:
+                priority = max(priority, 5)
+            else:
+                priority = max(priority, 4)
         elif "model_selector" in lowered_roles or "provider_selector" in lowered_roles:
             priority = max(priority, 3)
         elif "dispatcher" in lowered_roles:
@@ -1045,10 +1209,13 @@ def implementation_dispatcher_priority(meta: dict, file_path: str | None, query:
     if not candidates:
         return priority
     if basename == "__init__.py" and "infer_model" in candidates:
-        priority = max(priority, 4)
+        priority = max(priority, 6)
     for symbol in candidates:
         if symbol in {"infer_model", "infer_provider", "infer_provider_class"}:
-            priority = max(priority, 3)
+            if symbol == "infer_model":
+                priority = max(priority, 6)
+            elif symbol in {"infer_provider", "infer_provider_class"}:
+                priority = max(priority, 5)
         elif re.match(r"^(infer|resolve|select|dispatch|choose)_[a-z0-9_]+$", symbol):
             priority = max(priority, 2)
         elif "provider" in symbol or "model" in symbol:
@@ -1308,7 +1475,7 @@ def implementation_has_file_roles(meta: dict) -> bool:
 
 
 def implementation_allows_path_fallback(meta: dict) -> bool:
-    return not implementation_has_file_roles(meta)
+    return False
 
 
 def implementation_declared_symbol_roles(meta: dict) -> dict[str, set[str]]:
@@ -1423,8 +1590,6 @@ def implementation_definition_hit(content: str | None, query: str) -> int:
     if not text:
         return 0
     symbols = implementation_query_symbols(query)
-    if not symbols:
-        return 0
     lowered = text.lower()
     hits = 0
     for symbol in symbols:
@@ -1438,6 +1603,9 @@ def implementation_definition_hit(content: str | None, query: str) -> int:
             rf"\b{re.escape(symbol)}\s*:\s*function\b",
         ]
         if any(re.search(pattern, lowered) for pattern in patterns):
+            hits += 1
+    for pattern in _implementation_definition_declaration_patterns(query):
+        if re.search(pattern, lowered):
             hits += 1
     return hits
 
@@ -1580,8 +1748,6 @@ def implementation_exact_signature_symbol_hit(content: str | None, query: str) -
         return 0
     header = "\n".join(text.splitlines()[:3]).lower()
     symbols = implementation_query_symbols(query)
-    if not symbols:
-        return 0
     hits = 0
     for symbol in symbols:
         patterns = [
@@ -1594,6 +1760,9 @@ def implementation_exact_signature_symbol_hit(content: str | None, query: str) -
             rf"\b{re.escape(symbol)}\s*:\s*function\b",
         ]
         if any(re.search(pattern, header) for pattern in patterns):
+            hits += 1
+    for pattern in _implementation_definition_declaration_patterns(query):
+        if re.search(pattern, header):
             hits += 1
     return hits
 
@@ -1695,6 +1864,24 @@ def implementation_api_context_hit(meta: dict) -> int:
         return 0
     lowered = {str(part).strip().lower() for part in context_path if str(part).strip()}
     return 1 if {"api", "public", "exports"} & lowered else 0
+
+
+def implementation_view_body_priority(meta: dict, query: str, query_class: str) -> int:
+    if query_class not in {"implementation_search", "implementation_explanation", "api_definition_lookup"}:
+        return 0
+    file_roles = implementation_file_roles(meta)
+    if "view_surface" not in file_roles:
+        return 0
+    context_path = meta.get("context_path")
+    if not isinstance(context_path, list) or not context_path:
+        return 0
+    lowered = [str(part).strip().lower() for part in context_path if str(part).strip()]
+    if not lowered or lowered[-1] != "body":
+        return 0
+    query_symbols = implementation_query_symbols(query)
+    if {"sidebar", "toolbar", "panel", "inspector", "canvas", "editor"} & query_symbols:
+        return 5
+    return 3
 
 
 NODE_TYPE_POLICY_USAGE = {
@@ -2004,6 +2191,11 @@ def enrich_implementation_result(
         signature_hit=int(result.get("implementation_exact_signature_symbol_hit", 0) or 0),
     )
     result["implementation_api_context_hit"] = implementation_api_context_hit(meta)
+    result["implementation_view_body_priority"] = implementation_view_body_priority(
+        meta,
+        query,
+        query_class,
+    )
     result["implementation_facade_surface_hit"] = implementation_facade_surface_hit(
         result.get("file_path"),
         meta,
@@ -2039,6 +2231,18 @@ def enrich_implementation_result(
         export_hit=int(result.get("implementation_export_hit", 0) or 0),
         api_entrypoint_hit=int(result.get("implementation_api_entrypoint_hit", 0) or 0),
     )
+    file_roles = implementation_file_roles(meta)
+    if (
+        implementation_query_prefers_request_routing(query)
+        and "controller_surface" in file_roles
+        and chunk_role in {"definition", "context"}
+        and (
+            int(result.get("implementation_controller_entity_hit", 0) or 0) > 0
+            or int(result.get("implementation_request_handler_priority", 0) or 0) > 0
+            or int(result.get("implementation_routing_priority", 0) or 0) > 0
+        )
+    ):
+        role = "public_api_definition"
     if (
         query_class in {"api_definition_lookup", "symbol_lookup"}
         and int(result.get("implementation_reexport_surface_hit", 0) or 0) > 0
@@ -2089,6 +2293,7 @@ def enrich_implementation_result(
     exact_identifier_bonus = 0.0
     path_hint_bonus = 0.0
     basename_token_bonus = 0.0
+    view_body_bonus = 0.0
     dispatcher_bonus = 0.0
     provider_wiring_bonus = 0.0
     routing_bonus = 0.0
@@ -2122,6 +2327,9 @@ def enrich_implementation_result(
     basename_token_hits = int(result.get("implementation_basename_token_hit", 0) or 0)
     if basename_token_hits > 0 and query_class in {"implementation_search", "implementation_explanation", "api_definition_lookup"}:
         basename_token_bonus = 0.03 * min(basename_token_hits, 2)
+    view_body_hits = int(result.get("implementation_view_body_priority", 0) or 0)
+    if view_body_hits > 0:
+        view_body_bonus = 0.03 * min(view_body_hits, 3)
     dispatcher_hits = int(result.get("implementation_dispatcher_priority", 0) or 0)
     if dispatcher_hits > 0 and bool(intent_policy["allow_dispatcher_bonus"]):
         dispatcher_bonus = float(intent_policy["dispatcher_bonus_weight"]) * min(dispatcher_hits, 3)
@@ -2220,6 +2428,7 @@ def enrich_implementation_result(
         + declared_symbol_bonus
         + path_hint_bonus
         + basename_token_bonus
+        + view_body_bonus
         + provider_wiring_bonus
         + dispatcher_bonus
         + routing_bonus
@@ -2257,6 +2466,7 @@ def enrich_implementation_result(
         "declared_symbol_bonus": declared_symbol_bonus,
         "path_hint_bonus": path_hint_bonus,
         "basename_token_bonus": basename_token_bonus,
+        "view_body_bonus": view_body_bonus,
         "provider_wiring_bonus": provider_wiring_bonus,
         "dispatcher_bonus": dispatcher_bonus,
         "routing_bonus": routing_bonus,

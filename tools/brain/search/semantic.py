@@ -96,7 +96,7 @@ async def _load_rescue_rows(
             )
             SELECT file_path, chunk_index, content, project_id, metadata, exact_member_usage_hit
             FROM ranked
-            WHERE chunk_rank <= 2
+            WHERE chunk_rank <= 8
             ORDER BY file_path, exact_member_usage_hit DESC, chunk_index
             """,
             {"pid": pid, "paths": file_paths, "member_exprs": member_exprs},
@@ -205,6 +205,12 @@ async def _load_path_hint_rows(
                                    THEN 1
                                    ELSE 0
                                END DESC,
+                               CASE
+                                   WHEN lower(coalesce(c.metadata->'context_path'->>0, '')) LIKE '%%view'
+                                     AND lower(coalesce(c.metadata->'context_path'->>1, '')) = 'body'
+                                   THEN 1
+                                   ELSE 0
+                               END DESC,
                                c.chunk_index ASC
                        ) AS chunk_rank
                 FROM codebase_embeddings c
@@ -214,7 +220,7 @@ async def _load_path_hint_rows(
             )
             SELECT file_path, chunk_index, content, project_id, metadata, path_hint_hit, exact_identifier_text_hit
             FROM ranked
-            WHERE chunk_rank <= 6
+            WHERE chunk_rank <= 20
             ORDER BY exact_identifier_text_hit DESC, path_hint_hit DESC, code_rank ASC, file_path, chunk_index
             """,
             {
@@ -1280,6 +1286,8 @@ def register(mcp: FastMCP) -> None:
                     reranked = duplicate_trace.get("results") if isinstance(duplicate_trace, dict) else None
                     if isinstance(reranked, list) and reranked:
                         all_results = reranked
+                if impl_intent:
+                    all_results.sort(key=sem_helpers.implementation_rank_tuple)
                 all_results = sem_helpers.dedupe_files(all_results)
 
             if impl_intent:
@@ -1304,6 +1312,182 @@ def register(mcp: FastMCP) -> None:
                         non_profile_results.append(r)
                     if non_profile_results:
                         all_results = non_profile_results
+                if sem_helpers.implementation_query_prefers_dispatchers(query) and path_hints:
+                    exact_dispatcher_identifiers = sem_helpers.implementation_query_exact_identifiers(query)
+                    top_probe = all_results[: min(3, len(all_results))]
+                    has_strong_dispatcher = any(
+                        int(r.get("implementation_dispatcher_priority", 0) or 0) >= 5
+                        and (
+                            {
+                                str(symbol).strip().lower()
+                                for symbol in (sem_helpers.coerce_meta(r).get("declared_symbols") or [])
+                                if str(symbol).strip()
+                            }
+                            & exact_dispatcher_identifiers
+                        )
+                        for r in top_probe
+                    )
+                    if not has_strong_dispatcher:
+                        rescue_results: list[dict] = []
+                        for pid in pid_to_name:
+                            async with memory_store._pg_pool.connection() as conn:
+                                await conn.execute("BEGIN")
+                                rescue_rows = await _load_path_hint_rows(
+                                    conn,
+                                    pid=pid,
+                                    path_hints=path_hints,
+                                    identifier_exprs=exact_identifiers,
+                                    max_files=min(max(fallback_max, 8), 16),
+                                )
+                            for r in rescue_rows:
+                                r_meta = sem_helpers.coerce_meta(r)
+                                r["_meta"] = r_meta
+                                r["meta_score"] = sem_helpers.meta_score(r_meta)
+                                r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
+                                r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
+                                    r.get("file_path")
+                                )
+                                r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
+                                    r.get("file_path")
+                                )
+                                sem_helpers.enrich_implementation_result(
+                                    r,
+                                    query=query,
+                                    query_class=impl_query_class,
+                                    base_score=float(r.get("rrf", 0.0) or 0.0),
+                                    meta_boost=0.0,
+                                    base_bonus=0.14
+                                    if int(r.get("implementation_exact_identifier_text_hit", 0) or 0) > 0
+                                    else 0.025,
+                                )
+                                declared_symbols = {
+                                    str(symbol).strip().lower()
+                                    for symbol in (r_meta.get("declared_symbols") or [])
+                                    if str(symbol).strip()
+                                }
+                                if (
+                                    int(r.get("implementation_dispatcher_priority", 0) or 0) < 5
+                                    or not (declared_symbols & exact_dispatcher_identifiers)
+                                ):
+                                    continue
+                                rescue_results.append(r)
+                        if rescue_results:
+                            replacement_files = {
+                                (r.get("project_id"), r.get("file_path"))
+                                for r in rescue_results
+                            }
+                            all_results = [
+                                r
+                                for r in all_results
+                                if (r.get("project_id"), r.get("file_path")) not in replacement_files
+                            ]
+                            for r in rescue_results:
+                                all_results.append(r)
+                            all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                    strong_dispatchers: list[dict] = []
+                    other_results: list[dict] = []
+                    for r in all_results:
+                        meta = sem_helpers.coerce_meta(r)
+                        file_roles = sem_helpers.implementation_file_roles(meta)
+                        chunk_role = sem_helpers.implementation_chunk_role(meta, r.get("file_path"))
+                        declared_symbols = {
+                            str(symbol).strip().lower()
+                            for symbol in (meta.get("declared_symbols") or [])
+                            if str(symbol).strip()
+                        }
+                        if (
+                            int(r.get("implementation_dispatcher_priority", 0) or 0) >= 5
+                            and (declared_symbols & exact_dispatcher_identifiers)
+                            and "profile_surface" not in file_roles
+                            and chunk_role != "profile_definition"
+                        ):
+                            strong_dispatchers.append(r)
+                        else:
+                            other_results.append(r)
+                    if strong_dispatchers:
+                        strong_dispatchers.sort(key=sem_helpers.implementation_rank_tuple)
+                        other_results.sort(key=sem_helpers.implementation_rank_tuple)
+                        all_results = strong_dispatchers + other_results
+                if sem_helpers.implementation_query_prefers_request_routing(query) and path_hints:
+                    top_probe = all_results[: min(3, len(all_results))]
+                    has_strong_routing_surface = any(
+                        int(r.get("implementation_controller_entity_hit", 0) or 0) >= 2
+                        or int(r.get("implementation_request_handler_priority", 0) or 0) >= 2
+                        or int(r.get("implementation_routing_priority", 0) or 0) >= 2
+                        for r in top_probe
+                    )
+                    if not has_strong_routing_surface:
+                        routing_rescue_results: list[dict] = []
+                        for pid in pid_to_name:
+                            async with memory_store._pg_pool.connection() as conn:
+                                await conn.execute("BEGIN")
+                                rescue_rows = await _load_path_hint_rows(
+                                    conn,
+                                    pid=pid,
+                                    path_hints=path_hints,
+                                    identifier_exprs=exact_identifiers,
+                                    max_files=min(max(fallback_max, 8), 16),
+                                )
+                            for r in rescue_rows:
+                                r_meta = sem_helpers.coerce_meta(r)
+                                r["_meta"] = r_meta
+                                r["meta_score"] = sem_helpers.meta_score(r_meta)
+                                r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
+                                r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
+                                    r.get("file_path")
+                                )
+                                r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
+                                    r.get("file_path")
+                                )
+                                sem_helpers.enrich_implementation_result(
+                                    r,
+                                    query=query,
+                                    query_class=impl_query_class,
+                                    base_score=float(r.get("rrf", 0.0) or 0.0),
+                                    meta_boost=0.0,
+                                    base_bonus=0.12
+                                    if int(r.get("implementation_path_hint_hit", 0) or 0) > 0
+                                    else 0.02,
+                                )
+                                if (
+                                    int(r.get("implementation_controller_entity_hit", 0) or 0) < 2
+                                    and int(r.get("implementation_request_handler_priority", 0) or 0) < 2
+                                    and int(r.get("implementation_routing_priority", 0) or 0) < 2
+                                ):
+                                    continue
+                                routing_rescue_results.append(r)
+                        if routing_rescue_results:
+                            replacement_files = {
+                                (r.get("project_id"), r.get("file_path"))
+                                for r in routing_rescue_results
+                            }
+                            all_results = [
+                                r
+                                for r in all_results
+                                if (r.get("project_id"), r.get("file_path")) not in replacement_files
+                            ]
+                            all_results.extend(routing_rescue_results)
+                            all_results.sort(key=sem_helpers.implementation_rank_tuple)
+                    strong_routing_results: list[dict] = []
+                    other_results: list[dict] = []
+                    for r in all_results:
+                        meta = sem_helpers.coerce_meta(r)
+                        file_roles = sem_helpers.implementation_file_roles(meta)
+                        if (
+                            "controller_surface" in file_roles
+                            and (
+                                int(r.get("implementation_controller_entity_hit", 0) or 0) >= 2
+                                or int(r.get("implementation_request_handler_priority", 0) or 0) >= 2
+                                or int(r.get("implementation_routing_priority", 0) or 0) >= 2
+                            )
+                        ):
+                            strong_routing_results.append(r)
+                        else:
+                            other_results.append(r)
+                    if strong_routing_results:
+                        strong_routing_results.sort(key=sem_helpers.implementation_rank_tuple)
+                        other_results.sort(key=sem_helpers.implementation_rank_tuple)
+                        all_results = strong_routing_results + other_results
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)
             all_results = sem_helpers.cap_per_dir(all_results, max_per_dir)

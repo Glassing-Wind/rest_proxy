@@ -7,6 +7,7 @@ import re
 from urllib.parse import urlparse
 
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
+from _semantic_contract import SEMANTIC_CONTRACT_VERSION
 from graphrag_core.indexing import watcher as index_watcher
 from tools.brain.graph_contract import node_label, rel_type
 from tools.brain.graph import core as graph_core
@@ -130,7 +131,10 @@ async def _load_semantic_file_roles(conn, project_id: str, file_paths: list[str]
             """
             SELECT
               file_path,
-              bool_or(jsonb_typeof(metadata->'file_roles') = 'array') AS has_file_roles,
+              bool_or(
+                jsonb_typeof(metadata->'file_roles') = 'array'
+                AND coalesce((metadata->>'semantic_contract_version')::int, 0) = %s
+              ) AS has_file_roles,
               array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
             FROM codebase_embeddings
             LEFT JOIN LATERAL jsonb_array_elements_text(
@@ -144,7 +148,7 @@ async def _load_semantic_file_roles(conn, project_id: str, file_paths: list[str]
               AND file_path = ANY(%s)
             GROUP BY file_path
             """,
-            (project_id, paths),
+            (SEMANTIC_CONTRACT_VERSION, project_id, paths),
         )
         rows = await cur.fetchall()
     out: dict[str, set[str]] = {}
@@ -169,10 +173,12 @@ async def _load_graph_file_roles(session, project_id: str, file_paths: list[str]
         """
         MATCH (f:File {project_id:$pid})
         WHERE f.filepath IN $paths
+          AND coalesce(f.semantic_contract_version, 0) = $semantic_contract_version
         RETURN f.filepath AS fp, f.semantic_file_roles AS roles
         """,
         pid=project_id,
         paths=paths,
+        semantic_contract_version=SEMANTIC_CONTRACT_VERSION,
         op="load_graph_file_roles",
     )
     out: dict[str, set[str]] = {}
@@ -217,10 +223,12 @@ async def _promote_graph_file_roles(
             """
             UNWIND $batch AS item
             MATCH (f:File {project_id:$pid, filepath:item.filepath})
-            SET f.semantic_file_roles = item.roles
+            SET f.semantic_file_roles = item.roles,
+                f.semantic_contract_version = $semantic_contract_version
             """,
             pid=project_id,
             batch=batch,
+            semantic_contract_version=SEMANTIC_CONTRACT_VERSION,
             operation="promote_graph_file_roles",
         )
     except Exception:

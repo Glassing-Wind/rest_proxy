@@ -104,10 +104,12 @@ def load_indexing_module():
     jobs_mod = types.ModuleType("_jobs")
     jobs_mod._JOBS = {}
     jobs_mod._JOBS_LOCK = mock.MagicMock()
+    jobs_mod.claim_project_job_lock = lambda *args, **kwargs: (True, None)
     jobs_mod._drain_proc_output = lambda *args, **kwargs: None
     jobs_mod._finalize_job = lambda *args, **kwargs: None
     jobs_mod._job_control_paths = lambda *args, **kwargs: {}
     jobs_mod._persist_job_state = lambda *args, **kwargs: None
+    jobs_mod._release_project_job_lock = lambda *args, **kwargs: None
     jobs_mod._reconcile_job_process_state = lambda *args, **kwargs: None
     jobs_mod._render_job_logs = lambda *args, **kwargs: []
     jobs_mod.load_job_record = lambda *args, **kwargs: None
@@ -185,6 +187,34 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
                     "txt",
                 )
             )
+
+    def test_semantic_expected_excludes_xcassets_resource_metadata(self):
+        module = load_indexing_module()
+        fake_ts_pack = types.SimpleNamespace(
+            should_use_line_window_fallback=lambda _path: False,
+            detect_language_from_extension=lambda ext: "json" if ext == "json" else None,
+            detect_language=lambda _path: "json",
+            has_language=lambda lang: lang == "json",
+        )
+
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+            self.assertFalse(
+                module._is_semantic_expected_path(
+                    "App/Assets.xcassets/AppIcon.appiconset/Contents.json",
+                    "/tmp/repo/App/Assets.xcassets/AppIcon.appiconset/Contents.json",
+                    "json",
+                )
+            )
+
+    def test_semantic_expected_excludes_info_plist_metadata(self):
+        module = load_indexing_module()
+        self.assertFalse(
+            module._is_semantic_expected_path(
+                "App/Food-Truck-Info.plist",
+                "/tmp/repo/App/Food-Truck-Info.plist",
+                "plist",
+            )
+        )
 
     def test_health_reports_aligned_runs(self):
         module = load_indexing_module()
@@ -313,9 +343,9 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
         module = load_indexing_module()
         fake_memory = FakePgMemoryStore(
             {
-                "select file_path from codebase_embeddings": [
-                    ("src/app.py",),
-                    ("src/lib.py",),
+                "select file_path, bool_or(coalesce((metadata->>'semantic_contract_version')::int, 0) = %s) as current_contract from codebase_embeddings": [
+                    ("src/app.py", True),
+                    ("src/lib.py", True),
                 ],
                 "select file_path, count(*) from codebase_embeddings": [],
             }

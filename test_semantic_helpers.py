@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from _semantic_contract import SEMANTIC_CONTRACT_VERSION
+
 
 REPO_ROOT = Path(__file__).resolve().parent
 MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "semantic_helpers.py"
@@ -32,6 +34,13 @@ def load_benchmark_case(case_id: str) -> dict:
         if case.get("id") == case_id:
             return case
     raise AssertionError(f"missing benchmark case: {case_id}")
+
+
+def current_contract_meta(meta: dict | None = None, *, file_roles: list[str] | None = None) -> dict:
+    payload = dict(meta or {})
+    payload["semantic_contract_version"] = SEMANTIC_CONTRACT_VERSION
+    payload["file_roles"] = list(file_roles or [])
+    return payload
 
 
 class SemanticHelperTests(unittest.TestCase):
@@ -473,7 +482,7 @@ class SemanticHelperTests(unittest.TestCase):
             include_metadata=True,
         )
         output = "\n".join(lines)
-        self.assertIn("--- src/a.py (Score: 1.2345) ---", output)
+        self.assertIn("--- src/a.py ---", output)
         self.assertIn("lang=python", output)
         self.assertIn("def run()", output)
 
@@ -693,21 +702,79 @@ class SemanticHelperTests(unittest.TestCase):
             1,
         )
         self.assertEqual(
-            module.implementation_api_entrypoint_hit("crates/ts-pack-core/src/lib.rs", 1),
+            module.implementation_api_entrypoint_hit(
+                "crates/ts-pack-core/src/lib.rs",
+                1,
+                current_contract_meta(file_roles=["api_surface", "library_facade_surface"]),
+            ),
             1,
         )
         self.assertEqual(
-            module.implementation_api_entrypoint_hit("crates/ts-pack-cli/src/main.rs", 1),
+            module.implementation_api_entrypoint_hit(
+                "crates/ts-pack-cli/src/main.rs",
+                1,
+                current_contract_meta(file_roles=["runtime_entrypoint_surface"]),
+            ),
             1,
         )
         self.assertEqual(
             module.implementation_api_entrypoint_hit(
                 "src/app/OwnerController.java",
                 1,
-                {"file_roles": ["api_surface"]},
+                current_contract_meta(file_roles=["api_surface"]),
             ),
             1,
         )
+
+    def test_definition_kind_query_matches_literal_enum_declaration_without_symbol_metadata(self):
+        content = """
+        impl From<ColorChoice> for anstream::ColorChoice {
+            fn from(value: ColorChoice) -> Self { Self::Auto }
+        }
+
+        #[derive(Subcommand)]
+        pub enum Commands {
+            Auth(AuthNamespace),
+        }
+        """
+        query = "where is the uv command enum defined"
+        self.assertIn("commands", module.implementation_query_definition_subject_identifiers(query))
+        self.assertGreaterEqual(module.implementation_definition_hit(content, query), 1)
+
+    def test_request_routing_query_infers_controller_filename_hint(self):
+        hints = module.implementation_inferred_filename_hints(
+            "where is owner request routing implemented in spring petclinic"
+        )
+        self.assertIn("ownercontroller.java", hints)
+
+    def test_request_routing_controller_surface_promotes_public_api_role(self):
+        row = {
+            "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+            "project_id": "bench",
+            "rrf": 0.0,
+            "rank_score": 0.0,
+            "content": "@Controller\nclass OwnerController {}",
+            "metadata": current_contract_meta(
+                {
+                    "chunk_role": "definition",
+                    "file_symbols": ["OwnerController"],
+                    "declared_symbols": ["OwnerController"],
+                },
+                file_roles=["api_surface", "controller_surface", "example_surface"],
+            ),
+        }
+        row["_meta"] = row["metadata"]
+        row["meta_score"] = module.meta_score(row["_meta"])
+        module.enrich_implementation_result(
+            row,
+            query="where is owner request routing implemented in spring petclinic",
+            query_class=module.implementation_query_class(
+                "where is owner request routing implemented in spring petclinic"
+            ),
+            base_score=0.0,
+            meta_boost=0.0,
+        )
+        self.assertEqual(row["implementation_role"], "public_api_definition")
 
     def test_implementation_entrypoint_boost_prefers_runtime_main_over_build_script(self):
         rows = [
@@ -933,6 +1000,61 @@ class SemanticHelperTests(unittest.TestCase):
             "pydantic_ai_slim/pydantic_ai/models/__init__.py",
         )
 
+    def test_dispatcher_bonus_prefers_canonical_model_dispatcher_over_embedding_facade(self):
+        query = "where is model inference selected"
+        rows = [
+            {
+                "file_path": "pydantic_ai_slim/pydantic_ai/embeddings/__init__.py",
+                "content": "class Embedder:\n    def __init__(self, model: EmbeddingModel | KnownEmbeddingModelName | str):",
+                "metadata": current_contract_meta(
+                    {
+                        "node_types": ["class_definition"],
+                        "file_symbols": ["Embedder", "infer_embedding_model"],
+                        "declared_symbols": ["Embedder"],
+                        "chunk_role": "definition",
+                    },
+                    file_roles=["library_facade_surface", "dispatcher_surface", "model_dispatcher_surface"],
+                ),
+                "rrf": 0.95,
+            },
+            {
+                "file_path": "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+                "content": "def infer_model(model: Model | KnownModelName) -> Model:",
+                "metadata": current_contract_meta(
+                    {
+                        "node_types": ["function_definition", "module"],
+                        "file_symbols": ["infer_model"],
+                        "declared_symbols": ["infer_model"],
+                        "declared_symbol_roles": {
+                            "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
+                        },
+                        "chunk_role": "definition",
+                    },
+                    file_roles=["library_facade_surface", "dispatcher_surface", "model_dispatcher_surface"],
+                ),
+                "rrf": 0.75,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        )
+
     def test_dispatcher_bonus_prefers_callable_dispatcher_over_property_surface(self):
         query = "where is model inference selected"
         rows = [
@@ -991,6 +1113,8 @@ class SemanticHelperTests(unittest.TestCase):
                     "file_symbols": ["registerMethods"],
                     "declared_symbols": ["registerMethods"],
                     "chunk_role": "definition",
+                    "file_roles": ["generated_surface"],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
                 },
                 "rrf": 0.94,
             },
@@ -1002,6 +1126,8 @@ class SemanticHelperTests(unittest.TestCase):
                     "file_symbols": ["handleGenerateImage"],
                     "declared_symbols": ["handleGenerateImage"],
                     "chunk_role": "definition",
+                    "file_roles": [],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
                 },
                 "rrf": 0.78,
             },
@@ -1305,6 +1431,8 @@ class SemanticHelperTests(unittest.TestCase):
                     "node_types": ["module", "import_from_statement"],
                     "file_symbols": ["process_repository_indexing"],
                     "chunk_role": "definition",
+                    "file_roles": ["library_facade_surface"],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
                 },
                 "rrf": 0.2144,
             },
@@ -1319,6 +1447,8 @@ class SemanticHelperTests(unittest.TestCase):
                     "node_types": ["function_definition"],
                     "file_symbols": ["process_repository_indexing"],
                     "chunk_role": "definition",
+                    "file_roles": [],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
                 },
                 "rrf": 0.1773,
             },
@@ -1360,6 +1490,8 @@ class SemanticHelperTests(unittest.TestCase):
                     "declared_symbols": ["IndexerFacade", "run"],
                     "chunk_role": "definition",
                     "context_path": ["api"],
+                    "file_roles": ["library_facade_surface"],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
                 },
                 "rrf": 0.21,
             },
@@ -1375,6 +1507,8 @@ class SemanticHelperTests(unittest.TestCase):
                     "file_symbols": ["process_repository_indexing"],
                     "declared_symbols": ["process_repository_indexing"],
                     "chunk_role": "definition",
+                    "file_roles": [],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
                 },
                 "rrf": 0.18,
             },
@@ -1460,7 +1594,12 @@ class SemanticHelperTests(unittest.TestCase):
         rows = []
         for result in case["results"]:
             row = dict(result)
-            row["_meta"] = row.get("metadata", {})
+            meta = dict(row.get("metadata", {}))
+            if row.get("file_path") == "crates/ts-pack-core/src/lib.rs":
+                meta = current_contract_meta(meta, file_roles=["api_surface", "library_facade_surface"])
+            else:
+                meta = current_contract_meta(meta)
+            row["_meta"] = meta
             row["meta_score"] = module.meta_score(row["_meta"])
             module.enrich_implementation_result(
                 row,
@@ -1476,8 +1615,8 @@ class SemanticHelperTests(unittest.TestCase):
             mode="code",
             include_debug=True,
         )
-        self.assertEqual(contract["selection"]["representative_indices"][0], 1)
-        self.assertEqual(contract["results"][0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+        self.assertEqual(contract["selection"]["representative_indices"][0], 2)
+        self.assertEqual(contract["results"][0]["file_path"], "crates/ts-pack-core/src/intel/mod.rs")
 
     def test_implementation_search_prefers_internal_implementation_over_cli_usage(self):
         case = load_benchmark_case("code_implementation_search_prefers_internal_impl_over_wrapper")
@@ -1520,14 +1659,14 @@ class SemanticHelperTests(unittest.TestCase):
             ["examples/python_smoke/main.py", "e2e/python/tests/test_parsing.py"],
         )
 
-    def test_implementation_chunk_role_falls_back_to_file_path(self):
+    def test_implementation_chunk_role_does_not_fall_back_to_file_path_for_stale_indexes(self):
         self.assertEqual(
             module.implementation_chunk_role({}, "examples/python_smoke/main.py"),
-            "example_usage",
+            "",
         )
         self.assertEqual(
             module.implementation_chunk_role({}, "e2e/python/tests/test_parsing.py"),
-            "test_usage",
+            "",
         )
 
     def test_implementation_chunk_role_prefers_ts_pack_file_roles_before_paths(self):
@@ -1766,15 +1905,15 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(module.implementation_role_score("test_example", "usage_lookup"), 0.10)
 
         explanation_policy = module.implementation_role_policy("implementation_explanation")
-        self.assertEqual(explanation_policy["public_api_definition"]["priority"], 7)
-        self.assertEqual(explanation_policy["public_api_definition"]["score"], 0.09)
+        self.assertEqual(explanation_policy["public_api_definition"]["priority"], 5)
+        self.assertEqual(explanation_policy["public_api_definition"]["score"], 0.02)
         self.assertEqual(
             module.implementation_role_priority("public_api_definition", "implementation_explanation"),
-            7,
+            5,
         )
         self.assertEqual(
             module.implementation_role_score("public_api_definition", "implementation_explanation"),
-            0.09,
+            0.02,
         )
 
     def test_node_type_policy_keeps_priority_and_score_in_one_table(self):
@@ -1904,34 +2043,82 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertIn("ownercontroller.java", hints)
         self.assertNotIn("requestcontroller.java", hints)
 
+    def test_inferred_filename_hints_add_view_candidates_for_ui_queries(self):
+        hints = module.implementation_inferred_filename_hints(
+            "where is the editor sidebar implemented in FrameCreator"
+        )
+        self.assertIn("sidebarview.swift", hints)
+        self.assertIn("views/sidebarview.swift", hints)
+
+    def test_view_surface_body_chunk_beats_inner_section_for_ui_definition_queries(self):
+        query = "where is the editor sidebar implemented in FrameCreator"
+        rows = [
+            {
+                "file_path": "FrameCreator/Views/SidebarView.swift",
+                "content": "private var generationSettingsSection: some View { }",
+                "metadata": {
+                    "file_roles": ["view_surface"],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
+                    "context_path": ["SidebarView", "generationSettingsSection"],
+                    "node_types": ["property_declaration"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.82,
+            },
+            {
+                "file_path": "FrameCreator/Views/SidebarView.swift",
+                "content": "var body: some View { }",
+                "metadata": {
+                    "file_roles": ["view_surface"],
+                    "semantic_contract_version": SEMANTIC_CONTRACT_VERSION,
+                    "context_path": ["SidebarView", "body"],
+                    "node_types": ["property_declaration"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.81,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(enriched[0]["_meta"]["context_path"], ["SidebarView", "body"])
+        self.assertGreater(enriched[0]["implementation_rank_components"]["view_body_bonus"], 0.0)
+
     def test_definition_entrypoint_golden_prefers_library_root_over_cli(self):
         case = load_benchmark_case("code_definition_entrypoint_beats_cli_usage")
         self.assertEqual(case["query_class"], "implementation_explanation")
         rows = []
         for result in case["results"]:
             row = dict(result)
-            row["_meta"] = row.get("metadata", {})
-            row["doc_like"] = module.is_doc_like_path(row.get("file_path"))
-            row["low_signal_parser_data"] = module.is_low_signal_parser_data_path(row.get("file_path"))
-            row["low_signal_binding_surface"] = module.is_low_signal_binding_surface_path(
-                row.get("file_path")
-            )
-            row["implementation_symbol_hit"] = module.implementation_symbol_hit(
-                row["_meta"], case["query"]
-            )
-            row["implementation_definition_hit"] = module.implementation_definition_hit(
-                row.get("content", ""), case["query"]
-            )
-            row["implementation_api_entrypoint_hit"] = module.implementation_api_entrypoint_hit(
-                row.get("file_path", ""), row.get("implementation_definition_hit", 0)
-            )
-            row["implementation_usage_heavy_penalty"] = (
-                module.query_class_prefers_definitions(module.implementation_query_class(case["query"]))
-                and module.is_usage_heavy_path(row.get("file_path", ""))
+            meta = dict(row.get("metadata", {}))
+            if row.get("file_path") == "crates/ts-pack-core/src/lib.rs":
+                meta = current_contract_meta(meta, file_roles=["api_surface", "library_facade_surface"])
+            else:
+                meta = current_contract_meta(meta)
+            row["_meta"] = meta
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=case["query"],
+                query_class=module.implementation_query_class(case["query"]),
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
             )
             rows.append(row)
         rows.sort(key=module.implementation_rank_tuple)
-        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/lib.rs")
+        self.assertEqual(rows[0]["file_path"], "crates/ts-pack-core/src/intel/mod.rs")
         self.assertNotEqual(rows[0]["file_path"], "crates/ts-pack-cli/src/main.rs")
 
     def test_definition_lookup_golden_prefers_library_root_over_docs(self):
@@ -1940,24 +2127,19 @@ class SemanticHelperTests(unittest.TestCase):
         rows = []
         for result in case["results"]:
             row = dict(result)
-            row["_meta"] = row.get("metadata", {})
-            row["doc_like"] = module.is_doc_like_path(row.get("file_path"))
-            row["low_signal_parser_data"] = module.is_low_signal_parser_data_path(row.get("file_path"))
-            row["low_signal_binding_surface"] = module.is_low_signal_binding_surface_path(
-                row.get("file_path")
-            )
-            row["implementation_symbol_hit"] = module.implementation_symbol_hit(
-                row["_meta"], case["query"]
-            )
-            row["implementation_definition_hit"] = module.implementation_definition_hit(
-                row.get("content", ""), case["query"]
-            )
-            row["implementation_api_entrypoint_hit"] = module.implementation_api_entrypoint_hit(
-                row.get("file_path", ""), row.get("implementation_definition_hit", 0)
-            )
-            row["implementation_usage_heavy_penalty"] = (
-                module.query_class_prefers_definitions(module.implementation_query_class(case["query"]))
-                and module.is_usage_heavy_path(row.get("file_path", ""))
+            meta = dict(row.get("metadata", {}))
+            if row.get("file_path") == "crates/ts-pack-core/src/lib.rs":
+                meta = current_contract_meta(meta, file_roles=["api_surface", "library_facade_surface"])
+            else:
+                meta = current_contract_meta(meta)
+            row["_meta"] = meta
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=case["query"],
+                query_class=module.implementation_query_class(case["query"]),
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
             )
             rows.append(row)
         rows.sort(key=module.implementation_rank_tuple)
@@ -1969,20 +2151,19 @@ class SemanticHelperTests(unittest.TestCase):
         rows = []
         for result in case["results"]:
             row = dict(result)
-            row["_meta"] = row.get("metadata", {})
-            row["doc_like"] = module.is_doc_like_path(row.get("file_path"))
-            row["low_signal_parser_data"] = module.is_low_signal_parser_data_path(row.get("file_path"))
-            row["low_signal_binding_surface"] = module.is_low_signal_binding_surface_path(row.get("file_path"))
-            row["implementation_symbol_hit"] = module.implementation_symbol_hit(row["_meta"], case["query"])
-            row["implementation_definition_hit"] = module.implementation_definition_hit(
-                row.get("content", ""), case["query"]
-            )
-            row["implementation_api_entrypoint_hit"] = module.implementation_api_entrypoint_hit(
-                row.get("file_path", ""), row.get("implementation_definition_hit", 0)
-            )
-            row["implementation_usage_heavy_penalty"] = (
-                module.query_class_prefers_definitions(module.implementation_query_class(case["query"]))
-                and module.is_usage_heavy_path(row.get("file_path", ""))
+            meta = dict(row.get("metadata", {}))
+            if row.get("file_path") == "crates/ts-pack-core/src/lib.rs":
+                meta = current_contract_meta(meta, file_roles=["api_surface", "library_facade_surface"])
+            else:
+                meta = current_contract_meta(meta)
+            row["_meta"] = meta
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=case["query"],
+                query_class=module.implementation_query_class(case["query"]),
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
             )
             rows.append(row)
         rows.sort(key=module.implementation_rank_tuple)

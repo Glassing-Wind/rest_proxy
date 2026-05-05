@@ -912,6 +912,83 @@ class IndexWorkspaceTests(unittest.TestCase):
         self.assertEqual(statuses[-1][0][2], "failed")
         self.assertIn("semantic_partial_completion", statuses[-1][1]["error"])
 
+    def test_index_project_preserves_failed_status_on_semantic_driver_error(self):
+        payload = {
+            "new_chunks": [{"ref_id": "chunk-1", "text": "hello"}],
+            "skipped_chunks": 0,
+            "prune_targets": [{"file_path": "src/a.ts", "chunk_ids": ["chunk-1"]}],
+            "total_chunks": 1,
+            "existing_ids": set(),
+            "pruned_total": 0,
+            "wiped": True,
+            "orphan_pruned": 0,
+        }
+        fake_ts_pack = FakeTsPack(sync_plan=payload)
+        manifest = [{"abs_path": "/tmp/src/a.ts", "rel_path": "src/a.ts"}]
+        statuses = []
+
+        class _PoolConnection:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        class _Pool:
+            def connection(self):
+                return _PoolConnection()
+
+        self.module.memory_store._pg_pool_available = lambda: True
+        self.module.memory_store._pg_pool = _Pool()
+
+        async def _bootstrap():
+            return None
+
+        async def _open_pool():
+            return None
+
+        self.module.memory_bootstrap.bootstrap_schema = _bootstrap
+        self.module.memory_store.open_pool = _open_pool
+        self.module._get_latest_successful_struct_run_id = lambda _pid: "struct-new"
+
+        svc = types.SimpleNamespace(effective_batch_size=2, _device="cpu")
+
+        with mock.patch.dict(sys.modules, {"tree_sitter_language_pack": fake_ts_pack}):
+            with mock.patch.object(self.module, "_preflight_ts_pack", return_value=None):
+                with mock.patch.object(
+                    fake_ts_pack,
+                    "execute_semantic_index_driver",
+                    side_effect=RuntimeError("LM Studio request failed"),
+                ):
+                    with mock.patch.object(
+                        self.module,
+                        "chunk_file",
+                        return_value=(
+                            [{"ref_id": "chunk-1", "metadata": {"file": "src/a.ts"}, "text": "hello"}],
+                            None,
+                        ),
+                    ):
+                        with mock.patch.object(self.module, "get_embedding_service", return_value=svc):
+                            with mock.patch.object(
+                                self.module,
+                                "_set_semantic_run_status",
+                                side_effect=lambda *args, **kwargs: statuses.append((args, kwargs)),
+                            ):
+                                result = asyncio.run(
+                                    self.module.index_project(
+                                        "/tmp/project",
+                                        "proj123",
+                                        manifest,
+                                        rebuild=True,
+                                        cleanup_only=False,
+                                    )
+                                )
+
+        self.assertEqual(result, 0)
+        self.assertTrue(statuses)
+        self.assertEqual(statuses[-1][0][2], "failed")
+        self.assertIn("LM Studio request failed", statuses[-1][1]["error"])
+
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
         with mock.patch.dict(os.environ, {"LM_PROXY_SKIP_DIAGNOSTIC_FILES": "1"}, clear=False):
