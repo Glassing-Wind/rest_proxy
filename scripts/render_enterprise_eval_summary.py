@@ -53,11 +53,26 @@ def render_summary(payload: dict) -> str:
             f"- Semantic candidate hit rate: `{_fmt_metric(dispatcher.get('semantic_candidate_hit_rate'))}`"
         )
         lines.append(
+            f"- Semantic candidate contract hit rate: `{_fmt_metric(dispatcher.get('semantic_candidate_contract_hit_rate'))}`"
+        )
+        lines.append(
             f"- Implementation ranking top-hit rate: `{_fmt_metric(dispatcher.get('implementation_ranking_top_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Implementation ranking contract top-hit rate: `{_fmt_metric(dispatcher.get('implementation_ranking_contract_top_hit_rate'))}`"
         )
         lines.append(
             f"- Final dispatcher selection top-hit rate: `{_fmt_metric(dispatcher.get('final_dispatcher_selection_top_hit_rate'))}`"
         )
+        lines.append(
+            f"- Final dispatcher selection contract top-hit rate: `{_fmt_metric(dispatcher.get('final_dispatcher_selection_contract_top_hit_rate'))}`"
+        )
+        capability = dispatcher.get("dispatcher_anchor_contract_capability")
+        version = dispatcher.get("dispatcher_anchor_contract_version")
+        if capability or version is not None:
+            lines.append(
+                f"- Dispatcher anchor contract: `{capability or 'unknown'}` (version `{version if version is not None else 'n/a'}`)"
+            )
         diagnosis_counts = dispatcher.get("diagnosis_counts") or {}
         if diagnosis_counts:
             for name in sorted(diagnosis_counts):

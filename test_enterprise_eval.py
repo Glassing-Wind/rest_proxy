@@ -34,9 +34,14 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             },
             "dispatcher_eval": {
                 "summary": {
+                    "dispatcher_anchor_contract_capability": "focused_dispatcher_anchor_v1",
+                    "dispatcher_anchor_contract_version": 1,
                     "semantic_candidate_hit_rate": 0.5,
+                    "semantic_candidate_contract_hit_rate": 0.5,
                     "implementation_ranking_top_hit_rate": 0.5,
+                    "implementation_ranking_contract_top_hit_rate": 0.5,
                     "final_dispatcher_selection_top_hit_rate": 1.0,
+                    "final_dispatcher_selection_contract_top_hit_rate": 1.0,
                     "diagnosis_counts": {"ranking_fixed": 1, "semantic_recall_missing": 1},
                 }
             },

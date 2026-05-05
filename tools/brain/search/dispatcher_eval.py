@@ -13,7 +13,12 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from _semantic_contract import SEMANTIC_CONTRACT_VERSION
+from _semantic_contract import (
+    FOCUSED_DISPATCHER_ANCHOR_CAPABILITY,
+    FOCUSED_DISPATCHER_ANCHOR_CONTRACT_VERSION,
+    SEMANTIC_CONTRACT_VERSION,
+    has_focused_dispatcher_anchor_contract,
+)
 
 try:
     from tools.brain.search import semantic_helpers as sem_helpers
@@ -75,12 +80,26 @@ def _is_expected_dispatcher(row: dict, expected: dict) -> bool:
 def _stage_snapshot(rows: list[dict], expected: dict) -> dict:
     match_indices = [idx for idx, row in enumerate(rows) if _is_expected_dispatcher(row, expected)]
     top = rows[0] if rows else None
+    contract_match_indices = [
+        idx for idx, row in enumerate(rows) if _is_expected_dispatcher(row, expected) and has_focused_dispatcher_anchor_contract(
+            sem_helpers.coerce_meta(row)
+        )
+    ]
+    top_meta = sem_helpers.coerce_meta(top) if top else {}
     return {
         "candidate_hit": bool(match_indices),
         "top_hit": bool(top and _is_expected_dispatcher(top, expected)),
         "match_indices": match_indices,
+        "contract_candidate_hit": bool(contract_match_indices),
+        "contract_top_hit": bool(
+            top and _is_expected_dispatcher(top, expected) and has_focused_dispatcher_anchor_contract(top_meta)
+        ),
+        "contract_match_indices": contract_match_indices,
         "top_file_path": top.get("file_path") if isinstance(top, dict) else None,
-        "top_declared_symbols": list(sem_helpers.coerce_meta(top).get("declared_symbols") or []) if top else [],
+        "top_declared_symbols": list(top_meta.get("declared_symbols") or []) if top else [],
+        "top_dispatcher_anchor_contract_version": (
+            top_meta.get("focused_dispatcher_anchor_contract_version") if top else None
+        ),
     }
 
 
@@ -212,6 +231,13 @@ def evaluate_case(case: dict) -> dict:
         "query": query,
         "expected": expected,
         "stages": stages,
+        "dispatcher_anchor_contract": {
+            "capability": FOCUSED_DISPATCHER_ANCHOR_CAPABILITY,
+            "version": FOCUSED_DISPATCHER_ANCHOR_CONTRACT_VERSION,
+            "semantic_candidates_match_has_contract": stages["semantic_candidates"]["contract_candidate_hit"],
+            "implementation_ranking_top_has_contract": stages["implementation_ranking"]["contract_top_hit"],
+            "final_top_has_contract": stages["final_dispatcher_selection"]["contract_top_hit"],
+        },
         "first_success_stage": first_success_stage,
         "diagnosis": diagnosis,
     }
@@ -221,10 +247,15 @@ def evaluate_benchmarks(path: str | None = None) -> dict:
     cases = [evaluate_case(case) for case in load_benchmarks(path)]
     summary = {
         "total_cases": len(cases),
+        "dispatcher_anchor_contract_capability": FOCUSED_DISPATCHER_ANCHOR_CAPABILITY,
+        "dispatcher_anchor_contract_version": FOCUSED_DISPATCHER_ANCHOR_CONTRACT_VERSION,
         "semantic_candidate_hit_rate": 0.0,
+        "semantic_candidate_contract_hit_rate": 0.0,
         "semantic_top_hit_rate": 0.0,
         "implementation_ranking_top_hit_rate": 0.0,
+        "implementation_ranking_contract_top_hit_rate": 0.0,
         "final_dispatcher_selection_top_hit_rate": 0.0,
+        "final_dispatcher_selection_contract_top_hit_rate": 0.0,
         "diagnosis_counts": {},
     }
     if cases:
@@ -232,14 +263,23 @@ def evaluate_benchmarks(path: str | None = None) -> dict:
         summary["semantic_candidate_hit_rate"] = sum(
             1.0 for case in cases if case["stages"]["semantic_candidates"]["candidate_hit"]
         ) / total
+        summary["semantic_candidate_contract_hit_rate"] = sum(
+            1.0 for case in cases if case["stages"]["semantic_candidates"]["contract_candidate_hit"]
+        ) / total
         summary["semantic_top_hit_rate"] = sum(
             1.0 for case in cases if case["stages"]["semantic_candidates"]["top_hit"]
         ) / total
         summary["implementation_ranking_top_hit_rate"] = sum(
             1.0 for case in cases if case["stages"]["implementation_ranking"]["top_hit"]
         ) / total
+        summary["implementation_ranking_contract_top_hit_rate"] = sum(
+            1.0 for case in cases if case["stages"]["implementation_ranking"]["contract_top_hit"]
+        ) / total
         summary["final_dispatcher_selection_top_hit_rate"] = sum(
             1.0 for case in cases if case["stages"]["final_dispatcher_selection"]["top_hit"]
+        ) / total
+        summary["final_dispatcher_selection_contract_top_hit_rate"] = sum(
+            1.0 for case in cases if case["stages"]["final_dispatcher_selection"]["contract_top_hit"]
         ) / total
         diagnosis_counts: dict[str, int] = {}
         for case in cases:

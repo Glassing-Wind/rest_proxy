@@ -33,6 +33,8 @@
             "declared_symbol_roles": {
               "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
             },
+            "focused_dispatcher_anchor_contract_version": 1,
+            "semantic_contract_capabilities": ["focused_dispatcher_anchor_v1"],
             "chunk_role": "canonical_dispatcher_definition",
             "node_types": ["function_definition"],
             "file_roles": ["dispatcher_surface", "model_dispatcher_surface", "library_facade_surface"]
@@ -103,6 +105,8 @@
             "declared_symbol_roles": {
               "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
             },
+            "focused_dispatcher_anchor_contract_version": 1,
+            "semantic_contract_capabilities": ["focused_dispatcher_anchor_v1"],
             "chunk_role": "canonical_dispatcher_definition",
             "node_types": ["function_definition"],
             "file_roles": ["dispatcher_surface", "model_dispatcher_surface", "library_facade_surface"]

@@ -33,9 +33,14 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                     },
                 },
                 "dispatcher_summary": {
+                    "dispatcher_anchor_contract_capability": "focused_dispatcher_anchor_v1",
+                    "dispatcher_anchor_contract_version": 1,
                     "semantic_candidate_hit_rate": 0.5,
+                    "semantic_candidate_contract_hit_rate": 0.5,
                     "implementation_ranking_top_hit_rate": 0.5,
+                    "implementation_ranking_contract_top_hit_rate": 0.5,
                     "final_dispatcher_selection_top_hit_rate": 1.0,
+                    "final_dispatcher_selection_contract_top_hit_rate": 1.0,
                     "diagnosis_counts": {
                         "ranking_fixed": 1,
                         "semantic_recall_missing": 1,
@@ -57,7 +62,10 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("| `mrr` | 0.9500 | 0.0100 | `improved` |", text)
         self.assertIn("### Dispatcher Eval", text)
         self.assertIn("Semantic candidate hit rate: `0.5000`", text)
+        self.assertIn("Semantic candidate contract hit rate: `0.5000`", text)
         self.assertIn("Final dispatcher selection top-hit rate: `1.0000`", text)
+        self.assertIn("Final dispatcher selection contract top-hit rate: `1.0000`", text)
+        self.assertIn("Dispatcher anchor contract: `focused_dispatcher_anchor_v1` (version `1`)", text)
         self.assertIn("- `implementation_search`: 3", text)
 
     def test_render_pr_comment_includes_marker_and_alert_header(self):
