@@ -123,6 +123,69 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(len(deduped), 1)
         self.assertIn("infer_model", deduped[0]["content"])
 
+    def test_dedupe_files_prefers_contract_anchor_for_provider_dispatcher(self):
+        query = "how does OpenAI provider wiring work"
+        query_class = module.implementation_query_class(query)
+        plain = {
+            "file_path": "pkg/providers/__init__.py",
+            "project_id": "p",
+            "rrf": 0.50,
+            "content": "def infer_provider_class(provider: str):\n    return provider\n",
+            "metadata": current_contract_meta(
+                {
+                    "declared_symbols": ["infer_provider_class"],
+                    "declared_symbol_roles": {
+                        "infer_provider_class": [
+                            "canonical_dispatcher",
+                            "dispatcher",
+                            "provider_selector",
+                        ]
+                    },
+                    "chunk_role": "canonical_dispatcher_definition",
+                    "node_types": ["function_definition"],
+                },
+                file_roles=["dispatcher_surface", "provider_dispatcher_surface"],
+            ),
+        }
+        focused = {
+            "file_path": "pkg/providers/__init__.py",
+            "project_id": "p",
+            "rrf": 0.48,
+            "content": (
+                "// Semantic role: canonical provider inference selection dispatcher\n"
+                "// Query intent: where provider inference is selected; canonical provider wiring and selection entrypoint\n"
+                "def infer_provider_class(provider: str):\n    return provider\n"
+            ),
+            "metadata": current_contract_meta(
+                {
+                    "declared_symbols": ["infer_provider_class"],
+                    "file_symbols": ["infer_provider_class", "infer_provider"],
+                    "declared_symbol_roles": {
+                        "infer_provider_class": [
+                            "canonical_dispatcher",
+                            "dispatcher",
+                            "provider_selector",
+                        ]
+                    },
+                    "chunk_role": "canonical_dispatcher_definition",
+                    "focused_dispatcher_anchor_contract_version": 1,
+                    "semantic_contract_capabilities": ["focused_dispatcher_anchor_v1"],
+                    "node_types": ["function_definition"],
+                },
+                file_roles=["dispatcher_surface", "provider_dispatcher_surface"],
+            ),
+        }
+        for row in (plain, focused):
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row["rrf"]),
+            )
+        deduped = module.dedupe_files([plain, focused])
+        self.assertEqual(len(deduped), 1)
+        self.assertIn("provider wiring and selection entrypoint", deduped[0]["content"])
+
     def test_analyze_near_duplicate_results_uses_lower_level_contract(self):
         rows = [
             {"file_path": "src/a.py", "project_id": "p", "rrf": 1.0, "content": "same-a"},

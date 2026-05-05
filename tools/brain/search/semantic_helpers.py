@@ -751,6 +751,7 @@ def implementation_rank_tuple(
     member_usage_priority = int(result.get("implementation_member_usage_priority", 0) or 0)
     provider_wiring_priority = int(result.get("implementation_provider_wiring_priority", 0) or 0)
     dispatcher_priority = int(result.get("implementation_dispatcher_priority", 0) or 0)
+    dispatcher_contract_priority = int(result.get("implementation_dispatcher_contract_priority", 0) or 0)
     command_definition_priority = int(result.get("implementation_command_definition_priority", 0) or 0)
     routing_priority = int(result.get("implementation_routing_priority", 0) or 0)
     handler_priority = int(result.get("implementation_request_handler_priority", 0) or 0)
@@ -780,6 +781,7 @@ def implementation_rank_tuple(
         usage_heavy,
         -role_priority,
         -provider_wiring_priority,
+        -dispatcher_contract_priority,
         -callable_priority,
         -member_usage_priority,
         -dispatcher_priority,
@@ -854,6 +856,31 @@ def implementation_query_symbols(query: str) -> set[str]:
         if len(token) >= 3 and token not in stopwords
     }
     return symbols
+
+
+def implementation_dispatcher_contract_priority(meta: dict, query: str) -> int:
+    if not implementation_query_prefers_dispatchers(query):
+        return 0
+    if not isinstance(meta, dict) or not has_focused_dispatcher_anchor_contract(meta):
+        return 0
+    exact_identifiers = implementation_query_exact_identifiers(query)
+    if not exact_identifiers:
+        return 0
+    declared_symbols = {
+        str(symbol).strip().lower()
+        for symbol in (meta.get("declared_symbols") or [])
+        if str(symbol).strip()
+    }
+    if declared_symbols & exact_identifiers:
+        return 2
+    file_symbols = {
+        str(symbol).strip().lower()
+        for symbol in (meta.get("file_symbols") or [])
+        if str(symbol).strip()
+    }
+    if file_symbols & exact_identifiers:
+        return 1
+    return 0
 
 
 def implementation_query_exact_identifiers(query: str) -> set[str]:
@@ -2312,6 +2339,10 @@ def enrich_implementation_result(
     result["implementation_provider_wiring_priority"] = implementation_provider_wiring_priority(
         meta,
         result.get("file_path"),
+        query,
+    )
+    result["implementation_dispatcher_contract_priority"] = implementation_dispatcher_contract_priority(
+        meta,
         query,
     )
     result["implementation_routing_priority"] = implementation_routing_priority(
