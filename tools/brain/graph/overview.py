@@ -281,6 +281,7 @@ def _is_low_signal_semantic_path(file_path: str | None) -> bool:
 def _directory_snapshot_path_penalty(file_path: str | None, file_roles: set[str] | None = None) -> int:
     norm = (file_path or "").replace("\\", "/").lower()
     penalty = _semantic_file_roles_penalty(file_roles)
+    roles_known = _file_roles_known(file_roles)
     if _is_low_signal_semantic_path(norm):
         penalty = max(penalty, 100)
     if any(
@@ -295,33 +296,34 @@ def _directory_snapshot_path_penalty(file_path: str | None, file_roles: set[str]
         )
     ):
         penalty = max(penalty, 40)
-    if any(
-        marker in norm
-        for marker in (
-            "/tests/",
-            "/test/",
-            "tests/",
-            "test/",
-            "/stories/",
-            "/fixtures/",
-            "fixtures/",
-            "/examples/",
-            "examples/",
-        )
-    ):
-        penalty = max(penalty, 60)
-    if any(
-        marker in norm
-        for marker in (
-            "/integrationtests/",
-            "integrationtests/",
-            "/integration-tests/",
-            "integration-tests/",
-            "/e2e/",
-            "e2e/",
-        )
-    ):
-        penalty = max(penalty, 70)
+    if not roles_known:
+        if any(
+            marker in norm
+            for marker in (
+                "/tests/",
+                "/test/",
+                "tests/",
+                "test/",
+                "/stories/",
+                "/fixtures/",
+                "fixtures/",
+                "/examples/",
+                "examples/",
+            )
+        ):
+            penalty = max(penalty, 60)
+        if any(
+            marker in norm
+            for marker in (
+                "/integrationtests/",
+                "integrationtests/",
+                "/integration-tests/",
+                "integration-tests/",
+                "/e2e/",
+                "e2e/",
+            )
+        ):
+            penalty = max(penalty, 70)
     return penalty
 
 
