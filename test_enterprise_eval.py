@@ -61,6 +61,17 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                         "semantic_recall_missing_contract_candidate": 2,
                     },
                 },
+                "current_summary": {
+                    "contract_eligible_events": 2,
+                    "rescue_applied_rate": 0.5,
+                    "semantic_top_contract_hit_rate": 0.5,
+                    "implementation_ranking_top_contract_hit_rate": 1.0,
+                    "final_top_contract_hit_rate": 1.0,
+                    "diagnosis_counts": {
+                        "ranking_surfaces_contract": 1,
+                        "semantic_recall_missing_contract_candidate": 1,
+                    },
+                },
                 "recent_summary": {
                     "contract_eligible_events": 2,
                     "rescue_applied_rate": 0.5,
@@ -115,6 +126,8 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         )
         self.assertEqual(summary["dispatcher_telemetry_summary"]["total_events"], 3)
         self.assertEqual(summary["dispatcher_telemetry_recent_summary"]["contract_eligible_events"], 2)
+        self.assertEqual(summary["dispatcher_telemetry_current_scope"], "recent")
+        self.assertEqual(summary["dispatcher_telemetry_current_summary"]["contract_eligible_events"], 2)
         self.assertEqual(summary["routing_telemetry_summary"]["total_events"], 4)
         self.assertEqual(summary["routing_telemetry_recent_summary"]["signal_eligible_events"], 2)
         self.assertEqual(summary["routing_telemetry_current_scope"], "recent")

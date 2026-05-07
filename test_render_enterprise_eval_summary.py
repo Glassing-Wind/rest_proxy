@@ -60,6 +60,18 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                         "semantic_recall_missing_contract_candidate": 2,
                     },
                 },
+                "dispatcher_telemetry_current_summary": {
+                    "contract_eligible_events": 2,
+                    "rescue_applied_rate": 0.5000,
+                    "semantic_top_contract_hit_rate": 0.5000,
+                    "implementation_ranking_top_contract_hit_rate": 1.0000,
+                    "final_top_contract_hit_rate": 1.0000,
+                    "diagnosis_counts": {
+                        "ranking_surfaces_contract": 1,
+                        "semantic_recall_missing_contract_candidate": 1,
+                    },
+                },
+                "dispatcher_telemetry_current_scope": "recent",
                 "dispatcher_telemetry_recent_summary": {
                     "contract_eligible_events": 2,
                     "rescue_applied_rate": 0.5000,
@@ -128,15 +140,13 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("Final dispatcher selection contract top-hit rate: `1.0000`", text)
         self.assertIn("Dispatcher anchor contract: `focused_dispatcher_anchor_v1` (version `1`)", text)
         self.assertIn("### Live Dispatcher Telemetry", text)
-        self.assertIn("Total events: `3`", text)
+        self.assertIn("Current window: `recent`", text)
         self.assertIn("Contract-eligible events: `2`", text)
-        self.assertIn("Ignored no-signal events: `1`", text)
-        self.assertIn("Rescue applied rate: `0.3333`", text)
-        self.assertIn("Live diagnosis `semantic_recall_missing_contract_candidate`: 2", text)
-        self.assertIn("### Recent Dispatcher Telemetry", text)
-        self.assertIn("Recent contract-eligible events: `2`", text)
-        self.assertIn("Recent final top contract-hit rate: `1.0000`", text)
-        self.assertIn("Recent diagnosis `ranking_surfaces_contract`: 1", text)
+        self.assertIn("Rescue applied rate: `0.5000`", text)
+        self.assertIn("Live diagnosis `semantic_recall_missing_contract_candidate`: 1", text)
+        self.assertIn("### Historical Dispatcher Telemetry", text)
+        self.assertIn("Historical total events: `3`", text)
+        self.assertIn("Historical diagnosis `semantic_recall_missing_contract_candidate`: 2", text)
         self.assertIn("### Live Routing Telemetry", text)
         self.assertIn("Current window: `recent`", text)
         self.assertIn("Signal-eligible events: `2`", text)

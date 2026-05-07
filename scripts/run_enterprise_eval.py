@@ -156,6 +156,16 @@ def build_enterprise_summary(payload: dict) -> dict:
     dispatcher_summary = dispatcher.get("summary") or {}
     dispatcher_telemetry_summary = dispatcher_telemetry.get("summary") or {}
     dispatcher_telemetry_recent_summary = dispatcher_telemetry.get("recent_summary") or {}
+    dispatcher_telemetry_current_summary = (
+        dispatcher_telemetry_recent_summary
+        if int(dispatcher_telemetry_recent_summary.get("contract_eligible_events", 0) or 0) > 0
+        else dispatcher_telemetry_summary
+    )
+    dispatcher_telemetry_current_scope = (
+        "recent"
+        if dispatcher_telemetry_current_summary is dispatcher_telemetry_recent_summary
+        else "historical"
+    )
     routing_telemetry_summary = routing_telemetry.get("summary") or {}
     routing_telemetry_recent_summary = routing_telemetry.get("recent_summary") or {}
     routing_telemetry_current_summary = (
@@ -193,6 +203,8 @@ def build_enterprise_summary(payload: dict) -> dict:
         "retrieval_alerts": retrieval.get("alerts") or {},
         "retrieval_regressions": regressions,
         "dispatcher_summary": dispatcher_summary,
+        "dispatcher_telemetry_current_summary": dispatcher_telemetry_current_summary,
+        "dispatcher_telemetry_current_scope": dispatcher_telemetry_current_scope,
         "dispatcher_telemetry_summary": dispatcher_telemetry_summary,
         "dispatcher_telemetry_recent_summary": dispatcher_telemetry_recent_summary,
         "routing_telemetry_current_summary": routing_telemetry_current_summary,
