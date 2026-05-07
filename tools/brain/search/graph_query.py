@@ -10,6 +10,11 @@ from tools.brain.search import core as search_core
 
 def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
 
+    def _normalize_file_roles(raw_roles) -> set[str] | None:
+        if isinstance(raw_roles, (list, tuple, set)):
+            return {str(role).strip().lower() for role in raw_roles if str(role).strip()}
+        return None
+
     def _project_display_allowed(project_id: str | None, project_path: str | None) -> bool:
         pid = (project_id or "").strip()
         path = (project_path or "").strip()
@@ -29,7 +34,14 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
             return False
         return True
 
-    def _definition_path_penalty(file_path: str | None) -> int:
+    def _definition_path_penalty(file_path: str | None, raw_roles=None) -> int:
+        roles = _normalize_file_roles(raw_roles)
+        if roles is not None:
+            if {"generated_surface", "binding_surface"} & roles:
+                return 4
+            if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+                return 3
+            return 0
         norm = (file_path or "").replace("\\", "/").lower()
         if not norm:
             return 5
@@ -174,9 +186,11 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
                 OR n:TypeAlias OR n:AssociatedType OR n:EnumCase
             ) AND n.name = $name
             OPTIONAL MATCH (p:Project {id: n.project_id})
+            OPTIONAL MATCH (f:File {project_id: n.project_id, filepath: n.filepath})
             RETURN n.project_id AS project_id, p.project_path AS project_path,
                    n.filepath AS file, n.start_line AS line,
-                   head([label IN labels(n) WHERE label <> 'Node']) AS type
+                   head([label IN labels(n) WHERE label <> 'Node']) AS type,
+                   f.semantic_file_roles AS file_roles
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await search_core._execute_read(
@@ -192,7 +206,7 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
                 ]
                 filtered.sort(
                     key=lambda record: (
-                        _definition_path_penalty(record.get("file")),
+                        _definition_path_penalty(record.get("file"), record.get("file_roles")),
                         _definition_kind_rank(record.get("type")),
                         len(record.get("project_path") or record.get("project_id") or ""),
                         len(record.get("file") or ""),

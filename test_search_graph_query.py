@@ -93,6 +93,7 @@ class GraphQueryTests(unittest.TestCase):
                 "file": "packages/sdk/js/src/v2/gen/types.gen.ts",
                 "line": 1,
                 "type": "TypeAlias",
+                "file_roles": None,
             },
             {
                 "project_id": "opencode",
@@ -100,6 +101,7 @@ class GraphQueryTests(unittest.TestCase):
                 "file": "packages/opencode/src/config/config.ts",
                 "line": 8,
                 "type": "Class",
+                "file_roles": None,
             },
             {
                 "project_id": "opencode",
@@ -107,6 +109,7 @@ class GraphQueryTests(unittest.TestCase):
                 "file": "packages/opencode/test/config/config.test.ts",
                 "line": 5,
                 "type": "Class",
+                "file_roles": None,
             },
             {
                 "project_id": "profilequery123",
@@ -114,6 +117,7 @@ class GraphQueryTests(unittest.TestCase):
                 "file": "scratch/query.ts",
                 "line": 4,
                 "type": "Function",
+                "file_roles": None,
             },
         ]
 
@@ -136,6 +140,67 @@ class GraphQueryTests(unittest.TestCase):
         self.assertIn("packages/opencode/test/config/config.test.ts:5", lines[1])
         self.assertIn("packages/sdk/js/src/v2/gen/types.gen.ts:1", lines[2])
         self.assertNotIn("profilequery123", output)
+
+    def test_find_definitions_skips_test_path_penalty_when_file_roles_are_present(self):
+        rows = [
+            {
+                "project_id": "opencode",
+                "project_path": "/Users/michaelmarler/Projects/opencode",
+                "file": "packages/opencode/test/config/config.test.ts",
+                "line": 5,
+                "type": "Class",
+                "file_roles": [],
+            },
+            {
+                "project_id": "opencode",
+                "project_path": "/Users/michaelmarler/Projects/opencode",
+                "file": "packages/sdk/js/src/v2/gen/types.gen.ts",
+                "line": 1,
+                "type": "TypeAlias",
+                "file_roles": None,
+            },
+        ]
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            return rows
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["find_definitions"]("Config"))
+
+        lines = [line for line in output.splitlines() if line.startswith("- [")]
+        self.assertIn("packages/opencode/test/config/config.test.ts:5", lines[0])
+        self.assertIn("packages/sdk/js/src/v2/gen/types.gen.ts:1", lines[1])
+
+    def test_find_definitions_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        rows = [
+            {
+                "project_id": "opencode",
+                "project_path": "/Users/michaelmarler/Projects/opencode",
+                "file": "packages/opencode/test/config/config.test.ts",
+                "line": 5,
+                "type": "Class",
+                "file_roles": None,
+            },
+            {
+                "project_id": "opencode",
+                "project_path": "/Users/michaelmarler/Projects/opencode",
+                "file": "packages/opencode/src/config/config.ts",
+                "line": 8,
+                "type": "Class",
+                "file_roles": [],
+            },
+        ]
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            return rows
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["find_definitions"]("Config"))
+
+        lines = [line for line in output.splitlines() if line.startswith("- [")]
+        self.assertIn("packages/opencode/src/config/config.ts:8", lines[0])
 
 
 if __name__ == "__main__":
