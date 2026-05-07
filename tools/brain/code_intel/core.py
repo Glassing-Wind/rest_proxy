@@ -140,6 +140,22 @@ def register(mcp: FastMCP) -> None:
             or ".stories." in norm
         )
 
+    def _is_test_like_related_candidate(file_path: str | None, raw_roles) -> bool:
+        roles = _normalize_file_roles(raw_roles)
+        if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+            return True
+        if _file_roles_present(raw_roles):
+            return False
+        return _is_test_like_path(file_path)
+
+    def _is_low_signal_related_support_candidate(file_path: str | None, raw_roles) -> bool:
+        roles = _normalize_file_roles(raw_roles)
+        if {"docs_surface", "config_surface", "support_surface"} & roles:
+            return True
+        if _file_roles_present(raw_roles):
+            return False
+        return _is_low_signal_support_path(file_path)
+
     def _is_low_signal_related_import_source(source: str | None) -> bool:
         value = str(source or "").strip()
         if not value:
@@ -279,9 +295,9 @@ def register(mcp: FastMCP) -> None:
             score += 40
         elif target_dir and candidate_dir.split("/", 1)[0] == target_dir.split("/", 1)[0]:
             score += 20
-        if _is_test_like_path(candidate_norm):
+        if _is_test_like_related_candidate(candidate_norm, None):
             score -= 80
-        if _is_low_signal_support_path(candidate_norm):
+        if _is_low_signal_related_support_candidate(candidate_norm, None):
             score -= 60
         return (-score, -useful_import_count, -shared_imports, len(candidate_norm), candidate_norm)
 
@@ -331,9 +347,9 @@ def register(mcp: FastMCP) -> None:
             score += 20
         elif shared_depth >= 3:
             score += 10
-        if _is_test_like_path(candidate_norm):
+        if _is_test_like_related_candidate(candidate_norm, candidate_roles):
             score -= 120 if call_hits <= 0 else 80
-        if _is_low_signal_support_path(candidate_norm):
+        if _is_low_signal_related_support_candidate(candidate_norm, candidate_roles):
             score -= 60
         return (
             -score,
@@ -371,9 +387,9 @@ def register(mcp: FastMCP) -> None:
             score += 20
         elif shared_depth >= 3:
             score += 10
-        if _is_test_like_path(candidate_norm):
+        if _is_test_like_related_candidate(candidate_norm, candidate_roles):
             score -= 120
-        if _is_low_signal_support_path(candidate_norm):
+        if _is_low_signal_related_support_candidate(candidate_norm, candidate_roles):
             score -= 60
         return (-score, -sym_count, len(candidate_norm), candidate_norm)
 
@@ -2184,8 +2200,14 @@ def register(mcp: FastMCP) -> None:
                         related_dir = related_file.replace("\\", "/").strip("/").rsplit("/", 1)[0]
                         if (
                             related_dir == target_dir
-                            and not _is_low_signal_support_path(related_file)
-                            and not _is_test_like_path(related_file)
+                            and not _is_low_signal_related_support_candidate(
+                                related_file,
+                                record.get("file_roles"),
+                            )
+                            and not _is_test_like_related_candidate(
+                                related_file,
+                                record.get("file_roles"),
+                            )
                         ):
                             same_directory_runtime_hits += 1
                 thin_structural_surface = same_directory_runtime_hits < 2
@@ -2228,8 +2250,14 @@ def register(mcp: FastMCP) -> None:
                                 not related_file
                                 or related_file == file_path
                                 or related_file in existing_related_paths
-                                or _is_low_signal_support_path(related_file)
-                                or _is_test_like_path(related_file)
+                                or _is_low_signal_related_support_candidate(
+                                    related_file,
+                                    record.get("file_roles"),
+                                )
+                                or _is_test_like_related_candidate(
+                                    related_file,
+                                    record.get("file_roles"),
+                                )
                             ):
                                 continue
                             symbols = _dedupe_symbol_names(

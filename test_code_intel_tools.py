@@ -2350,6 +2350,110 @@ class CodeIntelToolTests(unittest.TestCase):
             output.index("PetController.java"),
         )
 
+    def test_get_related_files_does_not_use_test_path_penalty_when_roles_are_present(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 1,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "sym_count": 6,
+                        "sym_examples": ["OwnerControllerFlow"],
+                        "file_roles": [],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertIn("tests/OwnerControllerFlow.java", inspect_section)
+        self.assertLess(
+            output.index("Pet.java"),
+            output.index("tests/OwnerControllerFlow.java"),
+        )
+
+    def test_get_related_files_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 1,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "sym_count": 6,
+                        "sym_examples": ["OwnerControllerFlow"],
+                        "file_roles": None,
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertNotIn("tests/OwnerControllerFlow.java", inspect_section)
+
     def test_get_related_files_prefers_file_level_graph_callers_before_same_directory_fallback(self):
         async def fake_executor(cypher, **kwargs):
             if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
