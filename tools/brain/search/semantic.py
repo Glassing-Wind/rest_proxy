@@ -1320,30 +1320,6 @@ def register(mcp: FastMCP) -> None:
                         all_results = non_profile_results
                 if sem_helpers.implementation_query_prefers_dispatchers(query) and path_hints:
                     exact_dispatcher_identifiers = sem_helpers.implementation_query_exact_identifiers(query)
-                    strong_dispatchers: list[dict] = []
-                    other_results: list[dict] = []
-                    for r in all_results:
-                        meta = sem_helpers.coerce_meta(r)
-                        file_roles = sem_helpers.implementation_file_roles(meta)
-                        chunk_role = sem_helpers.implementation_chunk_role(meta, r.get("file_path"))
-                        declared_symbols = {
-                            str(symbol).strip().lower()
-                            for symbol in (meta.get("declared_symbols") or [])
-                            if str(symbol).strip()
-                        }
-                        if (
-                            int(r.get("implementation_dispatcher_priority", 0) or 0) >= 5
-                            and (declared_symbols & exact_dispatcher_identifiers)
-                            and "profile_surface" not in file_roles
-                            and chunk_role != "profile_definition"
-                        ):
-                            strong_dispatchers.append(r)
-                        else:
-                            other_results.append(r)
-                    if strong_dispatchers:
-                        strong_dispatchers.sort(key=sem_helpers.implementation_rank_tuple)
-                        other_results.sort(key=sem_helpers.implementation_rank_tuple)
-                        all_results = strong_dispatchers + other_results
                 dispatcher_contract_trace = sem_helpers.dispatcher_contract_telemetry(
                     query=query,
                     query_class=impl_query_class,
