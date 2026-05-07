@@ -2111,7 +2111,14 @@ def register(mcp: FastMCP) -> None:
                     if (
                         not related_file
                         or related_file == file_path
-                        or _is_low_signal_support_path(related_file)
+                        or _is_low_signal_related_support_candidate(
+                            related_file,
+                            counts.get("file_roles"),
+                        )
+                        or _is_test_like_related_candidate(
+                            related_file,
+                            counts.get("file_roles"),
+                        )
                     ):
                         continue
                     symbols = _dedupe_symbol_names(
@@ -2150,7 +2157,14 @@ def register(mcp: FastMCP) -> None:
                     if (
                         not related_file
                         or related_file == file_path
-                        or _is_low_signal_support_path(related_file)
+                        or _is_low_signal_related_support_candidate(
+                            related_file,
+                            counts.get("file_roles"),
+                        )
+                        or _is_test_like_related_candidate(
+                            related_file,
+                            counts.get("file_roles"),
+                        )
                     ):
                         continue
                     symbols = _dedupe_symbol_names(

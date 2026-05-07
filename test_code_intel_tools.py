@@ -2457,6 +2457,86 @@ class CodeIntelToolTests(unittest.TestCase):
         inspect_section = output.split("Inspect First:", 1)[1]
         self.assertNotIn("tests/OwnerControllerFlow.java", inspect_section)
 
+    def test_get_related_files_structural_calls_keep_test_path_when_roles_are_present(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN f.semantic_file_roles AS file_roles" in cypher:
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "caller_file <> owner" in cypher:
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "symbol": "processFindForm",
+                        "file_roles": [],
+                    }
+                ]
+            if (
+                "<-[:CALLS_INFERRED]-(caller:Node)" in cypher
+                or "<-[:CALLS]-(caller_file:File" in cypher
+                or "<-[:CALLS_INFERRED]-(caller_file:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher
+            ):
+                return []
+            if "get_related_files_same_directory" in kwargs.get("op", "") or "target_dir_prefix" in kwargs:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("tests/OwnerControllerFlow.java", output)
+
+    def test_get_related_files_structural_calls_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN f.semantic_file_roles AS file_roles" in cypher:
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "caller_file <> owner" in cypher:
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "symbol": "processFindForm",
+                        "file_roles": None,
+                    }
+                ]
+            if (
+                "<-[:CALLS_INFERRED]-(caller:Node)" in cypher
+                or "<-[:CALLS]-(caller_file:File" in cypher
+                or "<-[:CALLS_INFERRED]-(caller_file:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher
+            ):
+                return []
+            if "get_related_files_same_directory" in kwargs.get("op", "") or "target_dir_prefix" in kwargs:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No structurally related files found.")
+
     def test_get_related_files_prefers_file_level_graph_callers_before_same_directory_fallback(self):
         async def fake_executor(cypher, **kwargs):
             if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
