@@ -1798,6 +1798,37 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertGreater(enriched[0]["implementation_request_handler_priority"], 0)
         self.assertGreater(enriched[0]["implementation_controller_entity_hit"], 0)
 
+    def test_request_routing_priority_uses_semantic_routing_roles(self):
+        query = "how does gRPC server request routing work"
+        row = {
+            "file_path": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+            "content": "func routeImageRequest() {}",
+            "metadata": current_contract_meta(
+                {
+                    "node_types": ["function_declaration", "class_declaration"],
+                    "file_symbols": ["ImageGenerationServiceImpl", "routeImageRequest"],
+                    "declared_symbols": ["ImageGenerationServiceImpl", "routeImageRequest"],
+                    "declared_symbol_roles": {
+                        "routeImageRequest": ["request_handler", "route_definition"],
+                    },
+                    "chunk_role": "definition",
+                },
+                file_roles=["request_handler_surface", "route_definition_surface"],
+            ),
+            "rrf": 0.6,
+        }
+        row["_meta"] = row["metadata"]
+        row["meta_score"] = module.meta_score(row["_meta"])
+        module.enrich_implementation_result(
+            row,
+            query=query,
+            query_class=module.implementation_query_class(query),
+            base_score=float(row["rrf"]),
+            meta_boost=0.0,
+        )
+        self.assertGreaterEqual(row["implementation_routing_priority"], 3)
+        self.assertGreaterEqual(row["implementation_request_handler_priority"], 3)
+
     def test_request_routing_query_prefers_spring_controller_over_static_asset(self):
         query = "where is owner request routing implemented in spring petclinic"
         rows = [

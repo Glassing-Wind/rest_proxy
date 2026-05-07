@@ -1675,6 +1675,13 @@ def implementation_routing_priority(meta: dict, file_path: str | None, query: st
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
     priority = 0
+    file_roles = implementation_file_roles(meta)
+    if "route_definition_surface" in file_roles:
+        priority = max(priority, 3)
+    if "request_handler_surface" in file_roles:
+        priority = max(priority, 2)
+    if "controller_surface" in file_roles:
+        priority = max(priority, 2)
     if any(part in norm for part in ("/grpc/server/", "/server/sources/", "/server/")):
         priority = max(priority, 2)
     if "/controller/" in norm or basename.endswith("controller.java"):
@@ -1713,6 +1720,11 @@ def implementation_request_handler_priority(meta: dict, file_path: str | None, q
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
     priority = 0
+    file_roles = implementation_file_roles(meta)
+    if "request_handler_surface" in file_roles:
+        priority = max(priority, 3)
+    elif "controller_surface" in file_roles:
+        priority = max(priority, 2)
     if "serviceimpl" in basename:
         priority = max(priority, 3)
     elif "/controller/" in norm or basename.endswith("controller.java"):
