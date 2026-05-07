@@ -2217,8 +2217,8 @@ class SemanticHelperTests(unittest.TestCase):
             "where is model inference selected",
             "implementation_search",
         )
-        self.assertTrue(search_policy["allow_dispatcher_bonus"])
-        self.assertEqual(search_policy["dispatcher_bonus_weight"], 0.04)
+        self.assertNotIn("allow_dispatcher_bonus", search_policy)
+        self.assertNotIn("dispatcher_bonus_weight", search_policy)
         self.assertEqual(search_policy["request_handler_bonus_weight"], 0.05)
         self.assertEqual(search_policy["declared_symbol_bonus_search"], 0.02)
         self.assertEqual(search_policy["exact_identifier_bonus_weight"], 0.08)
@@ -2227,7 +2227,7 @@ class SemanticHelperTests(unittest.TestCase):
             "where is process defined",
             "api_definition_lookup",
         )
-        self.assertTrue(definition_policy["allow_dispatcher_bonus"])
+        self.assertNotIn("allow_dispatcher_bonus", definition_policy)
         self.assertFalse(definition_policy["allow_routing_bonus"])
         self.assertEqual(definition_policy["declared_symbol_bonus_definition"], 0.05)
         self.assertEqual(definition_policy["exact_identifier_bonus_weight"], 0.08)
@@ -2238,7 +2238,7 @@ class SemanticHelperTests(unittest.TestCase):
             "usage_lookup",
         )
         self.assertEqual(usage_policy["member_usage_bonus_usage"], 0.06)
-        self.assertFalse(usage_policy["allow_dispatcher_bonus"])
+        self.assertNotIn("allow_dispatcher_bonus", usage_policy)
         self.assertEqual(usage_policy["exact_identifier_bonus_weight"], 0.0)
 
     def test_support_surface_penalties_are_query_class_aware(self):
