@@ -588,24 +588,7 @@ def build_swift_protocol_upward_fallback_cypher(depth: int) -> str:
         if nested_depth == 0
         else (
             "WHERE caller IS NULL OR (\n"
-            "  (caller:Function OR caller:Method OR caller:Class OR caller:Struct OR caller:Trait OR caller:Enum)\n"
-            "  AND NOT (coalesce(caller.filepath, '') CONTAINS '/tests/'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '/test/'\n"
-            "    OR coalesce(caller.filepath, '') STARTS WITH 'tests/'\n"
-            "    OR coalesce(caller.filepath, '') STARTS WITH 'test/'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '/e2e/'\n"
-            "    OR coalesce(caller.filepath, '') STARTS WITH 'e2e/'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '/fixtures/'\n"
-            "    OR coalesce(caller.filepath, '') STARTS WITH 'fixtures/'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '.spec.'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '.stories.'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '/gen/'\n"
-            "    OR coalesce(caller.filepath, '') STARTS WITH 'gen/'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '/generated/'\n"
-            "    OR coalesce(caller.filepath, '') STARTS WITH 'generated/'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS 'PreGeneratedSPM'\n"
-            "    OR coalesce(caller.filepath, '') CONTAINS '/vendors/'\n"
-            "    OR coalesce(caller.filepath, '') STARTS WITH 'vendors/')\n"
+            "  caller:Function OR caller:Method OR caller:Class OR caller:Struct OR caller:Trait OR caller:Enum\n"
             ")\n"
             "WITH start, impl, path\n"
         )
@@ -628,6 +611,15 @@ def build_swift_protocol_upward_fallback_cypher(depth: int) -> str:
           "         WHEN path IS NULL THEN [start.start_line, impl.start_line]\n"
           "         ELSE [start.start_line] + [n IN reverse(nodes(path)) | n.start_line]\n"
           "       END AS lines\n"
+          "       ,CASE\n"
+          "         WHEN path IS NULL THEN [\n"
+          f"           head([({FILE_LABEL.lower()}_parent)-[:{REL_CONTAINS}]->(start) | {FILE_LABEL.lower()}_parent.semantic_file_roles]),\n"
+          f"           head([({FILE_LABEL.lower()}_parent)-[:{REL_CONTAINS}]->(impl) | {FILE_LABEL.lower()}_parent.semantic_file_roles])\n"
+          "         ]\n"
+          "         ELSE [head([(_start_parent)-[:CONTAINS]->(start) | _start_parent.semantic_file_roles])] +\n"
+          "              [n IN reverse(nodes(path)) |\n"
+          "                 head([(_path_parent)-[:CONTAINS]->(n) | _path_parent.semantic_file_roles])]\n"
+          "       END AS file_roles\n"
           "ORDER BY size(chain) ASC, files[1] ASC\n"
           "LIMIT 40"
     )
@@ -779,42 +771,17 @@ def build_call_chain_path_cypher(direction: str, depth: int, *, is_backend_root:
         hop_label = "callee"
         edge_pattern = f"-[:CALLS|CALLS_INFERRED*1..{depth}]->(hop)"
 
-    path_filter = (
-        " AND NOT (coalesce(hop.filepath, '') CONTAINS '/tests/'"
-        " OR coalesce(hop.filepath, '') CONTAINS '/test/'"
-        " OR coalesce(hop.filepath, '') STARTS WITH 'tests/'"
-        " OR coalesce(hop.filepath, '') STARTS WITH 'test/'"
-        " OR coalesce(hop.filepath, '') CONTAINS '/e2e/'"
-        " OR coalesce(hop.filepath, '') STARTS WITH 'e2e/'"
-        " OR coalesce(hop.filepath, '') CONTAINS '/fixtures/'"
-        " OR coalesce(hop.filepath, '') STARTS WITH 'fixtures/'"
-        " OR coalesce(hop.filepath, '') CONTAINS '.spec.'"
-        " OR coalesce(hop.filepath, '') CONTAINS '.stories.'"
-        " OR coalesce(hop.filepath, '') CONTAINS '/gen/'"
-        " OR coalesce(hop.filepath, '') STARTS WITH 'gen/'"
-        " OR coalesce(hop.filepath, '') CONTAINS '/generated/'"
-        " OR coalesce(hop.filepath, '') STARTS WITH 'generated/'"
-        " OR coalesce(hop.filepath, '') CONTAINS 'PreGeneratedSPM'"
-        " OR coalesce(hop.filepath, '') CONTAINS '/vendors/'"
-        " OR coalesce(hop.filepath, '') STARTS WITH 'vendors/')"
-    )
-    if is_backend_root:
-        path_filter += (
-            " AND NOT (coalesce(hop.filepath, '') CONTAINS '/public/'"
-            " OR coalesce(hop.filepath, '') STARTS WITH 'public/'"
-            " OR coalesce(hop.filepath, '') ENDS WITH '.html'"
-            " OR coalesce(hop.filepath, '') ENDS WITH '.css')"
-        )
-
     cypher = (
         "MATCH (start) WHERE elementId(start) = $eid "
         "MATCH path = (start)"
         f"{edge_pattern}"
         " WHERE (hop:Function OR hop:Method OR hop:Class OR hop:Struct OR hop:Trait OR hop:Enum)"
-        + path_filter
         + " RETURN [n IN nodes(path) | n.name] AS chain,"
         "        [n IN nodes(path) | n.filepath] AS files,"
-        "        [n IN nodes(path) | n.start_line] AS lines"
+        "        [n IN nodes(path) | n.start_line] AS lines,"
+        "        [n IN nodes(path) |\n"
+        "           head([(_path_parent)-[:CONTAINS]->(n) | _path_parent.semantic_file_roles])\n"
+        "        ] AS file_roles"
         " LIMIT 40"
     )
     return hop_label, cypher
@@ -1118,6 +1085,15 @@ def format_call_chain_rows(
             return 1
         return 2
 
+    def hop_penalty(filepath: str | None, raw_roles) -> int:
+        penalty = _symbol_path_penalty(filepath, raw_roles)
+        normalized = (filepath or "").replace("\\", "/").lower()
+        if penalty >= 4:
+            return penalty
+        if root_is_backend and any(token in normalized for token in ("/public/", "public/", ".html", ".css")):
+            return 3
+        return penalty
+
     header_name = resolved_name or symbol_name
     out = [f"## Call chain: `{header_name}` ({direction}, depth={depth})\n"]
     if resolved_name and resolved_name != symbol_name:
@@ -1127,30 +1103,50 @@ def format_call_chain_rows(
     first_hop_counts: dict[tuple[str, str], int] = {}
     terminal_paths = 0
     root_focus = focus_prefix(resolved_filepath)
+    root_is_backend = is_backend_filepath(resolved_filepath)
 
     for rec in rows:
         chain = rec["chain"]
         files = rec["files"]
         lines = rec.get("lines") or []
+        file_roles = rec.get("file_roles") or []
         if any(
             not _is_language_compatible(resolved_filepath, file_path)
             for file_path in files[1:]
             if file_path
         ):
             continue
-        compact_chain: list[tuple[str | None, str | None, int | None]] = []
+        compact_chain: list[tuple[str | None, str | None, int | None, object]] = []
         for idx, name in enumerate(chain):
             file_path = files[idx] if idx < len(files) else None
             line = lines[idx] if idx < len(lines) else None
+            roles = file_roles[idx] if idx < len(file_roles) else None
             if idx > 0 and is_low_value_name(name):
                 hint = f"{file_path}:{line}" if file_path and line else (file_path or "?")
                 if hint not in anonymous_hints:
                     anonymous_hints.append(hint)
                 continue
-            compact_chain.append((name, file_path, line))
+            compact_chain.append((name, file_path, line, roles))
         chain = [entry[0] for entry in compact_chain]
         files = [entry[1] for entry in compact_chain]
         lines = [entry[2] for entry in compact_chain]
+        file_roles = [entry[3] for entry in compact_chain]
+        if any(
+            hop_penalty(
+                files[idx] if idx < len(files) else None,
+                file_roles[idx] if idx < len(file_roles) else None,
+            ) >= 4
+            for idx in range(1, len(files))
+        ):
+            continue
+        if root_is_backend and any(
+            hop_penalty(
+                files[idx] if idx < len(files) else None,
+                file_roles[idx] if idx < len(file_roles) else None,
+            ) >= 3
+            for idx in range(1, len(files))
+        ):
+            continue
         if len(chain) < 2:
             continue
         first_name = chain[1]

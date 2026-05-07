@@ -449,6 +449,20 @@ class CodeIntelHelperTests(unittest.TestCase):
         cypher = module.VISUALIZE_SUBGRAPH_FOCUS_CYPHER
         self.assertIn("coalesce(n.semantic_file_roles, parent.semantic_file_roles) AS file_roles", cypher)
 
+    def test_call_chain_path_cypher_returns_per_hop_semantic_file_roles(self):
+        module = load_symbol_graph_module()
+        _, cypher = module.build_call_chain_path_cypher("down", 3, is_backend_root=True)
+        self.assertIn("AS file_roles", cypher)
+        self.assertNotIn("CONTAINS '/tests/'", cypher)
+        self.assertNotIn("CONTAINS '/generated/'", cypher)
+
+    def test_swift_protocol_call_chain_fallback_returns_per_hop_semantic_file_roles(self):
+        module = load_symbol_graph_module()
+        cypher = module.build_swift_protocol_upward_fallback_cypher(2)
+        self.assertIn("AS file_roles", cypher)
+        self.assertNotIn("CONTAINS '/tests/'", cypher)
+        self.assertNotIn("CONTAINS '/generated/'", cypher)
+
     def test_format_call_chain_rows_prefers_same_source_subtree_for_explicit_main(self):
         module = load_symbol_graph_module()
         output = module.format_call_chain_rows(
@@ -487,6 +501,32 @@ class CodeIntelHelperTests(unittest.TestCase):
         self.assertIn("packages/desktop/src-tauri/src/main.rs", output)
         self.assertIn("packages/desktop/src-tauri/src/lib.rs", output)
         self.assertNotIn("packages/opencode/src/git/index.ts", output)
+
+    def test_format_call_chain_rows_filters_backend_public_assets_after_query(self):
+        module = load_symbol_graph_module()
+        output = module.format_call_chain_rows(
+            [
+                {
+                    "chain": ["buildRouter", "leaseRouter"],
+                    "files": ["src/api/routes/buildRouter.ts", "src/api/routes/leaseRoutes.ts"],
+                    "lines": [12, 30],
+                    "file_roles": [[], []],
+                },
+                {
+                    "chain": ["buildRouter", "renderPublic"],
+                    "files": ["src/api/routes/buildRouter.ts", "src/public/assets/application-center.js"],
+                    "lines": [12, 44],
+                    "file_roles": [[], []],
+                },
+            ],
+            resolved_name="buildRouter",
+            symbol_name="buildRouter",
+            direction="down",
+            depth=2,
+            resolved_filepath="src/api/routes/buildRouter.ts",
+        )
+        self.assertIn("leaseRouter", output)
+        self.assertNotIn("renderPublic", output)
 
     def test_python_exact_call_graph_guidance_appears_when_edges_are_sparse(self):
         module = load_symbol_graph_module()

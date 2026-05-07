@@ -171,10 +171,10 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                 ]
             if "MATCH path = (start)" in cypher:
-                self.assertIn("/public/", cypher)
-                self.assertIn("/test/", cypher)
-                self.assertIn("STARTS WITH 'test/'", cypher)
-                self.assertIn("/gen/", cypher)
+                self.assertIn("AS file_roles", cypher)
+                self.assertNotIn("CONTAINS '/public/'", cypher)
+                self.assertNotIn("CONTAINS '/test/'", cypher)
+                self.assertNotIn("CONTAINS '/generated/'", cypher)
                 return [
                     {
                         "chain": ["buildRouter", "leaseRouter", "LeaseService"],
@@ -183,6 +183,7 @@ class CodeIntelToolTests(unittest.TestCase):
                             "src/api/routes/leaseRoutes.ts",
                             "src/services/leaseService.ts",
                         ],
+                        "file_roles": [[], [], []],
                     }
                 ]
             return []
