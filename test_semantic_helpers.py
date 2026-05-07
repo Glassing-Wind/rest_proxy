@@ -583,6 +583,47 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(event["topic"], "neo4j")
         self.assertEqual(event["telemetry"]["experimental_suppressions"], 1)
 
+    def test_append_duplicate_telemetry_event_trims_to_recent_max_events(self):
+        trace = {
+            "selection": {"keep_indices": [0]},
+            "telemetry": {"query_class": "docs_incident", "experimental_suppressions": 1},
+            "suppression_policy": "exact_only",
+            "experiments": {"boilerplate_variant_suppression": True},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "dup.ndjson")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "LM_PROXY_DUPLICATE_TELEMETRY": "1",
+                    "LM_PROXY_DUPLICATE_TELEMETRY_PATH": target,
+                    "LM_PROXY_DUPLICATE_TELEMETRY_MAX_EVENTS": "2",
+                },
+                clear=False,
+            ):
+                module.append_duplicate_telemetry_event(
+                    dict(trace),
+                    query="q1",
+                    tool="search_documentation",
+                    mode="docs",
+                )
+                module.append_duplicate_telemetry_event(
+                    dict(trace),
+                    query="q2",
+                    tool="search_documentation",
+                    mode="docs",
+                )
+                module.append_duplicate_telemetry_event(
+                    dict(trace),
+                    query="q3",
+                    tool="search_documentation",
+                    mode="docs",
+                )
+            with open(target, "r", encoding="utf-8") as fh:
+                events = [json.loads(line) for line in fh if line.strip()]
+        self.assertEqual(len(events), 2)
+        self.assertEqual([event["query"] for event in events], ["q2", "q3"])
+
     def test_dispatcher_contract_telemetry_distinguishes_missing_contract_from_missing_recall(self):
         semantic_candidates = [
             {
