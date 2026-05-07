@@ -260,6 +260,19 @@ class DocsSearchHelperTests(unittest.TestCase):
         self.assertIsNotNone(trace)
         self.assertEqual(trace["suppression_policy"], "exact_only")
 
+    def test_docs_legacy_source_exclusion_sql_uses_metadata_before_source_name_fallback(self):
+        sql, params = self.search_module._docs_legacy_source_exclusion_sql("")
+        self.assertIn("metadata ? 'doc_type'", sql)
+        self.assertIn("metadata ? 'source_type'", sql)
+        self.assertIn("source NOT ILIKE %(ex0)s", sql)
+        self.assertEqual(params["ex0"], "%test%")
+        self.assertEqual(params["ex7"], "%draft%")
+
+    def test_docs_legacy_source_exclusion_sql_skips_filter_for_topic_searches(self):
+        sql, params = self.search_module._docs_legacy_source_exclusion_sql("neo4j")
+        self.assertEqual(sql, "")
+        self.assertEqual(params, {})
+
     def test_search_documentation_reranks_docs_by_default(self):
         class FakeCursor:
             def __init__(self, rows):

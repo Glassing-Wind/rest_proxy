@@ -13,17 +13,52 @@ from tools.brain.docs.policy import (
 )
 
 
+def _docs_legacy_source_exclusion_sql(topic: str) -> tuple[str, dict[str, str]]:
+    if topic:
+        return "", {}
+    excluded = [
+        "%test%",
+        "%tmp%",
+        "%scratch%",
+        "%demo%",
+        "%sample%",
+        "%experimental%",
+        "%staging%",
+        "%draft%",
+    ]
+    clauses = []
+    params: dict[str, str] = {}
+    for idx, pattern in enumerate(excluded):
+        key = f"ex{idx}"
+        clauses.append(f"source NOT ILIKE %({key})s")
+        params[key] = pattern
+    legacy_filter = (
+        "AND ("
+        "metadata ? 'doc_type' "
+        "OR metadata ? 'source_type' "
+        "OR ("
+        + " AND ".join(clauses)
+        + "))"
+    )
+    return legacy_filter, params
+
+
 def _apply_diverse_docs_selection(results: list[dict], *, query: str, k: int) -> tuple[list[dict], dict | None]:
     """Apply the lower-level duplicate/diversification contract in docs mode."""
+    fallback_trace = {
+        "suppression_policy": "exact_only",
+        "experiments": {},
+        "selection": {"keep_indices": list(range(min(len(results), k)))},
+    }
     if len(results) < 2:
-        return results[:k], None
+        return results[:k], fallback_trace
     try:
         from tools.brain.search.semantic_helpers import (
             duplicate_experiment_flags_from_env,
             rerank_retrieval_results_contract,
         )
     except Exception:
-        return _url_diverse_docs_selection(results, k), None
+        return _url_diverse_docs_selection(results, k), fallback_trace
 
     experiments = duplicate_experiment_flags_from_env("docs")
     try:
@@ -35,7 +70,7 @@ def _apply_diverse_docs_selection(results: list[dict], *, query: str, k: int) ->
             include_debug=False,
         )
     except Exception:
-        return _url_diverse_docs_selection(results, k), None
+        return _url_diverse_docs_selection(results, k), fallback_trace
 
     selection = contract.get("selection") if isinstance(contract, dict) else {}
     keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
@@ -98,25 +133,7 @@ def register(mcp: FastMCP) -> None:
             operational_query = is_operational_query(topic, query)
             fetch = min(k * 10, 200)
             topic_sql, topic_params = topic_filter_sql(topic)
-            test_exclusion_sql = ""
-            test_exclusion_params: dict[str, str] = {}
-            if not topic:
-                excluded = [
-                    "%test%",
-                    "%tmp%",
-                    "%scratch%",
-                    "%demo%",
-                    "%sample%",
-                    "%experimental%",
-                    "%staging%",
-                    "%draft%",
-                ]
-                clauses = []
-                for idx, pattern in enumerate(excluded):
-                    key = f"ex{idx}"
-                    clauses.append(f"source NOT ILIKE %({key})s")
-                    test_exclusion_params[key] = pattern
-                test_exclusion_sql = "AND " + " AND ".join(clauses)
+            test_exclusion_sql, test_exclusion_params = _docs_legacy_source_exclusion_sql(topic)
 
             if query.strip():
                 sql = f"""
