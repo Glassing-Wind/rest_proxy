@@ -2335,6 +2335,7 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertNotIn("dispatcher_bonus_weight", search_policy)
         self.assertNotIn("request_handler_bonus_weight", search_policy)
         self.assertNotIn("routing_bonus_weight", search_policy)
+        self.assertNotIn("controller_entity_bonus_weight", search_policy)
         self.assertNotIn("allow_routing_bonus", search_policy)
         self.assertNotIn("allow_request_handler_bonus", search_policy)
         self.assertEqual(search_policy["declared_symbol_bonus_search"], 0.02)

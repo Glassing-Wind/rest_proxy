@@ -622,7 +622,6 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         "member_usage_bonus_search": 0.0,
         "path_hint_bonus_search": 0.0,
         "path_hint_bonus_definition": 0.0,
-        "controller_entity_bonus_weight": 0.0,
         "provider_wiring_bonus_weight": 0.0,
         "callable_bonus_weight": 0.0,
         "runtime_main_bonus_weight": 0.16,
@@ -647,7 +646,6 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
     if query_class == "implementation_search":
         policy["member_usage_bonus_search"] = 0.015
         policy["path_hint_bonus_search"] = 0.12
-        policy["controller_entity_bonus_weight"] = 0.06
         policy["provider_wiring_bonus_weight"] = 0.05
         policy["callable_bonus_weight"] = 0.03
         policy["declared_symbol_bonus_search"] = 0.02
@@ -656,7 +654,6 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         policy["allow_callable_bonus"] = True
     elif query_class == "implementation_explanation":
         policy["path_hint_bonus_definition"] = 0.08
-        policy["controller_entity_bonus_weight"] = 0.05
         policy["provider_wiring_bonus_weight"] = 0.05
         policy["callable_bonus_weight"] = 0.03
         policy["declared_symbol_bonus_definition"] = 0.05
@@ -2662,10 +2659,6 @@ def enrich_implementation_result(
     routing_hits = int(result.get("implementation_routing_priority", 0) or 0)
     request_handler_hits = int(result.get("implementation_request_handler_priority", 0) or 0)
     controller_entity_hits = int(result.get("implementation_controller_entity_hit", 0) or 0)
-    if controller_entity_hits > 0:
-        controller_entity_bonus = float(intent_policy["controller_entity_bonus_weight"]) * min(
-            controller_entity_hits, 2
-        )
     callable_hits = int(result.get("implementation_callable_priority", 0) or 0)
     if callable_hits > 0 and bool(intent_policy["allow_callable_bonus"]):
         callable_bonus = float(intent_policy["callable_bonus_weight"]) * min(callable_hits, 1)
