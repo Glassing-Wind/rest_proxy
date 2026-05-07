@@ -1488,14 +1488,16 @@ class SemanticHelperTests(unittest.TestCase):
             enriched[0]["file_path"],
             "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
         )
-        self.assertGreater(
+        self.assertEqual(
             enriched[0]["implementation_rank_components"]["routing_bonus"],
             0.0,
         )
-        self.assertGreater(
+        self.assertEqual(
             enriched[0]["implementation_rank_components"]["request_handler_bonus"],
             0.0,
         )
+        self.assertGreater(enriched[0]["implementation_routing_priority"], 0)
+        self.assertGreater(enriched[0]["implementation_request_handler_priority"], 0)
         self.assertEqual(enriched[1]["implementation_role"], "generated_surface")
         self.assertGreater(
             enriched[1]["implementation_rank_components"]["generated_surface_penalty"],
@@ -2331,7 +2333,10 @@ class SemanticHelperTests(unittest.TestCase):
         )
         self.assertNotIn("allow_dispatcher_bonus", search_policy)
         self.assertNotIn("dispatcher_bonus_weight", search_policy)
-        self.assertEqual(search_policy["request_handler_bonus_weight"], 0.05)
+        self.assertNotIn("request_handler_bonus_weight", search_policy)
+        self.assertNotIn("routing_bonus_weight", search_policy)
+        self.assertNotIn("allow_routing_bonus", search_policy)
+        self.assertNotIn("allow_request_handler_bonus", search_policy)
         self.assertEqual(search_policy["declared_symbol_bonus_search"], 0.02)
         self.assertEqual(search_policy["exact_identifier_bonus_weight"], 0.08)
 
@@ -2340,7 +2345,7 @@ class SemanticHelperTests(unittest.TestCase):
             "api_definition_lookup",
         )
         self.assertNotIn("allow_dispatcher_bonus", definition_policy)
-        self.assertFalse(definition_policy["allow_routing_bonus"])
+        self.assertNotIn("allow_routing_bonus", definition_policy)
         self.assertEqual(definition_policy["declared_symbol_bonus_definition"], 0.05)
         self.assertEqual(definition_policy["exact_identifier_bonus_weight"], 0.08)
         self.assertEqual(definition_policy["reexport_surface_penalty_definition"], 0.07)

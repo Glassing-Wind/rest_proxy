@@ -624,8 +624,6 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         "path_hint_bonus_definition": 0.0,
         "controller_entity_bonus_weight": 0.0,
         "provider_wiring_bonus_weight": 0.0,
-        "routing_bonus_weight": 0.0,
-        "request_handler_bonus_weight": 0.0,
         "callable_bonus_weight": 0.0,
         "runtime_main_bonus_weight": 0.16,
         "definition_bonus_weight": 0.025,
@@ -641,8 +639,6 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         "reexport_surface_penalty_definition": 0.0,
         "facade_surface_penalty_definition": 0.0,
         "library_entrypoint_penalty": 0.0,
-        "allow_routing_bonus": False,
-        "allow_request_handler_bonus": False,
         "allow_callable_bonus": False,
     }
     if query_class_prefers_usage(query_class):
@@ -653,21 +649,15 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         policy["path_hint_bonus_search"] = 0.12
         policy["controller_entity_bonus_weight"] = 0.06
         policy["provider_wiring_bonus_weight"] = 0.05
-        policy["routing_bonus_weight"] = 0.04
-        policy["request_handler_bonus_weight"] = 0.05
         policy["callable_bonus_weight"] = 0.03
         policy["declared_symbol_bonus_search"] = 0.02
         policy["exact_identifier_bonus_weight"] = 0.08
         policy["export_bonus_search"] = 0.01
-        policy["allow_routing_bonus"] = True
-        policy["allow_request_handler_bonus"] = True
         policy["allow_callable_bonus"] = True
     elif query_class == "implementation_explanation":
         policy["path_hint_bonus_definition"] = 0.08
         policy["controller_entity_bonus_weight"] = 0.05
         policy["provider_wiring_bonus_weight"] = 0.05
-        policy["routing_bonus_weight"] = 0.04
-        policy["request_handler_bonus_weight"] = 0.05
         policy["callable_bonus_weight"] = 0.03
         policy["declared_symbol_bonus_definition"] = 0.05
         policy["exact_identifier_bonus_weight"] = 0.08
@@ -676,8 +666,6 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
         policy["api_context_bonus_definition"] = 0.02
         policy["reexport_surface_penalty_definition"] = 0.07
         policy["facade_surface_penalty_definition"] = 0.05
-        policy["allow_routing_bonus"] = True
-        policy["allow_request_handler_bonus"] = True
         policy["allow_callable_bonus"] = True
     elif query_class_prefers_definitions(query_class):
         policy["path_hint_bonus_definition"] = 0.08
@@ -2672,11 +2660,7 @@ def enrich_implementation_result(
             provider_wiring_hits, 4
         )
     routing_hits = int(result.get("implementation_routing_priority", 0) or 0)
-    if routing_hits > 0 and bool(intent_policy["allow_routing_bonus"]):
-        routing_bonus = float(intent_policy["routing_bonus_weight"]) * min(routing_hits, 3)
     request_handler_hits = int(result.get("implementation_request_handler_priority", 0) or 0)
-    if request_handler_hits > 0 and bool(intent_policy["allow_request_handler_bonus"]):
-        request_handler_bonus = float(intent_policy["request_handler_bonus_weight"]) * min(request_handler_hits, 3)
     controller_entity_hits = int(result.get("implementation_controller_entity_hit", 0) or 0)
     if controller_entity_hits > 0:
         controller_entity_bonus = float(intent_policy["controller_entity_bonus_weight"]) * min(
