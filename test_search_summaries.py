@@ -494,10 +494,10 @@ class SearchSummaryTests(unittest.TestCase):
                 return []
             if op == "get_symbol_exports_summary_heuristic":
                 return [
-                    {"file": "src/api/lib.rs", "symbol": "Router", "visibility": "pub"},
-                    {"file": "src/api/lib.rs", "symbol": "_internal_router", "visibility": "pub"},
-                    {"file": "pkg/service.py", "symbol": "PublicService", "visibility": ""},
-                    {"file": "pkg/service.py", "symbol": "_private_helper", "visibility": ""},
+                    {"file": "src/api/lib.rs", "symbol": "Router", "visibility": "pub", "file_roles": []},
+                    {"file": "src/api/lib.rs", "symbol": "_internal_router", "visibility": "pub", "file_roles": []},
+                    {"file": "pkg/service.py", "symbol": "PublicService", "visibility": "", "file_roles": []},
+                    {"file": "pkg/service.py", "symbol": "_private_helper", "visibility": "", "file_roles": []},
                 ]
             return []
 
@@ -517,6 +517,73 @@ class SearchSummaryTests(unittest.TestCase):
         self.assertIn("Router", output)
         self.assertIn("PublicService", output)
         self.assertNotIn("_private_helper", output)
+
+    def test_symbol_exports_summary_heuristic_skips_test_path_penalty_when_file_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 0}]
+            if op == "get_symbol_exports_summary_symbols":
+                return []
+            if op == "get_symbol_exports_summary_files":
+                return []
+            if op == "get_symbol_exports_summary_heuristic":
+                return [
+                    {
+                        "file": "tests/test_app.py",
+                        "symbol": "FakeSession",
+                        "visibility": "",
+                        "file_roles": [],
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertIn("tests/test_app.py", output)
+
+    def test_symbol_exports_summary_heuristic_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 0}]
+            if op == "get_symbol_exports_summary_symbols":
+                return []
+            if op == "get_symbol_exports_summary_files":
+                return []
+            if op == "get_symbol_exports_summary_heuristic":
+                return [
+                    {
+                        "file": "tests/test_app.py",
+                        "symbol": "FakeSession",
+                        "visibility": "",
+                        "file_roles": None,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertEqual(
+            output,
+            "No symbol exports found.\nChecked EXPORTS_SYMBOL edges, then visibility/name-based public-surface heuristics.",
+        )
 
     def test_symbol_exports_summary_excludes_test_files_by_default(self):
         async def fake_execute_read(session, query, **kwargs):

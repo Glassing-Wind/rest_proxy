@@ -609,7 +609,10 @@ async def get_symbol_exports_summary_impl(
                     s:Function OR s:Method OR s:Class OR s:Struct OR s:Trait
                     OR s:Enum OR s:Protocol OR s:Extension OR s:TypeAlias OR s:AssociatedType
                   )
-                RETURN f.filepath AS file, s.name AS symbol, coalesce(s.visibility, '') AS visibility
+                RETURN f.filepath AS file,
+                       s.name AS symbol,
+                       coalesce(s.visibility, '') AS visibility,
+                       f.semantic_file_roles AS file_roles
                 ORDER BY f.filepath, s.name
                 LIMIT $limit
                 """,
@@ -618,19 +621,20 @@ async def get_symbol_exports_summary_impl(
                 op="get_symbol_exports_summary_heuristic",
             )
 
-            file_symbols: dict[str, list[str]] = {}
+            file_symbols: dict[str, tuple[list[str], list[str] | None]] = {}
             symbol_counts: dict[str, int] = {}
             for rec in r3:
                 file = rec["file"]
                 name = rec["symbol"]
                 visibility = rec.get("visibility")
-                if not file or not _path_allowed(file) or not _symbol_allowed(name):
+                file_roles = rec.get("file_roles")
+                if not file or not _path_allowed(file, file_roles) or not _symbol_allowed(name):
                     continue
                 if not _heuristic_visibility_ok(file, visibility, name):
                     continue
-                file_symbols.setdefault(file, [])
-                if name not in file_symbols[file]:
-                    file_symbols[file].append(name)
+                file_symbols.setdefault(file, ([], file_roles))
+                if name not in file_symbols[file][0]:
+                    file_symbols[file][0].append(name)
                 symbol_counts[name] = symbol_counts.get(name, 0) + 1
 
             top_symbols = sorted(
@@ -639,8 +643,8 @@ async def get_symbol_exports_summary_impl(
             )[:limit]
             top_files = sorted(
                 (
-                    (file, len(symbols), symbols, None)
-                    for file, symbols in file_symbols.items()
+                    (file, len(symbols), symbols, roles)
+                    for file, (symbols, roles) in file_symbols.items()
                     if symbols
                 ),
                 key=lambda item: (-item[1], item[0]),
