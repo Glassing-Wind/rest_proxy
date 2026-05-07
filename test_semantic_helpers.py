@@ -130,6 +130,43 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertFalse(module.implementation_query_prefers_dispatchers("where is selection logic implemented"))
         self.assertFalse(module.implementation_query_prefers_dispatchers("how does inference caching work"))
 
+    def test_request_routing_detection_avoids_ambiguous_non_routing_queries(self):
+        self.assertTrue(
+            module.implementation_query_prefers_request_routing(
+                "where is owner request routing implemented in spring petclinic"
+            )
+        )
+        self.assertTrue(
+            module.implementation_query_prefers_request_routing(
+                "where are incoming http requests handled in gin"
+            )
+        )
+        self.assertTrue(
+            module.implementation_query_prefers_request_routing(
+                "how does gRPC server request routing work"
+            )
+        )
+        self.assertFalse(
+            module.implementation_query_prefers_request_routing(
+                "how does json schema conversion work"
+            )
+        )
+        self.assertFalse(
+            module.implementation_query_prefers_request_routing(
+                "where is project lock resolution executed in uv"
+            )
+        )
+        self.assertFalse(
+            module.implementation_query_prefers_request_routing(
+                "how does inference caching work"
+            )
+        )
+        self.assertFalse(
+            module.implementation_query_prefers_request_routing(
+                "where is selection logic implemented"
+            )
+        )
+
     def test_dedupe_files_prefers_contract_anchor_for_provider_dispatcher(self):
         query = "how does OpenAI provider wiring work"
         query_class = module.implementation_query_class(query)
