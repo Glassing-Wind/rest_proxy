@@ -170,13 +170,15 @@ def _apply_dispatcher_rescue(
     ranked_rows: list[dict],
     rescue_rows: list[dict],
     query: str,
-) -> list[dict]:
+) -> tuple[list[dict], bool]:
     final_rows = list(ranked_rows)
+    rescue_applied = False
     if not rescue_rows or not sem_helpers.implementation_query_prefers_dispatchers(query):
-        return final_rows
+        rescue_rows = []
     rescue_ranked = _rank_semantic_candidates(rescue_rows, query)
     rescue_matches = [row for row in rescue_ranked if _strong_dispatcher_match(row, query)]
     if rescue_matches:
+        rescue_applied = True
         replacement_files = {(row.get("project_id"), row.get("file_path")) for row in rescue_matches}
         final_rows = [
             row
@@ -193,10 +195,26 @@ def _apply_dispatcher_rescue(
         final_rows = strong_dispatchers + other_results
     else:
         final_rows.sort(key=sem_helpers.implementation_rank_tuple)
-    return sem_helpers.dedupe_files(final_rows)
+    exact_dispatcher_matches = [row for row in final_rows if _strong_dispatcher_match(row, query)]
+    if exact_dispatcher_matches:
+        exact_dispatcher_matches.sort(key=sem_helpers.implementation_rank_tuple)
+        best_dispatcher = exact_dispatcher_matches[0]
+        final_rows = [
+            best_dispatcher,
+            *[
+                row
+                for row in final_rows
+                if not (
+                    row.get("project_id") == best_dispatcher.get("project_id")
+                    and row.get("file_path") == best_dispatcher.get("file_path")
+                    and row.get("chunk_index") == best_dispatcher.get("chunk_index")
+                )
+            ],
+        ]
+    return sem_helpers.dedupe_files(final_rows), rescue_applied
 
 
-def _diagnose_case(stages: dict[str, dict]) -> tuple[str, str]:
+def _diagnose_case(stages: dict[str, dict], *, rescue_applied: bool) -> tuple[str, str]:
     semantic = stages["semantic_candidates"]
     ranked = stages["implementation_ranking"]
     final = stages["final_dispatcher_selection"]
@@ -209,7 +227,9 @@ def _diagnose_case(stages: dict[str, dict]) -> tuple[str, str]:
     if ranked["top_hit"]:
         return "implementation_ranking", "ranking_fixed"
     if final["top_hit"]:
-        return "final_dispatcher_selection", "rescue_required"
+        if rescue_applied:
+            return "final_dispatcher_selection", "rescue_required"
+        return "final_dispatcher_selection", "final_promotion_needed"
     return "none", "unresolved_after_rescue"
 
 
@@ -219,18 +239,19 @@ def evaluate_case(case: dict) -> dict:
     semantic_candidates = _normalize_rows(case.get("semantic_candidates") or [])
     rescue_candidates = _normalize_rows(case.get("rescue_candidates") or [])
     ranked_rows = _rank_semantic_candidates(semantic_candidates, query)
-    final_rows = _apply_dispatcher_rescue(ranked_rows, rescue_candidates, query)
+    final_rows, rescue_applied = _apply_dispatcher_rescue(ranked_rows, rescue_candidates, query)
     stages = {
         "semantic_candidates": _stage_snapshot(semantic_candidates, expected),
         "implementation_ranking": _stage_snapshot(ranked_rows, expected),
         "final_dispatcher_selection": _stage_snapshot(final_rows, expected),
     }
-    first_success_stage, diagnosis = _diagnose_case(stages)
+    first_success_stage, diagnosis = _diagnose_case(stages, rescue_applied=rescue_applied)
     return {
         "id": case.get("id"),
         "query": query,
         "expected": expected,
         "stages": stages,
+        "rescue_applied": rescue_applied,
         "dispatcher_anchor_contract": {
             "capability": FOCUSED_DISPATCHER_ANCHOR_CAPABILITY,
             "version": FOCUSED_DISPATCHER_ANCHOR_CONTRACT_VERSION,

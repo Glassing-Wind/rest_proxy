@@ -43,7 +43,7 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                     "final_dispatcher_selection_contract_top_hit_rate": 1.0,
                     "diagnosis_counts": {
                         "ranking_fixed": 1,
-                        "semantic_recall_missing": 1,
+                        "final_promotion_needed": 1,
                     },
                 },
                 "dispatcher_telemetry_summary": {

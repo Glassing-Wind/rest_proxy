@@ -54,17 +54,22 @@ class DispatcherEvalTests(unittest.TestCase):
         self.assertEqual(case["first_success_stage"], "implementation_ranking")
         self.assertEqual(case["diagnosis"], "ranking_fixed")
 
-    def test_rescue_case_attributes_missing_semantic_recall(self):
+    def test_final_promotion_case_attributes_current_contract_gap(self):
         module = load_eval_module()
         report = module.evaluate_benchmarks()
-        case = next(case for case in report["cases"] if case["id"] == "dispatcher_rescue_recovers_missing_canonical_candidate")
-        self.assertFalse(case["stages"]["semantic_candidates"]["candidate_hit"])
-        self.assertFalse(case["stages"]["semantic_candidates"]["contract_candidate_hit"])
-        self.assertFalse(case["stages"]["implementation_ranking"]["candidate_hit"])
+        case = next(
+            case
+            for case in report["cases"]
+            if case["id"] == "dispatcher_final_promotion_surfaces_canonical_candidate"
+        )
+        self.assertTrue(case["stages"]["semantic_candidates"]["candidate_hit"])
+        self.assertTrue(case["stages"]["semantic_candidates"]["contract_candidate_hit"])
+        self.assertFalse(case["stages"]["implementation_ranking"]["top_hit"])
         self.assertTrue(case["stages"]["final_dispatcher_selection"]["top_hit"])
         self.assertTrue(case["stages"]["final_dispatcher_selection"]["contract_top_hit"])
+        self.assertFalse(case["rescue_applied"])
         self.assertEqual(case["first_success_stage"], "final_dispatcher_selection")
-        self.assertEqual(case["diagnosis"], "semantic_recall_missing")
+        self.assertEqual(case["diagnosis"], "final_promotion_needed")
 
 
 if __name__ == "__main__":
