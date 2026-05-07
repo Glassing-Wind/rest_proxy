@@ -1699,6 +1699,58 @@ class SemanticHelperTests(unittest.TestCase):
             0.0,
         )
 
+    def test_request_routing_query_prefers_spring_controller_over_config_surface(self):
+        query = "where is owner request routing implemented in spring petclinic"
+        rows = [
+            {
+                "file_path": "k8s/petclinic.yml",
+                "content": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: petclinic\n",
+                "metadata": {
+                    "node_types": ["document"],
+                    "file_symbols": [],
+                    "declared_symbols": [],
+                    "chunk_role": "definition",
+                    "file_roles": ["config_surface"],
+                },
+                "rrf": 0.96,
+            },
+            {
+                "file_path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                "content": "@GetMapping(\"/owners\") public String processFindForm(@RequestParam(defaultValue = \"1\") int page, Owner owner, BindingResult result) { }",
+                "metadata": {
+                    "node_types": ["method_declaration", "class_declaration"],
+                    "file_symbols": ["OwnerController", "processFindForm"],
+                    "declared_symbols": ["OwnerController", "processFindForm"],
+                    "chunk_role": "definition",
+                },
+                "rrf": 0.74,
+            },
+        ]
+        enriched = []
+        query_class = module.implementation_query_class(query)
+        for result in rows:
+            row = dict(result)
+            row["_meta"] = row.get("metadata", {})
+            row["meta_score"] = module.meta_score(row["_meta"])
+            module.enrich_implementation_result(
+                row,
+                query=query,
+                query_class=query_class,
+                base_score=float(row.get("rrf", 0.0) or 0.0),
+                meta_boost=0.0,
+            )
+            enriched.append(row)
+        enriched.sort(key=module.implementation_rank_tuple)
+        self.assertEqual(
+            enriched[0]["file_path"],
+            "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        )
+        self.assertFalse(enriched[0]["implementation_usage_heavy_penalty"])
+        self.assertGreater(
+            enriched[1]["implementation_rank_components"]["support_path_penalty"],
+            0.0,
+        )
+
     def test_request_routing_query_prefers_owner_controller_over_sibling_controller(self):
         query = "where is owner request routing implemented in spring petclinic"
         rows = [

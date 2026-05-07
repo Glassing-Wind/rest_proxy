@@ -575,6 +575,15 @@ def implementation_support_surface_penalties(
             penalties["support_path_penalty"],
             0.14 if query_class_prefers_definitions(query_class) else 0.08,
         )
+    if (
+        "config_surface" in file_roles
+        and implementation_query_prefers_request_routing(query)
+        and not implementation_query_prefers_supporting_context(query)
+    ):
+        penalties["support_path_penalty"] = max(
+            penalties["support_path_penalty"],
+            0.16 if query_class_prefers_definitions(query_class) else 0.10,
+        )
     if low_signal_support and not implementation_query_prefers_supporting_context(query):
         penalties["support_path_penalty"] = max(
             penalties["support_path_penalty"],
@@ -741,6 +750,32 @@ def is_usage_heavy_path(file_path: str | None) -> bool:
         return False
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
+    if any(
+        segment in norm
+        for segment in (
+            "/src/main/java/",
+            "src/main/java/",
+            "/src/test/java/",
+            "src/test/java/",
+            "/src/main/kotlin/",
+            "src/main/kotlin/",
+            "/src/test/kotlin/",
+            "src/test/kotlin/",
+            "/src/main/scala/",
+            "src/main/scala/",
+            "/src/test/scala/",
+            "src/test/scala/",
+        )
+    ):
+        return (
+            basename == "main.rs"
+            or "/tests/" in norm
+            or "/test/" in norm
+            or "/e2e/" in norm
+            or "/spec/" in norm
+            or norm.endswith("_test.go")
+            or norm.endswith("_spec.rb")
+        )
     return (
         basename == "main.rs"
         or "/tests/" in norm
