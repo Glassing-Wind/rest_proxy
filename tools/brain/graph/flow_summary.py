@@ -63,21 +63,15 @@ CALL () {
     OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
     OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
     OPTIONAL MATCH (js)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
-    WHERE $include_tests OR (
-        NOT ui.filepath STARTS WITH 'tests/'
-        AND NOT ui.filepath CONTAINS '/tests/'
-        AND NOT ui.filepath CONTAINS '__tests__'
-        AND NOT ui.filepath CONTAINS '.test.'
-        AND NOT js.filepath STARTS WITH 'tests/'
-        AND NOT js.filepath CONTAINS '/tests/'
-        AND NOT js.filepath CONTAINS '__tests__'
-        AND NOT js.filepath CONTAINS '.test.'
-    )
     RETURN ui.filepath AS ui,
+       ui.semantic_file_roles AS ui_roles,
        js.filepath AS js,
+       js.semantic_file_roles AS js_roles,
        (coalesce(route.method, 'ANY') + ' ' + route.path) AS route,
        api.filepath AS api,
+       api.semantic_file_roles AS api_roles,
        svc.filepath AS svc,
+       svc.semantic_file_roles AS svc_roles,
        model.name AS model,
        schema.filepath AS schema,
        ext.url AS external
@@ -91,21 +85,15 @@ CALL () {
     OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
     OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
     OPTIONAL MATCH (js)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
-    WHERE $include_tests OR (
-        NOT ui.filepath STARTS WITH 'tests/'
-        AND NOT ui.filepath CONTAINS '/tests/'
-        AND NOT ui.filepath CONTAINS '__tests__'
-        AND NOT ui.filepath CONTAINS '.test.'
-        AND NOT js.filepath STARTS WITH 'tests/'
-        AND NOT js.filepath CONTAINS '/tests/'
-        AND NOT js.filepath CONTAINS '__tests__'
-        AND NOT js.filepath CONTAINS '.test.'
-    )
     RETURN ui.filepath AS ui,
+       ui.semantic_file_roles AS ui_roles,
        js.filepath AS js,
+       js.semantic_file_roles AS js_roles,
        NULL AS route,
        api.filepath AS api,
+       api.semantic_file_roles AS api_roles,
        svc.filepath AS svc,
+       svc.semantic_file_roles AS svc_roles,
        model.name AS model,
        schema.filepath AS schema,
        ext.url AS external
@@ -116,17 +104,15 @@ CALL () {
     OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
     OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
     OPTIONAL MATCH (ui)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
-    WHERE $include_tests OR (
-        NOT ui.filepath STARTS WITH 'tests/'
-        AND NOT ui.filepath CONTAINS '/tests/'
-        AND NOT ui.filepath CONTAINS '__tests__'
-        AND NOT ui.filepath CONTAINS '.test.'
-    )
     RETURN ui.filepath AS ui,
+       ui.semantic_file_roles AS ui_roles,
        ui.filepath AS js,
+       ui.semantic_file_roles AS js_roles,
        (coalesce(route.method, 'ANY') + ' ' + route.path) AS route,
        api.filepath AS api,
+       api.semantic_file_roles AS api_roles,
        svc.filepath AS svc,
+       svc.semantic_file_roles AS svc_roles,
        model.name AS model,
        schema.filepath AS schema,
        ext.url AS external
@@ -135,27 +121,25 @@ CALL () {
     WHERE NOT EXISTS {
         MATCH (ui)-[:__CALLS_API_ROUTE__]->(:__API_ROUTE__ {project_id:$p})
     }
-      AND ($include_tests OR (
-        NOT ui.filepath STARTS WITH 'tests/'
-        AND NOT ui.filepath CONTAINS '/tests/'
-        AND NOT ui.filepath CONTAINS '__tests__'
-        AND NOT ui.filepath CONTAINS '.test.'
-      ))
     MATCH (ui)-[:__CALLS_API__]->(api:__FILE__ {project_id:$p})
     OPTIONAL MATCH (api)-[:__CALLS_SERVICE__]->(svc:__FILE__ {project_id:$p})
     OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
     OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
     OPTIONAL MATCH (ui)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
     RETURN ui.filepath AS ui,
+       ui.semantic_file_roles AS ui_roles,
        ui.filepath AS js,
+       ui.semantic_file_roles AS js_roles,
        NULL AS route,
        api.filepath AS api,
+       api.semantic_file_roles AS api_roles,
        svc.filepath AS svc,
+       svc.semantic_file_roles AS svc_roles,
        model.name AS model,
        schema.filepath AS schema,
        ext.url AS external
 }
-RETURN ui, js, route, api, svc, model, schema, external
+RETURN ui, ui_roles, js, js_roles, route, api, api_roles, svc, svc_roles, model, schema, external
 ORDER BY ui, js, route, api, svc, model, schema, external
 LIMIT $limit
 """)
@@ -168,20 +152,10 @@ OPTIONAL MATCH (svc)-[:__CALLS_DB_MODEL__]->(model:__MODEL__ {project_id:$p})
 OPTIONAL MATCH (svc)-[:__CALLS_DB__]->(schema:__FILE__ {project_id:$p, filepath:'prisma/schema.prisma'})
 OPTIONAL MATCH (api)-[:__CALLS_API_EXTERNAL__]->(ext:__EXTERNAL_API__ {project_id:$p})
 WHERE (svc IS NOT NULL OR model IS NOT NULL OR schema IS NOT NULL OR ext IS NOT NULL)
-  AND ($include_tests OR (
-    NOT api.filepath STARTS WITH 'tests/'
-    AND NOT api.filepath CONTAINS '/tests/'
-    AND NOT api.filepath CONTAINS '__tests__'
-    AND NOT api.filepath CONTAINS '.test.'
-    AND (svc IS NULL OR (
-      NOT svc.filepath STARTS WITH 'tests/'
-      AND NOT svc.filepath CONTAINS '/tests/'
-      AND NOT svc.filepath CONTAINS '__tests__'
-      AND NOT svc.filepath CONTAINS '.test.'
-    ))
-  ))
 RETURN api.filepath AS api,
+   api.semantic_file_roles AS api_roles,
    svc.filepath AS svc,
+   svc.semantic_file_roles AS svc_roles,
    model.name AS model,
    schema.filepath AS schema,
    ext.url AS external
@@ -207,20 +181,10 @@ WHERE (
     OR svc_schema IS NOT NULL
     OR svc_ext IS NOT NULL
 )
-  AND ($include_tests OR (
-    NOT entry.filepath STARTS WITH 'tests/'
-    AND NOT entry.filepath CONTAINS '/tests/'
-    AND NOT entry.filepath CONTAINS '__tests__'
-    AND NOT entry.filepath CONTAINS '.test.'
-    AND (svc IS NULL OR (
-      NOT svc.filepath STARTS WITH 'tests/'
-      AND NOT svc.filepath CONTAINS '/tests/'
-      AND NOT svc.filepath CONTAINS '__tests__'
-      AND NOT svc.filepath CONTAINS '.test.'
-    ))
-  ))
 RETURN entry.filepath AS api,
+   entry.semantic_file_roles AS api_roles,
    svc.filepath AS svc,
+   svc.semantic_file_roles AS svc_roles,
    coalesce(svc_model.name, direct_model.name) AS model,
    coalesce(svc_schema.filepath, direct_schema.filepath) AS schema,
    coalesce(svc_ext.url, direct_ext.url) AS external
@@ -722,6 +686,29 @@ def _is_test_like_path(filepath: str | None) -> bool:
     )
 
 
+def _file_roles_present(raw_roles) -> bool:
+    return isinstance(raw_roles, list)
+
+
+def _normalize_file_roles(raw_roles) -> set[str]:
+    if not _file_roles_present(raw_roles):
+        return set()
+    return {
+        str(role).strip().lower()
+        for role in raw_roles
+        if str(role).strip()
+    }
+
+
+def _is_low_signal_flow_path(filepath: str | None, raw_roles) -> bool:
+    roles = _normalize_file_roles(raw_roles)
+    if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+        return True
+    if _file_roles_present(raw_roles):
+        return False
+    return _is_test_like_path(filepath)
+
+
 def _prefer_concrete_app_rows(raw_rows):
     concrete_keys = {
         (ui, js, api, svc, model, schema, external)
@@ -1024,32 +1011,57 @@ async def get_app_flow_summary_impl(
             limit=query_limit,
             op="get_app_flow_summary",
         )
-        raw_rows = [
-            (
-                row.get("ui"),
-                row.get("js"),
-                row.get("route"),
-                row.get("api"),
-                row.get("svc"),
-                row.get("model"),
-                row.get("schema"),
-                row.get("external"),
-            )
-            for row in result
-        ]
+        app_records = [dict(row) for row in result]
         raw_rows = _filtered_app_rows(
-            raw_rows,
+            [
+                (
+                    row.get("ui"),
+                    row.get("js"),
+                    row.get("route"),
+                    row.get("api"),
+                    row.get("svc"),
+                    row.get("model"),
+                    row.get("schema"),
+                    row.get("external"),
+                )
+                for row in app_records
+            ],
             entry_files=entry_files,
             ui_contains=ui_contains,
             model_contains=model_contains,
             service_contains=service_contains,
         )
         if not include_tests:
-            raw_rows = [
-                row
-                for row in raw_rows
-                if not any(_is_test_like_path(path) for path in [row[0], row[1], row[3], row[4]])
-            ]
+            raw_rows = []
+            for record in app_records:
+                row_tuple = (
+                    record.get("ui"),
+                    record.get("js"),
+                    record.get("route"),
+                    record.get("api"),
+                    record.get("svc"),
+                    record.get("model"),
+                    record.get("schema"),
+                    record.get("external"),
+                )
+                if row_tuple not in raw_rows and row_tuple in _filtered_app_rows(
+                    [row_tuple],
+                    entry_files=entry_files,
+                    ui_contains=ui_contains,
+                    model_contains=model_contains,
+                    service_contains=service_contains,
+                ):
+                    if any(
+                        _is_low_signal_flow_path(path, roles)
+                        for path, roles in (
+                            (record.get("ui"), record.get("ui_roles")),
+                            (record.get("js"), record.get("js_roles")),
+                            (record.get("api"), record.get("api_roles")),
+                            (record.get("svc"), record.get("svc_roles")),
+                        )
+                    ):
+                        continue
+                    raw_rows.append(row_tuple)
         if raw_rows and not any(_row_has_app_signal(row) for row in raw_rows):
             raw_rows = []
         if not raw_rows:
@@ -1170,6 +1182,18 @@ async def get_backend_flow_summary_impl(
             or row.get("schema")
             or row.get("external")
         ]
+        if not include_tests:
+            result = [
+                row
+                for row in result
+                if not any(
+                    _is_low_signal_flow_path(path, roles)
+                    for path, roles in (
+                        (row.get("api"), row.get("api_roles")),
+                        (row.get("svc"), row.get("svc_roles")),
+                    )
+                )
+            ]
         if not result:
             result = await graph_core._execute_read(
                 session,
@@ -1188,6 +1212,18 @@ async def get_backend_flow_summary_impl(
                 or row.get("schema")
                 or row.get("external")
             ]
+            if not include_tests:
+                result = [
+                    row
+                    for row in result
+                    if not any(
+                        _is_low_signal_flow_path(path, roles)
+                        for path, roles in (
+                            (row.get("api"), row.get("api_roles")),
+                            (row.get("svc"), row.get("svc_roles")),
+                        )
+                    )
+                ]
         if not result:
             result = await _build_python_backend_flow_fallback(
                 session=session,

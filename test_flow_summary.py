@@ -320,9 +320,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "tests/routes.test.ts",
                         "js": "tests/routes.test.ts",
+                        "ui_roles": None,
+                        "js_roles": None,
                         "route": "GET /api/applications",
                         "api": "src/api/routes/applicationOpsRoutes.ts",
+                        "api_roles": [],
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -330,9 +334,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "src/public/financial-summary.html",
                         "js": "src/public/assets/financial-summary.js",
+                        "ui_roles": [],
+                        "js_roles": [],
                         "route": "GET /api/financials/tax-package",
                         "api": "src/api/routes/financeAdminRoutes.ts",
+                        "api_roles": [],
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -355,6 +363,42 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("src/public/financial-summary.html", output)
         self.assertNotIn("tests/routes.test.ts", output)
 
+    def test_get_app_flow_summary_keeps_test_like_rows_when_file_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary":
+                return [
+                    {
+                        "ui": "tests/routes.test.ts",
+                        "js": "tests/routes.test.ts",
+                        "ui_roles": [],
+                        "js_roles": [],
+                        "route": "GET /api/applications",
+                        "api": "src/api/routes/applicationOpsRoutes.ts",
+                        "api_roles": [],
+                        "svc": None,
+                        "svc_roles": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    include_coverage=False,
+                    limit=20,
+                    group_by_ui=True,
+                )
+            )
+
+        self.assertIn("tests/routes.test.ts", output)
+
     def test_get_app_flow_summary_filters_e2e_and_spec_rows_even_if_query_leaks_them(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -363,9 +407,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "packages/console/app/src/routes/enterprise/index.tsx",
                         "js": "packages/app/e2e/actions.ts",
+                        "ui_roles": [],
+                        "js_roles": None,
                         "route": None,
                         "api": None,
+                        "api_roles": None,
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -373,9 +421,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "packages/console/app/src/routes/enterprise/index.tsx",
                         "js": "packages/app/e2e/app/home.spec.ts",
+                        "ui_roles": [],
+                        "js_roles": None,
                         "route": None,
                         "api": None,
+                        "api_roles": None,
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -383,9 +435,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "packages/opencode/src/index.ts",
                         "js": "packages/opencode/src/client.ts",
+                        "ui_roles": [],
+                        "js_roles": [],
                         "route": "GET /config",
                         "api": "packages/opencode/src/server/config.ts",
+                        "api_roles": [],
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -409,6 +465,11 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("GET /config", output)
         self.assertNotIn("packages/app/e2e/actions.ts", output)
         self.assertNotIn("home.spec.ts", output)
+
+    def test_is_low_signal_flow_path_uses_roles_before_path_fallback(self):
+        self.assertFalse(self.module._is_low_signal_flow_path("tests/routes.test.ts", []))
+        self.assertTrue(self.module._is_low_signal_flow_path("tests/routes.test.ts", None))
+        self.assertTrue(self.module._is_low_signal_flow_path("src/app.ts", ["test_surface"]))
 
     def test_collapse_ambiguous_app_rows_summarizes_cross_product_joins(self):
         rows = [
