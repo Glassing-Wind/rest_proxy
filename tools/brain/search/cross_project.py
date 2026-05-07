@@ -12,6 +12,8 @@ _STUB_SUFFIXES = (".pyi", ".d.ts", ".d.cts", ".d.mts")
 def _definition_rank(record: dict) -> tuple[int, int, str]:
     filepath = str(record.get("filepath") or "")
     kind = str(record.get("kind") or "")
+    raw_roles = record.get("file_roles")
+    roles = _coerce_file_roles(raw_roles)
     score = 0
     if filepath.endswith(_STUB_SUFFIXES):
         score -= 50
@@ -19,7 +21,17 @@ def _definition_rank(record: dict) -> tuple[int, int, str]:
         score += 20
     if kind == "ExportAlias":
         score -= 10
-    if "/tests/" in filepath or filepath.startswith("tests/"):
+    if roles is not None:
+        if any(
+            role in roles
+            for role in (
+                "test_surface",
+                "example_surface",
+                "benchmark_surface",
+            )
+        ):
+            score -= 15
+    elif "/tests/" in filepath or filepath.startswith("tests/"):
         score -= 15
     if "__init__.pyi" in filepath:
         score -= 15
@@ -163,7 +175,8 @@ def register(mcp: FastMCP) -> None:
                            s.filepath    AS filepath,
                            s.start_line  AS start_line,
                            s.end_line    AS end_line,
-                           s.signature   AS signature
+                           s.signature   AS signature,
+                           f.semantic_file_roles AS file_roles
                     LIMIT 12
                 """,
                     name=symbol_name,
@@ -181,7 +194,8 @@ def register(mcp: FastMCP) -> None:
                            alias.line AS start_line,
                            alias.line AS end_line,
                            coalesce(target.signature, target.name) AS signature,
-                           target.name AS target_name
+                           target.name AS target_name,
+                           f.semantic_file_roles AS file_roles
                     ORDER BY f.filepath ASC
                     LIMIT 12
                 """,
