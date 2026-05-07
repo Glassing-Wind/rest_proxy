@@ -251,18 +251,21 @@ class CrossProjectToolTests(unittest.TestCase):
                     "test_index_workspace.py",
                     9,
                     "def test_required_symbols_exist(): build_semantic_payload",
+                    {"file_roles": ["test_surface"]},
                     1000.0,
                 ),
                 (
                     "scripts/index_workspace.py",
                     260,
                     "def _read_and_chunk(...): build_semantic_payload(source, lang)",
+                    {"file_roles": None},
                     999.0,
                 ),
                 (
                     "scripts/index_workspace.py",
                     359,
                     "payload = build_semantic_payload(source, lang)",
+                    {"file_roles": None},
                     998.0,
                 ),
             ]
@@ -310,6 +313,112 @@ class CrossProjectToolTests(unittest.TestCase):
         self.assertIn("Implementation / consumer text hits", output)
         self.assertIn("Test / supporting text hits", output)
         self.assertIn("No direct call-graph edges found.", output)
+
+    def test_trace_symbol_cross_project_keeps_test_like_path_when_roles_present_empty(self):
+        self.memory_store = FakeMemoryStore(
+            [
+                (
+                    "tests/build_semantic_payload.py",
+                    9,
+                    "def build_semantic_payload_wrapper(): build_semantic_payload(source, lang)",
+                    {"file_roles": []},
+                    1000.0,
+                ),
+            ]
+        )
+        self.module, self.search_core = load_module(self.memory_store)
+        self.mcp = FakeMCP()
+        self.module.register(self.mcp)
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "trace_symbol_definition":
+                return [
+                    {
+                        "kind": "Function",
+                        "filepath": "crates/ts-pack-python/python/tree_sitter_language_pack/_semantic_payload.py",
+                        "start_line": 1137,
+                        "end_line": 1180,
+                        "signature": "build_semantic_payload(...)",
+                    }
+                ]
+            if op == "trace_symbol_alias_definition":
+                return []
+            if op == "trace_symbol_graph_usages":
+                return []
+            return []
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["trace_symbol_cross_project"](
+                        "build_semantic_payload",
+                        "src",
+                        "tgt",
+                    )
+                )
+
+        self.assertIn("Implementation / consumer text hits", output)
+        self.assertNotIn("Test / supporting text hits", output)
+
+    def test_trace_symbol_cross_project_legacy_test_path_fallback_still_applies_when_roles_missing(self):
+        self.memory_store = FakeMemoryStore(
+            [
+                (
+                    "tests/build_semantic_payload.py",
+                    9,
+                    "def build_semantic_payload_wrapper(): build_semantic_payload(source, lang)",
+                    None,
+                    1000.0,
+                ),
+            ]
+        )
+        self.module, self.search_core = load_module(self.memory_store)
+        self.mcp = FakeMCP()
+        self.module.register(self.mcp)
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "trace_symbol_definition":
+                return [
+                    {
+                        "kind": "Function",
+                        "filepath": "crates/ts-pack-python/python/tree_sitter_language_pack/_semantic_payload.py",
+                        "start_line": 1137,
+                        "end_line": 1180,
+                        "signature": "build_semantic_payload(...)",
+                    }
+                ]
+            if op == "trace_symbol_alias_definition":
+                return []
+            if op == "trace_symbol_graph_usages":
+                return []
+            return []
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["trace_symbol_cross_project"](
+                        "build_semantic_payload",
+                        "src",
+                        "tgt",
+                    )
+                )
+
+        self.assertNotIn("Implementation / consumer text hits", output)
+        self.assertIn("Test / supporting text hits", output)
 
 
 if __name__ == "__main__":

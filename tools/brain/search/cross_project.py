@@ -45,6 +45,31 @@ def _is_test_like_path(file_path: str) -> bool:
     )
 
 
+def _coerce_file_roles(raw_roles) -> set[str] | None:
+    if raw_roles is None:
+        return None
+    if isinstance(raw_roles, dict):
+        raw_roles = raw_roles.get("file_roles")
+    if isinstance(raw_roles, (list, tuple, set)):
+        return {str(role).strip() for role in raw_roles if str(role).strip()}
+    return None
+
+
+def _is_test_like_cross_project_hit(file_path: str, raw_roles) -> bool:
+    roles = _coerce_file_roles(raw_roles)
+    if roles is not None:
+        return any(
+            role in roles
+            for role in (
+                "test_surface",
+                "example_surface",
+                "docs_surface",
+                "support_surface",
+            )
+        )
+    return _is_test_like_path(file_path)
+
+
 def _semantic_usage_rank(record: dict) -> tuple[int, float, str, int]:
     filepath = str(record.get("file_path") or "")
     content = str(record.get("content") or "")
@@ -53,7 +78,7 @@ def _semantic_usage_rank(record: dict) -> tuple[int, float, str, int]:
         score -= 40
     elif filepath.endswith((".py", ".rs", ".ts", ".tsx", ".js", ".jsx", ".go", ".swift")):
         score += 20
-    if _is_test_like_path(filepath):
+    if _is_test_like_cross_project_hit(filepath, record.get("file_roles")):
         score -= 35
     if "/scripts/" in filepath or filepath.startswith("scripts/"):
         score += 8
@@ -219,7 +244,7 @@ def register(mcp: FastMCP) -> None:
                         await cur.execute(
                             """
                             WITH exact AS (
-                                SELECT file_path, chunk_index, content, 1000.0 AS rrf
+                                SELECT file_path, chunk_index, content, metadata, 1000.0 AS rrf
                                 FROM codebase_embeddings
                                 WHERE project_id = %(pid)s
                                   AND (
@@ -229,7 +254,7 @@ def register(mcp: FastMCP) -> None:
                                 LIMIT 20
                             ),
                             sem AS (
-                                SELECT file_path, chunk_index, content,
+                                SELECT file_path, chunk_index, content, metadata,
                                        ROW_NUMBER() OVER (
                                            ORDER BY embedding <=> %(vec)s::vector
                                        ) AS sem_rank
@@ -251,9 +276,9 @@ def register(mcp: FastMCP) -> None:
                                   )
                                 LIMIT 40
                             )
-                            SELECT file_path, chunk_index, content, rrf FROM exact
+                            SELECT file_path, chunk_index, content, metadata, rrf FROM exact
                             UNION ALL
-                            SELECT s.file_path, s.chunk_index, s.content,
+                            SELECT s.file_path, s.chunk_index, s.content, s.metadata,
                                    (1.0/(60+s.sem_rank) + COALESCE(1.0/(60+k.kw_rank), 0.0)) AS rrf
                             FROM sem s LEFT JOIN kw k
                               ON s.file_path = k.file_path AND s.chunk_index = k.chunk_index
@@ -312,9 +337,10 @@ def register(mcp: FastMCP) -> None:
                         "file_path": fp,
                         "chunk_index": idx,
                         "content": content,
+                        "file_roles": (metadata or {}).get("file_roles") if isinstance(metadata, dict) else None,
                         "rrf": rrf,
                     }
-                    for fp, idx, content, rrf in sem_rows
+                    for fp, idx, content, metadata, rrf in sem_rows
                 ),
                 key=_semantic_usage_rank,
                 reverse=True,
@@ -328,10 +354,20 @@ def register(mcp: FastMCP) -> None:
                 if len(sem_usage_records) >= 5:
                     break
             implementation_hits = [
-                record for record in sem_usage_records if not _is_test_like_path(str(record.get("file_path") or ""))
+                record
+                for record in sem_usage_records
+                if not _is_test_like_cross_project_hit(
+                    str(record.get("file_path") or ""),
+                    record.get("file_roles"),
+                )
             ]
             supporting_hits = [
-                record for record in sem_usage_records if _is_test_like_path(str(record.get("file_path") or ""))
+                record
+                for record in sem_usage_records
+                if _is_test_like_cross_project_hit(
+                    str(record.get("file_path") or ""),
+                    record.get("file_roles"),
+                )
             ]
 
             # ── 4. Assemble output ────────────────────────────────────────────
