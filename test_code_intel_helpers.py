@@ -36,6 +36,7 @@ def load_references_module():
 
     helpers_mod = types.ModuleType("_helpers")
     helpers_mod.get_project_id = lambda workspace_id: workspace_id.rstrip("/").split("/")[-1]
+    helpers_mod.get_workspace_path = lambda workspace_id: workspace_id
     helpers_mod.get_memory_modules = lambda: (None, None, None, None, None)
     neo4j_mod = types.ModuleType("neo4j")
 
@@ -436,6 +437,17 @@ class CodeIntelHelperTests(unittest.TestCase):
             normalized_signature=None,
         )
         self.assertEqual(picked["filepath"], "/tmp/opencode/packages/desktop/src-tauri/src/main.rs")
+
+    def test_call_chain_resolve_cypher_returns_semantic_file_roles(self):
+        module = load_symbol_graph_module()
+        cypher = module.CALL_CHAIN_RESOLVE_CYPHER
+        self.assertIn("parent.semantic_file_roles AS file_roles", cypher)
+        self.assertIn("WHEN parent.semantic_file_roles IS NOT NULL", cypher)
+
+    def test_visualize_focus_cypher_returns_semantic_file_roles(self):
+        module = load_symbol_graph_module()
+        cypher = module.VISUALIZE_SUBGRAPH_FOCUS_CYPHER
+        self.assertIn("coalesce(n.semantic_file_roles, parent.semantic_file_roles) AS file_roles", cypher)
 
     def test_format_call_chain_rows_prefers_same_source_subtree_for_explicit_main(self):
         module = load_symbol_graph_module()

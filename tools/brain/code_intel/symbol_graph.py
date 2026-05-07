@@ -81,8 +81,9 @@ CALL_CHAIN_RESOLVE_CYPHER = f"""
         OR s.filepath ENDS WITH ('/' + $file_path)
       )
       AND ($signature IS NULL OR (s.signature IS NOT NULL AND s.signature CONTAINS $signature))
+    OPTIONAL MATCH (s)<-[:{REL_CONTAINS}]-(parent:{FILE_LABEL})
     OPTIONAL MATCH (s)<-[:{REL_CALLS}|{REL_CALLS_INFERRED}]-(caller)
-    WITH s,
+    WITH s, parent,
          CASE
            WHEN s.name = $name THEN 0
            WHEN s.qualified_name = $name THEN 0
@@ -101,8 +102,20 @@ CALL_CHAIN_RESOLVE_CYPHER = f"""
     RETURN elementId(s) AS eid, s.name AS name, s.qualified_name AS qualified_name,
            s.signature AS signature, s.filepath AS filepath,
            head([label IN labels(s) WHERE label <> 'Node']) AS kind, rank,
+           parent.semantic_file_roles AS file_roles,
            CASE
              WHEN s.filepath IS NULL THEN 2
+             WHEN parent.semantic_file_roles IS NOT NULL
+               AND any(role IN parent.semantic_file_roles WHERE role IN ['generated_surface', 'binding_surface'])
+               THEN 3
+             WHEN parent.semantic_file_roles IS NOT NULL
+               AND any(role IN parent.semantic_file_roles WHERE role IN ['test_surface', 'example_surface', 'benchmark_surface'])
+               THEN 4
+             WHEN parent.semantic_file_roles IS NOT NULL
+               AND 'support_surface' IN parent.semantic_file_roles
+               THEN 3
+             WHEN parent.semantic_file_roles IS NOT NULL
+               THEN 1
              WHEN s.filepath CONTAINS '/tests/' OR s.filepath CONTAINS '/test/' OR s.filepath CONTAINS '/e2e/'
                OR s.filepath CONTAINS '/fixtures/' OR s.filepath CONTAINS '.spec.' OR s.filepath CONTAINS '.stories.'
                THEN 4
@@ -126,8 +139,10 @@ VISUALIZE_SUBGRAPH_FOCUS_CYPHER = f"""
     WHERE n:Function OR n:Class OR n:Struct OR n:Enum OR n:Trait
        OR n:Protocol OR n:Interface OR n:Extension OR n:TypeAlias OR n:AssociatedType
        OR n:{FILE_LABEL}
+    OPTIONAL MATCH (n)<-[:{REL_CONTAINS}]-(parent:{FILE_LABEL})
     RETURN n.id AS id, head([label IN labels(n) WHERE label <> 'Node']) AS kind, n.name AS name,
-           n.filepath AS fp, n.start_line AS sl
+           n.filepath AS fp, n.start_line AS sl,
+           coalesce(n.semantic_file_roles, parent.semantic_file_roles) AS file_roles
     LIMIT 12
 """
 
@@ -139,17 +154,23 @@ VISUALIZE_SUBGRAPH_NEIGHBORS_CYPHER = f"""
         WHERE caller:{FILE_LABEL} OR caller:Function OR caller:Class OR caller:Method
            OR caller:Struct OR caller:Trait OR caller:Enum OR caller:Protocol
            OR caller:Interface OR caller:Extension OR caller:TypeAlias OR caller:AssociatedType
+     OPTIONAL MATCH (caller)<-[:{REL_CONTAINS}]-(caller_parent:{FILE_LABEL})
      OPTIONAL MATCH (n)<-[:{REL_IMPORTS}]-(importer:{FILE_LABEL})
     OPTIONAL MATCH (n)-[:{REL_CALLS}|{REL_CALLS_INFERRED}]->(callee)
         WHERE callee:Function OR callee:Class OR callee:Struct OR callee:Method
            OR callee:Trait OR callee:Enum OR callee:Protocol OR callee:Interface
            OR callee:Extension OR callee:TypeAlias OR callee:AssociatedType
+    OPTIONAL MATCH (callee)<-[:{REL_CONTAINS}]-(callee_parent:{FILE_LABEL})
     RETURN
       parent.id AS parent_id, parent.name AS parent_name, parent.filepath AS parent_fp,
-      collect(DISTINCT {{id: caller.id, name: caller.name, fp: caller.filepath}})[..6]  AS callers,
-      collect(DISTINCT {{id: importer.id, name: importer.name, fp: importer.filepath}})[..6] AS importers,
+      parent.semantic_file_roles AS parent_file_roles,
+      collect(DISTINCT {{id: caller.id, name: caller.name, fp: caller.filepath,
+                        file_roles: coalesce(caller.semantic_file_roles, caller_parent.semantic_file_roles)}})[..6]  AS callers,
+      collect(DISTINCT {{id: importer.id, name: importer.name, fp: importer.filepath,
+                        file_roles: importer.semantic_file_roles}})[..6] AS importers,
       collect(DISTINCT {{id: callee.id, name: callee.name, kind: head([label IN labels(callee) WHERE label <> 'Node']),
-                        fp: callee.filepath}})[..8] AS callees
+                        fp: callee.filepath,
+                        file_roles: coalesce(callee.semantic_file_roles, callee_parent.semantic_file_roles)}})[..8] AS callees
     LIMIT 1
 """
 
@@ -616,26 +637,6 @@ def pick_visualize_candidate(candidates: list[dict], *, symbol_name: str) -> dic
     if not candidates:
         return None
 
-    def _path_penalty(filepath: str | None) -> int:
-        normalized = (filepath or "").lower()
-        if not normalized:
-            return 3
-        if any(
-            marker in normalized
-            for marker in (
-                "/pregeneratedspm/",
-                "/vendors/",
-                "/generated/",
-                "generated.swift",
-                "generated.ts",
-                "generated.js",
-            )
-        ):
-            return 3
-        if any(marker in normalized for marker in ("/tests/", "/test/", "/fixtures/")):
-            return 2
-        return 0
-
     def _kind_rank(kind: str | None) -> int:
         return {
             "Struct": 0,
@@ -657,7 +658,7 @@ def pick_visualize_candidate(candidates: list[dict], *, symbol_name: str) -> dic
         candidates,
         key=lambda candidate: (
             0 if candidate.get("name") == symbol_name else 1,
-            _path_penalty(candidate.get("fp")),
+            _symbol_path_penalty(candidate.get("fp"), candidate.get("file_roles")),
             _kind_rank(candidate.get("kind")),
             candidate.get("sl") or 0,
             len(candidate.get("fp") or ""),
@@ -681,13 +682,13 @@ def filter_visualize_neighbors(focus: dict, neighbors: dict) -> dict:
         return normalized in {"", "unnamed", "<anonymous>", "anonymous", "iife", "fn"}
 
     def _path_penalty(filepath: str | None) -> int:
-        normalized = (filepath or "").replace("\\", "/").lower()
-        if not normalized:
-            return 6
-        if any(token in normalized for token in ("/tests/", "/test/", "/e2e/", "/fixtures/", ".spec.", ".stories.")):
-            return 5
-        if any(token in normalized for token in ("/gen/", "/generated/", ".gen.", "_generated.", "pregeneratedspm", "/vendors/", "vendors/")):
-            return 4
+        return _symbol_path_penalty(filepath, None)
+
+    def _entry_path_penalty(entry: dict) -> int:
+        penalty = _symbol_path_penalty(entry.get("fp"), entry.get("file_roles"))
+        normalized = (entry.get("fp") or "").replace("\\", "/").lower()
+        if penalty >= 4:
+            return penalty
         if normalized.startswith(("script/", "scripts/", "nix/")) or "/script/" in normalized or "/scripts/" in normalized:
             return 4
         if any(token in normalized for token in ("/packages/ui/", "packages/ui/", "/packages/app/", "packages/app/", "/public/", "public/")):
@@ -696,13 +697,13 @@ def filter_visualize_neighbors(focus: dict, neighbors: dict) -> dict:
             return 0
         if "/src/" in normalized or normalized.startswith("src/"):
             return 1
-        return 2
+        return max(penalty, 2)
 
     def _sort_key(entry: dict) -> tuple:
         file_path = (entry.get("fp") or "").replace("\\", "/")
         return (
             0 if (focus_prefix and file_path.startswith(focus_prefix)) else 1,
-            _path_penalty(file_path),
+            _entry_path_penalty(entry),
             file_path,
             entry.get("name") or "",
         )
@@ -713,7 +714,7 @@ def filter_visualize_neighbors(focus: dict, neighbors: dict) -> dict:
             for entry in sorted(items or [], key=_sort_key)
             if entry.get("id")
             and (not require_named or not _low_value_name(entry.get("name")))
-            and _path_penalty(entry.get("fp")) < 4
+            and _entry_path_penalty(entry) < 4
         ]
         deduped_items: list[dict] = []
         seen_keys: set[tuple[str, str, str]] = set()
