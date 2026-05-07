@@ -17,17 +17,48 @@ _LOW_SIGNAL_REFERENCE_RE = re.compile(
 _LOW_SIGNAL_REFERENCE_DIR_RE = re.compile(r"(^|/)(docs?|documentation|notes?)/", re.IGNORECASE)
 
 
-def _reference_path_penalty(file_path: str | None) -> tuple[int, str]:
+def _file_roles_present(raw_roles) -> bool:
+    return isinstance(raw_roles, list)
+
+
+def _normalize_file_roles(raw_roles) -> set[str]:
+    if not _file_roles_present(raw_roles):
+        return set()
+    return {
+        str(role).strip().lower()
+        for role in raw_roles
+        if isinstance(role, str) and str(role).strip()
+    }
+
+
+def _reference_path_penalty(file_path: str | None, raw_roles=None) -> tuple[int, str]:
     norm = (file_path or "").replace("\\", "/").lower()
+    roles = _normalize_file_roles(raw_roles)
     if not norm:
         return (9, norm)
     if _LOW_SIGNAL_REFERENCE_RE.search(norm) or _LOW_SIGNAL_REFERENCE_DIR_RE.search(norm):
         return (8, norm)
     if norm.endswith((".md", ".rst", ".txt")):
         return (7, norm)
-    if any(token in norm for token in ("/tests/", "/test/", "/fixtures/", "/e2e/", ".spec.", ".stories.")):
+    if {"test_surface", "example_surface", "benchmark_surface"} & roles:
         return (5, norm)
-    if any(token in norm for token in ("/generated/", "/gen/", ".gen.", "_generated.", "pregeneratedspm/")):
+    if _file_roles_present(raw_roles):
+        test_like = False
+    else:
+        test_like = (
+            norm.startswith("tests/")
+            or norm.startswith("test/")
+            or norm.startswith("fixtures/")
+            or norm.startswith("e2e/")
+            or any(token in norm for token in ("/tests/", "/test/", "/fixtures/", "/e2e/", ".spec.", ".stories."))
+        )
+    if test_like:
+        return (5, norm)
+    if {"generated_surface", "binding_surface"} & roles:
+        return (4, norm)
+    if not _file_roles_present(raw_roles) and any(
+        token in norm for token in ("/generated/", "/gen/", ".gen.", "_generated.", "pregeneratedspm/")
+    ):
         return (4, norm)
     if norm.endswith(".swift"):
         return (0, norm)
@@ -321,6 +352,7 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
                     SELECT file_path,
                            metadata->>'start_line' as start_line,
                            project_id,
+                           metadata->'file_roles' as file_roles,
                            content
                     FROM codebase_embeddings
                     WHERE project_id = ANY(%s)
@@ -331,13 +363,13 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
                 )
                 semantic_candidates: dict[str, tuple[int, int, str, str]] = {}
                 async for row in cur:
-                    fp, sl, pid, text = row
+                    fp, sl, pid, file_roles, text = row
                     if (fp, str(sl) if sl else None) in graph_ref_keys:
                         continue
                     preview = _semantic_snippet(text, symbol_name)
                     if not preview:
                         continue
-                    bucket, _ = _reference_path_penalty(fp)
+                    bucket, _ = _reference_path_penalty(fp, file_roles)
                     if bucket < 4 and _is_definition_like_preview(fp, preview, symbol_name):
                         semantic_definition_candidates.append((bucket, fp or "", str(pid or "")))
                     line_part = f":{sl}" if sl else ""
