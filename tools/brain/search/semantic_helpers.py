@@ -371,6 +371,21 @@ def implementation_query_prefers_dispatchers(query: str) -> bool:
     text = (query or "").strip().lower()
     if not text:
         return False
+    if "dispatch" in text or "dispatcher" in text:
+        return True
+
+    context_terms = (
+        "model",
+        "models",
+        "provider",
+        "providers",
+        "openai",
+        "anthropic",
+    )
+    has_context = any(term in text for term in context_terms)
+    if not has_context:
+        return False
+
     dispatcher_terms = (
         "selected",
         "selection",
@@ -378,10 +393,6 @@ def implementation_query_prefers_dispatchers(query: str) -> bool:
         "infer",
         "wiring",
         "wire",
-        "dispatch",
-        "provider wiring",
-        "provider selection",
-        "model selection",
     )
     return any(term in text for term in dispatcher_terms)
 

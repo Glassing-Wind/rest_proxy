@@ -123,6 +123,13 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(len(deduped), 1)
         self.assertIn("infer_model", deduped[0]["content"])
 
+    def test_dispatcher_query_detection_requires_dispatcher_context(self):
+        self.assertTrue(module.implementation_query_prefers_dispatchers("where is model inference selected"))
+        self.assertTrue(module.implementation_query_prefers_dispatchers("how does OpenAI provider wiring work"))
+        self.assertTrue(module.implementation_query_prefers_dispatchers("where is request dispatch implemented"))
+        self.assertFalse(module.implementation_query_prefers_dispatchers("where is selection logic implemented"))
+        self.assertFalse(module.implementation_query_prefers_dispatchers("how does inference caching work"))
+
     def test_dedupe_files_prefers_contract_anchor_for_provider_dispatcher(self):
         query = "how does OpenAI provider wiring work"
         query_class = module.implementation_query_class(query)
