@@ -172,6 +172,42 @@ def append_dispatcher_telemetry_event(
         return
 
 
+def routing_telemetry_enabled() -> bool:
+    raw = os.getenv("LM_PROXY_ROUTING_TELEMETRY", "1").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
+def append_routing_telemetry_event(
+    telemetry: dict,
+    *,
+    query: str,
+    tool: str,
+    topic: str = "",
+) -> None:
+    if not routing_telemetry_enabled() or not isinstance(telemetry, dict):
+        return
+    path = os.getenv("LM_PROXY_ROUTING_TELEMETRY_PATH", "").strip()
+    if path:
+        target = Path(os.path.expanduser(path))
+    else:
+        target = Path(__file__).resolve().parents[3] / ".runtime" / "routing_telemetry.ndjson"
+    event = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "tool": tool,
+        "topic": topic,
+        "query": (query or "")[:500],
+        "telemetry": telemetry,
+    }
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, sort_keys=True) + "\n")
+    except Exception:
+        return
+
+
 def _float_env(name: str) -> float | None:
     raw = (os.getenv(name) or "").strip()
     if not raw:
@@ -1036,6 +1072,79 @@ def dispatcher_contract_telemetry(
         "ranked_contract_match_count": len(ranked_contract),
         "final_exact_match_count": len(final_exact),
         "final_contract_match_count": len(final_contract),
+        "semantic_top": semantic_top,
+        "ranked_top": ranked_top,
+        "final_top": final_top,
+    }
+
+
+def routing_signal_telemetry(
+    *,
+    query: str,
+    query_class: str | None,
+    semantic_candidates: list[dict],
+    ranked_candidates: list[dict],
+    final_results: list[dict],
+    partition_applied: bool,
+) -> dict | None:
+    if not implementation_query_prefers_request_routing(query):
+        return None
+
+    def _signal_snapshot(row: dict | None) -> dict:
+        if not isinstance(row, dict):
+            return {
+                "file_path": None,
+                "routing_hit": False,
+                "request_handler_hit": False,
+                "controller_entity_hit": False,
+            }
+        routing_hit = int(row.get("implementation_routing_priority", 0) or 0) > 0
+        request_handler_hit = int(row.get("implementation_request_handler_priority", 0) or 0) > 0
+        controller_entity_hit = int(row.get("implementation_controller_entity_hit", 0) or 0) > 0
+        return {
+            "file_path": row.get("file_path"),
+            "routing_hit": routing_hit,
+            "request_handler_hit": request_handler_hit,
+            "controller_entity_hit": controller_entity_hit,
+        }
+
+    def _signal_rows(rows: list[dict]) -> list[dict]:
+        matches: list[dict] = []
+        for row in rows or []:
+            snap = _signal_snapshot(row)
+            if snap["routing_hit"] or snap["request_handler_hit"] or snap["controller_entity_hit"]:
+                matches.append(row)
+        return matches
+
+    semantic_signal = _signal_rows(semantic_candidates)
+    ranked_signal = _signal_rows(ranked_candidates)
+    final_signal = _signal_rows(final_results)
+
+    semantic_top = _signal_snapshot(semantic_candidates[0] if semantic_candidates else None)
+    ranked_top = _signal_snapshot(ranked_candidates[0] if ranked_candidates else None)
+    final_top = _signal_snapshot(final_results[0] if final_results else None)
+
+    diagnosis = "no_routing_signal"
+    if semantic_signal:
+        diagnosis = "ranking_or_partition_needed"
+        if ranked_top["routing_hit"] or ranked_top["request_handler_hit"] or ranked_top["controller_entity_hit"]:
+            diagnosis = "ranking_surfaces_routing_signal"
+        elif (
+            final_top["routing_hit"] or final_top["request_handler_hit"] or final_top["controller_entity_hit"]
+        ) and partition_applied:
+            diagnosis = "partition_surfaces_routing_signal"
+        elif final_top["routing_hit"] or final_top["request_handler_hit"] or final_top["controller_entity_hit"]:
+            diagnosis = "final_promotion_surfaces_routing_signal"
+    elif final_top["routing_hit"] or final_top["request_handler_hit"] or final_top["controller_entity_hit"]:
+        diagnosis = "semantic_signal_missing_but_recovered"
+
+    return {
+        "query_class": query_class or implementation_query_class(query),
+        "partition_applied": bool(partition_applied),
+        "diagnosis": diagnosis,
+        "semantic_signal_match_count": len(semantic_signal),
+        "ranked_signal_match_count": len(ranked_signal),
+        "final_signal_match_count": len(final_signal),
         "semantic_top": semantic_top,
         "ranked_top": ranked_top,
         "final_top": final_top,

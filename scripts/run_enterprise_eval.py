@@ -56,6 +56,15 @@ def _load_dispatcher_telemetry_eval():
     return module
 
 
+def _load_routing_telemetry_eval():
+    module_path = ROOT / "tools" / "brain" / "search" / "routing_telemetry_eval.py"
+    spec = importlib.util.spec_from_file_location("enterprise_routing_telemetry_eval", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec is not None and spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
 def run_retrieval_eval() -> dict:
     duplicate_eval = _load_duplicate_eval()
     return duplicate_eval.evaluate_benchmarks()
@@ -69,6 +78,11 @@ def run_dispatcher_eval() -> dict:
 def run_dispatcher_telemetry_eval(path: str | None = None, *, recent_limit: int = 10) -> dict:
     dispatcher_telemetry_eval = _load_dispatcher_telemetry_eval()
     return dispatcher_telemetry_eval.evaluate_telemetry(path, recent_limit=recent_limit)
+
+
+def run_routing_telemetry_eval(path: str | None = None, *, recent_limit: int = 10) -> dict:
+    routing_telemetry_eval = _load_routing_telemetry_eval()
+    return routing_telemetry_eval.evaluate_telemetry(path, recent_limit=recent_limit)
 
 
 def run_live_graph_goldens(workspaces: list[str], python_bin: str) -> dict:
@@ -136,11 +150,14 @@ def build_enterprise_summary(payload: dict) -> dict:
     retrieval = payload.get("retrieval_eval") or {}
     dispatcher = payload.get("dispatcher_eval") or {}
     dispatcher_telemetry = payload.get("dispatcher_telemetry_eval") or {}
+    routing_telemetry = payload.get("routing_telemetry_eval") or {}
     live_graph = payload.get("live_graph_goldens") or {}
     retrieval_summary = retrieval.get("summary") or {}
     dispatcher_summary = dispatcher.get("summary") or {}
     dispatcher_telemetry_summary = dispatcher_telemetry.get("summary") or {}
     dispatcher_telemetry_recent_summary = dispatcher_telemetry.get("recent_summary") or {}
+    routing_telemetry_summary = routing_telemetry.get("summary") or {}
+    routing_telemetry_recent_summary = routing_telemetry.get("recent_summary") or {}
     best = _best_retrieval_config(retrieval_summary)
 
     regressions: list[dict] = []
@@ -168,6 +185,8 @@ def build_enterprise_summary(payload: dict) -> dict:
         "dispatcher_summary": dispatcher_summary,
         "dispatcher_telemetry_summary": dispatcher_telemetry_summary,
         "dispatcher_telemetry_recent_summary": dispatcher_telemetry_recent_summary,
+        "routing_telemetry_summary": routing_telemetry_summary,
+        "routing_telemetry_recent_summary": routing_telemetry_recent_summary,
     }
 
 
@@ -356,6 +375,17 @@ def main() -> int:
         default=10,
         help="How many recent contract-eligible dispatcher telemetry events to summarize separately.",
     )
+    parser.add_argument(
+        "--routing-telemetry-path",
+        default="",
+        help="Optional path to routing telemetry NDJSON. Defaults to .runtime/routing_telemetry.ndjson.",
+    )
+    parser.add_argument(
+        "--routing-telemetry-recent-limit",
+        type=int,
+        default=10,
+        help="How many recent signal-eligible routing telemetry events to summarize separately.",
+    )
     args = parser.parse_args()
 
     retrieval = run_retrieval_eval()
@@ -363,6 +393,10 @@ def main() -> int:
     dispatcher_telemetry = run_dispatcher_telemetry_eval(
         args.dispatcher_telemetry_path or None,
         recent_limit=max(int(args.dispatcher_telemetry_recent_limit or 0), 0),
+    )
+    routing_telemetry = run_routing_telemetry_eval(
+        args.routing_telemetry_path or None,
+        recent_limit=max(int(args.routing_telemetry_recent_limit or 0), 0),
     )
     graph = (
         {"skipped": True, "reason": "skip_graph"}
@@ -373,6 +407,7 @@ def main() -> int:
         "retrieval_eval": retrieval,
         "dispatcher_eval": dispatcher,
         "dispatcher_telemetry_eval": dispatcher_telemetry,
+        "routing_telemetry_eval": routing_telemetry,
         "live_graph_goldens": graph,
     }
     payload["enterprise_summary"] = build_enterprise_summary(payload)

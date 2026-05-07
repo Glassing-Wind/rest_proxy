@@ -1358,6 +1358,8 @@ def register(mcp: FastMCP) -> None:
                             "dispatcher_anchor_contract_version"
                         ),
                     )
+                pre_routing_partition_results = list(all_results)
+                routing_partition_applied = False
                 if sem_helpers.implementation_query_prefers_request_routing(query) and path_hints:
                     strong_routing_results: list[dict] = []
                     other_results: list[dict] = []
@@ -1376,9 +1378,38 @@ def register(mcp: FastMCP) -> None:
                         else:
                             other_results.append(r)
                     if strong_routing_results:
+                        routing_partition_applied = True
                         strong_routing_results.sort(key=sem_helpers.implementation_rank_tuple)
                         other_results.sort(key=sem_helpers.implementation_rank_tuple)
                         all_results = strong_routing_results + other_results
+                routing_signal_trace = sem_helpers.routing_signal_telemetry(
+                    query=query,
+                    query_class=impl_query_class,
+                    semantic_candidates=pre_duplicate_results,
+                    ranked_candidates=pre_routing_partition_results,
+                    final_results=all_results,
+                    partition_applied=routing_partition_applied,
+                )
+                if routing_signal_trace:
+                    sem_helpers.append_routing_telemetry_event(
+                        routing_signal_trace,
+                        query=query,
+                        tool="search_codebase",
+                        topic="",
+                    )
+                    debug_log(
+                        "routing_signal_telemetry",
+                        query=query,
+                        query_class=routing_signal_trace.get("query_class"),
+                        diagnosis=routing_signal_trace.get("diagnosis"),
+                        partition_applied=routing_signal_trace.get("partition_applied"),
+                        semantic_signal_match_count=routing_signal_trace.get("semantic_signal_match_count"),
+                        ranked_signal_match_count=routing_signal_trace.get("ranked_signal_match_count"),
+                        final_signal_match_count=routing_signal_trace.get("final_signal_match_count"),
+                        semantic_top=routing_signal_trace.get("semantic_top"),
+                        ranked_top=routing_signal_trace.get("ranked_top"),
+                        final_top=routing_signal_trace.get("final_top"),
+                    )
 
             all_results = sem_helpers.cap_per_file(all_results, max_per_file)
             all_results = sem_helpers.cap_per_dir(all_results, max_per_dir)

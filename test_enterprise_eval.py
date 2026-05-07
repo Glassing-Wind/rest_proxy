@@ -73,6 +73,32 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                     },
                 },
             },
+            "routing_telemetry_eval": {
+                "summary": {
+                    "total_events": 4,
+                    "signal_eligible_events": 3,
+                    "ignored_no_signal_events": 1,
+                    "partition_applied_rate": 0.3333,
+                    "semantic_top_signal_hit_rate": 0.6667,
+                    "implementation_ranking_top_signal_hit_rate": 0.6667,
+                    "final_top_signal_hit_rate": 1.0,
+                    "diagnosis_counts": {
+                        "partition_surfaces_routing_signal": 1,
+                        "ranking_surfaces_routing_signal": 2,
+                    },
+                },
+                "recent_summary": {
+                    "signal_eligible_events": 2,
+                    "partition_applied_rate": 0.5,
+                    "semantic_top_signal_hit_rate": 0.5,
+                    "implementation_ranking_top_signal_hit_rate": 1.0,
+                    "final_top_signal_hit_rate": 1.0,
+                    "diagnosis_counts": {
+                        "partition_surfaces_routing_signal": 1,
+                        "ranking_surfaces_routing_signal": 1,
+                    },
+                },
+            },
             "live_graph_goldens": {
                 "ok": True,
                 "skipped": False,
@@ -89,6 +115,8 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         )
         self.assertEqual(summary["dispatcher_telemetry_summary"]["total_events"], 3)
         self.assertEqual(summary["dispatcher_telemetry_recent_summary"]["contract_eligible_events"], 2)
+        self.assertEqual(summary["routing_telemetry_summary"]["total_events"], 4)
+        self.assertEqual(summary["routing_telemetry_recent_summary"]["signal_eligible_events"], 2)
 
     def test_build_summary_collects_only_configs_with_alerts(self):
         mod = _load_module()
@@ -110,6 +138,7 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             },
             "dispatcher_eval": {"summary": {}},
             "dispatcher_telemetry_eval": {"summary": {}},
+            "routing_telemetry_eval": {"summary": {}},
             "live_graph_goldens": {
                 "ok": False,
                 "skipped": True,
@@ -130,6 +159,7 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
             "retrieval_eval": {"summary": {"group_representatives": {"mrr": 0.95}}},
             "dispatcher_eval": {"summary": {"final_dispatcher_selection_top_hit_rate": 1.0}},
             "dispatcher_telemetry_eval": {"summary": {"total_events": 2}},
+            "routing_telemetry_eval": {"summary": {"total_events": 1}},
             "live_graph_goldens": {"ok": True, "workspaces": ["/tmp/repo"]},
         }
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -155,6 +185,12 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
     def test_run_dispatcher_telemetry_eval_returns_summary(self):
         mod = _load_module()
         report = mod.run_dispatcher_telemetry_eval()
+        self.assertIn("summary", report)
+        self.assertIn("total_events", report["summary"])
+
+    def test_run_routing_telemetry_eval_returns_summary(self):
+        mod = _load_module()
+        report = mod.run_routing_telemetry_eval()
         self.assertIn("summary", report)
         self.assertIn("total_events", report["summary"])
 

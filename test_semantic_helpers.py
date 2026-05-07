@@ -659,6 +659,60 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(event["topic"], "pydantic-ai")
         self.assertEqual(event["telemetry"]["diagnosis"], "semantic_recall_missing_contract_candidate")
 
+    def test_routing_signal_telemetry_reports_partitioned_controller_result(self):
+        controller = {
+            "file_path": "src/main/java/org/example/OwnerController.java",
+            "project_id": "p",
+            "implementation_routing_priority": 2,
+            "implementation_request_handler_priority": 2,
+            "implementation_controller_entity_hit": 2,
+        }
+        non_signal = {
+            "file_path": "src/main/resources/templates/owners.html",
+            "project_id": "p",
+            "implementation_routing_priority": 0,
+            "implementation_request_handler_priority": 0,
+            "implementation_controller_entity_hit": 0,
+        }
+        telemetry = module.routing_signal_telemetry(
+            query="where is owner request routing implemented in spring petclinic",
+            query_class="api_definition_lookup",
+            semantic_candidates=[controller, non_signal],
+            ranked_candidates=[non_signal, controller],
+            final_results=[controller, non_signal],
+            partition_applied=True,
+        )
+        self.assertEqual(telemetry["diagnosis"], "partition_surfaces_routing_signal")
+        self.assertEqual(telemetry["semantic_signal_match_count"], 1)
+        self.assertTrue(telemetry["final_top"]["controller_entity_hit"])
+
+    def test_append_routing_telemetry_event_writes_ndjson(self):
+        telemetry = {
+            "query_class": "implementation_explanation",
+            "diagnosis": "ranking_surfaces_routing_signal",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "routing.ndjson")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "LM_PROXY_ROUTING_TELEMETRY": "1",
+                    "LM_PROXY_ROUTING_TELEMETRY_PATH": target,
+                },
+                clear=False,
+            ):
+                module.append_routing_telemetry_event(
+                    telemetry,
+                    query="how does gRPC server request routing work",
+                    tool="search_codebase",
+                    topic="draw-things",
+                )
+            with open(target, "r", encoding="utf-8") as fh:
+                event = json.loads(fh.read().strip())
+        self.assertEqual(event["tool"], "search_codebase")
+        self.assertEqual(event["topic"], "draw-things")
+        self.assertEqual(event["telemetry"]["diagnosis"], "ranking_surfaces_routing_signal")
+
     def test_context_payload_uses_source_url_when_file_path_missing(self):
         payload = json.loads(
             module._context_payload(
