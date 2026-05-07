@@ -129,9 +129,11 @@ def append_duplicate_telemetry_event(
         "experiments": trace.get("experiments", {}),
     }
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(event, sort_keys=True) + "\n")
+        _append_bounded_ndjson_event(
+            target,
+            event,
+            max_events=_int_env("LM_PROXY_DUPLICATE_TELEMETRY_MAX_EVENTS", 500),
+        )
     except Exception:
         return
 
@@ -165,9 +167,11 @@ def append_dispatcher_telemetry_event(
         "telemetry": telemetry,
     }
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(event, sort_keys=True) + "\n")
+        _append_bounded_ndjson_event(
+            target,
+            event,
+            max_events=_int_env("LM_PROXY_DISPATCHER_TELEMETRY_MAX_EVENTS", 200),
+        )
     except Exception:
         return
 
@@ -201,11 +205,34 @@ def append_routing_telemetry_event(
         "telemetry": telemetry,
     }
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(event, sort_keys=True) + "\n")
+        _append_bounded_ndjson_event(
+            target,
+            event,
+            max_events=_int_env("LM_PROXY_ROUTING_TELEMETRY_MAX_EVENTS", 200),
+        )
     except Exception:
         return
+
+
+def _append_bounded_ndjson_event(target: Path, event: dict, *, max_events: int) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    encoded = json.dumps(event, sort_keys=True)
+    if max_events <= 0:
+        with target.open("a", encoding="utf-8") as fh:
+            fh.write(encoded + "\n")
+        return
+    lines: list[str] = []
+    if target.exists():
+        try:
+            with target.open("r", encoding="utf-8") as fh:
+                lines = [line.rstrip("\n") for line in fh if line.strip()]
+        except Exception:
+            lines = []
+    lines.append(encoded)
+    if len(lines) > max_events:
+        lines = lines[-max_events:]
+    with target.open("w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
 
 
 def _float_env(name: str) -> float | None:
@@ -216,6 +243,16 @@ def _float_env(name: str) -> float | None:
         return float(raw)
     except ValueError:
         return None
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def is_doc_like_path(file_path: str | None, file_roles: set[str] | None = None) -> bool:

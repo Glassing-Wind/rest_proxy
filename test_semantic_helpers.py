@@ -696,6 +696,42 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(event["topic"], "pydantic-ai")
         self.assertEqual(event["telemetry"]["diagnosis"], "semantic_recall_missing_contract_candidate")
 
+    def test_append_dispatcher_telemetry_event_trims_to_recent_max_events(self):
+        telemetry = {
+            "query_class": "api_definition_lookup",
+            "diagnosis": "ranking_surfaces_contract",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "dispatcher.ndjson")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "LM_PROXY_DISPATCHER_TELEMETRY": "1",
+                    "LM_PROXY_DISPATCHER_TELEMETRY_PATH": target,
+                    "LM_PROXY_DISPATCHER_TELEMETRY_MAX_EVENTS": "2",
+                },
+                clear=False,
+            ):
+                module.append_dispatcher_telemetry_event(
+                    dict(telemetry, ordinal=1),
+                    query="q1",
+                    tool="search_codebase",
+                )
+                module.append_dispatcher_telemetry_event(
+                    dict(telemetry, ordinal=2),
+                    query="q2",
+                    tool="search_codebase",
+                )
+                module.append_dispatcher_telemetry_event(
+                    dict(telemetry, ordinal=3),
+                    query="q3",
+                    tool="search_codebase",
+                )
+            with open(target, "r", encoding="utf-8") as fh:
+                events = [json.loads(line) for line in fh if line.strip()]
+        self.assertEqual(len(events), 2)
+        self.assertEqual([event["query"] for event in events], ["q2", "q3"])
+
     def test_routing_signal_telemetry_reports_partitioned_controller_result(self):
         controller = {
             "file_path": "src/main/java/org/example/OwnerController.java",
@@ -749,6 +785,42 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(event["tool"], "search_codebase")
         self.assertEqual(event["topic"], "draw-things")
         self.assertEqual(event["telemetry"]["diagnosis"], "ranking_surfaces_routing_signal")
+
+    def test_append_routing_telemetry_event_trims_to_recent_max_events(self):
+        telemetry = {
+            "query_class": "implementation_explanation",
+            "diagnosis": "ranking_surfaces_routing_signal",
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "routing.ndjson")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "LM_PROXY_ROUTING_TELEMETRY": "1",
+                    "LM_PROXY_ROUTING_TELEMETRY_PATH": target,
+                    "LM_PROXY_ROUTING_TELEMETRY_MAX_EVENTS": "2",
+                },
+                clear=False,
+            ):
+                module.append_routing_telemetry_event(
+                    dict(telemetry, ordinal=1),
+                    query="q1",
+                    tool="search_codebase",
+                )
+                module.append_routing_telemetry_event(
+                    dict(telemetry, ordinal=2),
+                    query="q2",
+                    tool="search_codebase",
+                )
+                module.append_routing_telemetry_event(
+                    dict(telemetry, ordinal=3),
+                    query="q3",
+                    tool="search_codebase",
+                )
+            with open(target, "r", encoding="utf-8") as fh:
+                events = [json.loads(line) for line in fh if line.strip()]
+        self.assertEqual(len(events), 2)
+        self.assertEqual([event["query"] for event in events], ["q2", "q3"])
 
     def test_context_payload_uses_source_url_when_file_path_missing(self):
         payload = json.loads(
