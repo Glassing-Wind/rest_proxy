@@ -208,16 +208,19 @@ class SearchSummaryTests(unittest.TestCase):
                         "file": "packages/opencode/test/lsp/index.test.ts",
                         "n": 22,
                         "symbols": ["DocumentSymbol", "tmpdir", "Status"],
+                        "file_roles": None,
                     },
                     {
                         "file": "packages/ui/src/components/context-menu.stories.tsx",
                         "n": 19,
                         "symbols": ["ContextMenuContentProps", "ContextMenuGroupProps", "Icon"],
+                        "file_roles": None,
                     },
                     {
                         "file": "packages/desktop-electron/src/main/index.ts",
                         "n": 26,
                         "symbols": ["CommandChild", "InitStep", "ServerReadyData", "WslConfig"],
+                        "file_roles": None,
                     },
                 ]
             return []
@@ -237,6 +240,80 @@ class SearchSummaryTests(unittest.TestCase):
         inspect_line_index = output.find("start with `packages/desktop-electron/src/main/index.ts`")
         self.assertNotEqual(inspect_line_index, -1)
 
+    def test_symbol_imports_overview_skips_test_path_penalty_when_file_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_imports_overview_exp_count":
+                return [{"n": 2}]
+            if op == "get_symbol_imports_overview_exp_symbols":
+                return [{"symbol": "OwnerControllerFlow", "n": 8}]
+            if op == "get_symbol_imports_overview_exp_files":
+                return [
+                    {
+                        "file": "src/main/java/org/example/tests/OwnerControllerFlow.java",
+                        "n": 12,
+                        "symbols": ["OwnerControllerFlow", "OwnerController"],
+                        "file_roles": [],
+                    },
+                    {
+                        "file": "src/main/java/org/example/Pet.java",
+                        "n": 10,
+                        "symbols": ["Pet"],
+                        "file_roles": [],
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_imports_overview_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                    include_implicit=False,
+                )
+            )
+
+        self.assertIn("start with `src/main/java/org/example/tests/OwnerControllerFlow.java`", output)
+
+    def test_symbol_imports_overview_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_imports_overview_exp_count":
+                return [{"n": 2}]
+            if op == "get_symbol_imports_overview_exp_symbols":
+                return [{"symbol": "OwnerControllerFlow", "n": 8}]
+            if op == "get_symbol_imports_overview_exp_files":
+                return [
+                    {
+                        "file": "src/main/java/org/example/tests/OwnerControllerFlow.java",
+                        "n": 12,
+                        "symbols": ["OwnerControllerFlow", "OwnerController"],
+                        "file_roles": None,
+                    },
+                    {
+                        "file": "src/main/java/org/example/Pet.java",
+                        "n": 10,
+                        "symbols": ["Pet"],
+                        "file_roles": [],
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_imports_overview_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                    include_implicit=False,
+                )
+            )
+
+        self.assertIn("start with `src/main/java/org/example/Pet.java`", output)
+
     def test_symbol_imports_overview_demotes_docs_and_component_leaf_files(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -254,21 +331,25 @@ class SearchSummaryTests(unittest.TestCase):
                         "file": "tools/brain/docs/search.py",
                         "n": 84,
                         "symbols": ["get_embedding_service", "bootstrap_schema", "assemble_memory"],
+                        "file_roles": ["docs_surface"],
                     },
                     {
                         "file": "scripts/index_workspace.py",
                         "n": 76,
                         "symbols": ["get_embedding_service", "bootstrap_schema", "assemble_memory"],
+                        "file_roles": [],
                     },
                     {
                         "file": "packages/web/src/components/share/part.tsx",
                         "n": 33,
                         "symbols": ["formatCount", "formatDuration", "formatNumber"],
+                        "file_roles": [],
                     },
                     {
                         "file": "packages/desktop-electron/src/main/index.ts",
                         "n": 26,
                         "symbols": ["CommandChild", "InitStep", "ServerReadyData"],
+                        "file_roles": [],
                     },
                 ]
             return []

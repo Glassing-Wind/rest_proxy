@@ -10,6 +10,20 @@ from _helpers import get_project_id
 from tools.brain.graph import core as graph_tools
 
 
+def _file_roles_present(raw_roles) -> bool:
+    return isinstance(raw_roles, list)
+
+
+def _normalize_file_roles(raw_roles) -> set[str]:
+    if not _file_roles_present(raw_roles):
+        return set()
+    return {
+        str(role).strip().lower()
+        for role in raw_roles
+        if str(role).strip()
+    }
+
+
 def _is_test_like_path(file_path: str) -> bool:
     normalized = (file_path or "").lower()
     return (
@@ -24,6 +38,15 @@ def _is_test_like_path(file_path: str) -> bool:
         or normalized.endswith("_test.go")
         or normalized.endswith("_spec.rb")
     )
+
+
+def _is_test_like_summary_path(file_path: str, raw_roles) -> bool:
+    roles = _normalize_file_roles(raw_roles)
+    if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+        return True
+    if _file_roles_present(raw_roles):
+        return False
+    return _is_test_like_path(file_path)
 
 
 def _is_stub_like_path(file_path: str) -> bool:
@@ -98,23 +121,25 @@ def _extract_explicit_export_aliases(file_path: str, *, symbol_prefix: str = "")
 def _import_focus_lines(exp_files: list[tuple[str, int, list[str]]], imp_files: list[tuple[str, int, list[str]]]) -> list[str]:
     lines: list[str] = []
     if exp_files:
-        file, count, symbols = exp_files[0]
+        file, count, symbols, _file_roles = exp_files[0]
         sample = ", ".join(_useful_symbol_sample(symbols))
         lines.append(f"- start with `{file}` because it pulls the widest explicit symbol surface ({count}: {sample})")
     if imp_files:
-        file, count, symbols = imp_files[0]
+        file, count, symbols, _file_roles = imp_files[0]
         sample = ", ".join(_useful_symbol_sample(symbols))
         lines.append(f"- inspect `{file}` next because it relies on the strongest implicit import surface ({count}: {sample})")
     return lines[:3]
 
 
-def _import_file_rank(file_path: str, count: int, symbols: list[str]) -> tuple[int, int, int, str]:
+def _import_file_rank(file_path: str, count: int, symbols: list[str], raw_roles=None) -> tuple[int, int, int, str]:
     useful = _useful_symbol_sample(symbols, limit=6)
     score = 0
     lowered = (file_path or "").lower()
+    roles = _normalize_file_roles(raw_roles)
+    roles_known = _file_roles_present(raw_roles)
     if _is_stub_like_path(file_path):
         score -= 40
-    if _is_test_like_path(file_path):
+    if _is_test_like_summary_path(file_path, raw_roles):
         score -= 30
     if _is_story_like_path(file_path):
         score -= 24
@@ -126,9 +151,13 @@ def _import_file_rank(file_path: str, count: int, symbols: list[str]) -> tuple[i
         score += 8
     if "/components/" in lowered:
         score -= 10
-    if "/docs/" in lowered or lowered.startswith("docs/"):
+    if "docs_surface" in roles:
         score -= 18
-    if "/examples/" in lowered or lowered.startswith("examples/"):
+    elif not roles_known and ("/docs/" in lowered or lowered.startswith("docs/")):
+        score -= 18
+    if "example_surface" in roles:
+        score -= 12
+    elif not roles_known and ("/examples/" in lowered or lowered.startswith("examples/")):
         score -= 12
     if "integration_example" in lowered:
         score -= 12
@@ -144,7 +173,7 @@ def _import_file_rank(file_path: str, count: int, symbols: list[str]) -> tuple[i
 
 def _export_focus_lines(
     top_symbols: list[tuple],
-    top_files: list[tuple[str, int, list[str]]],
+    top_files: list[tuple[str, int, list[str], list[str] | None]],
     export_mode: str,
 ) -> list[str]:
     lines: list[str] = []
@@ -160,7 +189,7 @@ def _export_focus_lines(
             name, count = item
             lines.append(f"- start with `{name}` because it is the strongest public export signal ({count})")
     if top_files:
-        file, count, symbols = top_files[0]
+        file, count, symbols, _file_roles = top_files[0]
         sample = ", ".join(symbols[:3])
         detail = "public-surface" if export_mode == "heuristic" else "export"
         lines.append(f"- inspect `{file}` next because it concentrates the widest {detail} surface ({count}: {sample})")
@@ -240,18 +269,21 @@ async def get_symbol_imports_overview_impl(
             session,
             """
             MATCH (f:File {project_id:$p})-[:IMPORTS_SYMBOL]->(s)
-            WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
+            WITH f.filepath AS file,
+                 count(*) AS n,
+                 collect(DISTINCT s.name) AS symbols,
+                 f.semantic_file_roles AS file_roles
             ORDER BY n DESC
             LIMIT $limit
-            RETURN file, n, symbols
+            RETURN file, n, symbols, file_roles
             """,
             p=project_id,
             limit=limit,
             op="get_symbol_imports_overview_exp_files",
         )
         exp_files = sorted(
-            [(rec["file"], rec["n"], rec["symbols"]) for rec in r_exp_files],
-            key=lambda item: _import_file_rank(item[0], int(item[1]), list(item[2] or [])),
+            [(rec["file"], rec["n"], rec["symbols"], rec.get("file_roles")) for rec in r_exp_files],
+            key=lambda item: _import_file_rank(item[0], int(item[1]), list(item[2] or []), item[3]),
             reverse=True,
         )
 
@@ -284,18 +316,21 @@ async def get_symbol_imports_overview_impl(
                 """
                 MATCH (f:File {project_id:$p})-[:IMPLICIT_IMPORTS_SYMBOL]->(s)
                 WHERE f.filepath ENDS WITH '.swift'
-                WITH f.filepath AS file, count(*) AS n, collect(DISTINCT s.name) AS symbols
+                WITH f.filepath AS file,
+                     count(*) AS n,
+                     collect(DISTINCT s.name) AS symbols,
+                     f.semantic_file_roles AS file_roles
                 ORDER BY n DESC
                 LIMIT $limit
-                RETURN file, n, symbols
+                RETURN file, n, symbols, file_roles
                 """,
                 p=project_id,
                 limit=limit,
                 op="get_symbol_imports_overview_imp_files",
             )
             imp_files = sorted(
-                [(rec["file"], rec["n"], rec["symbols"]) for rec in r_imp_files],
-                key=lambda item: _import_file_rank(item[0], int(item[1]), list(item[2] or [])),
+                [(rec["file"], rec["n"], rec["symbols"], rec.get("file_roles")) for rec in r_imp_files],
+                key=lambda item: _import_file_rank(item[0], int(item[1]), list(item[2] or []), item[3]),
                 reverse=True,
             )
 
@@ -323,7 +358,7 @@ async def get_symbol_imports_overview_impl(
     if exp_files:
         lines.append("")
         lines.append("## Files with most explicit symbol imports")
-        for file, count, symbols in exp_files[:limit]:
+        for file, count, symbols, _file_roles in exp_files[:limit]:
             sample = ", ".join(_useful_symbol_sample(symbols, limit=6))
             lines.append(f"- {file}  ({count})  [{sample}]")
 
@@ -335,7 +370,7 @@ async def get_symbol_imports_overview_impl(
     if include_implicit and imp_files:
         lines.append("")
         lines.append("## Files with most implicit symbol imports")
-        for file, count, symbols in imp_files[:limit]:
+        for file, count, symbols, _file_roles in imp_files[:limit]:
             sample = ", ".join(_useful_symbol_sample(symbols, limit=6))
             lines.append(f"- {file}  ({count})  [{sample}]")
 
@@ -403,6 +438,7 @@ async def get_symbol_exports_summary_impl(
                 RETURN f.filepath AS file,
                        coalesce(alias.name, s.name) AS symbol,
                        s.name AS target_symbol,
+                       f.semantic_file_roles AS file_roles,
                        count(DISTINCT alias) AS alias_edges,
                        count(DISTINCT importer) AS importers
                 ORDER BY file, symbol
@@ -412,7 +448,7 @@ async def get_symbol_exports_summary_impl(
             )
 
             symbol_totals: dict[tuple[str, str], dict[str, object]] = {}
-            file_symbols: dict[str, list[str]] = {}
+            file_symbols: dict[str, tuple[list[str], list[str] | None]] = {}
 
             for rec in filtered_rows:
                 file = rec.get("file")
@@ -426,9 +462,9 @@ async def get_symbol_exports_summary_impl(
                     if (rec.get("alias_edges") or 0) and name != target_name
                     else name
                 )
-                file_symbols.setdefault(file, [])
-                if rendered not in file_symbols[file]:
-                    file_symbols[file].append(rendered)
+                file_symbols.setdefault(file, ([], rec.get("file_roles")))
+                if rendered not in file_symbols[file][0]:
+                    file_symbols[file][0].append(rendered)
 
                 key = (name, target_name)
                 entry = symbol_totals.setdefault(
@@ -461,11 +497,23 @@ async def get_symbol_exports_summary_impl(
             top_files = sorted(
                 (
                     (file, len(symbols), symbols)
-                    for file, symbols in file_symbols.items()
+                    for file, (symbols, _roles) in file_symbols.items()
                     if symbols
                 ),
-                key=lambda item: (_is_stub_like_path(item[0]), -item[1], item[0]),
+                key=lambda item: (
+                    _is_stub_like_path(item[0]),
+                    _is_test_like_summary_path(
+                        item[0],
+                        file_symbols[item[0]][1],
+                    ),
+                    -item[1],
+                    item[0],
+                ),
             )[:limit]
+            top_files = [
+                (file, count, symbols, file_symbols[file][1])
+                for file, count, symbols in top_files
+            ]
         else:
             r1 = await graph_tools._execute_read(
                 session,
@@ -510,6 +558,7 @@ async def get_symbol_exports_summary_impl(
                 MATCH (f:File {project_id:$p})-[:EXPORTS_SYMBOL]->(s)
                 OPTIONAL MATCH (f)-[alias:EXPORTS_SYMBOL_AS]->(s)
                 WITH f.filepath AS file,
+                     f.semantic_file_roles AS file_roles,
                      count(*) AS n,
                      collect(DISTINCT CASE
                        WHEN alias.name IS NOT NULL AND alias.name <> s.name THEN alias.name + ' -> ' + s.name
@@ -517,7 +566,7 @@ async def get_symbol_exports_summary_impl(
                      END) AS symbols
                 ORDER BY n DESC
                 LIMIT $limit
-                RETURN file, n, symbols
+                RETURN file, n, symbols, file_roles
                 """,
                 p=project_id,
                 limit=limit,
@@ -528,10 +577,15 @@ async def get_symbol_exports_summary_impl(
                 file = rec["file"]
                 if not _path_allowed(file):
                     continue
-                top_files.append((file, rec["n"], rec["symbols"]))
+                top_files.append((file, rec["n"], rec["symbols"], rec.get("file_roles")))
             top_files = sorted(
                 top_files,
-                key=lambda item: (_is_stub_like_path(item[0]), -item[1], item[0]),
+                key=lambda item: (
+                    _is_stub_like_path(item[0]),
+                    _is_test_like_summary_path(item[0], item[3]),
+                    -item[1],
+                    item[0],
+                ),
             )[:limit]
 
         if not top_symbols and not top_files:
@@ -576,7 +630,7 @@ async def get_symbol_exports_summary_impl(
             )[:limit]
             top_files = sorted(
                 (
-                    (file, len(symbols), symbols)
+                    (file, len(symbols), symbols, None)
                     for file, symbols in file_symbols.items()
                     if symbols
                 ),
@@ -606,7 +660,7 @@ async def get_symbol_exports_summary_impl(
                     )[:limit]
                 if explicit_alias_files:
                     top_files = sorted(
-                        explicit_alias_files,
+                        [(file, count, symbols, None) for file, count, symbols in explicit_alias_files],
                         key=lambda item: (_is_stub_like_path(item[0]), -item[1], item[0]),
                     )[:limit]
 
@@ -650,7 +704,7 @@ async def get_symbol_exports_summary_impl(
         lines.append("")
     if top_files:
         lines.append("## Files with most symbol exports")
-        for file, count, symbols in top_files:
+        for file, count, symbols, _file_roles in top_files:
             sample = ", ".join(_useful_symbol_sample(symbols, limit=6))
             lines.append(f"- {file}  ({count})  [{sample}]")
     return "\n".join(lines)

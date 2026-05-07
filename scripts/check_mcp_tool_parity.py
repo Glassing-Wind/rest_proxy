@@ -297,10 +297,41 @@ def _normalize_order_insensitive_line(line: str) -> str:
 
 
 def _normalize(text: str) -> str:
-    return "\n".join(
+    lines = [
         _normalize_order_insensitive_line(line)
         for line in str(text).strip().splitlines()
-    ).strip()
+    ]
+    section_headers = {
+        "## Files with most symbol exports",
+    }
+    normalized: list[str] = []
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx]
+        normalized.append(line)
+        if line.strip() in section_headers:
+            idx += 1
+            section_lines: list[str] = []
+            while idx < len(lines):
+                candidate = lines[idx]
+                stripped = candidate.strip()
+                if stripped.startswith("#") and stripped != line.strip():
+                    break
+                if stripped.startswith("- "):
+                    section_lines.append(candidate)
+                    idx += 1
+                    continue
+                if not stripped:
+                    break
+                section_lines.append(candidate)
+                idx += 1
+            bullet_lines = [item for item in section_lines if item.strip().startswith("- ")]
+            other_lines = [item for item in section_lines if not item.strip().startswith("- ")]
+            normalized.extend(sorted(bullet_lines))
+            normalized.extend(other_lines)
+            continue
+        idx += 1
+    return "\n".join(normalized).strip()
 
 
 def _normalized_expected_variants(text: str) -> list[str]:
