@@ -78,6 +78,27 @@ def _is_test_like_path(filepath: str | None) -> bool:
     )
 
 
+def _coerce_file_roles(raw_roles) -> set[str] | None:
+    if raw_roles is None:
+        return None
+    if isinstance(raw_roles, (list, tuple, set)):
+        return {str(role).strip() for role in raw_roles if str(role).strip()}
+    return None
+
+
+def _is_test_like_graph_path(filepath: str | None, raw_roles) -> bool:
+    roles = _coerce_file_roles(raw_roles)
+    if roles is not None:
+        return any(
+            role in roles
+            for role in (
+                "test_surface",
+                "example_surface",
+            )
+        )
+    return _is_test_like_path(filepath)
+
+
 async def _load_cargo_dependency_rows(session, project_id: str, limit: int):
     return await graph_core._execute_read(
         session,
@@ -115,14 +136,20 @@ async def get_heuristic_flow_summary_impl(
             """
             MATCH (f1:File {project_id: $p})
             WHERE (f1.filepath CONTAINS 'ui' OR f1.filepath CONTAINS 'view' OR f1.filepath CONTAINS 'component' OR f1.filepath CONTAINS 'pages')
-              AND NOT (f1.filepath CONTAINS 'test' OR f1.filepath CONTAINS 'spec')
             MATCH (f1)-[:IMPORTS]->(f2:File {project_id: $p})
             WHERE (f2.filepath CONTAINS 'api' OR f2.filepath CONTAINS 'client' OR f2.filepath CONTAINS 'controller' OR f2.filepath CONTAINS 'routes')
             OPTIONAL MATCH (f2)-[:IMPORTS]->(f3:File {project_id: $p})
             WHERE (f3.filepath CONTAINS 'service' OR f3.filepath CONTAINS 'domain' OR f3.filepath CONTAINS 'provider' OR f3.filepath CONTAINS 'usecase')
             OPTIONAL MATCH (f3)-[:IMPORTS]->(f4:File {project_id: $p})
             WHERE (f4.filepath CONTAINS 'model' OR f4.filepath CONTAINS 'db' OR f4.filepath CONTAINS 'entity' OR f4.filepath CONTAINS 'schema')
-            RETURN f1.filepath AS ui, f2.filepath AS api, f3.filepath AS svc, f4.filepath AS model
+            RETURN f1.filepath AS ui,
+                   f1.semantic_file_roles AS ui_roles,
+                   f2.filepath AS api,
+                   f2.semantic_file_roles AS api_roles,
+                   f3.filepath AS svc,
+                   f3.semantic_file_roles AS svc_roles,
+                   f4.filepath AS model,
+                   f4.semantic_file_roles AS model_roles
             ORDER BY ui, api
             LIMIT $limit
             """,
@@ -161,6 +188,8 @@ async def get_heuristic_flow_summary_impl(
 
     rows = []
     for row in result:
+        if _is_test_like_graph_path(row.get("ui"), row.get("ui_roles")):
+            continue
         path = [value for value in [row.get("ui"), row.get("api"), row.get("svc"), row.get("model")] if value]
         if len(path) >= 2:
             api_crate, _ = _match_cargo_crate(row.get("api"), cargo_rows)
@@ -226,7 +255,7 @@ async def get_topology_summary_impl(
             OPTIONAL MATCH (in:File {project_id: $p})-[:IMPORTS]->(f)
             WITH f, count(DISTINCT out) AS outbound, count(DISTINCT in) AS inbound
             WHERE inbound + outbound > 0
-            RETURN f.filepath AS fp, inbound, outbound
+            RETURN f.filepath AS fp, f.semantic_file_roles AS file_roles, inbound, outbound
             ORDER BY inbound + outbound DESC
             LIMIT $limit
             """,
@@ -249,11 +278,17 @@ async def get_topology_summary_impl(
         rendered.append(
             {
                 "crate": crate,
+                "file_roles": rec.get("file_roles"),
                 "line": f"`{rec['fp']}`{crate_part}: {rec['inbound']} incoming, {rec['outbound']} outgoing imports",
             }
         )
-    non_test = [row for row in rendered if not _is_test_like_path(row["line"])]
-    test_like = [row for row in rendered if _is_test_like_path(row["line"])]
+    non_test = []
+    test_like = []
+    for rec, row in zip(result, rendered):
+        if _is_test_like_graph_path(rec.get("fp"), row.get("file_roles")):
+            test_like.append(row)
+        else:
+            non_test.append(row)
     rendered = non_test + test_like
     if rendered:
         output.append("Best raw connectivity starting points:")
