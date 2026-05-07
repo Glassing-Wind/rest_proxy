@@ -54,7 +54,7 @@ class DispatcherEvalTests(unittest.TestCase):
         self.assertEqual(case["first_success_stage"], "implementation_ranking")
         self.assertEqual(case["diagnosis"], "ranking_fixed")
 
-    def test_final_promotion_case_attributes_current_contract_gap(self):
+    def test_final_promotion_fixture_now_resolves_during_ranking(self):
         module = load_eval_module()
         report = module.evaluate_benchmarks()
         case = next(
@@ -64,12 +64,13 @@ class DispatcherEvalTests(unittest.TestCase):
         )
         self.assertTrue(case["stages"]["semantic_candidates"]["candidate_hit"])
         self.assertTrue(case["stages"]["semantic_candidates"]["contract_candidate_hit"])
-        self.assertFalse(case["stages"]["implementation_ranking"]["top_hit"])
+        self.assertTrue(case["stages"]["implementation_ranking"]["top_hit"])
+        self.assertTrue(case["stages"]["implementation_ranking"]["contract_top_hit"])
         self.assertTrue(case["stages"]["final_dispatcher_selection"]["top_hit"])
         self.assertTrue(case["stages"]["final_dispatcher_selection"]["contract_top_hit"])
         self.assertFalse(case["rescue_applied"])
-        self.assertEqual(case["first_success_stage"], "final_dispatcher_selection")
-        self.assertEqual(case["diagnosis"], "final_promotion_needed")
+        self.assertEqual(case["first_success_stage"], "implementation_ranking")
+        self.assertEqual(case["diagnosis"], "ranking_fixed")
 
 
 if __name__ == "__main__":
