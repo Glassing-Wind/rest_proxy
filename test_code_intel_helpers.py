@@ -344,6 +344,20 @@ class CodeIntelHelperTests(unittest.TestCase):
         )
         self.assertEqual(picked["filepath"], "/tmp/opencode/packages/desktop/src-tauri/src/main.rs")
 
+    def test_symbol_path_penalty_skips_test_path_fallback_when_file_roles_are_present(self):
+        module = load_symbol_graph_module()
+        self.assertLess(
+            module._symbol_path_penalty("packages/sdk/js/src/tests/config.test.ts", []),
+            module._symbol_path_penalty("packages/sdk/js/src/tests/config.test.ts", None),
+        )
+        self.assertEqual(
+            module._symbol_path_penalty(
+                "packages/sdk/js/src/tests/config.test.ts",
+                ["test_surface"],
+            ),
+            4,
+        )
+
     def test_symbol_context_cypher_parenthesizes_label_filter(self):
         module = load_symbol_graph_module()
         cypher = module.SYMBOL_CONTEXT_CYPHER

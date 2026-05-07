@@ -57,6 +57,7 @@ SYMBOL_CONTEXT_CYPHER = f"""
       s.end_line    AS end_line,
       s.signature   AS signature,
       parent.filepath AS parent_file,
+      parent.semantic_file_roles AS file_roles,
       collect(DISTINCT {{name: caller.name, file: caller.filepath,
                         line: caller.start_line}})[..10] AS callers,
       collect(DISTINCT {{name: callee.name, file: callee.filepath}})[..10] AS callees,
@@ -177,10 +178,32 @@ def normalize_query_file_path(workspace_id: str, file_path: str | None) -> str |
     return normalized or None
 
 
-def _symbol_path_penalty(filepath: str | None) -> int:
+def _file_roles_present(raw_roles) -> bool:
+    return isinstance(raw_roles, list)
+
+
+def _normalize_file_roles(raw_roles) -> set[str]:
+    if not _file_roles_present(raw_roles):
+        return set()
+    return {
+        str(role).strip().lower()
+        for role in raw_roles
+        if str(role).strip()
+    }
+
+
+def _symbol_path_penalty(filepath: str | None, raw_roles=None) -> int:
     normalized = (filepath or "").replace("\\", "/").lower()
+    roles = _normalize_file_roles(raw_roles)
+    roles_known = _file_roles_present(raw_roles)
     if not normalized:
         return 6
+    if "generated_surface" in roles or "binding_surface" in roles:
+        return 5
+    if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+        return 4
+    if "support_surface" in roles:
+        return 3
     if any(
         token in normalized
         for token in (
@@ -198,7 +221,7 @@ def _symbol_path_penalty(filepath: str | None) -> int:
         )
     ):
         return 5
-    if any(
+    if not roles_known and any(
         token in normalized
         for token in (
             "/e2e/",
@@ -300,7 +323,7 @@ def _symbol_context_score(candidate: dict, *, symbol_name: str) -> int:
         score += 35
         if signature.lstrip().startswith(("pub ", "public ")):
             score += 20
-    path_penalty = _symbol_path_penalty(filepath)
+    path_penalty = _symbol_path_penalty(filepath, candidate.get("file_roles"))
     score -= path_penalty * 18
     role_rank = _symbol_role_rank(candidate)
     score -= role_rank * 10
@@ -335,7 +358,7 @@ def _symbol_context_reason_parts(candidate: dict, *, symbol_name: str) -> list[s
         parts.append("runtime-entrypoint")
     elif "/cli/" in filepath or "/bin/" in filepath:
         parts.append("usage-heavy")
-    penalty = _symbol_path_penalty(filepath)
+    penalty = _symbol_path_penalty(filepath, candidate.get("file_roles"))
     if penalty >= 5:
         parts.append("generated")
     elif penalty >= 4:
@@ -372,7 +395,7 @@ def rank_symbol_context_candidates(
             0 if candidate.get("file_match") else 1,
             0 if candidate.get("signature_match") else 1,
             -int(candidate.get("symbol_context_score") or 0),
-            _symbol_path_penalty(candidate.get("filepath")),
+            _symbol_path_penalty(candidate.get("filepath"), candidate.get("file_roles")),
             _symbol_role_rank(candidate),
             _symbol_kind_rank(candidate.get("kind")),
             -(candidate.get("callers_in") or 0),
