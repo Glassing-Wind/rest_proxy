@@ -1360,28 +1360,6 @@ def register(mcp: FastMCP) -> None:
                     )
                 pre_routing_partition_results = list(all_results)
                 routing_partition_applied = False
-                if sem_helpers.implementation_query_prefers_request_routing(query) and path_hints:
-                    strong_routing_results: list[dict] = []
-                    other_results: list[dict] = []
-                    for r in all_results:
-                        meta = sem_helpers.coerce_meta(r)
-                        file_roles = sem_helpers.implementation_file_roles(meta)
-                        if (
-                            "controller_surface" in file_roles
-                            and (
-                                int(r.get("implementation_controller_entity_hit", 0) or 0) >= 2
-                                or int(r.get("implementation_request_handler_priority", 0) or 0) >= 2
-                                or int(r.get("implementation_routing_priority", 0) or 0) >= 2
-                            )
-                        ):
-                            strong_routing_results.append(r)
-                        else:
-                            other_results.append(r)
-                    if strong_routing_results:
-                        routing_partition_applied = True
-                        strong_routing_results.sort(key=sem_helpers.implementation_rank_tuple)
-                        other_results.sort(key=sem_helpers.implementation_rank_tuple)
-                        all_results = strong_routing_results + other_results
                 routing_signal_trace = sem_helpers.routing_signal_telemetry(
                     query=query,
                     query_class=impl_query_class,

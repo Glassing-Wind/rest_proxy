@@ -558,6 +558,23 @@ def implementation_support_surface_penalties(
             penalties["support_path_penalty"],
             0.07 if query_class_prefers_definitions(query_class) else 0.04,
         )
+    static_asset_like = (
+        "/resources/static/" in norm
+        or "/static/" in norm
+        or norm.endswith(".css")
+        or norm.endswith(".scss")
+        or norm.endswith(".less")
+        or norm.endswith(".sass")
+    )
+    if (
+        static_asset_like
+        and implementation_query_prefers_request_routing(query)
+        and not implementation_query_prefers_supporting_context(query)
+    ):
+        penalties["support_path_penalty"] = max(
+            penalties["support_path_penalty"],
+            0.14 if query_class_prefers_definitions(query_class) else 0.08,
+        )
     if low_signal_support and not implementation_query_prefers_supporting_context(query):
         penalties["support_path_penalty"] = max(
             penalties["support_path_penalty"],
@@ -760,7 +777,13 @@ def is_low_signal_support_path(file_path: str | None) -> bool:
     basename = norm.rsplit("/", 1)[-1]
     return (
         "/templates/" in norm
+        or "/resources/static/" in norm
+        or "/static/" in norm
         or basename.endswith(".html")
+        or basename.endswith(".css")
+        or basename.endswith(".scss")
+        or basename.endswith(".less")
+        or basename.endswith(".sass")
         or norm.startswith("scripts/")
         or "/scripts/" in norm
         or norm.startswith("tools/")
