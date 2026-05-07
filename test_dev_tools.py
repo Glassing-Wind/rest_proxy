@@ -170,7 +170,12 @@ class DevToolsTests(unittest.TestCase):
 
     def test_get_test_coverage_for_uses_semantic_test_chunk_fallback(self):
         memory_store = FakeMemoryStore(
-            [("tests/test_workspace_registry.py", 3), ("spec/workspace_registry_spec.py", 1)]
+            [
+                ("tests/test_workspace_registry.py", {"file_roles": ["test_surface"]}),
+                ("tests/test_workspace_registry.py", {"file_roles": ["test_surface"]}),
+                ("tests/test_workspace_registry.py", {"file_roles": ["test_surface"]}),
+                ("spec/workspace_registry_spec.py", None),
+            ]
         )
         module = load_module(memory_store)
         mcp = FakeMCP()
@@ -188,6 +193,47 @@ class DevToolsTests(unittest.TestCase):
 
         self.assertIn("tests/test_workspace_registry.py", output)
         self.assertIn("semantic test-chunk match (3)", output)
+
+    def test_get_test_coverage_for_skips_test_path_semantic_hit_when_roles_present_empty(self):
+        memory_store = FakeMemoryStore(
+            [("tests/test_workspace_registry.py", {"file_roles": []})]
+        )
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        def fake_subprocess_run(cmd, **kwargs):
+            return types.SimpleNamespace(stdout="")
+
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run), mock.patch.dict(
+            sys.modules, {"graph_bootstrap": module._graph_bootstrap_mod}
+        ):
+            output = asyncio.run(
+                mcp.tools["get_test_coverage_for"]("/tmp/repo", "src/workspace_registry.py")
+            )
+
+        self.assertIn("No test files found", output)
+
+    def test_get_test_coverage_for_legacy_test_path_semantic_hit_still_applies_when_roles_missing(self):
+        memory_store = FakeMemoryStore(
+            [("tests/test_workspace_registry.py", None)]
+        )
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        def fake_subprocess_run(cmd, **kwargs):
+            return types.SimpleNamespace(stdout="")
+
+        with mock.patch("subprocess.run", side_effect=fake_subprocess_run), mock.patch.dict(
+            sys.modules, {"graph_bootstrap": module._graph_bootstrap_mod}
+        ):
+            output = asyncio.run(
+                mcp.tools["get_test_coverage_for"]("/tmp/repo", "src/workspace_registry.py")
+            )
+
+        self.assertIn("tests/test_workspace_registry.py", output)
+        self.assertIn("semantic test-chunk match (1)", output)
 
     def test_get_test_coverage_for_routes_falls_back_to_route_test_match(self):
         memory_store = FakeMemoryStore([])

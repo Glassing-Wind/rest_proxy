@@ -40,6 +40,46 @@ def register(mcp: FastMCP) -> None:
             return parts[0] + "/"
         return ""
 
+    def _file_roles_present(raw_roles) -> bool:
+        return isinstance(raw_roles, list)
+
+    def _normalize_file_roles(raw_roles) -> set[str]:
+        if not _file_roles_present(raw_roles):
+            return set()
+        return {
+            str(role).strip().lower()
+            for role in raw_roles
+            if isinstance(role, str) and str(role).strip()
+        }
+
+    def _is_legacy_test_like_path(file_path: str | None) -> bool:
+        normalized = (file_path or "").replace("\\", "/").lower()
+        if not normalized:
+            return False
+        return (
+            "/test/" in normalized
+            or normalized.startswith("test/")
+            or "/tests/" in normalized
+            or normalized.startswith("tests/")
+            or "/spec/" in normalized
+            or normalized.startswith("spec/")
+            or "/__tests__/" in normalized
+            or normalized.startswith("__tests__/")
+            or ".test." in normalized
+            or ".spec." in normalized
+            or normalized.endswith("_test.py")
+            or normalized.endswith("_test.go")
+            or normalized.endswith("_spec.rb")
+        )
+
+    def _is_semantic_test_surface(file_path: str | None, raw_roles) -> bool:
+        roles = _normalize_file_roles(raw_roles)
+        if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+            return True
+        if _file_roles_present(raw_roles):
+            return False
+        return _is_legacy_test_like_path(file_path)
+
     async def _execute_read(session, cypher: str, op: str | None = None, **params):
         metadata = dict(_TX_METADATA_BASE)
         op_value = op or "read"
@@ -353,15 +393,14 @@ def register(mcp: FastMCP) -> None:
                         async with conn.cursor() as cur:
                             ors = " OR ".join(["content ILIKE %s"] * len(semantic_terms))
                             sql = (
-                                "SELECT file_path, count(*) AS hits "
+                                "SELECT file_path, metadata "
                                 "FROM codebase_embeddings "
                                 "WHERE project_id = %s "
                                 "  AND file_path <> %s "
                                 "  AND (file_path ILIKE %s OR file_path ILIKE %s OR file_path ILIKE %s) "
                                 f"  AND ({ors}) "
-                                "GROUP BY file_path "
-                                "ORDER BY hits DESC, file_path "
-                                "LIMIT 10"
+                                "ORDER BY file_path "
+                                "LIMIT 200"
                             )
                             params = [
                                 project_id,
@@ -371,10 +410,31 @@ def register(mcp: FastMCP) -> None:
                                 "%__tests__%",
                             ] + [f"%{term}%" for term in semantic_terms]
                             await cur.execute(sql, params)
-                            for hit_file, hits in await cur.fetchall():
+                            semantic_hits: dict[str, dict[str, object]] = {}
+                            for row in await cur.fetchall():
+                                if not row:
+                                    continue
+                                hit_file = row[0]
+                                metadata = row[1] if len(row) > 1 else None
+                                raw_roles = None
+                                if isinstance(metadata, dict):
+                                    raw_roles = metadata.get("file_roles")
+                                entry = semantic_hits.setdefault(
+                                    hit_file,
+                                    {"hits": 0, "file_roles": None},
+                                )
+                                entry["hits"] = int(entry["hits"]) + 1
+                                if _file_roles_present(raw_roles) and entry["file_roles"] is None:
+                                    entry["file_roles"] = raw_roles
+                            for hit_file, entry in semantic_hits.items():
+                                if not _is_semantic_test_surface(
+                                    hit_file,
+                                    entry.get("file_roles"),
+                                ):
+                                    continue
                                 results.setdefault(
                                     hit_file,
-                                    f"semantic test-chunk match ({hits})",
+                                    f"semantic test-chunk match ({entry['hits']})",
                                 )
                 except Exception:
                     pass
