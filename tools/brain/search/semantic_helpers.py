@@ -1676,18 +1676,20 @@ def implementation_routing_priority(meta: dict, file_path: str | None, query: st
     basename = norm.rsplit("/", 1)[-1]
     priority = 0
     file_roles = implementation_file_roles(meta)
+    has_file_roles = implementation_has_file_roles(meta)
     if "route_definition_surface" in file_roles:
         priority = max(priority, 3)
     if "request_handler_surface" in file_roles:
         priority = max(priority, 2)
     if "controller_surface" in file_roles:
         priority = max(priority, 2)
-    if any(part in norm for part in ("/grpc/server/", "/server/sources/", "/server/")):
-        priority = max(priority, 2)
-    if "/controller/" in norm or basename.endswith("controller.java"):
-        priority = max(priority, 2)
-    if "serviceimpl" in basename or basename.endswith("server.swift"):
-        priority = max(priority, 2)
+    if not has_file_roles:
+        if any(part in norm for part in ("/grpc/server/", "/server/sources/", "/server/")):
+            priority = max(priority, 2)
+        if "/controller/" in norm or basename.endswith("controller.java"):
+            priority = max(priority, 2)
+        if "serviceimpl" in basename or basename.endswith("server.swift"):
+            priority = max(priority, 2)
     candidates: set[str] = set()
     if isinstance(meta, dict):
         for key in ("declared_symbols", "file_symbols"):
@@ -1721,16 +1723,18 @@ def implementation_request_handler_priority(meta: dict, file_path: str | None, q
     basename = norm.rsplit("/", 1)[-1]
     priority = 0
     file_roles = implementation_file_roles(meta)
+    has_file_roles = implementation_has_file_roles(meta)
     if "request_handler_surface" in file_roles:
         priority = max(priority, 3)
     elif "controller_surface" in file_roles:
         priority = max(priority, 2)
-    if "serviceimpl" in basename:
-        priority = max(priority, 3)
-    elif "/controller/" in norm or basename.endswith("controller.java"):
-        priority = max(priority, 2)
-    elif basename.endswith(("service.swift", "server.swift")):
-        priority = max(priority, 1)
+    if not has_file_roles:
+        if "serviceimpl" in basename:
+            priority = max(priority, 3)
+        elif "/controller/" in norm or basename.endswith("controller.java"):
+            priority = max(priority, 2)
+        elif basename.endswith(("service.swift", "server.swift")):
+            priority = max(priority, 1)
     candidates: set[str] = set()
     if isinstance(meta, dict):
         for key in ("declared_symbols", "file_symbols"):

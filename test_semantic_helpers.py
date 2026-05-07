@@ -1829,6 +1829,60 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertGreaterEqual(row["implementation_routing_priority"], 3)
         self.assertGreaterEqual(row["implementation_request_handler_priority"], 3)
 
+    def test_request_routing_path_fallback_requires_missing_file_roles(self):
+        query = "how does gRPC server request routing work"
+        row = {
+            "file_path": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+            "content": "func helper() {}",
+            "metadata": current_contract_meta(
+                {
+                    "node_types": ["function_declaration"],
+                    "file_symbols": ["helper"],
+                    "declared_symbols": ["helper"],
+                    "declared_symbol_roles": {},
+                    "chunk_role": "definition",
+                },
+                file_roles=[],
+            ),
+            "rrf": 0.6,
+        }
+        row["_meta"] = row["metadata"]
+        row["meta_score"] = module.meta_score(row["_meta"])
+        module.enrich_implementation_result(
+            row,
+            query=query,
+            query_class=module.implementation_query_class(query),
+            base_score=float(row["rrf"]),
+            meta_boost=0.0,
+        )
+        self.assertEqual(row["implementation_routing_priority"], 0)
+        self.assertEqual(row["implementation_request_handler_priority"], 0)
+
+    def test_request_routing_path_fallback_still_works_for_legacy_missing_roles(self):
+        query = "how does gRPC server request routing work"
+        row = {
+            "file_path": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+            "content": "func helper() {}",
+            "metadata": {
+                "node_types": ["function_declaration"],
+                "file_symbols": ["helper"],
+                "declared_symbols": ["helper"],
+                "chunk_role": "definition",
+            },
+            "rrf": 0.6,
+        }
+        row["_meta"] = row["metadata"]
+        row["meta_score"] = module.meta_score(row["_meta"])
+        module.enrich_implementation_result(
+            row,
+            query=query,
+            query_class=module.implementation_query_class(query),
+            base_score=float(row["rrf"]),
+            meta_boost=0.0,
+        )
+        self.assertGreater(row["implementation_routing_priority"], 0)
+        self.assertGreater(row["implementation_request_handler_priority"], 0)
+
     def test_request_routing_query_prefers_spring_controller_over_static_asset(self):
         query = "where is owner request routing implemented in spring petclinic"
         rows = [
