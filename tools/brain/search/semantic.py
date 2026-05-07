@@ -1414,38 +1414,6 @@ def register(mcp: FastMCP) -> None:
                         strong_dispatchers.sort(key=sem_helpers.implementation_rank_tuple)
                         other_results.sort(key=sem_helpers.implementation_rank_tuple)
                         all_results = strong_dispatchers + other_results
-                    exact_dispatcher_matches: list[dict] = []
-                    for r in all_results:
-                        meta = sem_helpers.coerce_meta(r)
-                        file_roles = sem_helpers.implementation_file_roles(meta)
-                        chunk_role = sem_helpers.implementation_chunk_role(meta, r.get("file_path"))
-                        declared_symbols = {
-                            str(symbol).strip().lower()
-                            for symbol in (meta.get("declared_symbols") or [])
-                            if str(symbol).strip()
-                        }
-                        if (
-                            int(r.get("implementation_dispatcher_priority", 0) or 0) >= 5
-                            and (declared_symbols & exact_dispatcher_identifiers)
-                            and "profile_surface" not in file_roles
-                            and chunk_role != "profile_definition"
-                        ):
-                            exact_dispatcher_matches.append(r)
-                    if exact_dispatcher_matches:
-                        exact_dispatcher_matches.sort(key=sem_helpers.implementation_rank_tuple)
-                        best_dispatcher = exact_dispatcher_matches[0]
-                        all_results = [
-                            best_dispatcher,
-                            *[
-                                r
-                                for r in all_results
-                                if not (
-                                    r.get("project_id") == best_dispatcher.get("project_id")
-                                    and r.get("file_path") == best_dispatcher.get("file_path")
-                                    and r.get("chunk_index") == best_dispatcher.get("chunk_index")
-                                )
-                            ],
-                        ]
                 dispatcher_contract_trace = sem_helpers.dispatcher_contract_telemetry(
                     query=query,
                     query_class=impl_query_class,
