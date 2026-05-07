@@ -29,6 +29,10 @@ def _is_test_like_path(file_path: str) -> bool:
     return (
         normalized.startswith("tests/")
         or "/tests/" in normalized
+        or normalized.startswith("benchmarks/")
+        or "/benchmarks/" in normalized
+        or normalized.startswith("benchmark/")
+        or "/benchmark/" in normalized
         or "__tests__" in normalized
         or "/spec/" in normalized
         or normalized.startswith("spec/")
@@ -390,12 +394,12 @@ async def get_symbol_exports_summary_impl(
     project_id = get_project_id(project_path)
     limit = max(1, min(int(limit), 100))
 
-    def _path_allowed(file_path: str) -> bool:
+    def _path_allowed(file_path: str, raw_roles=None) -> bool:
         if include_paths and not any(fnmatch.fnmatch(file_path, pat) for pat in include_paths):
             return False
         if exclude_paths and any(fnmatch.fnmatch(file_path, pat) for pat in exclude_paths):
             return False
-        if not include_paths and _is_test_like_path(file_path):
+        if not include_paths and _is_test_like_summary_path(file_path, raw_roles):
             return False
         return True
 
@@ -454,7 +458,12 @@ async def get_symbol_exports_summary_impl(
                 file = rec.get("file")
                 name = rec.get("symbol")
                 target_name = rec.get("target_symbol") or name
-                if not isinstance(file, str) or not _path_allowed(file) or not _symbol_allowed(name):
+                file_roles = rec.get("file_roles")
+                if (
+                    not isinstance(file, str)
+                    or not _path_allowed(file, file_roles)
+                    or not _symbol_allowed(name)
+                ):
                     continue
 
                 rendered = (
@@ -462,7 +471,7 @@ async def get_symbol_exports_summary_impl(
                     if (rec.get("alias_edges") or 0) and name != target_name
                     else name
                 )
-                file_symbols.setdefault(file, ([], rec.get("file_roles")))
+                file_symbols.setdefault(file, ([], file_roles))
                 if rendered not in file_symbols[file][0]:
                     file_symbols[file][0].append(rendered)
 
@@ -575,7 +584,7 @@ async def get_symbol_exports_summary_impl(
             top_files = []
             for rec in r2:
                 file = rec["file"]
-                if not _path_allowed(file):
+                if not _path_allowed(file, rec.get("file_roles")):
                     continue
                 top_files.append((file, rec["n"], rec["symbols"], rec.get("file_roles")))
             top_files = sorted(
