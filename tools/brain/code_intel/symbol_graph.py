@@ -1065,14 +1065,11 @@ def format_call_chain_rows(
             return "/".join(parts[:2]) + "/"
         return parts[0] + "/" if parts else ""
 
-    def path_penalty(filepath: str | None) -> int:
+    def path_penalty(filepath: str | None, raw_roles) -> int:
         normalized = (filepath or "").replace("\\", "/").lower()
-        if not normalized:
-            return 6
-        if any(token in normalized for token in ("/test/", "/tests/", "/e2e/", "/fixtures/", ".spec.", ".stories.")):
-            return 5
-        if any(token in normalized for token in ("/gen/", "/generated/", ".gen.", "_generated.", "pregeneratedspm")):
-            return 4
+        penalty = _symbol_path_penalty(filepath, raw_roles)
+        if not normalized or penalty >= 4:
+            return penalty
         if normalized.startswith(("script/", "scripts/", "nix/")) or "/script/" in normalized or "/scripts/" in normalized:
             return 4
         if any(token in normalized for token in ("/packages/ui/", "packages/ui/", "/packages/app/", "packages/app/")):
@@ -1101,6 +1098,7 @@ def format_call_chain_rows(
     anonymous_hints: list[str] = []
     first_hop_groups: "OrderedDict[tuple[str, str], OrderedDict[tuple[str, str], None]]" = OrderedDict()
     first_hop_counts: dict[tuple[str, str], int] = {}
+    first_hop_roles: dict[tuple[str, str], object] = {}
     terminal_paths = 0
     root_focus = focus_prefix(resolved_filepath)
     root_is_backend = is_backend_filepath(resolved_filepath)
@@ -1161,6 +1159,7 @@ def format_call_chain_rows(
         first_key = (first_name, first_file)
         first_hop_groups.setdefault(first_key, OrderedDict())
         first_hop_counts[first_key] = first_hop_counts.get(first_key, 0) + 1
+        first_hop_roles.setdefault(first_key, file_roles[1] if len(file_roles) > 1 else None)
 
         if len(chain) >= 3:
             child_name = chain[2]
@@ -1183,7 +1182,7 @@ def format_call_chain_rows(
         first_hop_groups.items(),
         key=lambda item: (
             0 if (root_focus and (item[0][1] or "").startswith(root_focus)) else 1,
-            path_penalty(item[0][1]),
+            path_penalty(item[0][1], first_hop_roles.get(item[0])),
             -first_hop_counts.get(item[0], 0),
             item[0][1] or "",
             item[0][0] or "",

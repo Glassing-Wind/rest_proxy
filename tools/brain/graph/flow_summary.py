@@ -201,10 +201,16 @@ ORDER BY api
 
 _BACKEND_IMPORT_FALLBACK_QUERY = _schema_cypher("""
 MATCH (api:__FILE__ {project_id:$p})-[:__IMPORTS__]->(dep:__FILE__ {project_id:$p})
-RETURN api.filepath AS api, dep.filepath AS dep
+RETURN api.filepath AS api,
+       api.semantic_file_roles AS api_roles,
+       dep.filepath AS dep,
+       dep.semantic_file_roles AS dep_roles
 UNION
 MATCH (api:__FILE__ {project_id:$p})-[:__FILE_GRAPH_LINK__]->(dep:__FILE__ {project_id:$p})
-RETURN api.filepath AS api, dep.filepath AS dep
+RETURN api.filepath AS api,
+       api.semantic_file_roles AS api_roles,
+       dep.filepath AS dep,
+       dep.semantic_file_roles AS dep_roles
 ORDER BY api, dep
 """)
 
@@ -527,12 +533,14 @@ async def _build_python_backend_flow_fallback(
         return []
 
     deps_by_api: dict[str, list[str]] = defaultdict(list)
+    api_roles_by_path: dict[str, object] = {}
     for row in import_rows:
         api = row.get("api")
         dep = row.get("dep")
         if not api or not dep:
             continue
         deps_by_api[api].append(dep)
+        api_roles_by_path.setdefault(api, row.get("api_roles"))
 
     workspace_path = get_workspace_path(workspace_id)
     if not workspace_path:
@@ -540,7 +548,7 @@ async def _build_python_backend_flow_fallback(
 
     fallback_rows: list[dict] = []
     for api_path, deps in sorted(deps_by_api.items()):
-        if not include_tests and _is_test_like_path(api_path):
+        if not include_tests and _is_low_signal_flow_path(api_path, api_roles_by_path.get(api_path)):
             continue
         api_abs = os.path.join(workspace_path, api_path)
         try:
@@ -849,19 +857,26 @@ async def _load_asset_js_pairs(session, project_id: str):
            OR js.filepath ENDS WITH '.ts'
            OR js.filepath ENDS WITH '.tsx'
            OR js.filepath ENDS WITH '.jsx'
-        RETURN ui.filepath AS ui, js.filepath AS js
+        RETURN ui.filepath AS ui,
+               ui.semantic_file_roles AS ui_roles,
+               js.filepath AS js,
+               js.semantic_file_roles AS js_roles
         ORDER BY ui, js
         """),
         p=project_id,
         op="get_app_flow_summary_asset_pairs",
     )
-    return [(row.get("ui"), row.get("js")) for row in result if row.get("ui") and row.get("js")]
+    return [
+        (row.get("ui"), row.get("ui_roles"), row.get("js"), row.get("js_roles"))
+        for row in result
+        if row.get("ui") and row.get("js")
+    ]
 
 
 async def _build_app_flow_literal_fallback(session, project_id: str, workspace_id: str, raw_rows):
     js_pairs = sorted(
         {
-            (ui, js)
+            (ui, None, js, None)
             for ui, js, route, api, svc, model, schema, external in raw_rows
             if ui and js and js.endswith((".js", ".ts", ".tsx", ".jsx"))
         }
@@ -869,9 +884,10 @@ async def _build_app_flow_literal_fallback(session, project_id: str, workspace_i
     if not js_pairs:
         js_pairs = await _load_asset_js_pairs(session, project_id)
         js_pairs = [
-            (ui, js)
-            for ui, js in js_pairs
-            if not _is_test_like_path(ui) and not _is_test_like_path(js)
+            (ui, ui_roles, js, js_roles)
+            for ui, ui_roles, js, js_roles in js_pairs
+            if not _is_low_signal_flow_path(ui, ui_roles)
+            and not _is_low_signal_flow_path(js, js_roles)
         ]
     if not js_pairs:
         return []
@@ -884,7 +900,7 @@ async def _build_app_flow_literal_fallback(session, project_id: str, workspace_i
     workspace_path = get_workspace_path(workspace_id)
     if not workspace_path:
         return []
-    for ui, js in js_pairs:
+    for ui, _ui_roles, js, _js_roles in js_pairs:
         js_abs = os.path.join(workspace_path, js)
         try:
             with open(js_abs, "r", encoding="utf-8") as fh:

@@ -471,6 +471,69 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertTrue(self.module._is_low_signal_flow_path("tests/routes.test.ts", None))
         self.assertTrue(self.module._is_low_signal_flow_path("src/app.ts", ["test_surface"]))
 
+    def test_build_app_flow_literal_fallback_keeps_test_like_asset_pair_when_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_asset_pairs":
+                return [
+                    {
+                        "ui": "tests/routes.test.ts",
+                        "ui_roles": [],
+                        "js": "tests/routes.test.ts",
+                        "js_roles": [],
+                    }
+                ]
+            if op == "get_app_flow_summary_route_catalog":
+                return [{"path": "/api/applications", "method": "GET", "api": "src/api/routes/applicationOpsRoutes.ts"}]
+            return []
+
+        with (
+            mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+            mock.patch.object(self.module, "get_workspace_path", return_value="/tmp/repo"),
+            mock.patch("builtins.open", mock.mock_open(read_data="fetch('/api/applications')")),
+        ):
+            rows = asyncio.run(
+                self.module._build_app_flow_literal_fallback(
+                    FakeSession(),
+                    "proj123",
+                    "/tmp/repo",
+                    [],
+                )
+            )
+
+        self.assertEqual(
+            rows,
+            [("tests/routes.test.ts", "tests/routes.test.ts", "GET /api/applications", "src/api/routes/applicationOpsRoutes.ts", None, None, None, None)],
+        )
+
+    def test_build_app_flow_literal_fallback_filters_test_like_asset_pair_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_asset_pairs":
+                return [
+                    {
+                        "ui": "tests/routes.test.ts",
+                        "ui_roles": None,
+                        "js": "tests/routes.test.ts",
+                        "js_roles": None,
+                    }
+                ]
+            if op == "get_app_flow_summary_route_catalog":
+                return [{"path": "/api/applications", "method": "GET", "api": "src/api/routes/applicationOpsRoutes.ts"}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            rows = asyncio.run(
+                self.module._build_app_flow_literal_fallback(
+                    FakeSession(),
+                    "proj123",
+                    "/tmp/repo",
+                    [],
+                )
+            )
+
+        self.assertEqual(rows, [])
+
     def test_collapse_ambiguous_app_rows_summarizes_cross_product_joins(self):
         rows = [
             (
@@ -1375,6 +1438,101 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("POST /v1/chat/completions", output)
         self.assertIn("proxy/handlers.py", output)
         self.assertIn("proxy/models.py", output)
+
+    def test_get_backend_flow_summary_keeps_test_like_fastapi_fallback_when_roles_are_present(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tests_dir = os.path.join(tmpdir, "tests")
+            os.makedirs(tests_dir, exist_ok=True)
+            api_file = os.path.join(tests_dir, "app.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import FastAPI\n"
+                    "app = FastAPI()\n\n"
+                    "@app.get('/health')\n"
+                    "async def health():\n"
+                    "    return {'ok': True}\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [{"api": "tests/app.py", "api_roles": [], "dep": "app/db/session.py", "dep_roles": []}]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="tests/app.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertIn("tests/app.py", output)
+        self.assertIn("GET /health", output)
+
+    def test_get_backend_flow_summary_filters_test_like_fastapi_fallback_when_roles_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tests_dir = os.path.join(tmpdir, "tests")
+            os.makedirs(tests_dir, exist_ok=True)
+            api_file = os.path.join(tests_dir, "app.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import FastAPI\n"
+                    "app = FastAPI()\n\n"
+                    "@app.get('/health')\n"
+                    "async def health():\n"
+                    "    return {'ok': True}\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [{"api": "tests/app.py", "api_roles": None, "dep": "app/db/session.py", "dep_roles": None}]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="tests/app.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertEqual("No API → Service → DB paths found.", output)
 
     def test_extract_python_import_map_supports_parenthesized_imports(self):
         source_text = (

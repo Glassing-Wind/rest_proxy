@@ -695,6 +695,58 @@ class CodeIntelHelperTests(unittest.TestCase):
         self.assertIn("leaseRouter", output)
         self.assertNotIn("renderPublic", output)
 
+    def test_format_call_chain_rows_prefers_test_like_first_hop_when_roles_are_present_empty(self):
+        module = load_symbol_graph_module()
+        output = module.format_call_chain_rows(
+            [
+                {
+                    "chain": ["main", "testHelper"],
+                    "files": ["src/runtime/main.ts", "src/tests/helpers.spec.ts"],
+                    "lines": [12, 30],
+                    "file_roles": [[], []],
+                },
+                {
+                    "chain": ["main", "uiHelper"],
+                    "files": ["src/runtime/main.ts", "packages/ui/button.ts"],
+                    "lines": [12, 31],
+                    "file_roles": [[], []],
+                }
+            ],
+            resolved_name="main",
+            symbol_name="main",
+            direction="down",
+            depth=1,
+            resolved_filepath="src/runtime/main.ts",
+        )
+        self.assertIn("testHelper", output)
+        self.assertNotIn("uiHelper", output)
+
+    def test_format_call_chain_rows_demotes_test_like_first_hop_when_roles_missing(self):
+        module = load_symbol_graph_module()
+        output = module.format_call_chain_rows(
+            [
+                {
+                    "chain": ["main", "testHelper"],
+                    "files": ["src/runtime/main.ts", "src/tests/helpers.spec.ts"],
+                    "lines": [12, 30],
+                    "file_roles": [None, None],
+                },
+                {
+                    "chain": ["main", "uiHelper"],
+                    "files": ["src/runtime/main.ts", "packages/ui/button.ts"],
+                    "lines": [12, 31],
+                    "file_roles": [None, None],
+                }
+            ],
+            resolved_name="main",
+            symbol_name="main",
+            direction="down",
+            depth=1,
+            resolved_filepath="src/runtime/main.ts",
+        )
+        self.assertIn("uiHelper", output)
+        self.assertNotIn("testHelper", output)
+
     def test_python_exact_call_graph_guidance_appears_when_edges_are_sparse(self):
         module = load_symbol_graph_module()
         output = module.format_symbol_context(
