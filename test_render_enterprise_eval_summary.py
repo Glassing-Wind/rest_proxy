@@ -84,6 +84,18 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                         "ranking_surfaces_routing_signal": 2,
                     },
                 },
+                "routing_telemetry_current_summary": {
+                    "signal_eligible_events": 2,
+                    "partition_applied_rate": 0.5000,
+                    "semantic_top_signal_hit_rate": 0.5000,
+                    "implementation_ranking_top_signal_hit_rate": 1.0000,
+                    "final_top_signal_hit_rate": 1.0000,
+                    "diagnosis_counts": {
+                        "partition_surfaces_routing_signal": 1,
+                        "ranking_surfaces_routing_signal": 1,
+                    },
+                },
+                "routing_telemetry_current_scope": "recent",
                 "routing_telemetry_recent_summary": {
                     "signal_eligible_events": 2,
                     "partition_applied_rate": 0.5000,
@@ -126,12 +138,13 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         self.assertIn("Recent final top contract-hit rate: `1.0000`", text)
         self.assertIn("Recent diagnosis `ranking_surfaces_contract`: 1", text)
         self.assertIn("### Live Routing Telemetry", text)
-        self.assertIn("Signal-eligible events: `3`", text)
-        self.assertIn("Partition applied rate: `0.3333`", text)
+        self.assertIn("Current window: `recent`", text)
+        self.assertIn("Signal-eligible events: `2`", text)
+        self.assertIn("Partition applied rate: `0.5000`", text)
         self.assertIn("Routing diagnosis `partition_surfaces_routing_signal`: 1", text)
-        self.assertIn("### Recent Routing Telemetry", text)
-        self.assertIn("Recent signal-eligible events: `2`", text)
-        self.assertIn("Recent routing diagnosis `ranking_surfaces_routing_signal`: 1", text)
+        self.assertIn("### Historical Routing Telemetry", text)
+        self.assertIn("Historical total events: `4`", text)
+        self.assertIn("Historical routing diagnosis `ranking_surfaces_routing_signal`: 2", text)
         self.assertIn("- `implementation_search`: 3", text)
 
     def test_render_pr_comment_includes_marker_and_alert_header(self):

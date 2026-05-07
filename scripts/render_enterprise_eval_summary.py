@@ -23,6 +23,8 @@ def render_summary(payload: dict) -> str:
     dispatcher_telemetry = enterprise.get("dispatcher_telemetry_summary") or {}
     dispatcher_telemetry_recent = enterprise.get("dispatcher_telemetry_recent_summary") or {}
     routing_telemetry = enterprise.get("routing_telemetry_summary") or {}
+    routing_telemetry_current = enterprise.get("routing_telemetry_current_summary") or routing_telemetry
+    routing_telemetry_current_scope = str(enterprise.get("routing_telemetry_current_scope") or "historical")
     routing_telemetry_recent = enterprise.get("routing_telemetry_recent_summary") or {}
     attention = list(trend.get("attention_needed") or [])
     query_counts = enterprise.get("retrieval_query_class_counts") or {}
@@ -137,56 +139,59 @@ def render_summary(payload: dict) -> str:
         if diagnosis_counts:
             for name in sorted(diagnosis_counts):
                 lines.append(f"- Recent diagnosis `{name}`: {diagnosis_counts[name]}")
-    if routing_telemetry:
+    if routing_telemetry_current:
         lines.append("")
         lines.append("### Live Routing Telemetry")
         lines.append("")
-        lines.append(f"- Total events: `{routing_telemetry.get('total_events', 0)}`")
+        lines.append(f"- Current window: `{routing_telemetry_current_scope}`")
         lines.append(
-            f"- Signal-eligible events: `{routing_telemetry.get('signal_eligible_events', 0)}`"
+            f"- Signal-eligible events: `{routing_telemetry_current.get('signal_eligible_events', 0)}`"
         )
-        ignored = int(routing_telemetry.get("ignored_no_signal_events", 0) or 0)
+        ignored = int(routing_telemetry_current.get("ignored_no_signal_events", 0) or 0)
         if ignored:
             lines.append(f"- Ignored no-signal events: `{ignored}`")
         lines.append(
-            f"- Partition applied rate: `{_fmt_metric(routing_telemetry.get('partition_applied_rate'))}`"
+            f"- Partition applied rate: `{_fmt_metric(routing_telemetry_current.get('partition_applied_rate'))}`"
         )
         lines.append(
-            f"- Semantic top signal-hit rate: `{_fmt_metric(routing_telemetry.get('semantic_top_signal_hit_rate'))}`"
+            f"- Semantic top signal-hit rate: `{_fmt_metric(routing_telemetry_current.get('semantic_top_signal_hit_rate'))}`"
         )
         lines.append(
-            f"- Ranking top signal-hit rate: `{_fmt_metric(routing_telemetry.get('implementation_ranking_top_signal_hit_rate'))}`"
+            f"- Ranking top signal-hit rate: `{_fmt_metric(routing_telemetry_current.get('implementation_ranking_top_signal_hit_rate'))}`"
         )
         lines.append(
-            f"- Final top signal-hit rate: `{_fmt_metric(routing_telemetry.get('final_top_signal_hit_rate'))}`"
+            f"- Final top signal-hit rate: `{_fmt_metric(routing_telemetry_current.get('final_top_signal_hit_rate'))}`"
+        )
+        diagnosis_counts = routing_telemetry_current.get("diagnosis_counts") or {}
+        if diagnosis_counts:
+            for name in sorted(diagnosis_counts):
+                lines.append(f"- Routing diagnosis `{name}`: {diagnosis_counts[name]}")
+    if routing_telemetry and routing_telemetry_current is not routing_telemetry:
+        lines.append("")
+        lines.append("### Historical Routing Telemetry")
+        lines.append("")
+        lines.append(
+            f"- Historical total events: `{routing_telemetry.get('total_events', 0)}`"
+        )
+        lines.append(
+            f"- Historical signal-eligible events: `{routing_telemetry.get('signal_eligible_events', 0)}`"
+        )
+        lines.append(
+            f"- Historical partition applied rate: `{_fmt_metric(routing_telemetry.get('partition_applied_rate'))}`"
+        )
+        lines.append(
+            f"- Historical semantic top signal-hit rate: `{_fmt_metric(routing_telemetry.get('semantic_top_signal_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Historical ranking top signal-hit rate: `{_fmt_metric(routing_telemetry.get('implementation_ranking_top_signal_hit_rate'))}`"
+        )
+        lines.append(
+            f"- Historical final top signal-hit rate: `{_fmt_metric(routing_telemetry.get('final_top_signal_hit_rate'))}`"
         )
         diagnosis_counts = routing_telemetry.get("diagnosis_counts") or {}
         if diagnosis_counts:
             for name in sorted(diagnosis_counts):
-                lines.append(f"- Routing diagnosis `{name}`: {diagnosis_counts[name]}")
-    if routing_telemetry_recent:
-        lines.append("")
-        lines.append("### Recent Routing Telemetry")
-        lines.append("")
-        lines.append(
-            f"- Recent signal-eligible events: `{routing_telemetry_recent.get('signal_eligible_events', 0)}`"
-        )
-        lines.append(
-            f"- Recent partition applied rate: `{_fmt_metric(routing_telemetry_recent.get('partition_applied_rate'))}`"
-        )
-        lines.append(
-            f"- Recent semantic top signal-hit rate: `{_fmt_metric(routing_telemetry_recent.get('semantic_top_signal_hit_rate'))}`"
-        )
-        lines.append(
-            f"- Recent ranking top signal-hit rate: `{_fmt_metric(routing_telemetry_recent.get('implementation_ranking_top_signal_hit_rate'))}`"
-        )
-        lines.append(
-            f"- Recent final top signal-hit rate: `{_fmt_metric(routing_telemetry_recent.get('final_top_signal_hit_rate'))}`"
-        )
-        diagnosis_counts = routing_telemetry_recent.get("diagnosis_counts") or {}
-        if diagnosis_counts:
-            for name in sorted(diagnosis_counts):
-                lines.append(f"- Recent routing diagnosis `{name}`: {diagnosis_counts[name]}")
+                lines.append(f"- Historical routing diagnosis `{name}`: {diagnosis_counts[name]}")
     if query_counts:
         lines.append("")
         lines.append("### Query Classes")

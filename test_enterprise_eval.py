@@ -117,6 +117,8 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         self.assertEqual(summary["dispatcher_telemetry_recent_summary"]["contract_eligible_events"], 2)
         self.assertEqual(summary["routing_telemetry_summary"]["total_events"], 4)
         self.assertEqual(summary["routing_telemetry_recent_summary"]["signal_eligible_events"], 2)
+        self.assertEqual(summary["routing_telemetry_current_scope"], "recent")
+        self.assertEqual(summary["routing_telemetry_current_summary"]["signal_eligible_events"], 2)
 
     def test_build_summary_collects_only_configs_with_alerts(self):
         mod = _load_module()

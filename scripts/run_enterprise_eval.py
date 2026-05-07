@@ -158,6 +158,16 @@ def build_enterprise_summary(payload: dict) -> dict:
     dispatcher_telemetry_recent_summary = dispatcher_telemetry.get("recent_summary") or {}
     routing_telemetry_summary = routing_telemetry.get("summary") or {}
     routing_telemetry_recent_summary = routing_telemetry.get("recent_summary") or {}
+    routing_telemetry_current_summary = (
+        routing_telemetry_recent_summary
+        if int(routing_telemetry_recent_summary.get("signal_eligible_events", 0) or 0) > 0
+        else routing_telemetry_summary
+    )
+    routing_telemetry_current_scope = (
+        "recent"
+        if routing_telemetry_current_summary is routing_telemetry_recent_summary
+        else "historical"
+    )
     best = _best_retrieval_config(retrieval_summary)
 
     regressions: list[dict] = []
@@ -185,6 +195,8 @@ def build_enterprise_summary(payload: dict) -> dict:
         "dispatcher_summary": dispatcher_summary,
         "dispatcher_telemetry_summary": dispatcher_telemetry_summary,
         "dispatcher_telemetry_recent_summary": dispatcher_telemetry_recent_summary,
+        "routing_telemetry_current_summary": routing_telemetry_current_summary,
+        "routing_telemetry_current_scope": routing_telemetry_current_scope,
         "routing_telemetry_summary": routing_telemetry_summary,
         "routing_telemetry_recent_summary": routing_telemetry_recent_summary,
     }
