@@ -338,6 +338,53 @@ class CrossProjectToolTests(unittest.TestCase):
         self.assertIn("scripts/build_semantic_payload.py", output)
         self.assertNotIn("src/tests/build_semantic_payload.py  L8", output)
 
+    def test_trace_symbol_cross_project_demotes_docs_definition_when_roles_are_present(self):
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "trace_symbol_definition":
+                return [
+                    {
+                        "kind": "Function",
+                        "filepath": "docs/build_semantic_payload.md",
+                        "start_line": 8,
+                        "end_line": 16,
+                        "signature": "build_semantic_payload(...)",
+                        "file_roles": ["docs_surface"],
+                    },
+                    {
+                        "kind": "Function",
+                        "filepath": "scripts/build_semantic_payload.py",
+                        "start_line": 10,
+                        "end_line": 18,
+                        "signature": "build_semantic_payload(...)",
+                        "file_roles": [],
+                    },
+                ]
+            if op == "trace_symbol_alias_definition":
+                return []
+            if op == "trace_symbol_graph_usages":
+                return []
+            return []
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["trace_symbol_cross_project"](
+                        "build_semantic_payload",
+                        "src",
+                        "tgt",
+                    )
+                )
+
+        self.assertIn("scripts/build_semantic_payload.py", output)
+        self.assertNotIn("docs/build_semantic_payload.md  L8", output)
+
     def test_trace_symbol_cross_project_prefers_implementation_consumer_hits(self):
         self.memory_store = FakeMemoryStore(
             [

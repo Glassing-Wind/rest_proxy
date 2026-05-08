@@ -31,6 +31,14 @@ def _definition_rank(record: dict) -> tuple[int, int, str]:
             )
         ):
             score -= 15
+        if any(
+            role in roles
+            for role in (
+                "docs_surface",
+                "support_surface",
+            )
+        ):
+            score -= 10
     elif "/tests/" in filepath or filepath.startswith("tests/"):
         score -= 15
     if "__init__.pyi" in filepath:
