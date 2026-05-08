@@ -98,7 +98,15 @@ def _is_test_like_cross_project_hit(file_path: str, raw_roles) -> bool:
                 "support_surface",
             )
         )
-    return _is_test_like_path(file_path)
+    normalized = (file_path or "").lower()
+    return _is_test_like_path(normalized) or (
+        normalized.startswith("docs/")
+        or "/docs/" in normalized
+        or normalized.startswith("examples/")
+        or "/examples/" in normalized
+        or normalized.startswith("fixtures/")
+        or "/fixtures/" in normalized
+    )
 
 
 def _semantic_usage_rank(record: dict) -> tuple[int, float, str, int]:
