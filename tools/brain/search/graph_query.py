@@ -76,6 +76,8 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
             )
         ):
             return 3
+        if "/docs/" in norm or norm.startswith("docs/"):
+            return 2
         if any(token in norm for token in ("/src/", "src/", "/packages/", "packages/")):
             return 0
         return 2
