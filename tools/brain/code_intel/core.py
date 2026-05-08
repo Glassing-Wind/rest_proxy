@@ -2496,12 +2496,10 @@ def register(mcp: FastMCP) -> None:
                 async with conn.cursor() as cur:
                     ors = " OR ".join(["content ILIKE %s"] * len(symbols))
                     sql = (
-                        "SELECT file_path, count(*) AS hits "
+                        "SELECT file_path, metadata->'file_roles' AS file_roles "
                         "FROM codebase_embeddings "
                         "WHERE project_id = %s AND file_path <> %s AND (" + ors + ") "
-                        "GROUP BY file_path "
-                        "ORDER BY hits DESC "
-                        "LIMIT 10"
+                        "LIMIT 200"
                     )
                     params = [project_id, file_path] + [f"%{s}%" for s in symbols]
                     await cur.execute(sql, params)
@@ -2510,10 +2508,36 @@ def register(mcp: FastMCP) -> None:
             if not rows:
                 return "No structurally related files found."
 
+            grouped_rows: dict[str, dict[str, object]] = {}
+            for row in rows:
+                if len(row) >= 3:
+                    fp, hits, raw_roles = row[0], row[1], row[2]
+                    hit_count = int(hits or 0)
+                else:
+                    fp, raw_roles = row[0], row[1]
+                    hit_count = 1
+                entry = grouped_rows.setdefault(
+                    fp,
+                    {"hits": 0, "file_roles": None},
+                )
+                entry["hits"] = int(entry["hits"] or 0) + hit_count
+                if _file_roles_present(raw_roles) and not _file_roles_present(entry.get("file_roles")):
+                    entry["file_roles"] = raw_roles
+
             filtered_rows = [
-                (fp, hits)
-                for fp, hits in rows
-                if not _is_low_signal_support_path(fp) and not _is_test_like_path(fp)
+                (fp, int(data.get("hits") or 0))
+                for fp, data in sorted(
+                    grouped_rows.items(),
+                    key=lambda item: (-int(item[1].get("hits") or 0), item[0]),
+                )
+                if not _is_low_signal_related_support_candidate(
+                    fp,
+                    data.get("file_roles"),
+                )
+                and not _is_test_like_related_candidate(
+                    fp,
+                    data.get("file_roles"),
+                )
             ]
             if not filtered_rows:
                 return "No structurally related files found."

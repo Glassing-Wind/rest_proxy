@@ -3199,6 +3199,126 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertEqual(output.count("FrameCreator/Views/ContentView.swift"), 1)
         self.assertIn("FrameCreator/Views/InspectorView.swift", output)
 
+    def test_get_related_files_semantic_fallback_keeps_test_like_path_when_roles_are_present(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [
+                    ("tests/SidebarViewNeighbors.swift", []),
+                ]
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            _pg_pool=FakePool(),
+            open_pool=mock.AsyncMock(return_value=None),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_memory_modules", return_value=(fake_memory_store, None, None, None, None)):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/framecreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("tests/SidebarViewNeighbors.swift", output)
+
+    def test_get_related_files_semantic_fallback_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [
+                    ("tests/SidebarViewNeighbors.swift", None),
+                ]
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            _pg_pool=FakePool(),
+            open_pool=mock.AsyncMock(return_value=None),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_memory_modules", return_value=(fake_memory_store, None, None, None, None)):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/framecreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No structurally related files found.")
+
     def test_get_symbol_context_uses_file_extension_for_source_preview_fence(self):
         record = {
             "kind": "Class",
