@@ -29,6 +29,8 @@ def _is_test_like_path(file_path: str) -> bool:
     return (
         normalized.startswith("tests/")
         or "/tests/" in normalized
+        or normalized.startswith("examples/")
+        or "/examples/" in normalized
         or normalized.startswith("benchmarks/")
         or "/benchmarks/" in normalized
         or normalized.startswith("benchmark/")

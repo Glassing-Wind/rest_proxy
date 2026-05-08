@@ -445,6 +445,42 @@ class SearchSummaryTests(unittest.TestCase):
 
         self.assertIn("inspect `src/main/java/org/example/Pet.java` next", output)
 
+    def test_symbol_exports_summary_legacy_example_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_symbol_exports_summary_count":
+                return [{"n": 2}]
+            if op == "get_symbol_exports_summary_symbols":
+                return [{"symbol": "OwnerControllerFlow", "target_symbol": "OwnerControllerFlow", "alias_edges": 0, "exporters": 1, "importers": 8}]
+            if op == "get_symbol_exports_summary_files":
+                return [
+                    {
+                        "file": "examples/OwnerControllerFlow.java",
+                        "n": 12,
+                        "symbols": ["OwnerControllerFlow", "OwnerController"],
+                        "file_roles": None,
+                    },
+                    {
+                        "file": "src/main/java/org/example/Pet.java",
+                        "n": 10,
+                        "symbols": ["Pet"],
+                        "file_roles": None,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_tools, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_symbol_exports_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                    limit=20,
+                )
+            )
+
+        self.assertIn("inspect `src/main/java/org/example/Pet.java` next", output)
+
     def test_symbol_exports_summary_legacy_benchmark_path_penalty_still_applies_when_roles_missing(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
