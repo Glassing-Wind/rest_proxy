@@ -134,8 +134,12 @@ def register(mcp: FastMCP) -> None:
             or norm.startswith("tests/")
             or "/e2e/" in norm
             or norm.startswith("e2e/")
+            or "/examples/" in norm
+            or norm.startswith("examples/")
             or "/fixtures/" in norm
             or norm.startswith("fixtures/")
+            or "/benchmarks/" in norm
+            or norm.startswith("benchmarks/")
             or ".spec." in norm
             or ".stories." in norm
         )
