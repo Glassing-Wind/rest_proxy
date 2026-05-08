@@ -156,6 +156,9 @@ def register(mcp: FastMCP) -> None:
             return False
         return _is_low_signal_support_path(file_path)
 
+    def _list_symbol_match_test_rank(file_path: str | None, raw_roles) -> int:
+        return 1 if _is_test_like_related_candidate(file_path, raw_roles) else 0
+
     def _is_low_signal_related_import_source(source: str | None) -> bool:
         value = str(source or "").strip()
         if not value:
@@ -1240,23 +1243,17 @@ def register(mcp: FastMCP) -> None:
                   OR (s.signature IS NOT NULL AND s.signature CONTAINS $q)
                 )
                 AND (size(s.name) > 2 OR size($q) <= 2)
+                OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)
                 RETURN labels(s) AS kinds, s.name AS name, s.qualified_name AS qualified_name,
                        s.signature AS signature, s.filepath AS filepath,
+                       coalesce(s.semantic_file_roles, parent.semantic_file_roles) AS file_roles,
                        CASE WHEN s.name CONTAINS $q THEN 0 ELSE 1 END AS name_match,
-                       CASE
-                         WHEN toLower(s.filepath) CONTAINS '/tests/'
-                           OR toLower(s.filepath) CONTAINS '/test/'
-                           OR toLower(s.filepath) STARTS WITH 'tests/'
-                           OR toLower(s.filepath) STARTS WITH 'test/'
-                         THEN 1
-                         ELSE 0
-                       END AS test_rank,
                        CASE
                          WHEN any(k in $type_kinds WHERE k IN labels(s)) THEN 0
                          WHEN any(k in $callable_kinds WHERE k IN labels(s)) THEN 1
                          ELSE 2
                        END AS kind_rank
-                ORDER BY name_match ASC, test_rank ASC, kind_rank ASC, size(s.name) ASC
+                ORDER BY name_match ASC, kind_rank ASC, size(s.name) ASC
                 LIMIT $limit
             """
 
@@ -1285,6 +1282,16 @@ def register(mcp: FastMCP) -> None:
 
             if not rows:
                 return f"No symbol matches for '{q}'."
+
+            rows = sorted(
+                rows,
+                key=lambda rec: (
+                    int(rec.get("name_match") or 0),
+                    _list_symbol_match_test_rank(rec.get("filepath"), rec.get("file_roles")),
+                    int(rec.get("kind_rank") or 99),
+                    len(str(rec.get("name") or "")),
+                ),
+            )
 
             lines = [f"Symbol matches for '{q}':", ""]
             for rec in rows:

@@ -1710,7 +1710,8 @@ class CodeIntelToolTests(unittest.TestCase):
         vendor_index = rendered.index("`withUnsafeMutableBytes`")
         self.assertLess(cancel_index, generated_index)
         self.assertLess(generate_index, generated_index)
-        self.assertLess(generated_index, vendor_index)
+        self.assertLess(cancel_index, vendor_index)
+        self.assertLess(generate_index, vendor_index)
 
     def test_symbol_context_demotes_type_and_property_like_callees_below_behavioral_calls(self):
         output = self.module.symbol_graph.format_symbol_context(
@@ -3456,7 +3457,8 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_list_symbol_matches_demotes_test_symbols_after_impl_symbols(self):
         async def fake_executor(cypher, **kwargs):
-            self.assertIn("test_rank", cypher)
+            self.assertIn("AS file_roles", cypher)
+            self.assertNotIn("CONTAINS '/tests/'", cypher)
             return [
                 {
                     "kinds": ["Function", "Node"],
@@ -3464,6 +3466,7 @@ class CodeIntelToolTests(unittest.TestCase):
                     "qualified_name": "pydantic_ai.providers.infer_provider",
                     "signature": None,
                     "filepath": "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                    "file_roles": [],
                 },
                 {
                     "kinds": ["Function", "Node"],
@@ -3471,6 +3474,7 @@ class CodeIntelToolTests(unittest.TestCase):
                     "qualified_name": "tests.providers.test_provider_names.test_infer_provider",
                     "signature": None,
                     "filepath": "tests/providers/test_provider_names.py",
+                    "file_roles": None,
                 },
             ]
 
@@ -3490,6 +3494,45 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertLess(
             output.index("pydantic_ai_slim/pydantic_ai/providers/__init__.py"),
             output.index("tests/providers/test_provider_names.py"),
+        )
+
+    def test_list_symbol_matches_keeps_test_symbol_eligible_when_roles_are_present_empty(self):
+        async def fake_executor(cypher, **kwargs):
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "tests.providers.test_provider_names.infer_provider",
+                    "signature": None,
+                    "filepath": "tests/providers/test_provider_names.py",
+                    "file_roles": [],
+                },
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "pydantic_ai.providers.infer_provider",
+                    "signature": None,
+                    "filepath": "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                    "file_roles": None,
+                },
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/pydantic-ai",
+                        "infer_provider",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertLess(
+            output.index("tests/providers/test_provider_names.py"),
+            output.index("pydantic_ai_slim/pydantic_ai/providers/__init__.py"),
         )
 
 
