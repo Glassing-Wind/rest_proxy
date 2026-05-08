@@ -665,8 +665,22 @@ def _overview_file_rank(filepath: str | None, symbol_count: int, file_roles: set
     roles_known = _file_roles_known(file_roles)
     score = base * _importance_penalty(filepath, file_roles) * _backend_bridge_boost(filepath, file_roles)
     if not roles_known and (
-        any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/"))
-        or norm.startswith(("tests/", "test/", "fixtures/", "examples/"))
+        any(
+            marker in norm
+            for marker in (
+                "/tests/",
+                "/test/",
+                ".spec.",
+                ".test.",
+                "/fixtures/",
+                "/examples/",
+                "/samples/",
+                "/benchmark/",
+                "/benchmarks/",
+                "/docs/",
+            )
+        )
+        or norm.startswith(("tests/", "test/", "fixtures/", "examples/", "samples/", "benchmark/", "benchmarks/", "docs/"))
     ):
         score *= 0.005
     if basename in {"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat"}:
@@ -718,9 +732,23 @@ def _is_overview_low_signal_key_file(filepath: str | None, file_roles: set[str] 
     } & roles:
         return True
     if not roles_known:
-        if any(marker in norm for marker in ("/tests/", "/test/", ".spec.", ".test.", "/fixtures/", "/examples/")):
+        if any(
+            marker in norm
+            for marker in (
+                "/tests/",
+                "/test/",
+                ".spec.",
+                ".test.",
+                "/fixtures/",
+                "/examples/",
+                "/samples/",
+                "/benchmark/",
+                "/benchmarks/",
+                "/docs/",
+            )
+        ):
             return True
-        if norm.startswith(("tests/", "test/", "fixtures/", "examples/")):
+        if norm.startswith(("tests/", "test/", "fixtures/", "examples/", "samples/", "benchmark/", "benchmarks/", "docs/")):
             return True
     if any(marker in norm for marker in _GENERATED_OVERVIEW_PATH_MARKERS):
         return True

@@ -1637,6 +1637,12 @@ class GraphToolsTests(unittest.TestCase):
         overview = self.mcp.tools["get_project_overview"].__globals__["graph_overview"]
         self.assertTrue(overview._is_overview_low_signal_key_file("examples/demo.py", None))
         self.assertFalse(overview._is_overview_low_signal_key_file("examples/demo.py", set()))
+        self.assertTrue(overview._is_overview_low_signal_key_file("docs/architecture.md", None))
+        self.assertFalse(overview._is_overview_low_signal_key_file("docs/architecture.md", set()))
+        self.assertLess(
+            overview._overview_file_rank("docs/architecture.md", 8, None),
+            overview._overview_file_rank("docs/architecture.md", 8, set()),
+        )
         self.assertGreater(
             overview._directory_snapshot_path_penalty("examples/demo.py", None),
             overview._directory_snapshot_path_penalty("examples/demo.py", set()),
