@@ -231,6 +231,16 @@ def _symbol_path_penalty(filepath: str | None, raw_roles=None) -> int:
         )
     ):
         return 4
+    if not roles_known and any(
+        token in normalized
+        for token in (
+            "/docs/",
+            "docs/",
+            "/readme",
+            "/changelog",
+        )
+    ):
+        return 3
     if any(
         token in normalized
         for token in (
