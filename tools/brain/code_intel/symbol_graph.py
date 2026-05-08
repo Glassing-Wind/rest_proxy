@@ -462,8 +462,14 @@ def should_disambiguate_symbol_context(
     distinct_kinds = {c.get("kind") for c in candidates if c.get("kind")}
     top_score = int(ranked[0].get("symbol_context_score") or 0)
     second_score = int(ranked[1].get("symbol_context_score") or 0)
-    top_penalty = _symbol_path_penalty(ranked[0].get("filepath"))
-    second_penalty = _symbol_path_penalty(ranked[1].get("filepath"))
+    top_penalty = _symbol_path_penalty(
+        ranked[0].get("filepath"),
+        ranked[0].get("file_roles"),
+    )
+    second_penalty = _symbol_path_penalty(
+        ranked[1].get("filepath"),
+        ranked[1].get("file_roles"),
+    )
     top_signature = str(ranked[0].get("signature") or "").lstrip().lower()
     second_signature = str(ranked[1].get("signature") or "").lstrip().lower()
     if (
@@ -647,9 +653,6 @@ def filter_visualize_neighbors(focus: dict, neighbors: dict) -> dict:
     def _low_value_name(name: str | None) -> bool:
         normalized = (name or "").strip().lower()
         return normalized in {"", "unnamed", "<anonymous>", "anonymous", "iife", "fn"}
-
-    def _path_penalty(filepath: str | None) -> int:
-        return _symbol_path_penalty(filepath, None)
 
     def _entry_path_penalty(entry: dict) -> int:
         penalty = _symbol_path_penalty(entry.get("fp"), entry.get("file_roles"))

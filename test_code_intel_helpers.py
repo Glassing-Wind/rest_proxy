@@ -602,6 +602,62 @@ class CodeIntelHelperTests(unittest.TestCase):
             )
         )
 
+    def test_should_disambiguate_symbol_context_skips_test_path_fallback_when_roles_are_present(self):
+        module = load_symbol_graph_module()
+        present_role_candidates = [
+            {
+                "kind": "TypeAlias",
+                "name": "Config",
+                "qualified_name": None,
+                "filepath": "packages/sdk/js/src/runtime/config.ts",
+                "start_line": 10,
+                "signature": None,
+                "callers_in": 1,
+                "callees_out": 0,
+                "file_roles": [],
+            },
+            {
+                "kind": "TypeAlias",
+                "name": "Config",
+                "qualified_name": None,
+                "filepath": "packages/sdk/js/src/runtime/tests/config.test.ts",
+                "start_line": 12,
+                "signature": None,
+                "callers_in": 1,
+                "callees_out": 0,
+                "file_roles": [],
+            },
+            {
+                "kind": "Class",
+                "name": "Config",
+                "qualified_name": None,
+                "filepath": "packages/sdk/js/src/gen/sdk.gen.ts",
+                "start_line": 30,
+                "signature": "class Config",
+                "callers_in": 0,
+                "callees_out": 0,
+                "file_roles": ["generated_surface"],
+            },
+        ]
+        legacy_candidates = [dict(candidate) for candidate in present_role_candidates]
+        legacy_candidates[1]["file_roles"] = None
+        self.assertTrue(
+            module.should_disambiguate_symbol_context(
+                present_role_candidates,
+                symbol_name="Config",
+                normalized_file_path=None,
+                normalized_signature=None,
+            )
+        )
+        self.assertFalse(
+            module.should_disambiguate_symbol_context(
+                legacy_candidates,
+                symbol_name="Config",
+                normalized_file_path=None,
+                normalized_signature=None,
+            )
+        )
+
     def test_call_chain_candidate_uses_suffix_file_match(self):
         module = load_symbol_graph_module()
         picked = module.pick_call_chain_candidate(
