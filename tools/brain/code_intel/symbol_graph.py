@@ -103,33 +103,8 @@ CALL_CHAIN_RESOLVE_CYPHER = f"""
            s.signature AS signature, s.filepath AS filepath,
            head([label IN labels(s) WHERE label <> 'Node']) AS kind, rank,
            parent.semantic_file_roles AS file_roles,
-           CASE
-             WHEN s.filepath IS NULL THEN 2
-             WHEN parent.semantic_file_roles IS NOT NULL
-               AND any(role IN parent.semantic_file_roles WHERE role IN ['generated_surface', 'binding_surface'])
-               THEN 3
-             WHEN parent.semantic_file_roles IS NOT NULL
-               AND any(role IN parent.semantic_file_roles WHERE role IN ['test_surface', 'example_surface', 'benchmark_surface'])
-               THEN 4
-             WHEN parent.semantic_file_roles IS NOT NULL
-               AND 'support_surface' IN parent.semantic_file_roles
-               THEN 3
-             WHEN parent.semantic_file_roles IS NOT NULL
-               THEN 1
-             WHEN s.filepath CONTAINS '/tests/' OR s.filepath CONTAINS '/test/' OR s.filepath CONTAINS '/e2e/'
-               OR s.filepath CONTAINS '/fixtures/' OR s.filepath CONTAINS '.spec.' OR s.filepath CONTAINS '.stories.'
-               THEN 4
-             WHEN s.filepath CONTAINS '/gen/' OR s.filepath CONTAINS '/generated/' OR s.filepath CONTAINS 'PreGeneratedSPM'
-               OR s.filepath CONTAINS '.gen.' OR s.filepath CONTAINS '_generated.'
-               THEN 3
-             WHEN s.filepath CONTAINS '/api/' OR s.filepath CONTAINS '/routes/' OR s.filepath CONTAINS '/services/' OR s.filepath CONTAINS '/db/'
-               OR s.filepath STARTS WITH 'api/' OR s.filepath STARTS WITH 'routes/' OR s.filepath STARTS WITH 'services/' OR s.filepath STARTS WITH 'db/'
-               THEN 0
-             WHEN s.filepath CONTAINS '/public/' OR s.filepath STARTS WITH 'public/' OR s.filepath ENDS WITH '.html' OR s.filepath ENDS WITH '.css'
-               THEN 3
-             ELSE 1
-           END AS path_rank
-    ORDER BY rank ASC, path_rank ASC, callers_in DESC, size(coalesce(s.qualified_name, s.name)) ASC
+           callers_in
+    ORDER BY rank ASC, callers_in DESC, size(coalesce(s.qualified_name, s.name)) ASC
     LIMIT 5
 """
 
@@ -550,7 +525,7 @@ def pick_call_chain_candidate(
         candidates,
         key=lambda candidate: (
             candidate.get("rank", 99),
-            min(candidate.get("path_rank", 99), _symbol_path_penalty(candidate.get("filepath"))),
+            _symbol_path_penalty(candidate.get("filepath"), candidate.get("file_roles")),
             _symbol_kind_rank(candidate.get("kind")),
             -int(candidate.get("callers_in") or 0),
             len(candidate.get("qualified_name") or candidate.get("name") or ""),

@@ -613,7 +613,7 @@ class CodeIntelHelperTests(unittest.TestCase):
                     "signature": "fn main()",
                     "filepath": "/tmp/opencode/packages/desktop/src-tauri/build.rs",
                     "rank": 0,
-                    "path_rank": 1,
+                    "file_roles": [],
                     "callers_in": 0,
                 },
                 {
@@ -623,7 +623,7 @@ class CodeIntelHelperTests(unittest.TestCase):
                     "signature": "fn main()",
                     "filepath": "/tmp/opencode/packages/desktop/src-tauri/src/main.rs",
                     "rank": 0,
-                    "path_rank": 1,
+                    "file_roles": [],
                     "callers_in": 3,
                 },
             ],
@@ -636,7 +636,9 @@ class CodeIntelHelperTests(unittest.TestCase):
         module = load_symbol_graph_module()
         cypher = module.CALL_CHAIN_RESOLVE_CYPHER
         self.assertIn("parent.semantic_file_roles AS file_roles", cypher)
-        self.assertIn("WHEN parent.semantic_file_roles IS NOT NULL", cypher)
+        self.assertNotIn("END AS path_rank", cypher)
+        self.assertNotIn("CONTAINS '/tests/'", cypher)
+        self.assertNotIn("CONTAINS '/generated/'", cypher)
 
     def test_visualize_focus_cypher_returns_semantic_file_roles(self):
         module = load_symbol_graph_module()

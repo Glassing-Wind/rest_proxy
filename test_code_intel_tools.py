@@ -158,7 +158,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/public/assets/application-center.js",
                         "rank": 0,
-                        "path_rank": 3,
                     },
                     {
                         "eid": "2",
@@ -167,7 +166,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/api/routes/buildRouter.ts",
                         "rank": 0,
-                        "path_rank": 0,
                     },
                 ]
             if "MATCH path = (start)" in cypher:
@@ -1004,7 +1002,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/api/routes/financeAdminRoutes.ts",
                         "rank": 0,
-                        "path_rank": 0,
                     }
                 ]
             if "MATCH path = (start)" in cypher:
@@ -1049,7 +1046,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/public/assets/financial-summary.js",
                         "rank": 0,
-                        "path_rank": 3,
                     }
                 ]
             if "MATCH path = (start)" in cypher:
@@ -1096,7 +1092,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "packages/opencode/src/project/instance.ts",
                         "rank": 0,
-                        "path_rank": 1,
                         "callers_in": 7,
                     }
                 ]
@@ -1145,7 +1140,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
                         "rank": 0,
-                        "path_rank": 0,
                     }
                 ]
             if "MATCH path = (start)" in cypher:
@@ -1182,7 +1176,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
                         "rank": 0,
-                        "path_rank": 0,
                         "callers_in": 1,
                     }
                 ]
@@ -1247,7 +1240,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "packages/opencode/src/project/instance.ts",
                         "rank": 0,
-                        "path_rank": 1,
                         "callers_in": 7,
                     }
                 ]
@@ -1302,7 +1294,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": "struct SidebarView: View",
                         "filepath": "FrameCreator/Views/SidebarView.swift",
                         "rank": 0,
-                        "path_rank": 0,
                         "callers_in": 0,
                     }
                 ]
@@ -1384,7 +1375,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "filepath": "Sources/NIOCore/EventLoop.swift",
                         "kind": "Protocol",
                         "rank": 0,
-                        "path_rank": 0,
                         "callers_in": 0,
                     }
                 ]
@@ -1435,7 +1425,6 @@ class CodeIntelToolTests(unittest.TestCase):
                     "filepath": "Sources/NIOCore/EventLoop.swift",
                     "kind": "Extension",
                     "rank": 0,
-                    "path_rank": 1,
                     "callers_in": 0,
                 },
                 {
@@ -1446,7 +1435,6 @@ class CodeIntelToolTests(unittest.TestCase):
                     "filepath": "Sources/NIOCore/EventLoop.swift",
                     "kind": "Protocol",
                     "rank": 0,
-                    "path_rank": 1,
                     "callers_in": 0,
                 },
             ],
