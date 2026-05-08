@@ -39,8 +39,19 @@ def _definition_rank(record: dict) -> tuple[int, int, str]:
             )
         ):
             score -= 10
-    elif "/tests/" in filepath or filepath.startswith("tests/"):
-        score -= 15
+    else:
+        normalized = filepath.lower()
+        if _is_test_like_path(normalized):
+            score -= 15
+        elif (
+            normalized.startswith("docs/")
+            or "/docs/" in normalized
+            or normalized.startswith("examples/")
+            or "/examples/" in normalized
+            or normalized.startswith("fixtures/")
+            or "/fixtures/" in normalized
+        ):
+            score -= 10
     if "__init__.pyi" in filepath:
         score -= 15
     if "__init__.py" in filepath:
