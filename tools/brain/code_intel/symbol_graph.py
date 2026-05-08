@@ -916,29 +916,9 @@ def _symbol_context_callee_rank(callee: dict, *, target_filepath: str | None) ->
     if target_filepath:
         target_dir = os.path.dirname(str(target_filepath).replace("\\", "/"))
 
-    if any(token in normalized for token in ("/vendors/", "/vendor/", "vendors/", "vendor/")):
-        bucket = 5
-    elif any(
-        token in normalized
-        for token in (
-            "/generated/",
-            "/gen/",
-            "pregeneratedspm",
-            ".gen.",
-            "_generated.",
-            ".grpc.swift",
-            ".pb.swift",
-        )
-    ):
-        bucket = 4
-    elif any(token in normalized for token in ("/tests/", "/test/", "/fixtures/", ".spec.", ".stories.")):
-        bucket = 6
-    elif filepath and target_dir and filepath.startswith(target_dir + "/"):
+    bucket = _symbol_path_penalty(filepath, callee.get("file_roles"))
+    if filepath and target_dir and filepath.startswith(target_dir + "/") and bucket < 4:
         bucket = 0
-    elif any(token in normalized for token in ("/apps/", "apps/", "/sources/", "sources/", "/libraries/", "libraries/")):
-        bucket = 1
-    else:
-        bucket = 2
 
     if name.startswith(("with", "get", "set")) and bucket <= 2:
         helper_penalty = 1

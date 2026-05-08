@@ -526,6 +526,33 @@ class CodeIntelHelperTests(unittest.TestCase):
             4,
         )
 
+    def test_symbol_context_callee_rank_skips_test_path_fallback_when_file_roles_are_present(self):
+        module = load_symbol_graph_module()
+        target = "packages/sdk/js/src/runtime/main.ts"
+        test_like_path = "packages/sdk/js/src/runtime/tests/config.test.ts"
+        self.assertLess(
+            module._symbol_context_callee_rank(
+                {"file": test_like_path, "name": "buildConfig", "file_roles": []},
+                target_filepath=target,
+            )[0],
+            module._symbol_context_callee_rank(
+                {"file": test_like_path, "name": "buildConfig", "file_roles": None},
+                target_filepath=target,
+            )[0],
+        )
+
+    def test_symbol_context_callee_rank_keeps_generated_same_dir_penalty(self):
+        module = load_symbol_graph_module()
+        target = "packages/sdk/js/src/runtime/main.ts"
+        generated_path = "packages/sdk/js/src/runtime/generated/config.pb.swift"
+        self.assertGreaterEqual(
+            module._symbol_context_callee_rank(
+                {"file": generated_path, "name": "Config", "file_roles": None},
+                target_filepath=target,
+            )[0],
+            4,
+        )
+
     def test_symbol_context_cypher_parenthesizes_label_filter(self):
         module = load_symbol_graph_module()
         cypher = module.SYMBOL_CONTEXT_CYPHER
