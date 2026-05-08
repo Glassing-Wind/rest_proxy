@@ -202,6 +202,37 @@ class GraphQueryTests(unittest.TestCase):
         lines = [line for line in output.splitlines() if line.startswith("- [")]
         self.assertIn("packages/opencode/src/config/config.ts:8", lines[0])
 
+    def test_find_definitions_demotes_docs_surface_when_roles_are_present(self):
+        rows = [
+            {
+                "project_id": "opencode",
+                "project_path": "/Users/michaelmarler/Projects/opencode",
+                "file": "docs/reference/config.md",
+                "line": 12,
+                "type": "Class",
+                "file_roles": ["docs_surface"],
+            },
+            {
+                "project_id": "opencode",
+                "project_path": "/Users/michaelmarler/Projects/opencode",
+                "file": "packages/opencode/src/config/config.ts",
+                "line": 8,
+                "type": "Class",
+                "file_roles": [],
+            },
+        ]
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            return rows
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(self.mcp.tools["find_definitions"]("Config"))
+
+        lines = [line for line in output.splitlines() if line.startswith("- [")]
+        self.assertIn("packages/opencode/src/config/config.ts:8", lines[0])
+        self.assertIn("docs/reference/config.md:12", lines[1])
+
 
 if __name__ == "__main__":
     unittest.main()

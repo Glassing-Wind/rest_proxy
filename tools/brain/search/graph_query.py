@@ -41,6 +41,8 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
                 return 4
             if {"test_surface", "example_surface", "benchmark_surface"} & roles:
                 return 3
+            if {"docs_surface", "support_surface"} & roles:
+                return 2
             return 0
         norm = (file_path or "").replace("\\", "/").lower()
         if not norm:
