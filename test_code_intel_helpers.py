@@ -424,6 +424,18 @@ class CodeIntelHelperTests(unittest.TestCase):
         self.assertIn("Mentions & Type Usages (Semantic)", output)
         self.assertIn("tests/providers/test_provider_names.py", output)
 
+    def test_reference_path_penalty_treats_legacy_example_paths_as_low_signal(self):
+        module = load_references_module()
+        low_signal_bucket, _ = module._reference_path_penalty(
+            "examples/provider_walkthrough.py",
+            None,
+        )
+        normal_bucket, _ = module._reference_path_penalty(
+            "src/providers/provider.py",
+            None,
+        )
+        self.assertGreater(low_signal_bucket, normal_bucket)
+
     def test_format_symbol_context_includes_external_calls(self):
         module = load_symbol_graph_module()
         output = module.format_symbol_context(

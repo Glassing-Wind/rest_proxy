@@ -48,9 +48,13 @@ def _reference_path_penalty(file_path: str | None, raw_roles=None) -> tuple[int,
         test_like = (
             norm.startswith("tests/")
             or norm.startswith("test/")
+            or norm.startswith("examples/")
             or norm.startswith("fixtures/")
             or norm.startswith("e2e/")
-            or any(token in norm for token in ("/tests/", "/test/", "/fixtures/", "/e2e/", ".spec.", ".stories."))
+            or any(
+                token in norm
+                for token in ("/tests/", "/test/", "/examples/", "/fixtures/", "/e2e/", ".spec.", ".stories.")
+            )
         )
     if test_like:
         return (5, norm)
