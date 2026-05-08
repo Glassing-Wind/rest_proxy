@@ -71,6 +71,14 @@ def _is_test_like_path(filepath: str | None) -> bool:
     return (
         filepath.startswith("tests/")
         or "/tests/" in filepath
+        or filepath.startswith("test/")
+        or "/test/" in filepath
+        or filepath.startswith("examples/")
+        or "/examples/" in filepath
+        or filepath.startswith("fixtures/")
+        or "/fixtures/" in filepath
+        or filepath.startswith("docs/")
+        or "/docs/" in filepath
         or "__tests__" in filepath
         or ".test." in filepath
         or filepath.endswith("_test.py")
@@ -94,6 +102,9 @@ def _is_test_like_graph_path(filepath: str | None, raw_roles) -> bool:
             for role in (
                 "test_surface",
                 "example_surface",
+                "benchmark_surface",
+                "docs_surface",
+                "support_surface",
             )
         )
     return _is_test_like_path(filepath)

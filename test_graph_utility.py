@@ -157,6 +157,52 @@ class GraphUtilityTests(unittest.TestCase):
             )
         self.assertLess(output.find("tests/services.test.ts"), output.find("src/api/routes.ts"))
 
+    def test_topology_summary_demotes_docs_surface_when_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [
+                    {"fp": "docs/architecture.md", "file_roles": ["docs_surface"], "inbound": 0, "outbound": 11},
+                    {"fp": "src/api/routes.ts", "file_roles": [], "inbound": 2, "outbound": 34},
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                )
+            )
+        self.assertLess(output.find("src/api/routes.ts"), output.find("docs/architecture.md"))
+
+    def test_topology_summary_legacy_docs_path_fallback_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [
+                    {"fp": "docs/architecture.md", "file_roles": None, "inbound": 0, "outbound": 11},
+                    {"fp": "src/api/routes.ts", "file_roles": None, "inbound": 2, "outbound": 34},
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                )
+            )
+        self.assertLess(output.find("src/api/routes.ts"), output.find("docs/architecture.md"))
+
     def test_heuristic_flow_summary_includes_cargo_crate_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
