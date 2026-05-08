@@ -77,6 +77,10 @@ def _is_test_like_path(filepath: str | None) -> bool:
         or "/examples/" in filepath
         or filepath.startswith("fixtures/")
         or "/fixtures/" in filepath
+        or filepath.startswith("benchmark/")
+        or "/benchmark/" in filepath
+        or filepath.startswith("benchmarks/")
+        or "/benchmarks/" in filepath
         or filepath.startswith("docs/")
         or "/docs/" in filepath
         or "__tests__" in filepath
