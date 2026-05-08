@@ -73,6 +73,8 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
                 "/storybook/",
                 "/fixtures/",
                 "/examples/",
+                "/benchmark/",
+                "/benchmarks/",
             )
         ):
             return 3
