@@ -684,6 +684,12 @@ def _is_test_like_path(filepath: str | None) -> bool:
         or "/tests/" in filepath
         or filepath.startswith("test/")
         or "/test/" in filepath
+        or filepath.startswith("examples/")
+        or "/examples/" in filepath
+        or filepath.startswith("fixtures/")
+        or "/fixtures/" in filepath
+        or filepath.startswith("docs/")
+        or "/docs/" in filepath
         or filepath.startswith("e2e/")
         or "/e2e/" in filepath
         or "__tests__" in filepath
@@ -710,7 +716,7 @@ def _normalize_file_roles(raw_roles) -> set[str]:
 
 def _is_low_signal_flow_path(filepath: str | None, raw_roles) -> bool:
     roles = _normalize_file_roles(raw_roles)
-    if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+    if {"test_surface", "example_surface", "benchmark_surface", "docs_surface", "support_surface"} & roles:
         return True
     if _file_roles_present(raw_roles):
         return False
