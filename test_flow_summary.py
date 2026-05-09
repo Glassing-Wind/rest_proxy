@@ -470,6 +470,7 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertFalse(self.module._is_low_signal_flow_path("tests/routes.test.ts", []))
         self.assertTrue(self.module._is_low_signal_flow_path("tests/routes.test.ts", None))
         self.assertTrue(self.module._is_low_signal_flow_path("src/app.ts", ["test_surface"]))
+        self.assertTrue(self.module._is_low_signal_flow_path("benchmarks/routes_benchmark.ts", None))
         self.assertTrue(self.module._is_low_signal_flow_path("docs/architecture.md", None))
         self.assertTrue(self.module._is_low_signal_flow_path("src/app.ts", ["docs_surface"]))
 
