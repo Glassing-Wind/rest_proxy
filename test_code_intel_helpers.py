@@ -557,6 +557,13 @@ class CodeIntelHelperTests(unittest.TestCase):
             3,
         )
 
+    def test_symbol_path_penalty_legacy_benchmark_fallback_still_applies_when_roles_missing(self):
+        module = load_symbol_graph_module()
+        self.assertEqual(
+            module._symbol_path_penalty("packages/sdk/js/benchmarks/provider_walkthrough.ts", None),
+            4,
+        )
+
     def test_symbol_context_callee_rank_skips_test_path_fallback_when_file_roles_are_present(self):
         module = load_symbol_graph_module()
         target = "packages/sdk/js/src/runtime/main.ts"

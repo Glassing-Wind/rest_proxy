@@ -228,6 +228,8 @@ def _symbol_path_penalty(filepath: str | None, raw_roles=None) -> int:
             "/storybook/",
             "/fixtures/",
             "/examples/",
+            "/benchmark/",
+            "/benchmarks/",
         )
     ):
         return 4
