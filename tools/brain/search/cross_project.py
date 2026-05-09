@@ -50,6 +50,10 @@ def _definition_rank(record: dict) -> tuple[int, int, str]:
             or "/examples/" in normalized
             or normalized.startswith("fixtures/")
             or "/fixtures/" in normalized
+            or normalized.startswith("benchmark/")
+            or "/benchmark/" in normalized
+            or normalized.startswith("benchmarks/")
+            or "/benchmarks/" in normalized
         ):
             score -= 10
     if "__init__.pyi" in filepath:
@@ -106,6 +110,10 @@ def _is_test_like_cross_project_hit(file_path: str, raw_roles) -> bool:
         or "/examples/" in normalized
         or normalized.startswith("fixtures/")
         or "/fixtures/" in normalized
+        or normalized.startswith("benchmark/")
+        or "/benchmark/" in normalized
+        or normalized.startswith("benchmarks/")
+        or "/benchmarks/" in normalized
     )
 
 

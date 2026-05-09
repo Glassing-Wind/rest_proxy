@@ -432,6 +432,53 @@ class CrossProjectToolTests(unittest.TestCase):
         self.assertIn("scripts/build_semantic_payload.py", output)
         self.assertNotIn("docs/build_semantic_payload.md  L8", output)
 
+    def test_trace_symbol_cross_project_legacy_benchmark_definition_fallback_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "trace_symbol_definition":
+                return [
+                    {
+                        "kind": "Function",
+                        "filepath": "benchmarks/build_semantic_payload.py",
+                        "start_line": 8,
+                        "end_line": 16,
+                        "signature": "build_semantic_payload(...)",
+                        "file_roles": None,
+                    },
+                    {
+                        "kind": "Function",
+                        "filepath": "scripts/build_semantic_payload.py",
+                        "start_line": 10,
+                        "end_line": 18,
+                        "signature": "build_semantic_payload(...)",
+                        "file_roles": None,
+                    },
+                ]
+            if op == "trace_symbol_alias_definition":
+                return []
+            if op == "trace_symbol_graph_usages":
+                return []
+            return []
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["trace_symbol_cross_project"](
+                        "build_semantic_payload",
+                        "src",
+                        "tgt",
+                    )
+                )
+
+        self.assertIn("scripts/build_semantic_payload.py", output)
+        self.assertNotIn("benchmarks/build_semantic_payload.py  L8", output)
+
     def test_trace_symbol_cross_project_prefers_implementation_consumer_hits(self):
         self.memory_store = FakeMemoryStore(
             [
@@ -613,6 +660,59 @@ class CrossProjectToolTests(unittest.TestCase):
             [
                 (
                     "docs/build_semantic_payload.md",
+                    9,
+                    "build_semantic_payload(source, lang)",
+                    None,
+                    1000.0,
+                ),
+            ]
+        )
+        self.module, self.search_core = load_module(self.memory_store)
+        self.mcp = FakeMCP()
+        self.module.register(self.mcp)
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "trace_symbol_definition":
+                return [
+                    {
+                        "kind": "Function",
+                        "filepath": "crates/ts-pack-python/python/tree_sitter_language_pack/_semantic_payload.py",
+                        "start_line": 1137,
+                        "end_line": 1180,
+                        "signature": "build_semantic_payload(...)",
+                    }
+                ]
+            if op == "trace_symbol_alias_definition":
+                return []
+            if op == "trace_symbol_graph_usages":
+                return []
+            return []
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "embedding_service": fake_embedding_module(),
+            },
+        ):
+            with mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+                output = asyncio.run(
+                    self.mcp.tools["trace_symbol_cross_project"](
+                        "build_semantic_payload",
+                        "src",
+                        "tgt",
+                    )
+                )
+
+        self.assertNotIn("Implementation / consumer text hits", output)
+        self.assertIn("Test / supporting text hits", output)
+
+    def test_trace_symbol_cross_project_legacy_benchmark_path_fallback_still_applies_when_roles_missing(self):
+        self.memory_store = FakeMemoryStore(
+            [
+                (
+                    "benchmarks/build_semantic_payload.py",
                     9,
                     "build_semantic_payload(source, lang)",
                     None,
