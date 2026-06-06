@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-_LM_PROXY_FALLBACK_PYTHON = "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
+_LM_PROXY_FALLBACK_PYTHON = (
+    "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
+)
 
 
 def _preferred_python() -> str | None:
@@ -109,46 +111,97 @@ DEFAULT_CASE_IDS = [
 
 DEFAULT_DIRECT_PARITY_CHECKS = [
     {
+        "id": "mcp_tool_catalog_symbol_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "symbol", "limit": 8},
+        "required_substrings": [
+            "MCP tool catalog for `symbol`:",
+            "`get_symbol_context`",
+            "`find_references`",
+        ],
+    },
+    {
+        "id": "stale_shadow_cleanup_dry_run",
+        "tool": "cleanup_stale_shadow_graph",
+        "params": {"dry_run": True, "max_project_ids": 25},
+        "compare_output": False,
+        "required_substrings": [
+            "## Stale Shadow Graph Cleanup Dry Run",
+            "Shadow project IDs found:",
+            "Shadow nodes:",
+            "Shadow relationships:",
+        ],
+    },
+    {
         "id": "framecreator_indexing_health",
         "tool": "get_indexing_health",
         "workspace_name": "FrameCreator",
         "params": {"workspace_id": "$workspace_id"},
-        "required_substrings": ["# Indexing Health Audit: `/Users/michaelmarler/Projects/FrameCreator`", "**Sync Status**: ✅ Healthy", "**Run Alignment**:        ✅ Aligned"],
+        "required_substrings": [
+            "# Indexing Health Audit: `/Users/michaelmarler/Projects/FrameCreator`",
+            "**Sync Status**: ✅ Healthy",
+            "**Run Alignment**:        ✅ Aligned",
+        ],
     },
     {
         "id": "framecreator_resolve_graph_project",
         "tool": "resolve_graph_project",
         "workspace_name": "FrameCreator",
         "params": {"workspace_id": "$workspace_id"},
-        "required_substrings": ['"workspace_path": "/Users/michaelmarler/Projects/FrameCreator"', '"project_id": "19b79d7c3feb"'],
+        "required_substrings": [
+            '"workspace_path": "/Users/michaelmarler/Projects/FrameCreator"',
+            '"project_id": "19b79d7c3feb"',
+        ],
     },
     {
         "id": "framecreator_project_overview",
         "tool": "get_project_overview",
         "workspace_name": "FrameCreator",
         "params": {"workspace_id": "$workspace_id"},
-        "required_substrings": ["# Project Overview: FrameCreator", "## Key Files (most symbol-dense, non-test)"],
+        "required_substrings": [
+            "# Project Overview: FrameCreator",
+            "## Key Files (most symbol-dense, non-test)",
+        ],
     },
     {
         "id": "spring_owner_find_definitions",
         "tool": "find_definitions",
         "workspace_name": "spring-petclinic-upstream",
         "params": {"symbol_name": "OwnerController"},
-        "required_substrings": ["Definition matches for `OwnerController`", "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java:48"],
+        "required_substrings": [
+            "Definition matches for `OwnerController`",
+            "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java:48",
+        ],
     },
     {
         "id": "pydantic_infer_provider_list_symbol_matches",
         "tool": "list_symbol_matches",
         "workspace_name": "pydantic-ai",
-        "params": {"project_path": "$workspace_id", "query": "infer_provider", "limit": 10, "kinds": None},
-        "required_substrings": ["Symbol matches for 'infer_provider':", "infer_provider_class (Function)"],
+        "params": {
+            "project_path": "$workspace_id",
+            "query": "infer_provider",
+            "limit": 10,
+            "kinds": None,
+        },
+        "required_substrings": [
+            "Symbol matches for 'infer_provider':",
+            "infer_provider_class (Function)",
+        ],
     },
     {
         "id": "spring_process_find_form_grep",
         "tool": "grep_codebase",
         "workspace_name": "spring-petclinic-upstream",
-        "params": {"workspace_id": "$workspace_id", "pattern": "processFindForm", "file_glob": "*.java"},
-        "required_substrings": ["## `processFindForm` — 2 file(s)", "OwnerController.java", "OwnerControllerTests.java"],
+        "params": {
+            "workspace_id": "$workspace_id",
+            "pattern": "processFindForm",
+            "file_glob": "*.java",
+        },
+        "required_substrings": [
+            "## `processFindForm` — 2 file(s)",
+            "OwnerController.java",
+            "OwnerControllerTests.java",
+        ],
     },
     {
         "id": "framecreator_sidebar_call_chain_up",
@@ -169,7 +222,10 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         "id": "okhttp_real_interceptor_chain_references",
         "tool": "find_references",
         "workspace_name": "okhttp-upstream",
-        "params": {"workspace_id": "$workspace_id", "symbol_name": "RealInterceptorChain"},
+        "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "RealInterceptorChain",
+        },
         "required_substrings": [
             "### Mentions & Type Usages (Semantic)",
             "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt:53",
@@ -210,7 +266,11 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         "id": "pydantic_ai_provider_exports_summary",
         "tool": "get_symbol_exports_summary",
         "workspace_name": "pydantic-ai",
-        "params": {"project_path": "$workspace_id", "limit": 10, "symbol_prefix": "infer_provider"},
+        "params": {
+            "project_path": "$workspace_id",
+            "limit": 10,
+            "symbol_prefix": "infer_provider",
+        },
         "required_substrings": [
             "# Symbol export summary: pydantic-ai",
             "## Inspect First",
@@ -277,12 +337,30 @@ def _extract_text_from_result(result: dict) -> str:
     return json.dumps(result, indent=2, sort_keys=True)
 
 
-_SCHEME_BUILDS_RE = re.compile(r"^(?P<prefix>\s*(?:-\s*)?scheme `[^`]+` builds )(?P<body>.+)$")
-_WORKSPACE_REFS_RE = re.compile(r"^(?P<prefix>\s*(?:-\s*)?workspace `[^`]+` references )(?P<body>.+)$")
+_SCHEME_BUILDS_RE = re.compile(
+    r"^(?P<prefix>\s*(?:-\s*)?scheme `[^`]+` builds )(?P<body>.+)$"
+)
+_WORKSPACE_REFS_RE = re.compile(
+    r"^(?P<prefix>\s*(?:-\s*)?workspace `[^`]+` references )(?P<body>.+)$"
+)
+_VOLATILE_SHADOW_HEALTH_LABELS = (
+    "Shadow project IDs found:",
+    "Shadow project IDs with nodes:",
+    "Shadow project IDs with relationships:",
+    "Shadow nodes:",
+    "Shadow relationships:",
+)
 
 
 def _normalize_order_insensitive_line(line: str) -> str:
     stripped = line.rstrip()
+    stripped_text = stripped.strip()
+    bullet_prefix = "- " if stripped_text.startswith("- ") else ""
+    comparable = stripped_text[2:].strip() if bullet_prefix else stripped_text
+    for label in _VOLATILE_SHADOW_HEALTH_LABELS:
+        if comparable.startswith(label) and comparable != label:
+            indent = line[: len(line) - len(line.lstrip())]
+            return f"{indent}{bullet_prefix}{label} <volatile>"
     for pattern in (_SCHEME_BUILDS_RE, _WORKSPACE_REFS_RE):
         match = pattern.match(stripped)
         if not match:
@@ -325,8 +403,12 @@ def _normalize(text: str) -> str:
                     break
                 section_lines.append(candidate)
                 idx += 1
-            bullet_lines = [item for item in section_lines if item.strip().startswith("- ")]
-            other_lines = [item for item in section_lines if not item.strip().startswith("- ")]
+            bullet_lines = [
+                item for item in section_lines if item.strip().startswith("- ")
+            ]
+            other_lines = [
+                item for item in section_lines if not item.strip().startswith("- ")
+            ]
             normalized.extend(sorted(bullet_lines))
             normalized.extend(other_lines)
             continue
@@ -336,7 +418,7 @@ def _normalize(text: str) -> str:
 
 def _normalized_expected_variants(text: str) -> list[str]:
     normalized = _normalize_order_insensitive_line(str(text))
-    variants = [normalized]
+    variants = [str(text), normalized]
     stripped = normalized.lstrip()
     if stripped.startswith("workspace `") or stripped.startswith("scheme `"):
         variants.append(f"- {stripped}")
@@ -346,23 +428,26 @@ def _normalized_expected_variants(text: str) -> list[str]:
 def _first_ranked_result_label(text: str) -> str:
     for line in text.splitlines():
         stripped = line.strip()
-        if (
-            stripped.startswith("--- ")
-            and " (Score:" in stripped
-        ) or (
-            stripped.startswith("--- ")
-            and stripped.endswith(" ---")
+        if (stripped.startswith("--- ") and " (Score:" in stripped) or (
+            stripped.startswith("--- ") and stripped.endswith(" ---")
         ):
             return stripped
     return ""
 
 
 def _find_references_lines(text: str) -> set[str]:
-    return {
-        line.strip()
-        for line in text.splitlines()
-        if line.strip().startswith("- ")
-    }
+    return {line.strip() for line in text.splitlines() if line.strip().startswith("- ")}
+
+
+def _require_non_error(name: str, output: str) -> None:
+    if not output or output.startswith("Error "):
+        raise AssertionError(f"{name} failed:\n{output}")
+
+
+def _is_optional_search_dependency_unavailable(output: str) -> bool:
+    return "LM Studio server is unavailable" in str(
+        output
+    ) or "Start the server or check LMSTUDIO_BASE_URL" in str(output)
 
 
 def _load_cases(case_ids: list[str]) -> list[dict]:
@@ -374,7 +459,9 @@ def _load_cases(case_ids: list[str]) -> list[dict]:
         case_id = str(case.get("id") or "")
         if case_id in wanted:
             if case.get("steps"):
-                raise AssertionError(f"Workflow case '{case_id}' is not supported in MCP parity smoke")
+                raise AssertionError(
+                    f"Workflow case '{case_id}' is not supported in MCP parity smoke"
+                )
             selected.append(case)
     missing = wanted - {str(case.get("id") or "") for case in selected}
     if missing:
@@ -413,13 +500,20 @@ def _initialize_session() -> str:
         },
         body={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
     )
-    assert notify_status == 202 or notify_status == 200, f"initialized notification failed with status={notify_status}"
+    assert notify_status == 202 or notify_status == 200, (
+        f"initialized notification failed with status={notify_status}"
+    )
     return session_id
 
 
-def _mcp_call(session_id: str, tool_name: str, arguments: dict, workspace_id: str) -> str:
+def _mcp_call(
+    session_id: str, tool_name: str, arguments: dict, workspace_id: str
+) -> str:
     mcp_arguments = dict(arguments)
-    if tool_name in {"get_symbol_context", "get_call_chain"} and "workspace_id" not in mcp_arguments:
+    if (
+        tool_name in {"get_symbol_context", "get_call_chain"}
+        and "workspace_id" not in mcp_arguments
+    ):
         mcp_arguments["workspace_id"] = workspace_id
     status, headers, raw = _request(
         MCP_URL,
@@ -438,7 +532,9 @@ def _mcp_call(session_id: str, tool_name: str, arguments: dict, workspace_id: st
     assert status == 200, f"tools/call failed for {tool_name} with status={status}"
     payload = _parse_payload(headers, raw)
     if payload.get("error"):
-        raise AssertionError(f"MCP tool call failed for {tool_name}: {payload['error']}")
+        raise AssertionError(
+            f"MCP tool call failed for {tool_name}: {payload['error']}"
+        )
     result = payload.get("result") or {}
     return _extract_text_from_result(result)
 
@@ -473,8 +569,10 @@ async def _direct_call(mcp, tool_name: str, workspace_id: str, params: dict) -> 
 def _build_parity_tool_registry():
     mcp = _build_tool_registry()
     _install_mcp_stub()
+    from tools.brain import tool_catalog
     from tools.hands import indexing as indexing_tools
 
+    tool_catalog.register(mcp)
     indexing_tools.register(mcp)
     return mcp
 
@@ -486,20 +584,58 @@ async def _run_direct_parity_cases(cases: list[dict], session_id: str) -> list[d
         case_id = str(case.get("id") or "")
         workspace_name = str(case.get("workspace_name") or "")
         workspace_id = DEFAULT_WORKSPACES.get(workspace_name)
-        assert workspace_id and os.path.isdir(workspace_id), f"Missing workspace for {workspace_name}"
+        assert workspace_id and os.path.isdir(workspace_id), (
+            f"Missing workspace for {workspace_name}"
+        )
         tool_name = str(case.get("tool") or "")
         params = _resolve_golden_params(dict(case.get("params") or {}), workspace_id)
         direct_output = await _direct_call(mcp, tool_name, workspace_id, params)
+        if (
+            tool_name == "search_codebase"
+            and _is_optional_search_dependency_unavailable(direct_output)
+        ):
+            results.append(
+                {
+                    "case_id": case_id,
+                    "tool": tool_name,
+                    "workspace": workspace_name,
+                    "status": "skipped",
+                    "reason": "LM Studio unavailable",
+                }
+            )
+            continue
         mcp_output = _mcp_call(session_id, tool_name, params, workspace_id)
+        if (
+            tool_name == "search_codebase"
+            and _is_optional_search_dependency_unavailable(mcp_output)
+        ):
+            results.append(
+                {
+                    "case_id": case_id,
+                    "tool": tool_name,
+                    "workspace": workspace_name,
+                    "status": "skipped",
+                    "reason": "LM Studio unavailable",
+                }
+            )
+            continue
+        _require_non_error(f"{case_id} direct {tool_name}", direct_output)
+        _require_non_error(f"{case_id} MCP {tool_name}", mcp_output)
         direct_norm = _normalize(direct_output)
         mcp_norm = _normalize(mcp_output)
         if tool_name == "search_codebase":
             direct_top = _first_ranked_result_label(direct_norm)
             mcp_top = _first_ranked_result_label(mcp_norm)
-            assert direct_top and mcp_top and direct_top == mcp_top, (
-                f"MCP top-hit parity mismatch for {case_id}\n"
-                f"--- direct top ---\n{direct_top}\n\n--- mcp top ---\n{mcp_top}"
-            )
+            if direct_top or mcp_top:
+                assert direct_top and mcp_top and direct_top == mcp_top, (
+                    f"MCP top-hit parity mismatch for {case_id}\n"
+                    f"--- direct top ---\n{direct_top}\n\n--- mcp top ---\n{mcp_top}"
+                )
+            else:
+                assert direct_norm == mcp_norm, (
+                    f"MCP search parity mismatch for {case_id}\n"
+                    f"--- direct ---\n{direct_norm}\n\n--- mcp ---\n{mcp_norm}"
+                )
         elif tool_name == "find_references":
             direct_lines = _find_references_lines(direct_norm)
             mcp_lines = _find_references_lines(mcp_norm)
@@ -517,7 +653,14 @@ async def _run_direct_parity_cases(cases: list[dict], session_id: str) -> list[d
             assert any(variant in mcp_norm for variant in variants), (
                 f"Missing expected substring for {case_id}: {expected}"
             )
-        results.append({"case_id": case_id, "tool": tool_name, "workspace": workspace_name})
+        results.append(
+            {
+                "case_id": case_id,
+                "tool": tool_name,
+                "workspace": workspace_name,
+                "status": "checked",
+            }
+        )
     return results
 
 
@@ -526,16 +669,25 @@ async def _run_direct_tier1_checks(checks: list[dict], session_id: str) -> list[
     results: list[dict] = []
     for check in checks:
         check_id = str(check["id"])
-        workspace_name = str(check["workspace_name"])
-        workspace_id = DEFAULT_WORKSPACES.get(workspace_name)
-        assert workspace_id and os.path.isdir(workspace_id), f"Missing workspace for {workspace_name}"
+        workspace_name = str(check.get("workspace_name") or "")
+        workspace_id = ""
+        if workspace_name:
+            workspace_id = DEFAULT_WORKSPACES.get(workspace_name) or ""
+            assert workspace_id and os.path.isdir(workspace_id), (
+                f"Missing workspace for {workspace_name}"
+            )
         tool_name = str(check["tool"])
         params = _resolve_golden_params(dict(check.get("params") or {}), workspace_id)
         direct_output = await _direct_call(mcp, tool_name, workspace_id, params)
         mcp_output = _mcp_call(session_id, tool_name, params, workspace_id)
+        _require_non_error(f"{check_id} direct {tool_name}", direct_output)
+        _require_non_error(f"{check_id} MCP {tool_name}", mcp_output)
         direct_norm = _normalize(direct_output)
         mcp_norm = _normalize(mcp_output)
-        if tool_name == "find_references":
+        compare_output = bool(check.get("compare_output", True))
+        if not compare_output:
+            pass
+        elif tool_name == "find_references":
             direct_lines = _find_references_lines(direct_norm)
             mcp_lines = _find_references_lines(mcp_norm)
             assert mcp_lines.issubset(direct_lines), (
@@ -549,14 +701,26 @@ async def _run_direct_tier1_checks(checks: list[dict], session_id: str) -> list[
             )
         for expected in check.get("required_substrings") or []:
             variants = _normalized_expected_variants(str(expected))
+            assert any(variant in direct_norm for variant in variants), (
+                f"Missing expected substring for {check_id} direct output: {expected}"
+            )
             assert any(variant in mcp_norm for variant in variants), (
                 f"Missing expected substring for {check_id}: {expected}"
             )
-        results.append({"case_id": check_id, "tool": tool_name, "workspace": workspace_name})
+        results.append(
+            {
+                "case_id": check_id,
+                "tool": tool_name,
+                "workspace": workspace_name or "global",
+                "status": "checked",
+            }
+        )
     return results
 
 
-async def _run_all_parity_checks(checks: list[dict], cases: list[dict], session_id: str) -> list[dict]:
+async def _run_all_parity_checks(
+    checks: list[dict], cases: list[dict], session_id: str
+) -> list[dict]:
     tier_results = await _run_direct_tier1_checks(checks, session_id)
     case_results = await _run_direct_parity_cases(cases, session_id)
     return [*tier_results, *case_results]
@@ -564,7 +728,9 @@ async def _run_all_parity_checks(checks: list[dict], cases: list[dict], session_
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--case-id", action="append", default=[], help="Parity case id(s) to run")
+    parser.add_argument(
+        "--case-id", action="append", default=[], help="Parity case id(s) to run"
+    )
     args = parser.parse_args()
 
     status, _, _ = _request(HEALTH_URL)
@@ -591,21 +757,37 @@ def main() -> int:
         "get_symbol_imports_overview",
         "get_symbol_exports_summary",
         "visualize_subgraph",
+        "get_mcp_tool_catalog",
+        "cleanup_stale_shadow_graph",
     ):
-        assert expected_tool in tool_names, f"Expected MCP tool '{expected_tool}' was not listed"
+        assert expected_tool in tool_names, (
+            f"Expected MCP tool '{expected_tool}' was not listed"
+        )
 
     try:
-        results = asyncio.run(_run_all_parity_checks(DEFAULT_DIRECT_PARITY_CHECKS, cases, session_id))
+        results = asyncio.run(
+            _run_all_parity_checks(DEFAULT_DIRECT_PARITY_CHECKS, cases, session_id)
+        )
     finally:
         _request(
             MCP_URL,
             method="DELETE",
-            headers={"MCP-Protocol-Version": PROTOCOL_VERSION, "Mcp-Session-Id": session_id},
+            headers={
+                "MCP-Protocol-Version": PROTOCOL_VERSION,
+                "Mcp-Session-Id": session_id,
+            },
         )
 
     print("MCP tool parity smoke check passed")
     print(f"- session id returned: {session_id}")
-    print(f"- cases checked: {', '.join(item['case_id'] for item in results)}")
+    checked = [item for item in results if item.get("status") != "skipped"]
+    skipped = [item for item in results if item.get("status") == "skipped"]
+    print(f"- cases checked: {', '.join(item['case_id'] for item in checked)}")
+    if skipped:
+        skipped_summary = ", ".join(
+            f"{item['case_id']} ({item.get('reason') or 'skipped'})" for item in skipped
+        )
+        print(f"- cases skipped: {skipped_summary}")
     return 0
 
 

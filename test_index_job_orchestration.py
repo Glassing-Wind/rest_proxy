@@ -71,6 +71,14 @@ class FakeDriver:
         return FakeSession(self.tx)
 
 
+class FakeAsyncpgConnection:
+    async def fetch(self, *args, **kwargs):
+        return []
+
+    async def close(self):
+        return None
+
+
 def load_jobs_module(fake_driver):
     spec = importlib.util.spec_from_file_location("jobs_under_test", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -78,6 +86,12 @@ def load_jobs_module(fake_driver):
 
     neo4j_mod = types.ModuleType("neo4j")
     neo4j_mod.unit_of_work = lambda *args, **kwargs: lambda fn: fn
+    asyncpg_mod = types.ModuleType("asyncpg")
+
+    async def _connect(*args, **kwargs):
+        return FakeAsyncpgConnection()
+
+    asyncpg_mod.connect = _connect
 
     graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
 
@@ -88,6 +102,7 @@ def load_jobs_module(fake_driver):
     graph_bootstrap_mod._NEO4J_DB = "neo4j"
 
     sys.modules["neo4j"] = neo4j_mod
+    sys.modules["asyncpg"] = asyncpg_mod
     sys.modules["graph_bootstrap"] = graph_bootstrap_mod
     spec.loader.exec_module(module)
     return module

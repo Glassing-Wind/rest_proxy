@@ -176,18 +176,36 @@ def load_indexing_module():
     graph_bootstrap_mod.require_driver = _require_driver
     graph_bootstrap_mod._NEO4J_DB = "neo4j"
 
-    sys.modules["_jobs"] = jobs_mod
-    sys.modules["_helpers"] = helpers_mod
-    sys.modules["_runtime"] = runtime_mod
-    sys.modules["mcp.server.fastmcp"] = fastmcp_mod
-    sys.modules["graphrag_core.config"] = config_mod
-    sys.modules["graphrag_core.indexing.watcher"] = watcher_mod
-    sys.modules["graphrag_core.indexing.manifest"] = manifest_mod
-    sys.modules["graphrag_core.indexing.registry"] = registry_mod
-    sys.modules["graphrag_core.neo4j"] = neo4j_utils_mod
-    sys.modules["graph_bootstrap"] = graph_bootstrap_mod
+    module_stubs = {
+        "_jobs": jobs_mod,
+        "_helpers": helpers_mod,
+        "_runtime": runtime_mod,
+        "mcp.server.fastmcp": fastmcp_mod,
+        "graphrag_core.config": config_mod,
+        "graphrag_core.indexing.watcher": watcher_mod,
+        "graphrag_core.indexing.manifest": manifest_mod,
+        "graphrag_core.indexing.registry": registry_mod,
+        "graphrag_core.neo4j": neo4j_utils_mod,
+        "graph_bootstrap": graph_bootstrap_mod,
+    }
+    previous_modules = {name: sys.modules.get(name) for name in module_stubs}
+    sys.modules.update(module_stubs)
     spec.loader.exec_module(module)
+    for name, previous in previous_modules.items():
+        if previous is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
+    module._test_graph_bootstrap = graph_bootstrap_mod
     return module
+
+
+def run_indexing_health(module, workspace_id: str, audit: bool = False) -> str:
+    with mock.patch.dict(
+        sys.modules,
+        {"graph_bootstrap": module._test_graph_bootstrap},
+    ):
+        return asyncio.run(module.get_indexing_health(workspace_id, audit=audit))
 
 
 class IndexingHealthAlignmentTests(unittest.TestCase):
@@ -267,7 +285,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.exists", return_value=True),
             mock.patch("os.path.getmtime", return_value=1000.0),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn("**Run Alignment**:        ✅ Aligned", output)
         self.assertIn("No actions required. Everything looks healthy!", output)
@@ -306,7 +324,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.exists", return_value=True),
             mock.patch("os.path.getmtime", return_value=1000.0),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn("**Run Alignment**:        ⚠️ Not aligned", output)
         self.assertIn("Structural and semantic runs are not aligned.", output)
@@ -349,7 +367,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.exists", return_value=True),
             mock.patch("os.path.getmtime", return_value=1000.0),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn("## 1.6 Global Shadow Graph Residue", output)
         self.assertIn("Shadow project IDs with nodes: 2", output)
@@ -403,7 +421,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.exists", return_value=True),
             mock.patch("os.path.getmtime", return_value=1000.0),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn(
             "**Parse Success Rate**: 100.0% (1/1 source-eligible files)", output
@@ -473,7 +491,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.getmtime", return_value=1000.0),
             mock.patch("os.path.getsize", return_value=1),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn("Files in structural index: 2", output)
         self.assertIn("Files in semantic index:   2", output)
@@ -544,7 +562,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.getmtime", return_value=1000.0),
             mock.patch("os.path.getsize", return_value=1),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn("**Sync Status**: ✅ Healthy", output)
         self.assertIn("**Run Alignment**:        ✅ Aligned", output)
@@ -592,7 +610,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.exists", return_value=True),
             mock.patch("os.path.getmtime", return_value=1000.0),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn("**Sync Status**: ✅ Healthy", output)
         self.assertNotIn("Files missing from index entirely", output)
@@ -665,7 +683,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             mock.patch("os.path.exists", return_value=True),
             mock.patch("os.path.getmtime", return_value=1000.0),
         ):
-            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+            output = run_indexing_health(module, "/tmp/repo")
 
         self.assertIn("## 1.75 Apple Build Coverage", output)
         self.assertIn("**Apple Graph Status**: ⚠️ Partial", output)

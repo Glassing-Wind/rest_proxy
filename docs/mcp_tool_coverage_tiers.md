@@ -43,7 +43,7 @@ These are the tools we expect to reach for first during normal codebase work.
 | `list_symbol_matches` | unit/script, mcp parity |
 | `grep_codebase` | unit/script, mcp parity |
 | `trace_graph_provenance` | unit/script, live, mcp parity, tool-choice |
-| `get_mcp_tool_catalog` | unit/script |
+| `get_mcp_tool_catalog` | unit/script, mcp parity |
 
 Notes:
 
@@ -101,6 +101,7 @@ Examples:
 - `index_workspace`
 - `get_index_status`
 - `cancel_index_job`
+- `cleanup_stale_shadow_graph`
 - `watch_project`
 - `unwatch_project`
 - `get_indexed_projects`
