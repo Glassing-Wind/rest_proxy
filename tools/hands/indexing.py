@@ -4,7 +4,6 @@ import os
 import sys
 import json
 import asyncio
-import hashlib
 import threading
 import subprocess
 import time
@@ -13,11 +12,12 @@ from mcp.server.fastmcp import FastMCP
 from _jobs import (
     _JOBS,
     _JOBS_LOCK,
+    claim_index_capacity_lock,
     claim_project_job_lock,
-    _drain_proc_output,
     _finalize_job,
     _job_control_paths,
     _persist_job_state,
+    _release_index_capacity_lock,
     _release_project_job_lock,
     _reconcile_job_process_state,
     _render_job_logs,
@@ -31,7 +31,11 @@ from _semantic_contract import SEMANTIC_CONTRACT_VERSION
 
 from graphrag_core.config import load_env
 from graphrag_core.indexing import watcher as index_watcher
-from graphrag_core.indexing.manifest import build_manifest, load_indexignore_patterns, suggest_indexignore_entries
+from graphrag_core.indexing.manifest import (
+    build_manifest,
+    load_indexignore_patterns,
+    suggest_indexignore_entries,
+)
 from graphrag_core.indexing.registry import record_indexed_project
 from graphrag_core import neo4j as neo4j_utils
 
@@ -40,10 +44,37 @@ load_env()
 _TX_TIMEOUT = int(os.getenv("LM_PROXY_NEO4J_TX_TIMEOUT", "30"))
 _TX_OP_PREFIX = os.getenv("LM_PROXY_NEO4J_OP_PREFIX", "").strip()
 _TX_METADATA_BASE = {"source": "lm_proxy", "tool": "indexing"}
+_TS_PACK_INIT_LOCK = threading.Lock()
+_TS_PACK_INIT_DONE = False
+
+
+def _ensure_ts_pack_initialized(ts_pack) -> None:
+    """Register ts-pack cache configuration before probing language availability."""
+    global _TS_PACK_INIT_DONE
+    if _TS_PACK_INIT_DONE:
+        return
+    with _TS_PACK_INIT_LOCK:
+        if _TS_PACK_INIT_DONE:
+            return
+        init = getattr(ts_pack, "init", None)
+        if callable(init):
+            config = {}
+            cache_dir = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
+            if cache_dir:
+                config["cache_dir"] = cache_dir
+            try:
+                init(config)
+            except Exception:
+                pass
+        _TS_PACK_INIT_DONE = True
 
 
 def _is_strict_job_session() -> bool:
-    return os.getenv("LM_PROXY_STRICT_JOB_SESSION", "").strip().lower() in {"1", "true", "yes"}
+    return os.getenv("LM_PROXY_STRICT_JOB_SESSION", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 async def _execute_read(session, cypher: str, op: str | None = None, **params):
@@ -56,6 +87,35 @@ async def _execute_read(session, cypher: str, op: str | None = None, **params):
         base_metadata=_TX_METADATA_BASE,
         **params,
     )
+
+
+async def _execute_write_scalar(
+    session,
+    cypher: str,
+    *,
+    op: str,
+    result_key: str,
+    **params,
+) -> int:
+    from neo4j import unit_of_work
+
+    metadata = dict(_TX_METADATA_BASE)
+    op_value = op or "write"
+    if _TX_OP_PREFIX:
+        op_value = f"{_TX_OP_PREFIX}.{op_value}"
+    metadata["op"] = op_value
+
+    @unit_of_work(timeout=_TX_TIMEOUT, metadata=metadata)
+    async def _tx(tx):
+        result = await tx.run(cypher, **params)
+        record = await result.single()
+        if not record:
+            return 0
+        return int(record.get(result_key) or 0)
+
+    if hasattr(session, "execute_write"):
+        return await session.execute_write(_tx)
+    return await _tx(session)
 
 
 def _debug_log(message: str, **fields: object) -> None:
@@ -82,14 +142,17 @@ def _is_source_eligible_structural_path(file_path: str | None) -> bool:
     norm = str(file_path).replace("\\", "/").lower()
     basename = os.path.basename(norm)
 
-    if any(token in norm for token in (
-        "/.github/",
-        "/docs/",
-        "/docs-site/",
-        "/agent_docs/",
-        "/.claude/",
-        "/.cursor/",
-    )):
+    if any(
+        token in norm
+        for token in (
+            "/.github/",
+            "/docs/",
+            "/docs-site/",
+            "/agent_docs/",
+            "/.claude/",
+            "/.cursor/",
+        )
+    ):
         return False
 
     if basename in {
@@ -149,7 +212,7 @@ def _is_semantic_expected_path(
     """Return True when the semantic worker would reasonably be expected to emit chunks."""
     rel = str(rel_path or "")
     abs_file = str(abs_path or "")
-    ext_norm = str(ext or "").lower().lstrip(".")
+    ext_norm = str(ext or os.path.splitext(rel)[1]).lower().lstrip(".")
     rel_norm = rel.replace("\\", "/").lower()
     if ".xcassets/" in rel_norm:
         return False
@@ -165,6 +228,8 @@ def _is_semantic_expected_path(
         import tree_sitter_language_pack as ts_pack
     except Exception:
         return _is_source_eligible_structural_path(rel_path)
+
+    _ensure_ts_pack_initialized(ts_pack)
 
     try:
         fallback_allowed = bool(
@@ -191,9 +256,11 @@ def _is_semantic_expected_path(
     try:
         has_language = getattr(ts_pack, "has_language", None)
         if callable(has_language):
-            return bool(has_language(lang))
+            return bool(has_language(lang)) or _is_source_eligible_structural_path(
+                rel_path
+            )
     except Exception:
-        return False
+        return _is_source_eligible_structural_path(rel_path)
     return True
 
 
@@ -258,6 +325,35 @@ async def _get_apple_graph_health(session, project_id: str) -> dict[str, int]:
     return dict(rows[0]) if rows else {}
 
 
+async def _get_shadow_graph_health(session) -> dict[str, int]:
+    node_rows = await _execute_read(
+        session,
+        """
+        MATCH (n)
+        WHERE n.project_id CONTAINS '::shadow::'
+        RETURN count(n) AS nodes, count(DISTINCT n.project_id) AS projects
+        """,
+        op="get_shadow_graph_node_health",
+    )
+    rel_rows = await _execute_read(
+        session,
+        """
+        MATCH ()-[r]->()
+        WHERE r.project_id CONTAINS '::shadow::'
+        RETURN count(r) AS rels, count(DISTINCT r.project_id) AS rel_projects
+        """,
+        op="get_shadow_graph_rel_health",
+    )
+    node_record = node_rows[0] if node_rows else {}
+    rel_record = rel_rows[0] if rel_rows else {}
+    return {
+        "nodes": int(node_record.get("nodes") or 0),
+        "projects": int(node_record.get("projects") or 0),
+        "rels": int(rel_record.get("rels") or 0),
+        "rel_projects": int(rel_record.get("rel_projects") or 0),
+    }
+
+
 def _describe_apple_graph_health(coverage: dict[str, int]) -> list[str]:
     notes: List[str] = []
     if coverage.get("project_files", 0) > 0 and coverage.get("targets", 0) == 0:
@@ -265,15 +361,32 @@ def _describe_apple_graph_health(coverage: dict[str, int]) -> list[str]:
     if coverage.get("scheme_files", 0) > 0 and coverage.get("schemes", 0) == 0:
         notes.append("scheme files exist, but no XcodeScheme nodes were materialized")
     if coverage.get("workspace_files", 0) > 0 and coverage.get("workspaces", 0) == 0:
-        notes.append("workspace metadata exists, but no XcodeWorkspace nodes were materialized")
+        notes.append(
+            "workspace metadata exists, but no XcodeWorkspace nodes were materialized"
+        )
     if coverage.get("resource_like_files", 0) > 0 and coverage.get("resources", 0) == 0:
-        notes.append("resource-like files exist, but no Resource nodes were materialized")
-    if coverage.get("scheme_files", 0) > 0 and coverage.get("builds_target_edges", 0) == 0:
+        notes.append(
+            "resource-like files exist, but no Resource nodes were materialized"
+        )
+    if (
+        coverage.get("scheme_files", 0) > 0
+        and coverage.get("builds_target_edges", 0) == 0
+    ):
         notes.append("scheme files exist, but no BUILDS_TARGET edges were created")
-    if coverage.get("workspace_files", 0) > 0 and coverage.get("references_project_edges", 0) == 0:
-        notes.append("workspace metadata exists, but no REFERENCES_PROJECT edges were created")
-    if coverage.get("resource_like_files", 0) > 0 and coverage.get("bundles_file_edges", 0) == 0:
-        notes.append("resource-like files exist, but no BUNDLES_FILE edges were created")
+    if (
+        coverage.get("workspace_files", 0) > 0
+        and coverage.get("references_project_edges", 0) == 0
+    ):
+        notes.append(
+            "workspace metadata exists, but no REFERENCES_PROJECT edges were created"
+        )
+    if (
+        coverage.get("resource_like_files", 0) > 0
+        and coverage.get("bundles_file_edges", 0) == 0
+    ):
+        notes.append(
+            "resource-like files exist, but no BUNDLES_FILE edges were created"
+        )
     return notes
 
 
@@ -330,7 +443,8 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
     project_id = ""
     job_id = ""
     try:
-        import time, uuid
+        import time
+        import uuid
 
         # Standalone async callers do not go through mcp_server.py startup, so
         # capture the active loop here as the canonical loop for post-index
@@ -360,7 +474,9 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             project_path=project_path,
         )
         if not claimed:
-            blocking_id = str((blocking_job or {}).get("job_id") or "").strip() or "unknown"
+            blocking_id = (
+                str((blocking_job or {}).get("job_id") or "").strip() or "unknown"
+            )
             elapsed = None
             if isinstance(blocking_job, dict) and blocking_job.get("started_at"):
                 elapsed = max(0.0, time.time() - float(blocking_job["started_at"]))
@@ -372,18 +488,53 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 lines.append(f"  elapsed: {elapsed:.0f}s")
             if blocking_id != "unknown":
                 lines.append("")
-                lines.append(f"Use get_index_status('{blocking_id}') to monitor progress.")
+                lines.append(
+                    f"Use get_index_status('{blocking_id}') to monitor progress."
+                )
             return "\n".join(lines)
         claimed_lock = True
+        claimed_capacity, blocking_capacity_job = claim_index_capacity_lock(
+            job_id,
+            project_id=project_id,
+            project_path=project_path,
+        )
+        if not claimed_capacity:
+            _release_project_job_lock(project_id, job_id)
+            claimed_lock = False
+            blocking_id = (
+                str((blocking_capacity_job or {}).get("job_id") or "").strip()
+                or "unknown"
+            )
+            blocking_project = str(
+                (blocking_capacity_job or {}).get("project_path") or ""
+            ).strip()
+            lines = [
+                "⚠️  Another indexing job is already running.",
+                f"  job_id: {blocking_id}",
+            ]
+            if blocking_project:
+                lines.append(f"  project: {blocking_project}")
+            lines.append("")
+            lines.append(
+                "This daemon serializes indexing by default to avoid saturating Neo4j Desktop."
+            )
+            if blocking_id != "unknown":
+                lines.append(
+                    f"Use get_index_status('{blocking_id}') to monitor progress."
+                )
+            lines.append(
+                "Set LM_PROXY_MAX_CONCURRENT_INDEX_JOBS above 1 only for a tuned Neo4j server."
+            )
+            return "\n".join(lines)
         # __file__ is tools/hands/indexing.py — step up two levels to rest_proxy/
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        base_dir = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
         runtime_dir = os.path.join(base_dir, ".runtime")
         os.makedirs(runtime_dir, exist_ok=True)
 
         manifest = build_manifest(project_path)
-        await record_indexed_project(
-            project_path, project_id, file_count=len(manifest)
-        )
+        await record_indexed_project(project_path, project_id, file_count=len(manifest))
 
         manifest_path = os.path.join(runtime_dir, f"{project_id}_manifest.json")
         with open(manifest_path, "w") as f:
@@ -400,6 +551,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
         await memory_store.open_pool()
 
         import graph_bootstrap
+
         driver = await graph_bootstrap.require_driver()
         valid_relpaths = [e["rel_path"] for e in manifest]
 
@@ -410,7 +562,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as _s:
                 await _s.run(
                     "MATCH (n) WHERE n.project_id = $pid DETACH DELETE n",
-                    pid=project_id
+                    pid=project_id,
                 )
             # 2. Postgres Wipe
             if memory_store._pg_pool_available():
@@ -422,6 +574,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
 
         # ── Handle CLEANUP mode (Prune Orphans) ──────────────────────────────
         elif mode == "cleanup" or mode == "incremental":
+
             async def _cleanup() -> None:
                 async with driver.session(database=graph_bootstrap._NEO4J_DB) as _s:
                     # 1. Delete files no longer in manifest
@@ -463,7 +616,9 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                             (project_id, valid_relpaths),
                         )
                 except Exception as exc:
-                    _debug_log("semantic_prune_failed", project_id=project_id, error=str(exc))
+                    _debug_log(
+                        "semantic_prune_failed", project_id=project_id, error=str(exc)
+                    )
 
         if mode == "cleanup":
             _release_project_job_lock(project_id, job_id)
@@ -544,8 +699,12 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
             "on",
         }:
             struct_env.setdefault("TS_PACK_AUTO_DOWNLOAD", "1")
-        struct_env.setdefault("LM_PROXY_RUNTIME_PYTHON", str(runtime.get("python") or ""))
-        struct_env.setdefault("LM_PROXY_RUNTIME_SOURCE", str(runtime.get("source") or ""))
+        struct_env.setdefault(
+            "LM_PROXY_RUNTIME_PYTHON", str(runtime.get("python") or "")
+        )
+        struct_env.setdefault(
+            "LM_PROXY_RUNTIME_SOURCE", str(runtime.get("source") or "")
+        )
         struct_log_fh = open(control_paths["struct_log_path"], "a", encoding="utf-8")
         sem_log_fh = open(control_paths["semantic_log_path"], "a", encoding="utf-8")
         struct_proc = subprocess.Popen(
@@ -598,6 +757,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
     except Exception as e:
         if claimed_lock and project_id and job_id:
             _release_project_job_lock(project_id, job_id)
+            _release_index_capacity_lock(job_id)
         return f"Error starting indexing: {e}"
 
 
@@ -619,7 +779,12 @@ async def get_index_status(job_id: str) -> str:
                     break
 
         # Security: Only allow sessions to see their own jobs when strict mode is enabled
-        if job and current_session and job.get("session_id") != current_session and _is_strict_job_session():
+        if (
+            job
+            and current_session
+            and job.get("session_id") != current_session
+            and _is_strict_job_session()
+        ):
             return f"Access Denied: Job {job_id} belongs to another session."
 
     if job is None:
@@ -677,7 +842,9 @@ async def get_index_status(job_id: str) -> str:
         and last_log_at
         and (time.time() - last_log_at) >= 300
     ):
-        lines.append(f"  heartbeat:  stale ({time.time() - last_log_at:.0f}s since last log)")
+        lines.append(
+            f"  heartbeat:  stale ({time.time() - last_log_at:.0f}s since last log)"
+        )
     if run_summary:
         struct_run = run_summary.get("struct_active_run_id") or "unknown"
         semantic_run = run_summary.get("semantic_active_run_id") or "unknown"
@@ -766,20 +933,28 @@ async def cancel_index_job(job_id: str) -> str:
                     break
 
         # Security check: Match session ID when strict mode is enabled
-        if job and current_session and job.get("session_id") != current_session and _is_strict_job_session():
-            return f"Access Denied: Cannot cancel a job belonging to another session."
+        if (
+            job
+            and current_session
+            and job.get("session_id") != current_session
+            and _is_strict_job_session()
+        ):
+            return "Access Denied: Cannot cancel a job belonging to another session."
         active_jobs = list(_JOBS.keys())
 
     if job is None:
         job = load_job_record(job_id)
         if job is None:
             return (
-                f"No job found for id '{job_id}'.\n"
-                f"Active jobs: {active_jobs or 'none'}"
+                f"No job found for id '{job_id}'.\nActive jobs: {active_jobs or 'none'}"
             )
 
-    if current_session and job.get("session_id") != current_session and _is_strict_job_session():
-        return f"Access Denied: Cannot cancel a job belonging to another session."
+    if (
+        current_session
+        and job.get("session_id") != current_session
+        and _is_strict_job_session()
+    ):
+        return "Access Denied: Cannot cancel a job belonging to another session."
 
     if job.get("status") != "running":
         return f"Job {job_id} is not running (status={job.get('status')})."
@@ -869,7 +1044,8 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     semantic_active_struct_run_id: str | None = None
     semantic_index_status: str | None = None
     apple_graph_coverage: Dict[str, int] = {}
-    
+    shadow_graph_health: Dict[str, int] = {}
+
     # --- Structural Integrity Metrics (Level 2) ---
     import_total = 0
     import_resolved_internal = 0
@@ -897,11 +1073,14 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             if rec["vts"]:
                 semantic_files[rec["fp"]] = rec["vts"] / 1000.0
                 semantic_present_paths.add(rec["fp"])
-            
+
             p = rec["parsed"]
-            if p is True: parsed_true += 1
-            elif p is False: parsed_false += 1
-            else: parsed_unknown += 1
+            if p is True:
+                parsed_true += 1
+            elif p is False:
+                parsed_false += 1
+            else:
+                parsed_unknown += 1
             if _is_source_eligible_structural_path(fp):
                 source_eligible_nodes += 1
                 if p is True:
@@ -936,6 +1115,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             semantic_index_status = rec.get("semantic_index_status")
 
         apple_graph_coverage = await _get_apple_graph_health(session, project_id)
+        shadow_graph_health = await _get_shadow_graph_health(session)
 
         if audit:
             # 2. Internal Import Resolution Rate (Level 2)
@@ -969,14 +1149,39 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
                 pid=project_id,
                 op="audit_symbol_density",
             )
-            symbol_bearing_exts = {".py", ".swift", ".ts", ".js", ".go", ".rs", ".c", ".cpp", ".h", ".hpp", ".rb", ".php"}
-            excluded_basenames = {
-                "config.py", "setup.py", "__init__.py", "conftest.py",
-                "package.json", "tsconfig.json", "pnpm-lock.yaml", "yarn.lock", "package-lock.json",
-                "vitest.config.ts", "playwright.config.ts", "jest.config.ts", "svelte.config.js",
-                "sst.config.ts", "bunfig.toml", "flake.nix"
+            symbol_bearing_exts = {
+                ".py",
+                ".swift",
+                ".ts",
+                ".js",
+                ".go",
+                ".rs",
+                ".c",
+                ".cpp",
+                ".h",
+                ".hpp",
+                ".rb",
+                ".php",
             }
-            
+            excluded_basenames = {
+                "config.py",
+                "setup.py",
+                "__init__.py",
+                "conftest.py",
+                "package.json",
+                "tsconfig.json",
+                "pnpm-lock.yaml",
+                "yarn.lock",
+                "package-lock.json",
+                "vitest.config.ts",
+                "playwright.config.ts",
+                "jest.config.ts",
+                "svelte.config.js",
+                "sst.config.ts",
+                "bunfig.toml",
+                "flake.nix",
+            }
+
             for d_rec in density_records:
                 fp = d_rec["fp"]
                 ext = os.path.splitext(fp)[1].lower()
@@ -1032,7 +1237,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
                         """,
                         (SEMANTIC_CONTRACT_VERSION, project_id),
                     )
-                    for row in (await cur.fetchall()):
+                    for row in await cur.fetchall():
                         if not row or not row[0]:
                             continue
                         semantic_present_paths.add(row[0])
@@ -1058,7 +1263,9 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     missing: List[str] = []
     manifest = build_manifest(project_path)
     total_checked_all = len(manifest)
-    manifest_paths = {entry.get("rel_path") for entry in manifest if entry.get("rel_path")}
+    manifest_paths = {
+        entry.get("rel_path") for entry in manifest if entry.get("rel_path")
+    }
 
     for entry in manifest:
         rel = entry.get("rel_path")
@@ -1067,13 +1274,17 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             continue
         try:
             mtime = os.path.getmtime(abs_path)
-            if rel not in structural_paths and _is_structural_expected_manifest_path(rel):
+            if rel not in structural_paths and _is_structural_expected_manifest_path(
+                rel
+            ):
                 missing.append(rel)
                 continue
             ts = indexed_files.get(rel)
             if ts and mtime > ts:
                 stale_graph.append(rel)
-            semantic_expected = _is_semantic_expected_path(rel, abs_path, entry.get("ext"))
+            semantic_expected = _is_semantic_expected_path(
+                rel, abs_path, entry.get("ext")
+            )
             if semantic_expected:
                 semantic_expected_paths.add(rel)
             if semantic_expected and rel not in semantic_present_paths:
@@ -1089,7 +1300,7 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             continue
 
     orphans_graph = [fp for fp in structural_paths if fp not in manifest_paths]
-    
+
     ghost_chunks_count = 0
     ghost_files: List[str] = []
     if memory_store._pg_pool_available() and manifest_paths:
@@ -1114,42 +1325,67 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     # --- Result Formatting ---
     lines = [f"# Indexing Health Audit: `{project_path}`"]
     lines.append(f"Project ID: `{project_id}`\n")
-    
+
     # Bucket 1: Synchronization
     lines.append("## 1. Synchronization (Level 1)")
     lines.append(f"  - Files on disk:             {total_checked_all}")
     lines.append(f"  - Files in structural index: {len(structural_paths)}")
     lines.append(f"  - Files in semantic index:   {len(semantic_present_paths)}")
-    
+
     sync_status = "✅ Healthy"
-    if stale_graph or stale_vector or stale_semantic_contract or missing or orphans_graph or ghost_files:
+    if (
+        stale_graph
+        or stale_vector
+        or stale_semantic_contract
+        or missing
+        or orphans_graph
+        or ghost_files
+    ):
         sync_status = "❌ Out of Sync"
     lines.append(f"  - **Sync Status**: {sync_status}")
-    
+
     if stale_graph:
         lines.append(f"    - ❌ {len(stale_graph)} Stale Structural Files")
     if stale_vector:
         lines.append(f"    - ⚠️ {len(stale_vector)} Stale Semantic Files")
     if stale_semantic_contract:
-        lines.append(f"    - ⛔ {len(stale_semantic_contract)} Files on stale semantic contract")
+        lines.append(
+            f"    - ⛔ {len(stale_semantic_contract)} Files on stale semantic contract"
+        )
     if missing:
         lines.append(f"    - ❓ {len(missing)} Files missing from index entirely")
     if orphans_graph:
-        lines.append(f"    - 🧹 {len(orphans_graph)} Orphaned nodes (files deleted from disk)")
+        lines.append(
+            f"    - 🧹 {len(orphans_graph)} Orphaned nodes (files deleted from disk)"
+        )
     if ghost_files:
-        lines.append(f"    - 👻 {len(ghost_files)} Ghost files with {ghost_chunks_count} dangling chunks")
+        lines.append(
+            f"    - 👻 {len(ghost_files)} Ghost files with {ghost_chunks_count} dangling chunks"
+        )
 
     lines.append("\n## 1.5 Run Alignment")
     lines.append(f"  - Structural status:        `{struct_index_status or 'unknown'}`")
     lines.append(f"  - Structural active run:    `{struct_active_run_id or 'none'}`")
-    lines.append(f"  - Structural last success:  `{struct_last_successful_run_id or 'none'}`")
-    lines.append(f"  - Semantic status:          `{semantic_index_status or 'unknown'}`")
+    lines.append(
+        f"  - Structural last success:  `{struct_last_successful_run_id or 'none'}`"
+    )
+    lines.append(
+        f"  - Semantic status:          `{semantic_index_status or 'unknown'}`"
+    )
     lines.append(f"  - Semantic active run:      `{semantic_active_run_id or 'none'}`")
-    lines.append(f"  - Semantic last success:    `{semantic_last_successful_run_id or 'none'}`")
-    lines.append(f"  - Semantic target struct:   `{semantic_target_struct_run_id or 'none'}`")
-    lines.append(f"  - Semantic active struct:   `{semantic_active_struct_run_id or 'none'}`")
+    lines.append(
+        f"  - Semantic last success:    `{semantic_last_successful_run_id or 'none'}`"
+    )
+    lines.append(
+        f"  - Semantic target struct:   `{semantic_target_struct_run_id or 'none'}`"
+    )
+    lines.append(
+        f"  - Semantic active struct:   `{semantic_active_struct_run_id or 'none'}`"
+    )
     struct_reference_run = struct_active_run_id or struct_last_successful_run_id
-    semantic_reference_struct_run = semantic_active_struct_run_id or semantic_target_struct_run_id
+    semantic_reference_struct_run = (
+        semantic_active_struct_run_id or semantic_target_struct_run_id
+    )
     aligned = bool(
         struct_reference_run
         and semantic_reference_struct_run
@@ -1171,11 +1407,33 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         )
         if coverage_verified:
             aligned = True
-    lines.append(f"  - **Run Alignment**:        {'✅ Aligned' if aligned else '⚠️ Not aligned'}")
+    lines.append(
+        f"  - **Run Alignment**:        {'✅ Aligned' if aligned else '⚠️ Not aligned'}"
+    )
+
+    shadow_nodes = int(shadow_graph_health.get("nodes") or 0)
+    shadow_rels = int(shadow_graph_health.get("rels") or 0)
+    if shadow_nodes or shadow_rels:
+        lines.append("\n## 1.6 Global Shadow Graph Residue")
+        lines.append(
+            f"  - Shadow project IDs with nodes: {shadow_graph_health.get('projects', 0)}"
+        )
+        lines.append(
+            "  - Shadow project IDs with relationships: "
+            f"{shadow_graph_health.get('rel_projects', 0)}"
+        )
+        lines.append(f"  - Shadow nodes: {shadow_nodes}")
+        lines.append(f"  - Shadow relationships: {shadow_rels}")
+        lines.append("  - **Shadow Cleanup Status**: ⚠️ Cleanup recommended")
 
     apple_files_present = any(
         apple_graph_coverage.get(key, 0) > 0
-        for key in ("project_files", "scheme_files", "workspace_files", "resource_like_files")
+        for key in (
+            "project_files",
+            "scheme_files",
+            "workspace_files",
+            "resource_like_files",
+        )
     )
     apple_notes = _describe_apple_graph_health(apple_graph_coverage)
     if apple_files_present:
@@ -1224,12 +1482,20 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
             f"  - Support-file coverage: {parse_rate:.1f}% "
             f"({parsed_true}/{file_nodes} across all manifest-kept files)"
         )
-    
+
     if audit:
-        import_rate = (import_resolved_internal / import_total * 100) if import_total > 0 else 0
-        lines.append(f"  - **Internal Import Resolution**: {import_rate:.1f}% ({import_resolved_internal}/{import_total} resolved)")
-        lines.append(f"  - **Isolated Source Files**: {len(isolated_files)} detected (supporting heuristic)")
-        lines.append(f"  - **Symbol-Poor Files**: {len(suspicious_files)} detected (parsed but 0 symbols)")
+        import_rate = (
+            (import_resolved_internal / import_total * 100) if import_total > 0 else 0
+        )
+        lines.append(
+            f"  - **Internal Import Resolution**: {import_rate:.1f}% ({import_resolved_internal}/{import_total} resolved)"
+        )
+        lines.append(
+            f"  - **Isolated Source Files**: {len(isolated_files)} detected (supporting heuristic)"
+        )
+        lines.append(
+            f"  - **Symbol-Poor Files**: {len(suspicious_files)} detected (parsed but 0 symbols)"
+        )
     else:
         lines.append("  - *Hint: Add `audit=True` to run a deep fidelity check.*")
 
@@ -1238,26 +1504,32 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         lines.append("\n## 3. Suspicious Files / Parsing Issues")
         if parsed_false > 0:
             lines.append(f"  ### Explicit Parsing Failures ({parsed_false}):")
-        
+
         if suspicious_files:
-            lines.append(f"  ### Symbol-Poor Source Files (Top {min(5, len(suspicious_files))}):")
+            lines.append(
+                f"  ### Symbol-Poor Source Files (Top {min(5, len(suspicious_files))}):"
+            )
             for f in suspicious_files[:5]:
                 lines.append(f"    - `{f['path']}`")
-        
+
         if isolated_files:
-            lines.append(f"  ### Isolated Files (No structural links):")
+            lines.append("  ### Isolated Files (No structural links):")
             for f in isolated_files[:5]:
                 lines.append(f"    - `{f}`")
             if len(isolated_files) > 5:
-                lines.append(f"    - ... and {len(isolated_files)-5} more")
+                lines.append(f"    - ... and {len(isolated_files) - 5} more")
 
     # Bucket 4: Recommended Actions
     lines.append("\n## 4. Recommended Actions")
     recommendations = []
     if missing or stale_graph or stale_vector or stale_semantic_contract:
-        recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}')` to synchronize stale/missing files.")
+        recommendations.append(
+            f"- Run `index_workspace(workspace_id='{workspace_id}')` to synchronize stale/missing files."
+        )
     if orphans_graph or ghost_files:
-        recommendations.append(f"- Run `index_workspace(workspace_id='{workspace_id}', mode='cleanup')` to prune orphaned data.")
+        recommendations.append(
+            f"- Run `index_workspace(workspace_id='{workspace_id}', mode='cleanup')` to prune orphaned data."
+        )
     if not aligned:
         recommendations.append(
             f"- Structural and semantic runs are not aligned. Re-run `index_workspace(workspace_id='{workspace_id}')` and confirm both phases complete successfully."
@@ -1266,17 +1538,158 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         recommendations.append(
             "- Apple build metadata is only partially materialized. Re-run structural indexing after verifying the checkout contains the expected `.xcodeproj`, shared schemes, workspace metadata, and bundled resources."
         )
-    
+    if shadow_nodes or shadow_rels:
+        recommendations.append(
+            "- Stale shadow graph data exists. Run `cleanup_stale_shadow_graph(dry_run=False)` during a quiet indexing window."
+        )
+
     if audit:
-        if source_parse_rate < 80 or (import_total > 0 and (import_resolved_internal/import_total) < 0.5):
-            recommendations.append(f"- ⚠️ **Strongly Recommended**: Run `index_workspace(workspace_id='{workspace_id}', mode='rebuild')` or investigate parser/grammar compatibility.")
+        if source_parse_rate < 80 or (
+            import_total > 0 and (import_resolved_internal / import_total) < 0.5
+        ):
+            recommendations.append(
+                f"- ⚠️ **Strongly Recommended**: Run `index_workspace(workspace_id='{workspace_id}', mode='rebuild')` or investigate parser/grammar compatibility."
+            )
         elif suspicious_files:
-             recommendations.append("- Investigate suspicious files for language-specific parsing gaps or grammar mismatches.")
-    
+            recommendations.append(
+                "- Investigate suspicious files for language-specific parsing gaps or grammar mismatches."
+            )
+
     if not recommendations:
         recommendations.append("- No actions required. Everything looks healthy!")
-    
+
     lines.extend(recommendations)
+    return "\n".join(lines)
+
+
+async def cleanup_stale_shadow_graph(
+    dry_run: bool = True,
+    node_batch: int = 5000,
+    rel_batch: int = 5000,
+    max_project_ids: int = 1000,
+) -> str:
+    """
+    Inspect or remove stale Neo4j shadow project namespaces.
+
+    Shadow project IDs are used while structural indexing stages a replacement
+    graph. Successful promotions remove them. Residue usually means an index
+    run was interrupted before promotion or cleanup completed.
+
+    Args:
+        dry_run: When True, report residue without deleting anything.
+        node_batch: Max nodes to delete per transaction when dry_run is False.
+        rel_batch: Max relationships to delete per transaction when dry_run is False.
+        max_project_ids: Safety cap for the number of shadow project IDs to process.
+    """
+    node_batch = max(1, int(node_batch or 5000))
+    rel_batch = max(1, int(rel_batch or 5000))
+    max_project_ids = max(1, int(max_project_ids or 1000))
+
+    import graph_bootstrap
+
+    driver = await graph_bootstrap.require_driver()
+    async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+        before = await _get_shadow_graph_health(session)
+        project_rows = await _execute_read(
+            session,
+            """
+            CALL () {
+              MATCH (n)
+              WHERE n.project_id CONTAINS '::shadow::'
+              RETURN n.project_id AS pid
+              UNION
+              MATCH ()-[r]->()
+              WHERE r.project_id CONTAINS '::shadow::'
+              RETURN r.project_id AS pid
+            }
+            RETURN DISTINCT pid
+            ORDER BY pid
+            LIMIT $limit
+            """,
+            limit=max_project_ids,
+            op="list_stale_shadow_project_ids",
+        )
+        project_ids = [
+            row.get("pid")
+            for row in project_rows
+            if isinstance(row.get("pid"), str) and row.get("pid")
+        ]
+
+        if dry_run:
+            lines = ["## Stale Shadow Graph Cleanup Dry Run"]
+            lines.append(f"- Shadow project IDs found: {len(project_ids)}")
+            lines.append(f"- Shadow nodes: {int(before.get('nodes') or 0)}")
+            lines.append(f"- Shadow relationships: {int(before.get('rels') or 0)}")
+            if project_ids:
+                lines.append(
+                    "- To clean: run `cleanup_stale_shadow_graph(dry_run=False)` "
+                    "during a quiet indexing window."
+                )
+            else:
+                lines.append("- No stale shadow graph data found.")
+            return "\n".join(lines)
+
+        deleted_nodes = 0
+        deleted_rels = 0
+        processed = 0
+        for pid in project_ids:
+            processed += 1
+            while True:
+                count = await _execute_write_scalar(
+                    session,
+                    """
+                    MATCH ()-[r]->()
+                    WHERE r.project_id = $pid
+                    WITH r LIMIT $limit
+                    DELETE r
+                    RETURN count(r) AS deleted
+                    """,
+                    op="cleanup_shadow_rels",
+                    result_key="deleted",
+                    pid=pid,
+                    limit=rel_batch,
+                )
+                deleted_rels += count
+                if count < rel_batch:
+                    break
+            while True:
+                count = await _execute_write_scalar(
+                    session,
+                    """
+                    MATCH (n {project_id: $pid})
+                    WITH n LIMIT $limit
+                    DETACH DELETE n
+                    RETURN count(n) AS deleted
+                    """,
+                    op="cleanup_shadow_nodes",
+                    result_key="deleted",
+                    pid=pid,
+                    limit=node_batch,
+                )
+                deleted_nodes += count
+                if count < node_batch:
+                    break
+
+        after = await _get_shadow_graph_health(session)
+
+    lines = ["## Stale Shadow Graph Cleanup"]
+    lines.append(f"- Shadow project IDs processed: {processed}")
+    lines.append(f"- Relationships deleted: {deleted_rels}")
+    lines.append(f"- Nodes deleted: {deleted_nodes}")
+    lines.append(
+        f"- Before: nodes={int(before.get('nodes') or 0)} "
+        f"relationships={int(before.get('rels') or 0)}"
+    )
+    lines.append(
+        f"- After: nodes={int(after.get('nodes') or 0)} "
+        f"relationships={int(after.get('rels') or 0)}"
+    )
+    if int(after.get("nodes") or 0) or int(after.get("rels") or 0):
+        lines.append(
+            "- Residue remains; rerun with a higher `max_project_ids` or inspect Neo4j for active shadow writes."
+        )
+    else:
+        lines.append("- No stale shadow graph data remains.")
     return "\n".join(lines)
 
 
@@ -1395,9 +1808,13 @@ async def suggest_indexignore(workspace_id: str, write: bool = False) -> str:
 
     if not suggestions:
         lines.append("")
-        lines.append("No additional repo-specific `.indexignore` entries are suggested right now.")
+        lines.append(
+            "No additional repo-specific `.indexignore` entries are suggested right now."
+        )
         if not write:
-            lines.append("A new `.indexignore` file is not needed based on the current repo layout.")
+            lines.append(
+                "A new `.indexignore` file is not needed based on the current repo layout."
+            )
         return "\n".join(lines)
 
     lines.append("")
@@ -1426,7 +1843,9 @@ async def suggest_indexignore(workspace_id: str, write: bool = False) -> str:
         lines.append(f"Wrote suggestions to `{indexignore_path}`.")
     else:
         lines.append("")
-        lines.append("Run `suggest_indexignore(..., write=True)` to write these entries.")
+        lines.append(
+            "Run `suggest_indexignore(..., write=True)` to write these entries."
+        )
 
     return "\n".join(lines)
 
@@ -1440,4 +1859,5 @@ def register(mcp: FastMCP) -> None:
     mcp.tool()(unwatch_project)
     mcp.tool()(suggest_indexignore)
     mcp.tool()(get_indexing_health)
+    mcp.tool()(cleanup_stale_shadow_graph)
     mcp.tool()(get_indexed_projects)

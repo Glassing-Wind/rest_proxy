@@ -9,7 +9,6 @@ import os
 import re
 import sys
 import threading
-import asyncio
 import time
 import json
 from typing import Dict, Any
@@ -17,7 +16,9 @@ from contextvars import ContextVar
 from pathlib import Path
 
 # Context for session-scoped operations in multi-client Brain server
-client_session_id: ContextVar[str | None] = ContextVar("client_session_id", default=None)
+client_session_id: ContextVar[str | None] = ContextVar(
+    "client_session_id", default=None
+)
 
 _JOBS: Dict[str, Dict[str, Any]] = {}
 _JOBS_LOCK = threading.Lock()
@@ -25,6 +26,7 @@ _MAX_LOG_LINES = 200  # ring-buffer size per job
 _RUNTIME_JOBS_DIR = Path(__file__).resolve().parent / ".runtime" / "jobs"
 _PROJECT_LOCKS_DIR = Path(__file__).resolve().parent / ".runtime" / "project_locks"
 _PROJECT_LOCK_STALE_S = 6 * 60 * 60
+_GLOBAL_INDEX_LOCK_ID = "__global_index__"
 
 # The main asyncio event loop, captured at server startup.
 # _finalize_job runs in a worker thread and must schedule async work
@@ -42,8 +44,12 @@ _SEM_DONE_RE = re.compile(
     r"\[lm-proxy:indexer\] Done — (?P<new>\d+) new / (?P<skipped>\d+) skipped / "
     r"(?P<files>\d+) files in (?P<total>[0-9.]+)s \(parsed=(?P<parsed>\d+) skipped_files=(?P<skipped_files>\d+)\)"
 )
-_GDS_OK_RE = re.compile(r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Done — (?P<detail>.+)")
-_GDS_SKIP_RE = re.compile(r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Skipped — (?P<detail>.+)")
+_GDS_OK_RE = re.compile(
+    r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Done — (?P<detail>.+)"
+)
+_GDS_SKIP_RE = re.compile(
+    r"\[ts-pack:(?P<label>leiden|betweenness|wcc)\] Skipped — (?P<detail>.+)"
+)
 
 
 async def _promote_semantic_file_roles_async(project_id: str) -> dict[str, int]:
@@ -86,7 +92,9 @@ async def _promote_semantic_file_roles_async(project_id: str) -> dict[str, int]:
         file_path = str(row["file_path"] or "").strip()
         if not file_path:
             continue
-        roles = sorted({str(role).strip() for role in (row["roles"] or []) if str(role).strip()})
+        roles = sorted(
+            {str(role).strip() for role in (row["roles"] or []) if str(role).strip()}
+        )
         if roles:
             non_empty += 1
         batch.append({"filepath": file_path, "roles": roles})
@@ -201,7 +209,9 @@ def _persist_job_state(job_id: str) -> None:
     tmp_path = state_path.with_name(
         f"{state_path.name}.tmp.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}"
     )
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    tmp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+    )
     tmp_path.replace(state_path)
 
 
@@ -277,6 +287,103 @@ def _release_project_job_lock(project_id: str, job_id: str) -> None:
         return
 
 
+def _max_concurrent_index_jobs() -> int:
+    try:
+        return max(1, int(os.getenv("LM_PROXY_MAX_CONCURRENT_INDEX_JOBS", "1")))
+    except ValueError:
+        return 1
+
+
+def _release_index_capacity_lock(job_id: str) -> None:
+    if not job_id or _max_concurrent_index_jobs() > 1:
+        return
+    path = _project_lock_path(_GLOBAL_INDEX_LOCK_ID)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        payload = None
+    if isinstance(payload, dict) and payload.get("job_id") != job_id:
+        return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+
+def claim_index_capacity_lock(
+    job_id: str,
+    *,
+    project_id: str,
+    project_path: str,
+) -> tuple[bool, dict[str, Any] | None]:
+    """Limit concurrent index jobs across projects.
+
+    Neo4j Desktop is easy to saturate with concurrent structural writes and GDS
+    finalization. Keep the default daemon behavior conservative; larger
+    deployments can raise LM_PROXY_MAX_CONCURRENT_INDEX_JOBS.
+    """
+
+    if _max_concurrent_index_jobs() > 1:
+        return True, None
+
+    path = _project_lock_path(_GLOBAL_INDEX_LOCK_ID)
+    payload = {
+        "job_id": job_id,
+        "project_id": project_id,
+        "project_path": project_path,
+        "created_at": time.time(),
+        "pid": os.getpid(),
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+
+    while True:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            existing = None
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                existing = None
+            existing_job_id = (
+                str((existing or {}).get("job_id") or "").strip()
+                if isinstance(existing, dict)
+                else ""
+            )
+            existing_job = load_job_record(existing_job_id) if existing_job_id else None
+            if existing_job_id and existing_job:
+                alive = _job_processes_alive(existing_job)
+                status = str(existing_job.get("status") or "")
+                if alive or status == "running":
+                    return False, existing_job
+            created_at = (
+                float((existing or {}).get("created_at") or 0.0)
+                if isinstance(existing, dict)
+                else 0.0
+            )
+            if created_at and (time.time() - created_at) < _PROJECT_LOCK_STALE_S:
+                return False, existing_job or existing
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
+            except OSError:
+                return False, existing_job
+            continue
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(raw)
+        except Exception:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            raise
+        return True, None
+
+
 def claim_project_job_lock(
     project_id: str,
     job_id: str,
@@ -337,7 +444,9 @@ def _process_alive(pid: int | None) -> bool:
         return False
 
 
-def _infer_return_code_from_log(log_path: str | None, done_re: re.Pattern[str]) -> int | None:
+def _infer_return_code_from_log(
+    log_path: str | None, done_re: re.Pattern[str]
+) -> int | None:
     if not log_path or not os.path.exists(log_path):
         return None
     try:
@@ -444,7 +553,9 @@ def _append_job_log(job_id: str, line: str) -> None:
     _persist_job_state(job_id)
 
 
-async def _post_index_maintenance_async(project_id: str, sem_rc: int | None) -> dict[str, Any] | None:
+async def _post_index_maintenance_async(
+    project_id: str, sem_rc: int | None
+) -> dict[str, Any] | None:
     import graph_bootstrap
     from neo4j import unit_of_work
 
@@ -542,7 +653,11 @@ def _run_coro_blocking(coro: Any, *, job_id: str, timeout: int = 180) -> Any:
     except RuntimeError:
         current_loop = None
 
-    if _MAIN_LOOP is not None and _MAIN_LOOP.is_running() and _MAIN_LOOP is not current_loop:
+    if (
+        _MAIN_LOOP is not None
+        and _MAIN_LOOP.is_running()
+        and _MAIN_LOOP is not current_loop
+    ):
         future = _asyncio.run_coroutine_threadsafe(coro, _MAIN_LOOP)
         return future.result(timeout=timeout)
 
@@ -577,7 +692,11 @@ def _complete_post_index_maintenance(
     run_summary: dict[str, Any] | None = None,
     graph_build_error: str | None = None,
 ) -> None:
-    queued = "timestamps refreshed" if not graph_build_error else f"failed: {graph_build_error}"
+    queued = (
+        "timestamps refreshed"
+        if not graph_build_error
+        else f"failed: {graph_build_error}"
+    )
     with _JOBS_LOCK:
         if job_id in _JOBS:
             _JOBS[job_id].pop("clone_enrich_status", None)
@@ -585,11 +704,15 @@ def _complete_post_index_maintenance(
             _JOBS[job_id].pop("post_index_maintenance_pending", None)
             if _JOBS[job_id].get("logs"):
                 _JOBS[job_id]["logs"] = [
-                    line for line in _JOBS[job_id]["logs"] if "[clone-enrich]" not in line
+                    line
+                    for line in _JOBS[job_id]["logs"]
+                    if "[clone-enrich]" not in line
                 ]
             if run_summary:
                 _JOBS[job_id]["run_summary"] = run_summary
-            _JOBS[job_id]["metrics"] = _extract_job_metrics(_JOBS[job_id].get("logs", []))
+            _JOBS[job_id]["metrics"] = _extract_job_metrics(
+                _JOBS[job_id].get("logs", [])
+            )
             _JOBS[job_id]["logs"].append(f"[struct-index] {queued}")
             _JOBS[job_id]["post_index_maintenance_done"] = time.time()
             if graph_build_error:
@@ -654,7 +777,9 @@ def _run_post_index_maintenance(job_id: str) -> None:
                 _JOBS[job_id]["post_index_maintenance_pending"] = time.time()
         _persist_job_state(job_id)
 
-        task = current_loop.create_task(_post_index_maintenance_async(project_id, sem_rc))
+        task = current_loop.create_task(
+            _post_index_maintenance_async(project_id, sem_rc)
+        )
 
         def _on_done(fut: _asyncio.Future) -> None:
             try:
@@ -663,7 +788,9 @@ def _run_post_index_maintenance(job_id: str) -> None:
             except _asyncio.CancelledError:
                 _defer_post_index_maintenance(job_id)
                 return
-            except Exception as exc:  # pragma: no cover - callback path depends on loop scheduling
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - callback path depends on loop scheduling
                 run_summary = None
                 graph_build_error = str(exc)
             _complete_post_index_maintenance(
@@ -711,7 +838,13 @@ def _reconcile_job_process_state(job_id: str) -> dict[str, Any] | None:
             job = _JOBS[job_id]
 
         for proc_key, rc_key, pid_key, done_re, log_key in (
-            ("struct_proc", "struct_rc", "struct_pid", _STRUCT_DONE_RE, "struct_log_path"),
+            (
+                "struct_proc",
+                "struct_rc",
+                "struct_pid",
+                _STRUCT_DONE_RE,
+                "struct_log_path",
+            ),
             ("sem_proc", "sem_rc", "sem_pid", _SEM_DONE_RE, "semantic_log_path"),
         ):
             if job.get(rc_key) is not None:
@@ -731,7 +864,9 @@ def _reconcile_job_process_state(job_id: str) -> dict[str, Any] | None:
                 inferred = _infer_return_code_from_log(job.get(log_key), done_re)
                 job[rc_key] = inferred if inferred is not None else 1
 
-        both_finished = job.get("struct_rc") is not None and job.get("sem_rc") is not None
+        both_finished = (
+            job.get("struct_rc") is not None and job.get("sem_rc") is not None
+        )
         if both_finished and job.get("finished_at") is None:
             if job.get("cancel_requested"):
                 job["status"] = "cancelled"
@@ -749,6 +884,7 @@ def _reconcile_job_process_state(job_id: str) -> dict[str, Any] | None:
                 str(job.get("project_id") or ""),
                 job_id,
             )
+            _release_index_capacity_lock(job_id)
         should_run_post_index_maintenance = bool(
             both_finished and not job.get("post_index_maintenance_done")
         )
@@ -790,14 +926,12 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
         pass
     import time as _t
 
-    project_path = ""
     project_id = ""
     cancel_requested = False
     with _JOBS_LOCK:
         if job_id in _JOBS:
             cancel_requested = bool(_JOBS[job_id].get("cancel_requested"))
             ok = struct_rc == 0 and sem_rc == 0
-            project_path = _JOBS[job_id].get("project_path", "")
             project_id = _JOBS[job_id].get("project_id", "")
             if cancel_requested:
                 _JOBS[job_id]["status"] = "cancelled"
@@ -805,6 +939,7 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
                 _JOBS[job_id]["status"] = "done" if ok else "failed"
                 _JOBS[job_id]["finished_at"] = _t.time()
     _release_project_job_lock(project_id, job_id)
+    _release_index_capacity_lock(job_id)
     _persist_job_state(job_id)
 
     _run_post_index_maintenance(job_id)
@@ -820,6 +955,8 @@ def _finalize_job(job_id: str, manifest_path: str) -> None:
             elif graph_build_error:
                 _JOBS[job_id]["status"] = "failed"
             else:
-                _JOBS[job_id]["status"] = "done" if (struct_rc == 0 and sem_rc == 0) else "failed"
+                _JOBS[job_id]["status"] = (
+                    "done" if (struct_rc == 0 and sem_rc == 0) else "failed"
+                )
             _JOBS[job_id]["finished_at"] = _t.time()
     _persist_job_state(job_id)

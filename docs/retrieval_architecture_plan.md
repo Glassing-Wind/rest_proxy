@@ -167,8 +167,10 @@ These belong in `ts-pack` or a lower-level retrieval/indexing layer, not in MCP 
 
 ### Boundary Drift
 
-- docs retrieval semantics still live in Python MCP code
-- code retrieval contract is not strong enough to prevent fallback regressions
+- docs retrieval semantics still partly live in Python MCP code
+- some smaller helper/debug surfaces still carry legacy path-only fallback logic
+- a few query families still rely on `rest_proxy` policy where lower-level
+  metadata is not yet rich enough
 
 ### Topic Governance
 
@@ -180,6 +182,71 @@ These belong in `ts-pack` or a lower-level retrieval/indexing layer, not in MCP 
 - helper-level tests exist
 - product-behavior tests are too sparse
 - important retrieval guarantees are not pinned by golden tests
+
+
+## Current Status
+
+As of 2026-05-11, the architecture is materially closer to the target layering
+than when this plan was first written.
+
+### What Has Already Moved Deeper
+
+- semantic file-surface roles now come from `ts-pack` instead of being guessed
+  only in `rest_proxy`
+- focused dispatcher-anchor metadata and contract capabilities now come from
+  `ts-pack`
+- routing/request-handler semantic roles now come from `ts-pack`
+- semantic chunk identity and several indexing invariants were fixed below the
+  MCP layer instead of being papered over in retrieval logic
+
+### What `rest_proxy` Now Mostly Does
+
+- orchestration and health/alignment gating
+- role-aware ranking using lower-level metadata
+- query-family intent detection where product policy still belongs in the tool
+  layer
+- live telemetry, enterprise evals, parity checks, and user-facing formatting
+
+### What Was Successfully Deleted Or Reduced
+
+- stale-index compatibility as a silent default
+- dispatcher rescue/reordering branches that were only compensating for weak
+  ranking
+- routing partition and additive routing bonus branches once semantic roles and
+  structural ranking were strong enough
+- many path-only test/example/docs/benchmark suppressions in retrieval,
+  orientation, summaries, and code-intel paths
+
+### What Is Still Intentionally In `rest_proxy`
+
+These are not obviously wrong to keep higher:
+
+- query-intent detection
+- product-level ranking tradeoffs between structurally valid answers
+- presentation decisions such as “Inspect First” wording or graph summary shape
+- telemetry and enterprise-eval diagnostics
+
+### What Is Still Not Clean Enough
+
+- some smaller helper/debug/admin surfaces still use legacy path fallbacks
+- some query families may still need richer lower-level metadata if real usage
+  finds another repeated weak spot
+- docs retrieval still has more Python-owned semantics than code retrieval does
+
+
+## What To Do Next
+
+This plan should not be interpreted as “move everything down immediately.”
+Current next steps should follow this order:
+
+1. Finish shrinking the remaining legacy-only fallback pockets in smaller
+   helper/debug surfaces.
+2. Use live MCP workflows and telemetry to find the next real hesitation.
+3. If the issue is a durable structural fact, move it down into `ts-pack` or a
+   lower-level index contract.
+4. If the issue is a query/product tradeoff, keep it in `rest_proxy`.
+5. Only add new goldens or workflow cases when they protect a real current
+   boundary.
 
 
 ## Golden Behavior Tests

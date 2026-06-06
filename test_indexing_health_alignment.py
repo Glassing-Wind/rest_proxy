@@ -97,14 +97,18 @@ class FakePgMemoryStore(FakeMemoryStore):
 
 
 def load_indexing_module():
-    spec = importlib.util.spec_from_file_location("hands_indexing_under_test", MODULE_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "hands_indexing_under_test", MODULE_PATH
+    )
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
 
     jobs_mod = types.ModuleType("_jobs")
     jobs_mod._JOBS = {}
     jobs_mod._JOBS_LOCK = mock.MagicMock()
+    jobs_mod._release_index_capacity_lock = lambda *args, **kwargs: None
     jobs_mod.claim_project_job_lock = lambda *args, **kwargs: (True, None)
+    jobs_mod.claim_index_capacity_lock = lambda *args, **kwargs: (True, None)
     jobs_mod._drain_proc_output = lambda *args, **kwargs: None
     jobs_mod._finalize_job = lambda *args, **kwargs: None
     jobs_mod._job_control_paths = lambda *args, **kwargs: {}
@@ -121,9 +125,14 @@ def load_indexing_module():
     helpers_mod.get_memory_modules = lambda: (fake_memory, None, None, None, None)
     helpers_mod.get_project_id = lambda workspace_id: "proj123"
     helpers_mod.get_workspace_path = lambda workspace_id: "/tmp/repo"
+    helpers_mod.normalize_neo4j_path = lambda path: str(path).replace("\\", "/")
 
     runtime_mod = types.ModuleType("_runtime")
-    runtime_mod.resolve_python_runtime = lambda: {"cmd": ["python"], "python": "python", "source": "test"}
+    runtime_mod.resolve_python_runtime = lambda: {
+        "cmd": ["python"],
+        "python": "python",
+        "source": "test",
+    }
 
     fastmcp_mod = types.ModuleType("mcp.server.fastmcp")
     fastmcp_mod.FastMCP = FakeMCP
@@ -146,18 +155,24 @@ def load_indexing_module():
     manifest_mod.suggest_indexignore_entries = lambda *args, **kwargs: []
 
     registry_mod = types.ModuleType("graphrag_core.indexing.registry")
+
     async def _record_indexed_project(*args, **kwargs):
         return None
+
     registry_mod.record_indexed_project = _record_indexed_project
 
     neo4j_utils_mod = types.ModuleType("graphrag_core.neo4j")
+
     async def _execute_read(*args, **kwargs):
         return []
+
     neo4j_utils_mod.execute_read = _execute_read
 
     graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
+
     async def _require_driver():
         return FakeDriver()
+
     graph_bootstrap_mod.require_driver = _require_driver
     graph_bootstrap_mod._NEO4J_DB = "neo4j"
 
@@ -192,7 +207,9 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
         module = load_indexing_module()
         fake_ts_pack = types.SimpleNamespace(
             should_use_line_window_fallback=lambda _path: False,
-            detect_language_from_extension=lambda ext: "json" if ext == "json" else None,
+            detect_language_from_extension=lambda ext: (
+                "json" if ext == "json" else None
+            ),
             detect_language=lambda _path: "json",
             has_language=lambda lang: lang == "json",
         )
@@ -245,9 +262,11 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
                 ]
             return []
 
-        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch(
-            "os.path.exists", return_value=True
-        ), mock.patch("os.path.getmtime", return_value=1000.0):
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+        ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
         self.assertIn("**Run Alignment**:        ✅ Aligned", output)
@@ -282,13 +301,61 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
                 ]
             return []
 
-        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch(
-            "os.path.exists", return_value=True
-        ), mock.patch("os.path.getmtime", return_value=1000.0):
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+        ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
         self.assertIn("**Run Alignment**:        ⚠️ Not aligned", output)
         self.assertIn("Structural and semantic runs are not aligned.", output)
+
+    def test_health_reports_stale_shadow_residue(self):
+        module = load_indexing_module()
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_indexing_health_files":
+                return [
+                    {
+                        "fp": "src/app.py",
+                        "ts": 2_000_000,
+                        "vts": 2_000_000,
+                        "parsed": True,
+                    }
+                ]
+            if op == "get_indexing_health_runs":
+                return [
+                    {
+                        "struct_active_run_id": "struct-1",
+                        "struct_last_successful_run_id": "struct-1",
+                        "struct_index_status": "done",
+                        "semantic_active_run_id": "sem-1",
+                        "semantic_last_successful_run_id": "sem-1",
+                        "semantic_target_struct_run_id": "struct-1",
+                        "semantic_active_struct_run_id": "struct-1",
+                        "semantic_index_status": "done",
+                    }
+                ]
+            if op == "get_shadow_graph_node_health":
+                return [{"nodes": 12, "projects": 2}]
+            if op == "get_shadow_graph_rel_health":
+                return [{"rels": 3, "rel_projects": 1}]
+            return []
+
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+        ):
+            output = asyncio.run(module.get_indexing_health("/tmp/repo"))
+
+        self.assertIn("## 1.6 Global Shadow Graph Residue", output)
+        self.assertIn("Shadow project IDs with nodes: 2", output)
+        self.assertIn("Shadow nodes: 12", output)
+        self.assertIn("Shadow relationships: 3", output)
+        self.assertIn("cleanup_stale_shadow_graph(dry_run=False)", output)
 
     def test_parse_success_rate_uses_source_eligible_files(self):
         module = load_indexing_module()
@@ -331,13 +398,19 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
                 ]
             return []
 
-        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch(
-            "os.path.exists", return_value=True
-        ), mock.patch("os.path.getmtime", return_value=1000.0):
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+        ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
-        self.assertIn("**Parse Success Rate**: 100.0% (1/1 source-eligible files)", output)
-        self.assertIn("Support-file coverage: 33.3% (1/3 across all manifest-kept files)", output)
+        self.assertIn(
+            "**Parse Success Rate**: 100.0% (1/1 source-eligible files)", output
+        )
+        self.assertIn(
+            "Support-file coverage: 33.3% (1/3 across all manifest-kept files)", output
+        )
 
     def test_health_uses_structural_and_pg_coverage_not_timestamp_subsets(self):
         module = load_indexing_module()
@@ -388,12 +461,17 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             {"rel_path": "src/lib.py", "abs_path": "/tmp/repo/src/lib.py"},
         ]
 
-        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch.object(
-            module, "get_memory_modules", return_value=(fake_memory, None, None, None, None)
-        ), mock.patch.object(module, "build_manifest", return_value=manifest), mock.patch(
-            "os.path.exists", return_value=True
-        ), mock.patch("os.path.getmtime", return_value=1000.0), mock.patch(
-            "os.path.getsize", return_value=1
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch.object(
+                module,
+                "get_memory_modules",
+                return_value=(fake_memory, None, None, None, None),
+            ),
+            mock.patch.object(module, "build_manifest", return_value=manifest),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+            mock.patch("os.path.getsize", return_value=1),
         ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
@@ -403,7 +481,9 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
         self.assertIn("**Run Alignment**:        ✅ Aligned", output)
         self.assertIn("No actions required. Everything looks healthy!", output)
 
-    def test_health_treats_verified_coverage_as_aligned_even_when_semantic_struct_run_lags(self):
+    def test_health_treats_verified_coverage_as_aligned_even_when_semantic_struct_run_lags(
+        self,
+    ):
         module = load_indexing_module()
         fake_memory = FakePgMemoryStore(
             {
@@ -452,12 +532,17 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             {"rel_path": "src/lib.py", "abs_path": "/tmp/repo/src/lib.py"},
         ]
 
-        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch.object(
-            module, "get_memory_modules", return_value=(fake_memory, None, None, None, None)
-        ), mock.patch.object(module, "build_manifest", return_value=manifest), mock.patch(
-            "os.path.exists", return_value=True
-        ), mock.patch("os.path.getmtime", return_value=1000.0), mock.patch(
-            "os.path.getsize", return_value=1
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch.object(
+                module,
+                "get_memory_modules",
+                return_value=(fake_memory, None, None, None, None),
+            ),
+            mock.patch.object(module, "build_manifest", return_value=manifest),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+            mock.patch("os.path.getsize", return_value=1),
         ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
@@ -501,10 +586,11 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             {"rel_path": ".env.example", "abs_path": "/tmp/repo/.env.example"},
         ]
 
-        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch.object(
-            module, "build_manifest", return_value=manifest
-        ), mock.patch("os.path.exists", return_value=True), mock.patch(
-            "os.path.getmtime", return_value=1000.0
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch.object(module, "build_manifest", return_value=manifest),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
         ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
@@ -563,21 +649,33 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             return []
 
         manifest = [
-            {"rel_path": "FrameCreator.xcodeproj/project.pbxproj", "abs_path": "/tmp/repo/FrameCreator.xcodeproj/project.pbxproj"},
-            {"rel_path": "FrameCreator.xcodeproj/xcshareddata/xcschemes/FrameCreator.xcscheme", "abs_path": "/tmp/repo/FrameCreator.xcodeproj/xcshareddata/xcschemes/FrameCreator.xcscheme"},
+            {
+                "rel_path": "FrameCreator.xcodeproj/project.pbxproj",
+                "abs_path": "/tmp/repo/FrameCreator.xcodeproj/project.pbxproj",
+            },
+            {
+                "rel_path": "FrameCreator.xcodeproj/xcshareddata/xcschemes/FrameCreator.xcscheme",
+                "abs_path": "/tmp/repo/FrameCreator.xcodeproj/xcshareddata/xcschemes/FrameCreator.xcscheme",
+            },
         ]
 
-        with mock.patch.object(module, "_execute_read", side_effect=fake_execute_read), mock.patch.object(
-            module, "build_manifest", return_value=manifest
-        ), mock.patch("os.path.exists", return_value=True), mock.patch(
-            "os.path.getmtime", return_value=1000.0
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch.object(module, "build_manifest", return_value=manifest),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
         ):
             output = asyncio.run(module.get_indexing_health("/tmp/repo"))
 
         self.assertIn("## 1.75 Apple Build Coverage", output)
         self.assertIn("**Apple Graph Status**: ⚠️ Partial", output)
-        self.assertIn("scheme files exist, but no XcodeScheme nodes were materialized", output)
-        self.assertIn("workspace metadata exists, but no XcodeWorkspace nodes were materialized", output)
+        self.assertIn(
+            "scheme files exist, but no XcodeScheme nodes were materialized", output
+        )
+        self.assertIn(
+            "workspace metadata exists, but no XcodeWorkspace nodes were materialized",
+            output,
+        )
         self.assertIn("Apple build metadata is only partially materialized.", output)
 
 

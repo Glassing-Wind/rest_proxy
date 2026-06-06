@@ -297,6 +297,19 @@ This is intentionally separate from the retrieval quality gate. The quality
 gate answers "would I trust the tools right now?"; enterprise eval answers
 "how are the retrieval metrics trending over time?".
 
+Current baseline:
+
+- the validated benchmark corpus is on the current semantic contract
+- dispatcher and routing telemetry summaries are current-first
+- primary retrieval/orientation paths are semantic-role-first, with legacy path
+  fallback mostly limited to older metadata shapes and smaller helper surfaces
+
+If you need a more narrative status update and the remaining cleanup backlog,
+see:
+
+- [/Users/michaelmarler/Projects/rest_proxy/docs/tool_trust_status.md](/Users/michaelmarler/Projects/rest_proxy/docs/tool_trust_status.md)
+- [/Users/michaelmarler/Projects/rest_proxy/docs/retrieval_architecture_plan.md](/Users/michaelmarler/Projects/rest_proxy/docs/retrieval_architecture_plan.md)
+
 ## STDIO Fallback
 
 The legacy stdio MCP path is still available as a fallback for clients that

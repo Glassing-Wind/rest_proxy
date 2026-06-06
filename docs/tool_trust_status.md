@@ -21,8 +21,9 @@ The working standard is:
 
 ## Current Position
 
-The repo is past blanket enterprise-hardening work and into workflow-driven
-trust work.
+As of 2026-05-11, the repo is past blanket enterprise-hardening work and past
+the biggest retrieval-boundary cleanup pass. The main investigation surfaces
+are now on a stable, semantic-role-first baseline.
 
 What is in good shape now:
 
@@ -38,6 +39,23 @@ What is in good shape now:
   - ts-pack wheel reuse is in place
   - dependency audit issues were fixed
   - job-state persistence races were addressed and regression-tested
+- stale semantic indexes are no longer silently tolerated:
+  - current semantic-contract coverage is required for healthy code retrieval
+  - the validated benchmark repos have been refreshed onto the current contract
+- semantic file-role metadata is now a real cross-layer contract:
+  - `ts-pack` emits durable `file_roles` and focused dispatcher/routing facts
+  - semantic ingest promotes those roles onto graph `File` nodes
+  - retrieval, orientation, summaries, code-intel, and cross-project helpers
+    now prefer role metadata before path heuristics
+- dispatcher and routing retrieval are materially cleaner:
+  - focused dispatcher-anchor contract and live telemetry exist
+  - dispatcher rescue/reordering logic was largely deleted after ranking and
+    lower-level metadata became strong enough
+  - routing partition and additive routing bonuses were removed after
+    role-aware ranking made them redundant
+- telemetry/reporting is in better shape:
+  - dispatcher and routing enterprise summaries are current-first
+  - raw telemetry retention is bounded instead of append-only
 
 What recent live-workflow hardening improved:
 
@@ -45,6 +63,7 @@ What recent live-workflow hardening improved:
   - better implementation/explanation ranking
   - better provider-wiring behavior
   - better gRPC-routing behavior
+  - stronger dispatcher and routing contract reporting
 - `get_project_overview`
   - better first-stop ranking for Java/Spring and Apple repos
   - lower promotion of generated files and shell/setup noise
@@ -62,11 +81,23 @@ What recent live-workflow hardening improved:
   - less cross-language graph noise
   - better call ordering and less same-file clutter
 
+What this means in practice:
+
+- the retrieval quality gate is green from the current baseline
+- the live MCP daemon and direct invocation are aligned on the validated repo
+  corpus
+- most remaining low-signal demotion logic is now legacy-only fallback for
+  rows that genuinely do not have current metadata
+- the registered MCP surface now has an explicit tool-choice catalog contract:
+  every registered tool has a documented "reach for this when..." use case, and
+  `get_mcp_tool_catalog` exposes that guidance inside the MCP surface
+
 ## What The Standard Gate Covers Well
 
 The current standard trust gate is good at catching:
 
 - tool-family selection regressions
+- missing product-positioning metadata for newly registered MCP tools
 - MCP transport/direct parity drift
 - stale runtime/daemon behavior
 - benchmark-repo workflow regressions for the promoted investigation tools
@@ -79,26 +110,30 @@ shapes.
 
 ## What Still Needs Work
 
-The remaining work should stay targeted. The next value is in fixing the next
-real hesitation that shows up in live MCP use, not in trying to give every tool
-the same level of investment.
+The remaining work should stay targeted. The next value is no longer in broad
+hardening. It is in finishing smaller contract-boundary cleanup and only adding
+new lower-level metadata when live usage proves the current contract is still
+too weak.
 
 Current remaining goals:
 
-- continue MCP-only workflow passes across real repos and keep logging the next
-  trust break
-- improve search/result usefulness where the first 1-3 hits are still only
-  “technically correct” instead of clearly helpful
-- keep reducing overconfident output where the graph only supports weak context
-- keep live goldens aligned with improved behavior when a change makes the tool
-  more honest rather than merely different
+- keep shrinking the remaining legacy-only path fallback pockets in smaller
+  helper/debug surfaces
+- continue MCP-only workflow passes across real repos and log the next actual
+  trust hesitation instead of preemptive churn
+- add deeper metadata only for the next proven weak family, rather than adding
+  more top-layer ranking rules
+- keep live goldens and enterprise artifacts aligned with honest behavior when
+  tools become more precise or less overconfident
 
 Current likely targets:
 
-- more repo-specific ranking polish for search and adjacency on query shapes not
-  yet covered by the current workflow set
+- residual path-only compatibility logic in small helper/admin/debug surfaces
+- the next lower-level routing/handler metadata pass if live usage still finds
+  repo families where controller/route surfaces are under-described
+- explicit migration/reporting UX for semantic-contract upgrades, if stale
+  index enforcement becomes painful operationally
 - additional workflow cases only when they protect a current trust boundary
-- selective promotion of secondary tools if real usage proves they matter
 
 ## What Is Not Worth Doing Blindly
 
@@ -107,6 +142,8 @@ These are not the best next use of time unless live usage exposes a real issue:
 - adding equal live/parity coverage to every admin or specialty tool
 - more generic CI/plumbing churn without a concrete failure
 - broad ranking rewrites without a repo-backed workflow failure
+- reintroducing top-layer rescues that the lower-level contract already made
+  unnecessary
 - turning low-signal Apple/build metadata into fake “first stop” guidance just
   because the graph can return it
 

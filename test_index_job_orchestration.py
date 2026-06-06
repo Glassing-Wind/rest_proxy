@@ -77,7 +77,7 @@ def load_jobs_module(fake_driver):
     assert spec.loader is not None
 
     neo4j_mod = types.ModuleType("neo4j")
-    neo4j_mod.unit_of_work = lambda *args, **kwargs: (lambda fn: fn)
+    neo4j_mod.unit_of_work = lambda *args, **kwargs: lambda fn: fn
 
     graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
 
@@ -118,7 +118,9 @@ class IndexJobOrchestrationTests(unittest.TestCase):
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             manifest_path = tmp.name
-        self.addCleanup(lambda: os.path.exists(manifest_path) and os.remove(manifest_path))
+        self.addCleanup(
+            lambda: os.path.exists(manifest_path) and os.remove(manifest_path)
+        )
 
         with module._JOBS_LOCK:
             module._JOBS.clear()
@@ -134,7 +136,9 @@ class IndexJobOrchestrationTests(unittest.TestCase):
                 "cancel_requested": False,
             }
 
-        with mock.patch("asyncio.run_coroutine_threadsafe", side_effect=run_coro_immediately):
+        with mock.patch(
+            "asyncio.run_coroutine_threadsafe", side_effect=run_coro_immediately
+        ):
             module._finalize_job("job1", manifest_path)
 
         with module._JOBS_LOCK:
@@ -144,13 +148,24 @@ class IndexJobOrchestrationTests(unittest.TestCase):
             self.assertTrue(any("timestamps refreshed" in line for line in job["logs"]))
             self.assertEqual(job["run_summary"]["struct_active_run_id"], "struct-1")
             self.assertEqual(job["run_summary"]["semantic_active_run_id"], "sem-1")
-            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-1")
+            self.assertEqual(
+                job["run_summary"]["semantic_active_struct_run_id"], "struct-1"
+            )
 
         cyphers = [cypher for cypher, _ in tx.calls]
-        self.assertTrue(any("SET f.indexed_at = timestamp(), f.vector_indexed_at = timestamp()" in c for c in cyphers))
-        align_queries = [c for c in cyphers if "semantic_active_struct_run_id = struct_run_id" in c]
+        self.assertTrue(
+            any(
+                "SET f.indexed_at = timestamp(), f.vector_indexed_at = timestamp()" in c
+                for c in cyphers
+            )
+        )
+        align_queries = [
+            c for c in cyphers if "semantic_active_struct_run_id = struct_run_id" in c
+        ]
         self.assertEqual(len(align_queries), 1)
-        self.assertIn("MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})", align_queries[0])
+        self.assertIn(
+            "MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})", align_queries[0]
+        )
 
     def test_reconcile_finished_job_runs_post_index_maintenance(self):
         tx = FakeTx()
@@ -177,17 +192,71 @@ class IndexJobOrchestrationTests(unittest.TestCase):
                 "cancel_requested": False,
             }
 
-        with mock.patch("asyncio.run_coroutine_threadsafe", side_effect=run_coro_immediately):
+        with mock.patch(
+            "asyncio.run_coroutine_threadsafe", side_effect=run_coro_immediately
+        ):
             job = module._reconcile_job_process_state("job2")
 
         self.assertIsNotNone(job)
         self.assertIsNotNone(job.get("post_index_maintenance_done"))
-        self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-1")
+        self.assertEqual(
+            job["run_summary"]["semantic_active_struct_run_id"], "struct-1"
+        )
         self.assertTrue(any("timestamps refreshed" in line for line in job["logs"]))
 
         cyphers = [cypher for cypher, _ in tx.calls]
-        self.assertTrue(any("semantic_active_struct_run_id = struct_run_id" in c for c in cyphers))
-        self.assertTrue(any("MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})" in c for c in cyphers))
+        self.assertTrue(
+            any("semantic_active_struct_run_id = struct_run_id" in c for c in cyphers)
+        )
+        self.assertTrue(
+            any(
+                "MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})" in c
+                for c in cyphers
+            )
+        )
+
+    def test_global_index_capacity_lock_blocks_second_running_job(self):
+        tx = FakeTx()
+        module = load_jobs_module(FakeDriver(tx))
+        with tempfile.TemporaryDirectory() as tmp:
+            module._PROJECT_LOCKS_DIR = Path(tmp)
+            with mock.patch.dict(
+                os.environ, {"LM_PROXY_MAX_CONCURRENT_INDEX_JOBS": "1"}
+            ):
+                claimed, blocking = module.claim_index_capacity_lock(
+                    "job1",
+                    project_id="proj1",
+                    project_path="/tmp/repo1",
+                )
+                self.assertTrue(claimed)
+                self.assertIsNone(blocking)
+
+                with module._JOBS_LOCK:
+                    module._JOBS.clear()
+                    module._JOBS["job1"] = {
+                        "status": "running",
+                        "project_id": "proj1",
+                        "project_path": "/tmp/repo1",
+                        "struct_pid": os.getpid(),
+                        "sem_pid": None,
+                    }
+
+                claimed, blocking = module.claim_index_capacity_lock(
+                    "job2",
+                    project_id="proj2",
+                    project_path="/tmp/repo2",
+                )
+                self.assertFalse(claimed)
+                self.assertEqual(blocking["project_id"], "proj1")
+
+                module._release_index_capacity_lock("job1")
+                claimed, blocking = module.claim_index_capacity_lock(
+                    "job2",
+                    project_id="proj2",
+                    project_path="/tmp/repo2",
+                )
+                self.assertTrue(claimed)
+                self.assertIsNone(blocking)
 
     def test_post_index_maintenance_handles_same_running_loop(self):
         tx = FakeTx()
@@ -218,12 +287,21 @@ class IndexJobOrchestrationTests(unittest.TestCase):
             job = module._JOBS["job3"]
             self.assertIsNotNone(job.get("post_index_maintenance_done"))
             self.assertIsNone(job.get("post_index_maintenance_pending"))
-            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-1")
+            self.assertEqual(
+                job["run_summary"]["semantic_active_struct_run_id"], "struct-1"
+            )
             self.assertTrue(any("timestamps refreshed" in line for line in job["logs"]))
 
         cyphers = [cypher for cypher, _ in tx.calls]
-        self.assertTrue(any("semantic_active_struct_run_id = struct_run_id" in c for c in cyphers))
-        self.assertTrue(any("MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})" in c for c in cyphers))
+        self.assertTrue(
+            any("semantic_active_struct_run_id = struct_run_id" in c for c in cyphers)
+        )
+        self.assertTrue(
+            any(
+                "MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})" in c
+                for c in cyphers
+            )
+        )
 
     def test_post_index_maintenance_cancellation_leaves_job_retryable(self):
         tx = FakeTx()
@@ -279,7 +357,9 @@ class IndexJobOrchestrationTests(unittest.TestCase):
             self.assertIsNone(job.get("post_index_maintenance_error"))
             self.assertNotIn("run_summary", job)
 
-    def test_post_index_maintenance_uses_blocking_fallback_without_registered_main_loop(self):
+    def test_post_index_maintenance_uses_blocking_fallback_without_registered_main_loop(
+        self,
+    ):
         tx = FakeTx()
         module = load_jobs_module(FakeDriver(tx))
         fake_loop = object()
@@ -308,17 +388,22 @@ class IndexJobOrchestrationTests(unittest.TestCase):
         }
 
         with mock.patch("asyncio.get_running_loop", return_value=fake_loop):
+
             def _run_and_close(coro, **kwargs):
                 coro.close()
                 return expected_summary
 
-            with mock.patch.object(module, "_run_coro_blocking", side_effect=_run_and_close) as run_blocking:
+            with mock.patch.object(
+                module, "_run_coro_blocking", side_effect=_run_and_close
+            ) as run_blocking:
                 module._run_post_index_maintenance("job5")
 
         run_blocking.assert_called_once()
         with module._JOBS_LOCK:
             job = module._JOBS["job5"]
-            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-2")
+            self.assertEqual(
+                job["run_summary"]["semantic_active_struct_run_id"], "struct-2"
+            )
             self.assertIsNotNone(job.get("post_index_maintenance_done"))
             self.assertIsNone(job.get("post_index_maintenance_pending"))
 
@@ -350,17 +435,22 @@ class IndexJobOrchestrationTests(unittest.TestCase):
         }
         module._MAIN_LOOP = None
         with mock.patch("asyncio.get_running_loop", side_effect=RuntimeError()):
+
             def _run_and_close(coro, **kwargs):
                 coro.close()
                 return expected_summary
 
-            with mock.patch.object(module, "_run_coro_blocking", side_effect=_run_and_close) as run_blocking:
+            with mock.patch.object(
+                module, "_run_coro_blocking", side_effect=_run_and_close
+            ) as run_blocking:
                 module._run_post_index_maintenance("job6")
 
         run_blocking.assert_called_once()
         with module._JOBS_LOCK:
             job = module._JOBS["job6"]
-            self.assertEqual(job["run_summary"]["semantic_active_struct_run_id"], "struct-3")
+            self.assertEqual(
+                job["run_summary"]["semantic_active_struct_run_id"], "struct-3"
+            )
             self.assertIsNotNone(job.get("post_index_maintenance_done"))
             self.assertIsNone(job.get("post_index_maintenance_pending"))
 

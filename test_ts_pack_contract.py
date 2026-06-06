@@ -23,15 +23,22 @@ class TsPackContractTests(unittest.TestCase):
         ]
 
         for name in required:
-            self.assertTrue(hasattr(ts_pack, name), f"missing tree_sitter_language_pack.{name}")
+            self.assertTrue(
+                hasattr(ts_pack, name), f"missing tree_sitter_language_pack.{name}"
+            )
 
     def test_python_detection_and_process_contract(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             sample_path = Path(tmp_dir) / "sample.py"
-            sample_path.write_text("def greet(name):\n    return f'hi {name}'\n", encoding="utf-8")
+            sample_path.write_text(
+                "def greet(name):\n    return f'hi {name}'\n", encoding="utf-8"
+            )
 
             self.assertEqual(ts_pack.detect_language_from_extension("py"), "python")
             self.assertEqual(ts_pack.detect_language(str(sample_path)), "python")
+            self.assertTrue(ts_pack.has_language("python"))
+            self.assertIn("python", ts_pack.available_languages())
+            self.assertIsNotNone(ts_pack.get_parser("python"))
 
         config = ts_pack.ProcessConfig("python", chunk_max_size=256)
         result = ts_pack.process("def greet(name):\n    return f'hi {name}'\n", config)
@@ -75,7 +82,11 @@ class TsPackContractTests(unittest.TestCase):
             "contains_entrypoint",
             "chunk_role",
         }
-        self.assertTrue(required_fields.issubset((payload["chunks"][0].get("metadata") or {}).keys()))
+        self.assertTrue(
+            required_fields.issubset(
+                (payload["chunks"][0].get("metadata") or {}).keys()
+            )
+        )
 
         fallback_chunks = ts_pack.build_line_window_chunks(
             source,
@@ -90,17 +101,27 @@ class TsPackContractTests(unittest.TestCase):
         self.assertIsInstance(fallback_chunks, list)
         self.assertGreaterEqual(len(fallback_chunks), 1)
         self.assertIn("metadata", fallback_chunks[0])
-        self.assertTrue(required_fields.issubset((fallback_chunks[0].get("metadata") or {}).keys()))
+        self.assertTrue(
+            required_fields.issubset((fallback_chunks[0].get("metadata") or {}).keys())
+        )
 
     def test_swift_and_embedding_helpers_have_expected_parameters(self):
         swift_sig = inspect.signature(ts_pack.build_swift_chunks)
-        self.assertTrue({"source", "file_path", "project_id"}.issubset(swift_sig.parameters))
+        self.assertTrue(
+            {"source", "file_path", "project_id"}.issubset(swift_sig.parameters)
+        )
 
         upsert_sig = inspect.signature(ts_pack.execute_codebase_embedding_upsert)
-        self.assertTrue({"cursor", "batch", "project_id"}.issubset(upsert_sig.parameters))
+        self.assertTrue(
+            {"cursor", "batch", "project_id"}.issubset(upsert_sig.parameters)
+        )
 
         driver_sig = inspect.signature(ts_pack.execute_semantic_index_driver)
-        self.assertTrue({"conn", "project_id", "manifest_paths", "all_chunks"}.issubset(driver_sig.parameters))
+        self.assertTrue(
+            {"conn", "project_id", "manifest_paths", "all_chunks"}.issubset(
+                driver_sig.parameters
+            )
+        )
 
 
 if __name__ == "__main__":

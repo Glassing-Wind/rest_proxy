@@ -146,7 +146,7 @@ tldextract==5.3.1
 tqdm==4.67.3
 trafilatura==2.0.0
 tree-sitter==0.25.2
--e git+https://github.com/Zmaroo/tree-sitter-language-pack.git@0af25f917e7b7d19aa63f80e97929d1a344f3f80#egg=tree_sitter_language_pack&subdirectory=crates/ts-pack-python
+-e git+https://github.com/Zmaroo/tree-sitter-language-pack.git@551704abaf4dd2d995a1f3c311591f7c154a0678#egg=tree_sitter_language_pack&subdirectory=crates/ts-pack-python
 tree-sitter-swift==0.0.1
 tree-sitter-yaml==0.7.2
 trimesh==4.11.4

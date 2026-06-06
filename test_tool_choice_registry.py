@@ -73,6 +73,7 @@ def _install_runtime_stubs() -> None:
 def _build_tool_registry() -> FakeMCP:
     _install_mcp_stub()
     _install_runtime_stubs()
+    from tools.brain import tool_catalog
     from tools.brain.code_intel import core as code_intel_core
     from tools.brain.graph import tools as graph_tools
     from tools.brain.search import graph_query as graph_query_tools
@@ -83,6 +84,7 @@ def _build_tool_registry() -> FakeMCP:
 
     mcp = FakeMCP()
     with mock.patch.dict(os.environ, {"LM_PROXY_GRAPH_ENABLED": "0"}, clear=False):
+        tool_catalog.register(mcp)
         code_intel_core.register(mcp)
         graph_tools.register(mcp)
         graph_query_tools.register(mcp)
@@ -94,6 +96,47 @@ def _build_tool_registry() -> FakeMCP:
 
 
 class ToolChoiceRegistryTests(unittest.TestCase):
+    def test_registered_tools_have_catalog_entries(self):
+        from tools.brain.tool_catalog import TOOL_CATALOG
+
+        registry = _build_tool_registry()
+        registered = set(registry.tools)
+        missing = sorted(registered - set(TOOL_CATALOG))
+
+        self.assertEqual(
+            [],
+            missing,
+            msg="Registered tools without tool-catalog entries: " + ", ".join(missing),
+        )
+
+    def test_tool_catalog_entries_are_actionable(self):
+        from tools.brain.tool_catalog import TOOL_CATALOG
+
+        valid_tiers = {
+            "primary",
+            "secondary",
+            "docs",
+            "support",
+            "dev",
+            "memory",
+            "operational",
+            "experimental",
+            "admin",
+        }
+        for name, entry in TOOL_CATALOG.items():
+            self.assertIn(entry.tier, valid_tiers, name)
+            self.assertTrue(entry.workflow.strip(), name)
+            self.assertTrue(entry.reach_for_when.strip(), name)
+            self.assertNotIn("TODO", entry.reach_for_when, name)
+
+    def test_tool_catalog_renderer_filters_by_intent(self):
+        from tools.brain.tool_catalog import render_tool_catalog
+
+        output = render_tool_catalog(intent="symbol", limit=10)
+        self.assertIn("get_symbol_context", output)
+        self.assertIn("find_references", output)
+        self.assertNotIn("delete_documentation", output)
+
     def test_tool_choice_goldens_reference_registered_tools(self):
         payload = json.loads(Path(GOLDENS_PATH).read_text(encoding="utf-8"))
         registry = _build_tool_registry()
@@ -109,7 +152,8 @@ class ToolChoiceRegistryTests(unittest.TestCase):
         self.assertEqual(
             [],
             missing,
-            msg="Missing registered tools in tool-choice goldens: " + ", ".join(
+            msg="Missing registered tools in tool-choice goldens: "
+            + ", ".join(
                 f"{case_id}:{key}:{tool_name}" for case_id, key, tool_name in missing
             ),
         )

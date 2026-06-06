@@ -43,9 +43,13 @@ These are the tools we expect to reach for first during normal codebase work.
 | `list_symbol_matches` | unit/script, mcp parity |
 | `grep_codebase` | unit/script, mcp parity |
 | `trace_graph_provenance` | unit/script, live, mcp parity, tool-choice |
+| `get_mcp_tool_catalog` | unit/script |
 
 Notes:
 
+- `get_mcp_tool_catalog` is the product-positioning surface for tool choice.
+  It is intentionally lightweight and contract-tested so newly registered MCP
+  tools must state when they are worth reaching for.
 
 ## Tier 2: Secondary Architectural / Triage Tools
 
