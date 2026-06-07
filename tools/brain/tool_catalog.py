@@ -34,7 +34,9 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
         "Create a repo-specific guide and immediately make it searchable.",
     ),
     "cancel_index_job": ToolCatalogEntry(
-        "operational", "indexing", "Stop a runaway or obsolete background indexing job."
+        "operational",
+        "indexing",
+        "Stop a runaway or obsolete background indexing job; use force only for an explicit admin override.",
     ),
     "cleanup_stale_shadow_graph": ToolCatalogEntry(
         "operational",
@@ -140,7 +142,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_index_status": ToolCatalogEntry(
         "operational",
         "indexing",
-        "Inspect a specific indexing job that was started earlier.",
+        "Inspect a background indexing job, or discover active job IDs when the original ID is stale.",
     ),
     "get_indexed_projects": ToolCatalogEntry(
         "operational",

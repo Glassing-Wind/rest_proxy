@@ -7,7 +7,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | Tool | Usefulness | Improvements Needed | Pertinent Details |
 | :--- | :--- | :--- | :--- |
 | `add_memory` | **High** | Add support for tags/categories and importance levels for better organization. | **Tested**: Successfully added a memory and verified with `list_memories`. Persistent and reliable. |
-| `cancel_index_job` | **Medium** | Fix session ID drift between tool calls or provide a "force" override for admins. | **Tested**: Received "Access Denied" despite starting the job in the same conversation. Reveals strict session-locking. |
+| `cancel_index_job` | **Medium** | None for the current admin workflow. | **Fixed**: Strict session-locking now explains the denial and supports `force=True` for an explicit admin override. |
 | `delete_documentation` | **Medium** | Implement "delete by age" or "unused" filters. Link with usage metrics. | **Tested**: Safety check intercepted attempt with a hint. Excellent guardrail against accidental wipes. |
 | `describe_file` | **Very High** | Include an LLM-generated natural language summary in the output. | **Tested**: Correctly identified 5 symbols in `mcp_server.py`. Fails if file/path is ambiguous or parser lags. |
 | `download_documentation` | **High** | Improve status polling/reporting for background crawl jobs. | **Value**: Essential for expanding context beyond the repo. Idempotent updates are a plus. |
@@ -25,7 +25,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `get_code_importance` | **Critical** | None - PageRank implementation is solid. | **Tested**: Ranked `memory/store_core.py` as most important. Uses functional centrality, not just file size. |
 | `get_directory_snapshot` | **Very High** | Add an AI-generated directory purpose summary. | **Tested**: Successfully mapped `proxy/` dependency coupling. Great for "landing" in a new part of the repo. |
 | `get_flow_summary` | **High** | Annotate relationships with flow types (e.g., "Request Path" vs "Utility"). | **Tested**: Provided a clean file-to-file dependency map. Much more readable than a raw graph for architecture. |
-| `get_index_status` | **Critical** | List status string (e.g., 'indexing', 'queued') next to active job IDs. | **Tested**: correctly handled missing IDs and listed current job queue. Essential for async job management. |
+| `get_index_status` | **Critical** | None for the current async job workflow. | **Fixed**: Missing-ID responses now list active job IDs with status, elapsed time, and project path. Essential for async job management. |
 | `get_indexed_projects` | **High** | None - solid source of truth. | **Tested**: Found two registered views for `rest_proxy`. Correctly derived path-to-id mapping. |
 | `get_indexing_health` | **Critical** | Explain the impact of 'isolated' files (e.g., "cannot trace call chains"). | **Tested**: Found 69 stale semantic files in `rest_proxy`. Indispensable for ensuring data integrity before reasoning. |
 | `get_project_overview` | **Critical** | None - perfect first-call tool. | **Tested**: Summarized `rest_proxy` architecture (memory vs tools) and key files in one shot. Best for onboarding. |

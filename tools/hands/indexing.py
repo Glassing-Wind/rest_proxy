@@ -77,6 +77,39 @@ def _is_strict_job_session() -> bool:
     }
 
 
+def _resolve_active_job_locked(job_id: str) -> tuple[str, dict | None]:
+    job_key = str(job_id or "").strip()
+    job = _JOBS.get(job_key)
+    if job is not None:
+        return job_key, job
+    for jid, candidate in _JOBS.items():
+        project_id = str(candidate.get("project_id") or "")
+        if jid.startswith(job_key) or project_id.startswith(job_key):
+            return jid, candidate
+    return job_key, None
+
+
+def _active_job_summary_lines() -> list[str]:
+    with _JOBS_LOCK:
+        active_jobs = [
+            (jid, dict(job))
+            for jid, job in sorted(_JOBS.items())
+            if str(job.get("status") or "").lower() in {"running", "cancelling"}
+        ]
+    if not active_jobs:
+        return ["Active jobs: none"]
+
+    now = time.time()
+    lines = ["Active jobs:"]
+    for jid, job in active_jobs:
+        started_at = float(job.get("started_at") or now)
+        elapsed = max(0.0, now - started_at)
+        status = str(job.get("status") or "unknown").upper()
+        project = str(job.get("project_path") or job.get("project_id") or "unknown")
+        lines.append(f"  - {jid}: {status} {elapsed:.0f}s {project}")
+    return lines
+
+
 async def _execute_read(session, cypher: str, op: str | None = None, **params):
     return await neo4j_utils.execute_read(
         session,
@@ -770,13 +803,7 @@ async def get_index_status(job_id: str) -> str:
     """
     current_session = client_session_id.get()
     with _JOBS_LOCK:
-        job = _JOBS.get(job_id)
-        if job is None:
-            for jid, j in _JOBS.items():
-                if jid.startswith(job_id) or j.get("project_id", "").startswith(job_id):
-                    job = j
-                    job_id = jid
-                    break
+        job_id, job = _resolve_active_job_locked(job_id)
 
         # Security: Only allow sessions to see their own jobs when strict mode is enabled
         if (
@@ -790,9 +817,8 @@ async def get_index_status(job_id: str) -> str:
     if job is None:
         job = load_job_record(job_id)
         if job is None:
-            return (
-                f"No job found for id '{job_id}'.\n"
-                f"Active jobs: {list(_JOBS.keys()) or 'none'}"
+            return "\n".join(
+                [f"No job found for id '{job_id}'.", *_active_job_summary_lines()]
             )
 
     job = _reconcile_job_process_state(job_id) or job
@@ -918,19 +944,18 @@ async def get_index_status(job_id: str) -> str:
     return "\n".join(lines)
 
 
-async def cancel_index_job(job_id: str) -> str:
+async def cancel_index_job(job_id: str, force: bool = False) -> str:
     """
     Cancel a running indexing job by job_id (or prefix).
+
+    Args:
+        job_id: Job ID, job ID prefix, or project ID prefix.
+        force: Allow an explicit admin override when strict session ownership
+            would otherwise deny cancellation.
     """
     current_session = client_session_id.get()
     with _JOBS_LOCK:
-        job = _JOBS.get(job_id)
-        if job is None:
-            for jid, j in _JOBS.items():
-                if jid.startswith(job_id) or j.get("project_id", "").startswith(job_id):
-                    job = j
-                    job_id = jid
-                    break
+        job_id, job = _resolve_active_job_locked(job_id)
 
         # Security check: Match session ID when strict mode is enabled
         if (
@@ -938,23 +963,32 @@ async def cancel_index_job(job_id: str) -> str:
             and current_session
             and job.get("session_id") != current_session
             and _is_strict_job_session()
+            and not force
         ):
-            return "Access Denied: Cannot cancel a job belonging to another session."
-        active_jobs = list(_JOBS.keys())
+            return (
+                "Access Denied: Cannot cancel a job belonging to another session.\n"
+                f"Use cancel_index_job('{job_id}', force=True) only for an explicit "
+                "admin override."
+            )
 
     if job is None:
         job = load_job_record(job_id)
         if job is None:
-            return (
-                f"No job found for id '{job_id}'.\nActive jobs: {active_jobs or 'none'}"
+            return "\n".join(
+                [f"No job found for id '{job_id}'.", *_active_job_summary_lines()]
             )
 
     if (
         current_session
         and job.get("session_id") != current_session
         and _is_strict_job_session()
+        and not force
     ):
-        return "Access Denied: Cannot cancel a job belonging to another session."
+        return (
+            "Access Denied: Cannot cancel a job belonging to another session.\n"
+            f"Use cancel_index_job('{job_id}', force=True) only for an explicit "
+            "admin override."
+        )
 
     if job.get("status") != "running":
         return f"Job {job_id} is not running (status={job.get('status')})."
@@ -984,7 +1018,10 @@ async def cancel_index_job(job_id: str) -> str:
         except OSError:
             continue
 
-    return f"Cancel requested for job {job_id}. Processes will terminate shortly."
+    suffix = " Admin override used." if force else ""
+    return (
+        f"Cancel requested for job {job_id}. Processes will terminate shortly.{suffix}"
+    )
 
 
 async def watch_project(workspace_id: str) -> str:

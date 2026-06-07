@@ -209,6 +209,59 @@ def run_indexing_health(module, workspace_id: str, audit: bool = False) -> str:
 
 
 class IndexingHealthAlignmentTests(unittest.TestCase):
+    def test_get_index_status_lists_active_jobs_with_status_when_missing(self):
+        module = load_indexing_module()
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+            module._JOBS["abc12345"] = {
+                "status": "running",
+                "session_id": "owner-session",
+                "project_path": "/tmp/repo",
+                "project_id": "proj123",
+                "file_count": 12,
+                "started_at": 1000.0,
+                "last_log_at": 1000.0,
+                "logs": [],
+            }
+
+        with mock.patch.object(module.time, "time", return_value=1065.0):
+            output = asyncio.run(module.get_index_status("missing"))
+
+        self.assertIn("No job found for id 'missing'.", output)
+        self.assertIn("Active jobs:", output)
+        self.assertIn("abc12345: RUNNING 65s /tmp/repo", output)
+
+    def test_cancel_index_job_force_overrides_strict_session(self):
+        module = load_indexing_module()
+        module.client_session_id = types.SimpleNamespace(get=lambda: "other-session")
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+            module._JOBS["abc12345"] = {
+                "status": "running",
+                "session_id": "owner-session",
+                "project_path": "/tmp/repo",
+                "project_id": "proj123",
+                "file_count": 12,
+                "started_at": 1000.0,
+                "last_log_at": 1000.0,
+                "logs": [],
+                "struct_pid": None,
+                "sem_pid": None,
+            }
+
+        with mock.patch.dict("os.environ", {"LM_PROXY_STRICT_JOB_SESSION": "true"}):
+            denied = asyncio.run(module.cancel_index_job("abc"))
+            forced = asyncio.run(module.cancel_index_job("abc", force=True))
+
+        self.assertIn("Access Denied", denied)
+        self.assertIn("force=True", denied)
+        self.assertIn("Cancel requested for job abc12345", forced)
+        self.assertIn("Admin override used.", forced)
+        with module._JOBS_LOCK:
+            job = module._JOBS["abc12345"]
+            self.assertEqual(job["status"], "cancelling")
+            self.assertTrue(job["cancel_requested"])
+
     def test_semantic_expected_excludes_empty_files(self):
         module = load_indexing_module()
 

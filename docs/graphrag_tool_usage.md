@@ -16,6 +16,10 @@ See also:
    - Normal path: wait for `DONE`, then the project should be graph-ready.
 2. `get_index_status(job_id)`
    - Polls `RUNNING`, `DONE`, or `FAILED` and returns recent logs.
+   - If the ID is wrong or stale, the response lists active jobs with status,
+     elapsed time, and project path.
+   - In strict multi-session mode, jobs from other sessions are hidden unless
+     an admin intentionally uses `cancel_index_job(job_id, force=true)`.
 3. `get_indexing_health(workspace_id, audit=true)`
    - Checks indexing freshness and parsing fidelity.
 4. `get_project_overview(workspace_id)`
