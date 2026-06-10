@@ -253,8 +253,16 @@ def _is_semantic_expected_path(
         return False
     if abs_file:
         try:
-            if os.path.getsize(abs_file) <= 0:
+            size = os.path.getsize(abs_file)
+            if size <= 0:
                 return False
+            if size <= 4096:
+                try:
+                    with open(abs_file, "r", encoding="utf-8", errors="ignore") as fh:
+                        if not fh.read().strip():
+                            return False
+                except OSError:
+                    pass
         except OSError:
             return False
     try:

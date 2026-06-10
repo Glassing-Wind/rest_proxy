@@ -274,6 +274,21 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
                 )
             )
 
+    def test_semantic_expected_excludes_whitespace_only_source_files(self):
+        module = load_indexing_module()
+
+        with (
+            mock.patch("os.path.getsize", return_value=1),
+            mock.patch("builtins.open", mock.mock_open(read_data="\n")),
+        ):
+            self.assertFalse(
+                module._is_semantic_expected_path(
+                    "crates/example/src/lib.rs",
+                    "/tmp/repo/crates/example/src/lib.rs",
+                    "rs",
+                )
+            )
+
     def test_semantic_expected_excludes_xcassets_resource_metadata(self):
         module = load_indexing_module()
         fake_ts_pack = types.SimpleNamespace(
