@@ -263,6 +263,18 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "pydantic_ai_code_communities",
+        "tool": "get_code_communities",
+        "workspace_name": "pydantic-ai",
+        "params": {"workspace_id": "$workspace_id"},
+        "required_substrings": [
+            "Architectural clusters [",
+            "Community Summary:",
+            "Dominant concerns:",
+            "Priority exploration order:",
+        ],
+    },
+    {
         "id": "pydantic_ai_provider_exports_summary",
         "tool": "get_symbol_exports_summary",
         "workspace_name": "pydantic-ai",
@@ -754,6 +766,7 @@ def main() -> int:
         "trace_graph_provenance",
         "get_related_files",
         "get_code_importance",
+        "get_code_communities",
         "get_symbol_imports_overview",
         "get_symbol_exports_summary",
         "visualize_subgraph",

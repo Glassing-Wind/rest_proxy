@@ -66,7 +66,9 @@ These should be preferred when their exact problem shape matches.
 These are still worth improving because they do not yet feel like obvious default choices.
 
 - `get_code_communities`
-  - Useful, but still too presentation-heavy and not actionable enough.
+  - Useful secondary orientation tool. It now opens with a compact community
+    summary, dominant concerns, and omitted-tail accounting, but remains behind
+    `get_project_overview` for normal first-stop onboarding.
 - `get_code_importance`
   - Useful ranking signal, but still closer to analysis support than a default user-facing tool.
 - `find_definitions`
@@ -105,8 +107,9 @@ We still have several tools that partially overlap:
 - `get_code_importance`
 - `get_code_communities`
 
-The first two are the best user-facing surfaces. The rest should either become
-clearly stronger or be repositioned as support/debug outputs.
+The first two are the best user-facing surfaces. `get_code_communities` is now
+more decision-oriented for large or clustered repos, while `get_code_importance`
+still reads more like analysis support than a default onboarding surface.
 
 One concrete drift we found: `get_topology_summary` had been discussed in docs
 like a user-facing tool, but it is currently an internal helper path rather than

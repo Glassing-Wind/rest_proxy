@@ -900,7 +900,6 @@ def _suppress_symbol_context_self_aliases(
 
 def _symbol_context_callee_rank(callee: dict, *, target_filepath: str | None) -> tuple:
     filepath = str(callee.get("file") or "").replace("\\", "/")
-    normalized = filepath.lower()
     name = str(callee.get("name") or "")
     target_dir = ""
     if target_filepath:
@@ -1099,22 +1098,6 @@ def format_call_chain_rows(
         files = [entry[1] for entry in compact_chain]
         lines = [entry[2] for entry in compact_chain]
         file_roles = [entry[3] for entry in compact_chain]
-        if any(
-            hop_penalty(
-                files[idx] if idx < len(files) else None,
-                file_roles[idx] if idx < len(file_roles) else None,
-            ) >= 4
-            for idx in range(1, len(files))
-        ):
-            continue
-        if root_is_backend and any(
-            hop_penalty(
-                files[idx] if idx < len(files) else None,
-                file_roles[idx] if idx < len(file_roles) else None,
-            ) >= 3
-            for idx in range(1, len(files))
-        ):
-            continue
         if len(chain) < 2:
             continue
         first_name = chain[1]
@@ -1124,6 +1107,12 @@ def format_call_chain_rows(
             hint = f"{filepath}:{line}" if line else filepath
             if hint not in anonymous_hints:
                 anonymous_hints.append(hint)
+            continue
+        first_penalty = hop_penalty(
+            files[1] if len(files) > 1 else None,
+            file_roles[1] if len(file_roles) > 1 else None,
+        )
+        if first_penalty >= 4 or (root_is_backend and first_penalty >= 3):
             continue
         first_file = files[1] or "?"
         first_key = (first_name, first_file)
@@ -1139,6 +1128,13 @@ def format_call_chain_rows(
                 hint = f"{filepath}:{line}" if line else filepath
                 if hint not in anonymous_hints:
                     anonymous_hints.append(hint)
+                continue
+            child_penalty = hop_penalty(
+                files[2] if len(files) > 2 else None,
+                file_roles[2] if len(file_roles) > 2 else None,
+            )
+            if child_penalty >= 4 or (root_is_backend and child_penalty >= 3):
+                terminal_paths += 1
                 continue
             child_file = files[2] or "?"
             first_hop_groups[first_key][(child_name, child_file)] = None

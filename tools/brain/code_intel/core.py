@@ -7,7 +7,6 @@ from neo4j import unit_of_work
 from mcp.server.fastmcp import FastMCP
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from proxy.logging import debug_log
-from ts_diagnostics import normalize_ts_pack_result
 from tools.brain.code_intel import file_describe
 from tools.brain.code_intel import references
 from tools.brain.code_intel import symbol_graph
@@ -617,6 +616,82 @@ def register(mcp: FastMCP) -> None:
         if kind_label in {"backend/app", "cli/runtime", "sdk/runtime", "data/schema"}:
             return False
         return file_count <= 2 or total_syms <= 12
+
+    def _community_label(
+        record: dict,
+        using_louvain: bool,
+        cargo_rows: list[dict] | None = None,
+    ) -> str:
+        if using_louvain:
+            return f"cluster #{record.get('comm')}"
+        top_file = (record.get("top_files") or [None])[0]
+        crate = _match_cargo_crate(top_file, cargo_rows or [])
+        if crate:
+            return str(crate)
+        return str(record.get("dominant_dir") or "(root)")
+
+    def _community_reason(kind_label: str) -> str:
+        if kind_label in {"backend/app", "cli/runtime", "sdk/runtime"}:
+            return "runtime-heavy cluster"
+        if kind_label in {"data/schema", "jobs/runtime"}:
+            return "operational boundary"
+        if kind_label in {"sdk/generated", "ui/public"}:
+            return "likely support or generated surface"
+        if kind_label in {"ui/app", "web/site"}:
+            return "user-facing surface"
+        return "broadest symbol-rich area"
+
+    def _render_community_summary(
+        records: list[dict],
+        using_louvain: bool,
+        cargo_rows: list[dict],
+        hidden_count: int,
+        suppressed_count: int,
+    ) -> list[str]:
+        if not records:
+            return []
+        top = records[0]
+        top_files = top.get("top_files") or []
+        top_file = str(top_files[0]) if top_files else "unknown file"
+        top_kind, _ = _cluster_kind(top_files)
+        total_files = sum(int(record.get("file_count") or 0) for record in records)
+        total_syms = sum(int(record.get("total_syms") or 0) for record in records)
+        kind_totals: dict[str, dict[str, int]] = {}
+        for record in records:
+            kind, _ = _cluster_kind(record.get("top_files") or [])
+            bucket = kind_totals.setdefault(kind, {"files": 0, "symbols": 0})
+            bucket["files"] += int(record.get("file_count") or 0)
+            bucket["symbols"] += int(record.get("total_syms") or 0)
+        concerns = sorted(
+            kind_totals.items(),
+            key=lambda item: (item[1]["symbols"], item[1]["files"], item[0]),
+            reverse=True,
+        )
+        concern_text = ", ".join(
+            f"{kind} ({stats['files']} files, {stats['symbols']} symbols)"
+            for kind, stats in concerns[:3]
+        )
+        lines = [
+            "",
+            "Community Summary:",
+            (
+                f"- Start with {_community_label(top, using_louvain, cargo_rows)} "
+                f"[{top_kind}] "
+                f"because it is the {_community_reason(top_kind)}; first file: {top_file}"
+            ),
+            f"- Dominant concerns: {concern_text}",
+            f"- Visible scope: {len(records)} cluster(s), {total_files} files, {total_syms} symbols",
+        ]
+        if hidden_count or suppressed_count:
+            hidden_parts = []
+            if hidden_count:
+                hidden_parts.append(f"{hidden_count} lower-priority cluster(s) hidden")
+            if suppressed_count:
+                hidden_parts.append(
+                    f"{suppressed_count} noisy/small cluster(s) suppressed"
+                )
+            lines.append(f"- Omitted: {'; '.join(hidden_parts)}")
+        return lines
 
     async def _execute_read(
         session,
@@ -1596,22 +1671,29 @@ def register(mcp: FastMCP) -> None:
             if hidden_notable:
                 visible_records.extend(hidden_notable[: max(0, 15 - len(visible_records))])
                 display_limit = len(visible_records)
+            total_suppressed_small = suppressed_small_records + len(hidden_small_tail)
+            visible_record_ids = {id(record) for record in visible_records}
+            hidden_notable_count = sum(
+                1 for record in hidden_notable if id(record) not in visible_record_ids
+            )
+            output.extend(
+                _render_community_summary(
+                    visible_records,
+                    using_louvain,
+                    cargo_rows,
+                    hidden_count=hidden_notable_count,
+                    suppressed_count=total_suppressed_small,
+                )
+            )
             if records:
                 output.append("Priority exploration order:")
                 for record in records[:3]:
-                    if using_louvain:
-                        cluster_name = f"cluster #{record['comm']}"
-                    else:
-                        cluster_name = record.get("dominant_dir") or "(root)"
+                    cluster_name = _community_label(record, using_louvain, cargo_rows)
                     kind_label, _ = _cluster_kind(record.get("top_files") or [])
                     top_file = (record.get("top_files") or [None])[0]
                     crate = _match_cargo_crate(top_file, cargo_rows)
                     suffix = f" [crate:{crate}]" if crate else ""
-                    reason = "broadest symbol-rich area"
-                    if kind_label in {"backend/app", "cli/runtime", "sdk/runtime"}:
-                        reason = "runtime-heavy cluster"
-                    elif kind_label in {"sdk/generated", "ui/public"}:
-                        reason = "likely lower-priority support cluster"
+                    reason = _community_reason(kind_label)
                     output.append(f"- {cluster_name} [{kind_label}]{suffix} — {reason}")
                 output.append("")
             if cargo_rows and not using_louvain:
@@ -1662,7 +1744,6 @@ def register(mcp: FastMCP) -> None:
                         + (f"  crates: {crate_text}" if crate_text else "")
                         + f"\n   Top files: {', '.join(record['top_files'])}"
                     )
-            total_suppressed_small = suppressed_small_records + len(hidden_small_tail)
             if total_suppressed_small:
                 output.append("")
                 output.append(

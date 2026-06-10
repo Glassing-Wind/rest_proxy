@@ -1380,7 +1380,7 @@ class CodeIntelToolTests(unittest.TestCase):
                 ]
             if "MATCH path = (start)" in cypher:
                 return []
-            if "MATCH (impl)-[:IMPLEMENTS_TYPE]->(start)" in cypher:
+            if "IMPLEMENTS_TYPE" in cypher and "ORDER BY size(chain)" in cypher:
                 return [
                     {
                         "chain": ["EventLoop", "EmbeddedEventLoop", "main"],
@@ -2802,6 +2802,9 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crate `core`", output)
         self.assertIn("crates/api/src/lib.rs", output)
         self.assertIn("Use this to decide which architectural area", output)
+        self.assertIn("Community Summary:", output)
+        self.assertIn("- Start with api", output)
+        self.assertIn("Dominant concerns:", output)
         self.assertIn("Priority exploration order:", output)
 
     def test_get_code_communities_hides_singleton_zero_symbol_noise(self):
@@ -3000,6 +3003,8 @@ class CodeIntelToolTests(unittest.TestCase):
                 CURRENT_EXECUTOR = None
 
         self.assertIn("Suppressed 2 small long-tail cluster(s)", output)
+        self.assertIn("Community Summary:", output)
+        self.assertIn("2 noisy/small cluster(s) suppressed", output)
         self.assertNotIn("cluster #99", output)
         self.assertNotIn("cluster #100", output)
 
