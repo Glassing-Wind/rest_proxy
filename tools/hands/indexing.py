@@ -1538,6 +1538,10 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         lines.append(
             f"  - **Isolated Source Files**: {len(isolated_files)} detected (supporting heuristic)"
         )
+        if isolated_files:
+            lines.append(
+                "    - Impact: isolated files have no structural links, so related-file, call-chain, and blast-radius tools may miss paths through them."
+            )
         lines.append(
             f"  - **Symbol-Poor Files**: {len(suspicious_files)} detected (parsed but 0 symbols)"
         )
@@ -1598,6 +1602,10 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         elif suspicious_files:
             recommendations.append(
                 "- Investigate suspicious files for language-specific parsing gaps or grammar mismatches."
+            )
+        if isolated_files:
+            recommendations.append(
+                "- Inspect isolated files for missing import/call extraction before relying on call-chain or blast-radius completeness."
             )
 
     if not recommendations:

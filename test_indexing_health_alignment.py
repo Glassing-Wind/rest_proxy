@@ -498,6 +498,82 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             "Support-file coverage: 33.3% (1/3 across all manifest-kept files)", output
         )
 
+    def test_audit_explains_isolated_file_impact(self):
+        module = load_indexing_module()
+        fake_memory = FakePgMemoryStore(
+            {
+                "select file_path, bool_or(coalesce((metadata->>'semantic_contract_version')::int, 0) = %s) as current_contract from codebase_embeddings": [
+                    ("src/app.py", True),
+                    ("src/orphan.py", True),
+                ],
+                "select file_path, count(*) from codebase_embeddings": [],
+            }
+        )
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_indexing_health_files":
+                return [
+                    {
+                        "fp": "src/app.py",
+                        "ts": 2_000_000,
+                        "vts": 2_000_000,
+                        "parsed": True,
+                    },
+                    {
+                        "fp": "src/orphan.py",
+                        "ts": 2_000_000,
+                        "vts": 2_000_000,
+                        "parsed": True,
+                    },
+                ]
+            if op == "get_indexing_health_runs":
+                return [
+                    {
+                        "struct_active_run_id": "struct-1",
+                        "struct_last_successful_run_id": "struct-1",
+                        "struct_index_status": "done",
+                        "semantic_active_run_id": "sem-1",
+                        "semantic_last_successful_run_id": "sem-1",
+                        "semantic_target_struct_run_id": "struct-1",
+                        "semantic_active_struct_run_id": "struct-1",
+                        "semantic_index_status": "done",
+                    }
+                ]
+            if op == "audit_import_resolution":
+                return [{"total": 2, "resolved": 2}]
+            if op == "audit_symbol_density":
+                return []
+            if op == "audit_isolation":
+                return [{"fp": "src/orphan.py"}]
+            return []
+
+        manifest = [
+            {"rel_path": "src/app.py", "abs_path": "/tmp/repo/src/app.py"},
+            {"rel_path": "src/orphan.py", "abs_path": "/tmp/repo/src/orphan.py"},
+        ]
+
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch.object(
+                module,
+                "get_memory_modules",
+                return_value=(fake_memory, None, None, None, None),
+            ),
+            mock.patch.object(module, "build_manifest", return_value=manifest),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+            mock.patch("os.path.getsize", return_value=1),
+        ):
+            output = run_indexing_health(module, "/tmp/repo", audit=True)
+
+        self.assertIn("**Isolated Source Files**: 1 detected", output)
+        self.assertIn("isolated files have no structural links", output)
+        self.assertIn("related-file, call-chain, and blast-radius tools may miss", output)
+        self.assertIn(
+            "Inspect isolated files for missing import/call extraction", output
+        )
+
     def test_health_uses_structural_and_pg_coverage_not_timestamp_subsets(self):
         module = load_indexing_module()
         fake_memory = FakePgMemoryStore(
