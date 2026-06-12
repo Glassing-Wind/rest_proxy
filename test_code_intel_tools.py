@@ -2118,6 +2118,7 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Symbol graph:", output)
         self.assertIn("RealCall.kt", output)
         self.assertIn("ConnectInterceptor.kt", output)
+        self.assertIn("caller of 2 symbol(s) defined in target file", output)
         self.assertNotIn("semantic co-mentions", output)
         self.assertLess(
             output.index("RealCall.kt"),
@@ -2715,6 +2716,7 @@ class CodeIntelToolTests(unittest.TestCase):
                 CURRENT_EXECUTOR = None
 
         self.assertIn("Symbol import graph:", output)
+        self.assertIn("imports 1 symbol(s) defined in target file", output)
         self.assertLess(
             output.index("ConnectInterceptor.kt"),
             output.index("JSSETest.kt"),

@@ -2221,7 +2221,9 @@ def register(mcp: FastMCP) -> None:
                         continue
                     reason_bits: list[str] = []
                     if call_hits:
-                        reason_bits.append(f"calls {call_hits} symbol(s)")
+                        reason_bits.append(
+                            f"caller of {call_hits} symbol(s) defined in target file"
+                        )
                     if symbols:
                         reason_bits.append(f"symbols: {', '.join(symbols[:3])}")
                     structural_related_records.append(
@@ -2265,7 +2267,9 @@ def register(mcp: FastMCP) -> None:
                     import_hits = int(counts.get("import_hits") or 0)
                     if import_hits <= 0:
                         continue
-                    reason_bits = [f"imports {import_hits} symbol(s)"]
+                    reason_bits = [
+                        f"imports {import_hits} symbol(s) defined in target file"
+                    ]
                     if symbols:
                         reason_bits.append(f"symbols: {', '.join(symbols[:3])}")
                     structural_import_related_records.append(
