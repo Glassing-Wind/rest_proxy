@@ -1,7 +1,6 @@
 import asyncio
 import importlib.util
 import sys
-import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -177,6 +176,90 @@ class CodeIntelHelperTests(unittest.TestCase):
         self.assertIn("Functional References (Graph)", output)
         self.assertIn("External Symbol Callers (Graph)", output)
         self.assertIn("Mentions & Type Usages (Semantic)", output)
+        self.assertIn("- src/b.py (1 semantic mention)", output)
+        self.assertIn("  - src/b.py:21 (semantic)", output)
+
+    def test_find_references_groups_multiple_semantic_hits_by_file(self):
+        module = load_references_module()
+
+        class FakeResult:
+            def __init__(self, rows):
+                self.rows = rows
+
+            async def data(self):
+                return self.rows
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute_read(self, fn):
+                return await fn(self)
+
+            async def run(self, cypher, **params):
+                return FakeResult([])
+
+        class FakeDriver:
+            def session(self, database=None):
+                return FakeSession()
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            def __aiter__(self):
+                async def gen():
+                    yield ("src/b.py", "21", "repo", [], "symbol_name()")
+                    yield ("src/b.py", "33", "repo", [], "return symbol_name")
+                    yield ("src/c.py", "9", "repo", [], "symbol_name")
+                return gen()
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        class FakeMemoryStore:
+            _pg_pool = FakePool()
+
+            @staticmethod
+            async def open_pool():
+                return None
+
+        graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
+
+        async def _require_driver():
+            return FakeDriver()
+
+        graph_bootstrap_mod.require_driver = _require_driver
+        graph_bootstrap_mod._NEO4J_DB = "neo4j"
+
+        with mock.patch.object(module, "get_memory_modules", return_value=(FakeMemoryStore, None, None, None, None)):
+            with mock.patch.dict(sys.modules, {"graph_bootstrap": graph_bootstrap_mod}):
+                output = asyncio.run(module.find_references_impl(["/tmp/repo"], "symbol_name"))
+
+        self.assertIn("- src/b.py (2 semantic mentions)", output)
+        self.assertIn("  - src/b.py:21 (semantic)", output)
+        self.assertIn("  - src/b.py:33 (semantic)", output)
+        self.assertIn("- src/c.py (1 semantic mention)", output)
 
     def test_find_references_filters_low_signal_semantic_paths(self):
         module = load_references_module()

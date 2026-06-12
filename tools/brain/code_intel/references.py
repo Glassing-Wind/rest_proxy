@@ -167,6 +167,34 @@ def _is_definition_like_preview(file_path: str | None, preview: str | None, symb
     return re.search(patterns.get(ext, rf"\b{target}\b"), line) is not None
 
 
+def _render_semantic_reference_groups(entries: list[tuple[int, int, str, str]]) -> str:
+    """Render semantic references as file groups while preserving line-level paths."""
+    grouped: dict[str, list[str]] = {}
+    file_rank: dict[str, tuple[int, int, str]] = {}
+    for bucket, same_definition_file, fp, rendered in sorted(
+        entries,
+        key=lambda item: (item[0], item[1], item[2], item[3]),
+    ):
+        if rendered in grouped.setdefault(fp, []):
+            continue
+        grouped[fp].append(rendered)
+        rank = (bucket, same_definition_file, fp)
+        current = file_rank.get(fp)
+        if current is None or rank < current:
+            file_rank[fp] = rank
+
+    lines: list[str] = []
+    for fp in sorted(grouped, key=lambda path: file_rank.get(path, (9, 9, path))):
+        refs = grouped[fp]
+        lines.append(f"- {fp} ({len(refs)} semantic mention{'s' if len(refs) != 1 else ''})")
+        for rendered in refs[:3]:
+            lines.append(f"  {rendered}")
+        hidden = len(refs) - 3
+        if hidden > 0:
+            lines.append(f"  - ... {hidden} more semantic mention(s) in this file")
+    return "\n".join(lines)
+
+
 async def find_references_impl(workspace_id: str | list[str], symbol_name: str) -> str:
     try:
         works = [workspace_id] if isinstance(workspace_id, str) else workspace_id
@@ -377,7 +405,7 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
                     """,
                     (pids, f"%{symbol_name}%", f"\\b{symbol_name}\\b"),
                 )
-                semantic_candidates: dict[str, tuple[int, int, str, str]] = {}
+                semantic_candidates: dict[str, list[tuple[int, int, str, str]]] = {}
                 async for row in cur:
                     fp, sl, pid, file_roles, text = row
                     if (fp, str(sl) if sl else None) in graph_ref_keys:
@@ -392,16 +420,19 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
                     rendered = f"- {fp}{line_part} (semantic) [Project: {pid}]  >> {preview}..."
                     same_definition_file = 1 if str(fp or "") in definition_paths else 0
                     entry = (bucket, same_definition_file, fp or "", rendered)
-                    current = semantic_candidates.get(fp or "")
-                    if current is None or entry < current:
-                        semantic_candidates[fp or ""] = entry
+                    entries = semantic_candidates.setdefault(fp or "", [])
+                    if entry not in entries:
+                        entries.append(entry)
+                        entries.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+                        del entries[3:]
 
-                for entry in semantic_candidates.values():
-                    bucket, same_definition_file, fp, rendered = entry
-                    if bucket >= 7 or same_definition_file:
-                        low_signal_semantic_refs.append(entry)
-                    else:
-                        semantic_refs.append(entry)
+                for entries in semantic_candidates.values():
+                    for entry in entries:
+                        bucket, same_definition_file, fp, rendered = entry
+                        if bucket >= 7 or same_definition_file:
+                            low_signal_semantic_refs.append(entry)
+                        else:
+                            semantic_refs.append(entry)
 
         if not any(f"({symbol_name})" in ref for ref in graph_refs):
             for _, fp, pid in sorted(semantic_definition_candidates, key=lambda item: (item[0], item[1], item[2])):
@@ -424,23 +455,15 @@ async def find_references_impl(workspace_id: str | list[str], symbol_name: str) 
         if external_refs:
             sections.append("### External Symbol Callers (Graph)\n" + "\n".join(sorted(list(set(external_refs)))))
         if semantic_refs:
-            deduped = []
-            seen = set()
-            for _, _, _, rendered in sorted(semantic_refs, key=lambda item: (item[0], item[1], item[2], item[3])):
-                if rendered in seen:
-                    continue
-                seen.add(rendered)
-                deduped.append(rendered)
-            sections.append("### Mentions & Type Usages (Semantic)\n" + "\n".join(deduped))
+            sections.append(
+                "### Mentions & Type Usages (Semantic)\n"
+                + _render_semantic_reference_groups(semantic_refs)
+            )
         if low_signal_semantic_refs and not (graph_refs or external_refs or semantic_refs):
-            deduped = []
-            seen = set()
-            for _, _, _, rendered in sorted(low_signal_semantic_refs, key=lambda item: (item[0], item[1], item[2], item[3])):
-                if rendered in seen:
-                    continue
-                seen.add(rendered)
-                deduped.append(rendered)
-            sections.append("### Supporting Mentions (Low-signal Semantic)\n" + "\n".join(deduped[:10]))
+            sections.append(
+                "### Supporting Mentions (Low-signal Semantic)\n"
+                + _render_semantic_reference_groups(low_signal_semantic_refs[:10])
+            )
         if not sections:
             return f"No references found for '{symbol_name}' in the specified projects."
         return "\n\n".join(sections)
