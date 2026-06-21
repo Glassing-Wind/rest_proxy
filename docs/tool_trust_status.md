@@ -152,6 +152,9 @@ Latest workflow finding closed:
   contract (`IMPORTS` and `IMPORTS_SYMBOL`) instead of the retired
   `RESOLVES_TO` relation, and STDIO startup no longer injects raw JSON-RPC
   notifications beside the SDK transport writer
+- `find_code_duplication` now collapses overlapping sliding-window matches and
+  explains candidates with declaration-level anchors, avoiding misleading
+  `continue`/path-setup previews and generic registration-wrapper findings
 
 Current likely targets:
 

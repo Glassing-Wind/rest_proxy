@@ -137,17 +137,37 @@ class DuplicationReportTests(unittest.TestCase):
                     "score": 0.96,
                     "struct_score": 1.0,
                     "reasons": [
-                        "same lead statement",
+                        "same declaration",
                         "shared identifiers (normalizeclientname)",
                     ],
+                    "preview_a": "function normalizeClientName() {}",
+                    "preview_b": "function normalizeClientName() {}",
                 }
             ],
             max_pairs=5,
         )
         output = "\n".join(lines)
         self.assertIn("High-confidence refactor candidates (1)", output)
-        self.assertIn("Why act: same lead statement; shared identifiers", output)
+        self.assertIn("Why act: same declaration; shared identifiers", output)
         self.assertIn("candidate=0.91", output)
+
+    def test_append_refactor_candidates_reports_displayed_region_count(self):
+        candidate = {
+            "row_a": {"file_path": "src/a.ts", "content": "function one() {}"},
+            "row_b": {"file_path": "src/b.ts", "content": "function one() {}"},
+            "candidate_score": 0.9,
+            "score": 0.9,
+            "struct_score": 1.0,
+            "reasons": ["same declaration"],
+        }
+        lines = []
+        self.module.append_refactor_candidates(
+            lines,
+            title="High-confidence refactor candidates",
+            candidates=[candidate, candidate, candidate],
+            max_pairs=2,
+        )
+        self.assertIn("showing 2 of 3 regions", "\n".join(lines))
 
 
 if __name__ == "__main__":

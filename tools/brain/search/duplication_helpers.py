@@ -12,6 +12,14 @@ TOKEN_PATTERN = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]"
 )
 IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+DECLARATION_PATTERN = re.compile(
+    r"^(?:async\s+def|def|class|(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn|"
+    r"struct|enum|trait|interface|protocol|function|func)\b"
+)
+DECLARATION_NAME_PATTERN = re.compile(
+    r"^(?:async\s+def|def|class|(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn|"
+    r"struct|enum|trait|interface|protocol|function|func)\s+([A-Za-z_][A-Za-z0-9_]*)"
+)
 
 DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS = [
     "tests/**",
@@ -52,6 +60,7 @@ DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST = {
     "decorator",
     "tool",
     "register",
+    "main",
     "_tx",
 }
 
@@ -374,6 +383,38 @@ def preview_line(text: str, limit: int = 200) -> str:
     return lines[0][:limit] if lines else ""
 
 
+def substantive_preview_line(text: str, limit: int = 200) -> str:
+    """Prefer a declaration over an arbitrary sliding-window boundary."""
+    fallback = preview_line(text, limit=limit)
+    for line in (text or "").strip().splitlines():
+        stripped = line.strip()
+        if DECLARATION_PATTERN.match(stripped):
+            return stripped[:limit]
+    return fallback
+
+
+def is_thin_delegating_declaration(text: str, declaration: str) -> bool:
+    """Return true for tiny compatibility adapters that only delegate work."""
+    lines = (text or "").splitlines()
+    start = next(
+        (index for index, line in enumerate(lines) if line.strip() == declaration),
+        None,
+    )
+    if start is None:
+        return False
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        stripped = line.strip()
+        if DECLARATION_PATTERN.match(stripped):
+            break
+        if not stripped or stripped.startswith("#"):
+            continue
+        body.append(stripped)
+    if not body or len(body) > 3:
+        return False
+    return bool(re.match(r"^return\s+[A-Za-z_][A-Za-z0-9_.]*\(", body[-1]))
+
+
 def is_low_signal_preview(text: str) -> bool:
     preview = preview_line(text).strip()
     if not preview:
@@ -468,9 +509,9 @@ def duplicate_candidate_details(
     score: float,
     struct_score: float,
 ) -> dict:
-    identifiers = preview_identifiers(row_a.get("content") or "") & preview_identifiers(
-        row_b.get("content") or ""
-    )
+    preview_a = substantive_preview_line(row_a.get("content") or "")
+    preview_b = substantive_preview_line(row_b.get("content") or "")
+    identifiers = preview_identifiers(preview_a) & preview_identifiers(preview_b)
     path_overlap = path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or "")
     same_dir = os.path.dirname(row_a.get("file_path") or "") == os.path.dirname(
         row_b.get("file_path") or ""
@@ -478,13 +519,30 @@ def duplicate_candidate_details(
     same_ext = os.path.splitext(row_a.get("file_path") or "")[1].lower() == os.path.splitext(
         row_b.get("file_path") or ""
     )[1].lower()
-    preview_a = preview_line(row_a.get("content") or "")
-    preview_b = preview_line(row_b.get("content") or "")
-    low_signal_a = is_low_signal_preview(row_a.get("content") or "")
-    low_signal_b = is_low_signal_preview(row_b.get("content") or "")
+    low_signal_a = is_low_signal_preview(preview_a)
+    low_signal_b = is_low_signal_preview(preview_b)
     preview_equal = bool(
         preview_a and preview_b and preview_a == preview_b and not (low_signal_a and low_signal_b)
     )
+    declaration_a = DECLARATION_NAME_PATTERN.match(preview_a)
+    declaration_b = DECLARATION_NAME_PATTERN.match(preview_b)
+    declaration_name_a = declaration_a.group(1) if declaration_a else None
+    declaration_name_b = declaration_b.group(1) if declaration_b else None
+    generic_declaration = bool(
+        declaration_name_a
+        and declaration_name_a == declaration_name_b
+        and declaration_name_a in DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST
+    )
+    declaration_equal = bool(preview_equal and declaration_a and declaration_b)
+    thin_delegation = bool(
+        declaration_equal
+        and is_thin_delegating_declaration(row_a.get("content") or "", preview_a)
+        and is_thin_delegating_declaration(row_b.get("content") or "", preview_b)
+    )
+    if generic_declaration or thin_delegation:
+        preview_equal = False
+        identifiers.discard(declaration_name_a.lower())
+    declaration_equal = bool(preview_equal and declaration_a and declaration_b)
 
     candidate_score = 0.0
     candidate_score += min(score, 1.0) * 0.45
@@ -499,10 +557,13 @@ def duplicate_candidate_details(
         candidate_score += 0.06
     if same_ext:
         candidate_score += 0.04
+    candidate_score = min(candidate_score, 1.0)
 
     reasons: list[str] = []
     if preview_equal:
-        reasons.append("same lead statement")
+        reasons.append(
+            "same declaration" if declaration_equal else "same substantive statement"
+        )
     if identifiers and not (low_signal_a and low_signal_b):
         shared = ", ".join(sorted(identifiers)[:3])
         reasons.append(f"shared identifiers ({shared})")
@@ -528,9 +589,43 @@ def duplicate_candidate_details(
         "same_dir": same_dir,
         "same_ext": same_ext,
         "preview_equal": preview_equal,
+        "preview_a": preview_a,
+        "preview_b": preview_b,
         "actionable": bool(
-            preview_equal
-            or (identifiers and not (low_signal_a and low_signal_b))
-            or (path_overlap_actionable and not (low_signal_a and low_signal_b))
+            not generic_declaration
+            and not thin_delegation
+            and (
+                preview_equal
+                or (identifiers and not (low_signal_a and low_signal_b))
+                or (path_overlap_actionable and not (low_signal_a and low_signal_b))
+            )
         ),
     }
+
+
+def deduplicate_refactor_candidates(candidates: list[dict]) -> list[dict]:
+    """Collapse sliding-window matches that describe the same code region."""
+    best_by_region: dict[tuple[str, str, str, str], dict] = {}
+    for candidate in candidates:
+        row_a = candidate.get("row_a") or {}
+        row_b = candidate.get("row_b") or {}
+        side_a = (
+            str(row_a.get("file_path") or ""),
+            str(candidate.get("preview_a") or ""),
+        )
+        side_b = (
+            str(row_b.get("file_path") or ""),
+            str(candidate.get("preview_b") or ""),
+        )
+        first, second = sorted((side_a, side_b))
+        key = (first[0], first[1], second[0], second[1])
+        existing = best_by_region.get(key)
+        if existing is None or (
+            candidate.get("candidate_score", 0),
+            candidate.get("score", 0),
+        ) > (
+            existing.get("candidate_score", 0),
+            existing.get("score", 0),
+        ):
+            best_by_region[key] = candidate
+    return list(best_by_region.values())

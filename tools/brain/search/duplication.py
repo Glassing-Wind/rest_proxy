@@ -581,6 +581,10 @@ def register(mcp: FastMCP) -> None:
                         for candidate in scored_pairs
                         if candidate["actionable"]
                     ]
+                    raw_actionable_count = len(actionable_candidates)
+                    actionable_candidates = dup_helpers.deduplicate_refactor_candidates(
+                        actionable_candidates
+                    )
                     actionable_candidates.sort(
                         key=lambda candidate: (
                             candidate["candidate_score"],
@@ -596,6 +600,12 @@ def register(mcp: FastMCP) -> None:
                             "Broad structural matches were omitted."
                         )
                     else:
+                        collapsed_count = raw_actionable_count - len(actionable_candidates)
+                        if collapsed_count > 0:
+                            lines.append(
+                                f"Collapsed {collapsed_count} overlapping chunk match(es) "
+                                "into declaration-level refactor regions."
+                            )
                         cross_candidates = [
                             candidate
                             for candidate in actionable_candidates
@@ -630,62 +640,6 @@ def register(mcp: FastMCP) -> None:
                                 max_pairs=max_pairs,
                             )
 
-                    actionable_pairs = [
-                        (candidate["row_a"], candidate["row_b"], candidate["score"], candidate["struct_score"])
-                        for candidate in actionable_candidates
-                    ]
-                    cross_pairs = [
-                        p
-                        for p in actionable_pairs
-                        if p[0]["file_path"] != p[1]["file_path"]
-                    ]
-                    same_pairs = [
-                        p
-                        for p in actionable_pairs
-                        if p[0]["file_path"] == p[1]["file_path"]
-                    ]
-
-                    if actionable_pairs and cross_file_only:
-                        dup_report.append_winnow_pairs(
-                            lines,
-                            title="Cross-file",
-                            pairs=cross_pairs,
-                            max_pairs=max_pairs,
-                            same_file_allowed=_same_file_allowed,
-                        )
-                    elif actionable_pairs:
-                        if prefer_cross_file:
-                            dup_report.append_winnow_pairs(
-                                lines,
-                                title="Cross-file",
-                                pairs=cross_pairs,
-                                max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
-                            )
-                            dup_report.append_winnow_pairs(
-                                lines,
-                                title="Same-file",
-                                pairs=same_pairs,
-                                max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
-                                same_file_counts={},
-                            )
-                        else:
-                            dup_report.append_winnow_pairs(
-                                lines,
-                                title="Same-file",
-                                pairs=same_pairs,
-                                max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
-                                same_file_counts={},
-                            )
-                            dup_report.append_winnow_pairs(
-                                lines,
-                                title="Cross-file",
-                                pairs=cross_pairs,
-                                max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
-                            )
                 else:
                     lines.append("\nNo winnowed duplicate chunks found.")
 

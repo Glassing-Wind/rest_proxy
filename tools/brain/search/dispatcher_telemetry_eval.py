@@ -6,6 +6,13 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from tools.brain.search.telemetry_eval_common import (
+    count_signal as _count_signal,
+    read_events,
+    safe_bool_rate as _safe_bool_rate,
+    telemetry_payload as _telemetry,
+)
+
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_TELEMETRY_PATH = ROOT / ".runtime" / "dispatcher_telemetry.ndjson"
@@ -13,42 +20,7 @@ DEFAULT_TELEMETRY_PATH = ROOT / ".runtime" / "dispatcher_telemetry.ndjson"
 
 def load_events(path: str | None = None) -> list[dict]:
     target = Path(path) if path else DEFAULT_TELEMETRY_PATH
-    if not target.exists():
-        return []
-    events: list[dict] = []
-    try:
-        with target.open(encoding="utf-8") as handle:
-            for line in handle:
-                raw = line.strip()
-                if not raw:
-                    continue
-                try:
-                    payload = json.loads(raw)
-                except Exception:
-                    continue
-                if isinstance(payload, dict):
-                    events.append(payload)
-    except Exception:
-        return []
-    return events
-
-
-def _safe_bool_rate(true_count: int, total: int) -> float:
-    if total <= 0:
-        return 0.0
-    return true_count / float(total)
-
-
-def _telemetry(event: dict) -> dict:
-    payload = event.get("telemetry")
-    return payload if isinstance(payload, dict) else {}
-
-
-def _count_signal(telemetry: dict, key: str) -> int:
-    try:
-        return int(telemetry.get(key, 0) or 0)
-    except Exception:
-        return 0
+    return read_events(target)
 
 
 def _is_contract_eligible(telemetry: dict) -> bool:

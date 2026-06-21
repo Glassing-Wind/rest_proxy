@@ -31,6 +31,11 @@ echo "[graph-check] Running duplication query checks..."
 echo "[graph-check] Running duplication report checks..."
 "$PYTHON_BIN" test_duplication_report.py
 
+echo "[graph-check] Running telemetry evaluator checks..."
+"$PYTHON_BIN" test_telemetry_eval_common.py
+"$PYTHON_BIN" test_dispatcher_telemetry_eval.py
+"$PYTHON_BIN" test_routing_telemetry_eval.py
+
 echo "[graph-check] Running semantic helper checks..."
 "$PYTHON_BIN" test_semantic_helpers.py
 

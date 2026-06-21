@@ -172,6 +172,38 @@ class DuplicationHelperTests(unittest.TestCase):
             "function x() {}",
         )
 
+    def test_substantive_preview_prefers_declaration_inside_sliding_chunk(self):
+        content = "// File: src/a.py\ncontinue\nreturn []\n\ndef load_events(path):\n    return path"
+        self.assertEqual(
+            module.substantive_preview_line(content),
+            "def load_events(path):",
+        )
+
+    def test_thin_delegating_declaration_distinguishes_adapter_from_logic(self):
+        adapter = (
+            "def load_events(path=None):\n"
+            "    target = Path(path)\n"
+            "    return read_events(target)\n\n"
+            "def summarize_events(events):\n"
+            "    return {}"
+        )
+        logic = (
+            "def safe_rate(count, total):\n"
+            "    if total <= 0:\n"
+            "        return 0.0\n"
+            "    return count / total"
+        )
+        self.assertTrue(
+            module.is_thin_delegating_declaration(
+                adapter, "def load_events(path=None):"
+            )
+        )
+        self.assertFalse(
+            module.is_thin_delegating_declaration(
+                logic, "def safe_rate(count, total):"
+            )
+        )
+
     def test_preview_identifiers_and_path_overlap_extract_useful_signal(self):
         self.assertIn("summarize_repo_links", module.preview_identifiers("def summarize_repo_links(project_path):"))
         self.assertIn("client", module.path_token_overlap("src/client_api.py", "tests/client_api_copy.py"))
@@ -203,8 +235,9 @@ class DuplicationHelperTests(unittest.TestCase):
         )
         self.assertTrue(details["actionable"])
         self.assertGreater(details["candidate_score"], 0.7)
-        self.assertIn("same lead statement", details["reasons"])
+        self.assertIn("same declaration", details["reasons"])
         self.assertIn("client", details["path_overlap"])
+        self.assertLessEqual(details["candidate_score"], 1.0)
 
     def test_duplicate_candidate_details_rejects_low_signal_headers(self):
         details = module.duplicate_candidate_details(
@@ -220,7 +253,7 @@ class DuplicationHelperTests(unittest.TestCase):
             struct_score=1.0,
         )
         self.assertFalse(details["actionable"])
-        self.assertNotIn("same lead statement", details["reasons"])
+        self.assertNotIn("same substantive statement", details["reasons"])
 
     def test_duplicate_candidate_details_does_not_use_path_overlap_alone_unless_score_is_extreme(self):
         details = module.duplicate_candidate_details(
@@ -266,6 +299,45 @@ class DuplicationHelperTests(unittest.TestCase):
             struct_score=0.33,
         )
         self.assertFalse(details["actionable"])
+
+    def test_duplicate_candidate_details_rejects_generic_register_wrappers(self):
+        details = module.duplicate_candidate_details(
+            {
+                "file_path": "tools/brain/code_search.py",
+                "content": "def register(mcp: FastMCP) -> None:\n    register_search(mcp)",
+            },
+            {
+                "file_path": "tools/brain/code_intel.py",
+                "content": "def register(mcp: FastMCP) -> None:\n    register_intel(mcp)",
+            },
+            score=1.0,
+            struct_score=1.0,
+        )
+        self.assertFalse(details["actionable"])
+
+    def test_deduplicate_refactor_candidates_collapses_sliding_windows(self):
+        common = {
+            "preview_a": "def load_events(path):",
+            "preview_b": "def load_events(path):",
+            "candidate_score": 0.9,
+            "score": 0.8,
+        }
+        candidates = [
+            {
+                **common,
+                "row_a": {"file_path": "src/a.py", "metadata": {"start_line": 1}},
+                "row_b": {"file_path": "src/b.py", "metadata": {"start_line": 1}},
+            },
+            {
+                **common,
+                "candidate_score": 0.95,
+                "row_a": {"file_path": "src/a.py", "metadata": {"start_line": 20}},
+                "row_b": {"file_path": "src/b.py", "metadata": {"start_line": 20}},
+            },
+        ]
+        deduplicated = module.deduplicate_refactor_candidates(candidates)
+        self.assertEqual(len(deduplicated), 1)
+        self.assertEqual(deduplicated[0]["candidate_score"], 0.95)
 
 
 if __name__ == "__main__":
