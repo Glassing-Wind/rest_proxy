@@ -501,7 +501,8 @@ def register(mcp: FastMCP) -> None:
         """
         project_path = get_workspace_path(workspace_id)
         try:
-            import subprocess, re
+            import re
+            import subprocess
 
             def _extract_changed_symbol(line: str) -> str | None:
                 patterns = [
@@ -542,6 +543,32 @@ def register(mcp: FastMCP) -> None:
                 return f"No changes vs `{since}`. Working tree is clean."
 
             file_re = re.compile(r"^diff --git a/.+ b/(.+)$")
+            source_extensions = {
+                ".c",
+                ".cc",
+                ".cpp",
+                ".cs",
+                ".cxx",
+                ".go",
+                ".h",
+                ".hpp",
+                ".java",
+                ".js",
+                ".jsx",
+                ".kt",
+                ".kts",
+                ".m",
+                ".mm",
+                ".php",
+                ".py",
+                ".pyi",
+                ".rb",
+                ".rs",
+                ".scala",
+                ".swift",
+                ".ts",
+                ".tsx",
+            }
             current_file = ""
             changed: dict[str, set] = {}
             all_files: set[str] = set()
@@ -556,15 +583,25 @@ def register(mcp: FastMCP) -> None:
                 if symbol and current_file:
                     changed.setdefault(current_file, set()).add(symbol)
 
-            unnamed = all_files - set(changed)
+            files_without_symbols = all_files - set(changed)
+            source_without_symbols = {
+                fp
+                for fp in files_without_symbols
+                if os.path.splitext(fp)[1].lower() in source_extensions
+            }
+            non_code_files = files_without_symbols - source_without_symbols
             out = [f"## Changed symbols vs `{since}`\n"]
             if changed:
                 for fp in sorted(changed):
                     syms = ", ".join(f"`{s}`" for s in sorted(changed[fp]))
                     out.append(f"**{fp}** — {syms}")
-            if unnamed:
-                out.append("\n**Files changed (file-level only):**")
-                for fp in sorted(unnamed):
+            if source_without_symbols:
+                out.append("\n**Changed source files without detected symbol definitions:**")
+                for fp in sorted(source_without_symbols):
+                    out.append(f"  - {fp}")
+            if non_code_files:
+                out.append("\n**Changed non-code/support files:**")
+                for fp in sorted(non_code_files):
                     out.append(f"  - {fp}")
             return "\n".join(out)
         except Exception as e:

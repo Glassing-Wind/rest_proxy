@@ -115,7 +115,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_changed_symbols": ToolCatalogEntry(
         "dev",
         "change review",
-        "List changed functions and classes in the working tree before targeted review or tests.",
+        "Review changed symbols and separate source-only changes from non-code/support files.",
     ),
     "get_code_communities": ToolCatalogEntry(
         "secondary",

@@ -320,6 +320,14 @@ diff --git a/src/misc.ts b/src/misc.ts
 ++/src/misc.ts
 @@
 +const unrelated = value
+diff --git a/README.md b/README.md
+++ b/README.md
+@@
++Document the new routing behavior.
+diff --git a/.env.example b/.env.example
+++ b/.env.example
+@@
++ROUTING_MODE=strict
 """
 
         def fake_subprocess_run(cmd, **kwargs):
@@ -333,8 +341,14 @@ diff --git a/src/misc.ts b/src/misc.ts
         self.assertIn("`buildRouter`", output)
         self.assertIn("`RouteContext`", output)
         self.assertIn("`RouteHelpers`", output)
-        self.assertIn("**Files changed (file-level only):**", output)
+        self.assertIn(
+            "**Changed source files without detected symbol definitions:**", output
+        )
         self.assertIn("src/misc.ts", output)
+        self.assertIn("**Changed non-code/support files:**", output)
+        self.assertIn("README.md", output)
+        self.assertIn(".env.example", output)
+        self.assertLess(output.index("src/misc.ts"), output.index("README.md"))
 
 
 if __name__ == "__main__":
