@@ -59,7 +59,10 @@ def _local_tool_fingerprint() -> tuple[str, int]:
         raise
 
     mcp = get_mcp()
-    return compute_tool_fingerprint(mcp)
+    return compute_tool_fingerprint(
+        mcp,
+        runtime_source_files=[ROOT / "brain_server.py"],
+    )
 
 
 def _brain_server_url(path: str) -> str:

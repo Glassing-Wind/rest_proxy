@@ -11,6 +11,8 @@ Architecture:
   - Session context middleware for multi-client session scoping
 """
 
+# ruff: noqa: E402 - resource limits must be raised before importing server stacks.
+
 import asyncio
 import hashlib
 import os
@@ -48,13 +50,18 @@ from starlette.routing import Mount, Route
 
 from _mcp import mcp
 from _tool_fingerprint import compute_tool_fingerprint
+from mcp.shared.version import SUPPORTED_PROTOCOL_VERSIONS
+from mcp.types import LATEST_PROTOCOL_VERSION
 
 # ---------------------------------------------------------------------------
 # Tool fingerprint
 # ---------------------------------------------------------------------------
 
 def _compute_tool_fingerprint() -> str:
-    fingerprint, _ = compute_tool_fingerprint(mcp)
+    fingerprint, _ = compute_tool_fingerprint(
+        mcp,
+        runtime_source_files=[__file__],
+    )
     return fingerprint
 
 
@@ -278,7 +285,9 @@ async def health(request: Request) -> JSONResponse:
     incoming_session_id = _mcp_transport_session_id(request.scope)
     response = JSONResponse({
         "server": "GraphRAG MCP Brain",
-        "standard": "Streamable HTTP (2025-06-18)",
+        "standard": f"Streamable HTTP ({LATEST_PROTOCOL_VERSION})",
+        "protocol_version": LATEST_PROTOCOL_VERSION,
+        "supported_protocol_versions": SUPPORTED_PROTOCOL_VERSIONS,
         "transport_path": "/mcp",
         "tools": tool_count,
         "boot_id": BOOT_ID,

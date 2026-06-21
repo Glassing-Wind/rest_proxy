@@ -188,7 +188,8 @@ This is the preferred path for “where did this edge come from?” investigatio
   - `/brain_server.py`
 - Supported shared-client mode today:
   - shared HTTP daemon at `http://127.0.0.1:8001/mcp`
-  - manual watcher activation with `watch_project` / `unwatch_project`
+  - manual watcher activation with `watch_project(path)` / `unwatch_project(path)`
+  - explicit roots-capable client sync with no-argument `watch_project()`
   - no automatic workspace inference by default
 - Streamable HTTP is now stateful so stale `Mcp-Session-Id` values fail with `404` after a restart.
 - Normal debugging path for MCP availability:

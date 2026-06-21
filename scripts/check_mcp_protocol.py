@@ -10,11 +10,15 @@ import time
 import urllib.error
 import urllib.request
 
+from mcp.shared.version import SUPPORTED_PROTOCOL_VERSIONS
+from mcp.types import LATEST_PROTOCOL_VERSION
+
 
 BASE_URL = os.environ.get("BRAIN_SERVER_BASE_URL") or f"http://127.0.0.1:{os.environ.get('BRAIN_SERVER_PORT', '8001')}"
 MCP_URL = f"{BASE_URL}/mcp"
 HEALTH_URL = f"{BASE_URL}/health"
-PROTOCOL_VERSION = "2025-06-18"
+PROTOCOL_VERSION = LATEST_PROTOCOL_VERSION
+COMPAT_PROTOCOL_VERSION = "2025-06-18"
 
 
 def _request(
@@ -96,6 +100,8 @@ def main() -> int:
     assert health_status == 200, f"health failed with status={health_status}"
     health = json.loads(health_body)
     assert health.get("standard") == f"Streamable HTTP ({PROTOCOL_VERSION})", health
+    assert health.get("protocol_version") == PROTOCOL_VERSION, health
+    assert health.get("supported_protocol_versions") == SUPPORTED_PROTOCOL_VERSIONS, health
     assert health_headers.get("x-graphrag-boot-id"), health_headers
     assert health_headers.get("x-graphrag-tool-fingerprint"), health_headers
 
@@ -141,10 +147,43 @@ def main() -> int:
         f"headerless session DELETE failed with status={fallback_delete_status}"
     )
 
+    compat_payload = {
+        **initialize_payload,
+        "id": 3,
+        "params": {
+            **initialize_payload["params"],
+            "protocolVersion": COMPAT_PROTOCOL_VERSION,
+            "clientInfo": {"name": "graphrag-compat-smoke", "version": "1.0"},
+        },
+    }
+    compat_status, compat_headers, compat_body = _request(
+        MCP_URL,
+        method="POST",
+        headers={"MCP-Protocol-Version": COMPAT_PROTOCOL_VERSION},
+        body=compat_payload,
+    )
+    assert compat_status == 200, f"compat initialize failed with status={compat_status}"
+    compat_session_id = compat_headers.get("mcp-session-id")
+    assert compat_session_id, "compat initialize did not include Mcp-Session-Id"
+    compat_result = _extract_sse_json(compat_body).get("result") or {}
+    assert compat_result.get("protocolVersion") == COMPAT_PROTOCOL_VERSION, compat_result
+    compat_delete_status, _, _ = _request(
+        MCP_URL,
+        method="DELETE",
+        headers={
+            "MCP-Protocol-Version": COMPAT_PROTOCOL_VERSION,
+            "Mcp-Session-Id": compat_session_id,
+        },
+    )
+    assert compat_delete_status == 200, (
+        f"compat session DELETE failed with status={compat_delete_status}"
+    )
+
     print("MCP protocol smoke check passed")
     print(f"- initialize protocol version: {PROTOCOL_VERSION}")
     print(f"- session id returned: {session_id}")
     print(f"- headerless initialize negotiated: {fallback_result['protocolVersion']}")
+    print(f"- compatibility initialize negotiated: {compat_result['protocolVersion']}")
     print(f"- health standard: {health['standard']}")
     print(f"- boot id: {health['boot_id']}")
     return 0

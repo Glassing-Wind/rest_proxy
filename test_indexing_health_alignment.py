@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -136,6 +137,7 @@ def load_indexing_module():
 
     fastmcp_mod = types.ModuleType("mcp.server.fastmcp")
     fastmcp_mod.FastMCP = FakeMCP
+    fastmcp_mod.Context = type("Context", (), {})
 
     config_mod = types.ModuleType("graphrag_core.config")
     config_mod.load_env = lambda: None
@@ -209,6 +211,68 @@ def run_indexing_health(module, workspace_id: str, audit: bool = False) -> str:
 
 
 class IndexingHealthAlignmentTests(unittest.TestCase):
+    def test_watch_project_syncs_valid_mcp_client_roots(self):
+        module = load_indexing_module()
+
+        class FakeRootsSession:
+            async def list_roots(self):
+                return types.SimpleNamespace(
+                    roots=[
+                        types.SimpleNamespace(uri=first.as_uri()),
+                        types.SimpleNamespace(uri=second.as_uri()),
+                        types.SimpleNamespace(uri=first.as_uri()),
+                        types.SimpleNamespace(uri="https://example.com/repo"),
+                        types.SimpleNamespace(uri=(base / "missing").as_uri()),
+                    ]
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            first = base / "first repo"
+            second = base / "second"
+            first.mkdir()
+            second.mkdir()
+            watched: set[str] = set()
+
+            def add_watch(path):
+                if path in watched:
+                    return False
+                watched.add(path)
+                return True
+
+            ctx = types.SimpleNamespace(session=FakeRootsSession())
+            with mock.patch.object(module.index_watcher, "add_watch", side_effect=add_watch):
+                output = asyncio.run(module.watch_project(ctx=ctx))
+
+        self.assertIn("## MCP Client Roots Watch Sync", output)
+        self.assertIn("Roots advertised: 5", output)
+        self.assertIn("Newly pinned: 2", output)
+        self.assertIn("Ignored: 2", output)
+        self.assertIn(str(first.resolve()), output)
+        self.assertIn(str(second.resolve()), output)
+        self.assertIn("unsupported scheme `https`", output)
+        self.assertIn("path is not an existing directory", output)
+
+    def test_watch_project_reports_client_without_roots_support(self):
+        module = load_indexing_module()
+
+        class UnsupportedRootsSession:
+            async def list_roots(self):
+                raise RuntimeError("List roots not supported")
+
+        ctx = types.SimpleNamespace(session=UnsupportedRootsSession())
+        output = asyncio.run(module.watch_project(ctx=ctx))
+
+        self.assertIn("Client roots are unavailable or unsupported", output)
+        self.assertIn("Pass workspace_id explicitly", output)
+
+    def test_watch_project_without_request_context_requires_explicit_path(self):
+        module = load_indexing_module()
+        output = asyncio.run(module.watch_project())
+
+        self.assertIn("unavailable outside an MCP request", output)
+        self.assertIn("Pass workspace_id explicitly", output)
+
     def test_get_index_status_lists_active_jobs_with_status_when_missing(self):
         module = load_indexing_module()
         with module._JOBS_LOCK:

@@ -18,6 +18,7 @@ cd "$ROOT_DIR"
 echo "[retrieval-quality-gate] running MCP protocol lifecycle checks..."
 "$PYTHON_BIN" "$ROOT_DIR/scripts/check_mcp_protocol.py"
 "$ROOT_DIR/scripts/check_mcp_stale_session_restart.sh"
+"$PYTHON_BIN" "$ROOT_DIR/scripts/check_mcp_roots.py"
 
 echo "[retrieval-quality-gate] running tool-choice eval suite..."
 "$PYTHON_BIN" "$ROOT_DIR/scripts/run_tool_choice_eval_suite.py"

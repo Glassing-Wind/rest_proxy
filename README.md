@@ -156,7 +156,8 @@ http://localhost:8001/mcp
 Supported client mode today:
 
 - shared HTTP MCP daemon at `http://localhost:8001/mcp`
-- manual watcher activation via `watch_project` / `unwatch_project`
+- manual watcher activation via `watch_project(path)` / `unwatch_project(path)`
+- opt-in standards-based root sync via `watch_project()` for roots-capable clients
 - no automatic workspace inference by default for shared HTTP clients
 
 This is intentional. Transport sessions are not treated as trustworthy repo
@@ -176,7 +177,8 @@ curl -sS -D - http://127.0.0.1:8001/health
 Look for:
 
 - `x-graphrag-boot-id`: changes after a real restart
-- `x-graphrag-tool-fingerprint`: changes when the registered tool set changes
+- `x-graphrag-tool-fingerprint`: changes when registered tool implementations
+  or the shared HTTP transport runtime changes
 - `x-graphrag-session-known: 0`: the client is sending no MCP session or a stale one
 
 The JSON bodies also include `boot_id`, `fingerprint`, `uptime_seconds`, and a

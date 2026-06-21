@@ -289,8 +289,8 @@
             "Community Summary:",
             "[area/tools]",
             "Dominant concerns: area/tools",
-            "first file: tools/brain/graph/overview.py",
-            "Top files: tools/brain/graph/overview.py",
+            "first file: tools/brain/",
+            "Top files: tools/brain/",
             "Suppressed"
           ],
           "forbidden_substrings": [

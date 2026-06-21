@@ -8,7 +8,9 @@ import threading
 import subprocess
 import time
 from typing import Dict, List, Optional
-from mcp.server.fastmcp import FastMCP
+from urllib.parse import unquote, urlparse
+
+from mcp.server.fastmcp import Context, FastMCP
 from _jobs import (
     _JOBS,
     _JOBS_LOCK,
@@ -1041,13 +1043,83 @@ async def cancel_index_job(job_id: str, force: bool = False) -> str:
     )
 
 
-async def watch_project(workspace_id: str) -> str:
+def _local_root_path(root_uri: object) -> tuple[str | None, str | None]:
+    raw_uri = str(root_uri or "").strip()
+    if not raw_uri:
+        return None, "missing URI"
+    parsed = urlparse(raw_uri)
+    if parsed.scheme.lower() != "file":
+        return None, f"unsupported scheme `{parsed.scheme or '(none)'}`"
+    if parsed.netloc not in {"", "localhost"}:
+        return None, f"non-local file authority `{parsed.netloc}`"
+    path = os.path.realpath(os.path.abspath(unquote(parsed.path)))
+    if not os.path.isdir(path):
+        return None, "path is not an existing directory"
+    return path, None
+
+
+async def watch_project(
+    workspace_id: str | None = None,
+    ctx: Context | None = None,
+) -> str:
     """
     Pin a project for manual background watching across sessions.
 
     This is the primary activation path for the watcher in the default shipped
-    configuration.
+    configuration. When workspace_id is omitted, request standards-based roots
+    from the active MCP client and pin each valid local file root.
     """
+    if not workspace_id:
+        if ctx is None:
+            return "Client roots are unavailable outside an MCP request. Pass workspace_id explicitly."
+        try:
+            roots_result = await ctx.session.list_roots()
+        except Exception as exc:
+            return (
+                "Client roots are unavailable or unsupported. "
+                f"Pass workspace_id explicitly. ({type(exc).__name__}: {exc})"
+            )
+
+        added: list[str] = []
+        existing: list[str] = []
+        ignored: list[str] = []
+        seen: set[str] = set()
+        for root in roots_result.roots:
+            root_uri = getattr(root, "uri", None)
+            path, reason = _local_root_path(root_uri)
+            if not path:
+                ignored.append(f"{root_uri or '<missing>'} ({reason})")
+                continue
+            if path in seen:
+                continue
+            seen.add(path)
+            if index_watcher.add_watch(path):
+                added.append(path)
+            else:
+                existing.append(path)
+
+        lines = ["## MCP Client Roots Watch Sync"]
+        lines.append(f"- Roots advertised: {len(roots_result.roots)}")
+        lines.append(f"- Newly pinned: {len(added)}")
+        lines.append(f"- Already pinned: {len(existing)}")
+        lines.append(f"- Ignored: {len(ignored)}")
+        if added:
+            lines.append("")
+            lines.append("Pinned roots:")
+            lines.extend(f"- {path}" for path in added)
+        if existing:
+            lines.append("")
+            lines.append("Already pinned roots:")
+            lines.extend(f"- {path}" for path in existing)
+        if ignored:
+            lines.append("")
+            lines.append("Ignored roots:")
+            lines.extend(f"- {item}" for item in ignored)
+        if not added and not existing:
+            lines.append("")
+            lines.append("No valid local file roots were available; pass workspace_id explicitly.")
+        return "\n".join(lines)
+
     project_path = get_workspace_path(workspace_id)
     if not os.path.exists(project_path):
         return f"Error: Path does not exist: {project_path}"

@@ -318,7 +318,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "watch_project": ToolCatalogEntry(
         "operational",
         "indexing",
-        "Pin an important project for background watching across sessions.",
+        "Pin a project for background watching, or sync explicitly advertised MCP client roots when no path is supplied.",
     ),
 }
 

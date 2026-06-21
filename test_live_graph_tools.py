@@ -24,7 +24,7 @@ GRAPH_GOLDENS_PATH = os.path.join(REPO_ROOT, "benchmarks", "live_graph_goldens.j
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from _runtime import resolve_python_runtime
+from _runtime import resolve_python_runtime  # noqa: E402
 
 
 def _ensure_runtime_dependencies() -> None:
@@ -63,6 +63,7 @@ def _install_mcp_stub() -> None:
     server_pkg = types.ModuleType("mcp.server")
     fastmcp_mod = types.ModuleType("mcp.server.fastmcp")
     fastmcp_mod.FastMCP = FakeMCP
+    fastmcp_mod.Context = type("Context", (), {})
     sys.modules["mcp"] = mcp_pkg
     sys.modules["mcp.server"] = server_pkg
     sys.modules["mcp.server.fastmcp"] = fastmcp_mod

@@ -44,6 +44,7 @@ if ! ./scripts/brain_server_status.sh >/dev/null 2>&1; then
 fi
 "$PYTHON_BIN" ./scripts/check_mcp_protocol.py
 ./scripts/check_mcp_stale_session_restart.sh
+"$PYTHON_BIN" ./scripts/check_mcp_roots.py
 
 echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_cross_project_tools.py

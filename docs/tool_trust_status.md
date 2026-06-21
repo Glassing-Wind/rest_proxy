@@ -33,8 +33,12 @@ What is in good shape now:
   normal investigation work.
 - MCP daemon/runtime reliability is materially better:
   - stale-daemon fingerprint drift is detected
+  - transport-runtime source drift is included in freshness identity, not only
+    registered tool implementation drift
   - direct-run scripts self-heal into the expected `lmproxy` runtime
   - parity/live wrappers normalize interpreter selection
+  - current/compat protocol negotiation, restart recovery, and opt-in MCP roots
+    sync are exercised through the standard trust gate
 - CI/install plumbing is stronger:
   - ts-pack wheel reuse is in place
   - dependency audit issues were fixed
