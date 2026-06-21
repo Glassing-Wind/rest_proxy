@@ -1122,6 +1122,50 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("serviceCall0", output)
         self.assertIn("… 3 more first-hop call(s) hidden", output)
 
+    def test_get_call_chain_marks_inferred_edges(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "2",
+                        "name": "dispatch",
+                        "qualified_name": None,
+                        "signature": None,
+                        "filepath": "src/api/dispatch.py",
+                        "rank": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                self.assertIn("type(r)", cypher)
+                return [
+                    {
+                        "chain": ["dispatch", "route", "persist"],
+                        "files": [
+                            "src/api/dispatch.py",
+                            "src/api/routes.py",
+                            "src/services/store.py",
+                        ],
+                        "edge_types": ["CALLS_INFERRED", "CALLS"],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/repo", "dispatch", depth=2
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("`route` [inferred]", output)
+        self.assertIn("`persist`  (", output)
+        self.assertNotIn("`persist` [inferred]", output)
+
     def test_get_call_chain_up_filters_unnamed_callers(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:

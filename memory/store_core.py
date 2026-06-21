@@ -603,7 +603,12 @@ async def get_global_instructions() -> List[str]:
 
 
 async def add_durable_memory(
-    session_id: str, text: str, is_global: bool = False
+    session_id: str,
+    text: str,
+    is_global: bool = False,
+    tags: list[str] | None = None,
+    category: str | None = None,
+    importance: int = 3,
 ) -> bool:
     from memory import store_durable
 
@@ -611,16 +616,25 @@ async def add_durable_memory(
         session_id,
         text,
         is_global=is_global,
+        tags=tags,
+        category=category,
+        importance=importance,
     )
 
 
 async def list_durable_memories(
     session_id: str,
     include_global: bool = False,
+    tags: list[str] | None = None,
+    category: str | None = None,
+    min_importance: int = 1,
 ) -> list[dict]:
     from memory import store_durable
 
     return await store_durable.list_durable_memories(
         session_id,
         include_global=include_global,
+        tags=tags,
+        category=category,
+        min_importance=min_importance,
     )

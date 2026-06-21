@@ -38,7 +38,13 @@ class FakeCursor:
     async def execute(self, query, params=None):
         self._index = 0
         query = " ".join(query.split())
-        if "SELECT count(*) AS chunks, count(DISTINCT url) AS urls" in query:
+        if "SELECT count(*) FROM doc_embeddings" in query:
+            self.assert_age_filter(query, params)
+            self._rows = [(4,)]
+        elif "SELECT url FROM doc_embeddings" in query:
+            self.assert_age_filter(query, params)
+            self._rows = [("https://neo4j.com/old",)]
+        elif "SELECT count(*) AS chunks, count(DISTINCT url) AS urls" in query:
             self._rows = [(3723, 1112)]
         elif "SELECT split_part(url, '/', 3) AS domain, count(*) AS chunks" in query:
             self._rows = [("neo4j.com", 3723)]
@@ -52,6 +58,11 @@ class FakeCursor:
             ]
         else:
             raise AssertionError(f"Unexpected query: {query}")
+
+    @staticmethod
+    def assert_age_filter(query, params):
+        if "older_than_seconds" in (params or {}):
+            assert "created_at < EXTRACT(EPOCH FROM NOW())" in query
 
     async def fetchone(self):
         return self._rows[0] if self._rows else None
@@ -130,6 +141,21 @@ def load_module():
 
 
 class DocsAdminFamilyTests(unittest.TestCase):
+    def test_delete_documentation_supports_guarded_age_filter(self):
+        module, stub_modules = load_module()
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(sys.modules, stub_modules):
+            output = asyncio.run(
+                mcp.tools["delete_documentation"](
+                    topic="neo4j", older_than_days=30, dry_run=True
+                )
+            )
+
+        self.assertIn("4 chunk(s) would be deleted", output)
+        self.assertIn("https://neo4j.com/old", output)
+
     def test_list_documentation_sources_expands_family_topic(self):
         module, stub_modules = load_module()
         mcp = FakeMCP()

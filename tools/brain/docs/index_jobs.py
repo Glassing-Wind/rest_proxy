@@ -2,13 +2,18 @@
 
 import json
 import os
-import sys
 import threading
 import subprocess
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
-from _jobs import _JOBS, _JOBS_LOCK, _drain_proc_output, _finalize_job
+from _jobs import (
+    _JOBS,
+    _JOBS_LOCK,
+    _drain_proc_output,
+    _finalize_job,
+    client_session_id,
+)
 from _runtime import resolve_python_runtime
 from tools.brain.docs.config import DEFAULT_TOPIC_SEED_URLS
 
@@ -44,7 +49,8 @@ def register(mcp: FastMCP) -> None:
             topic: Label for these docs (e.g. 'neo4j', 'pgvector').
         """
         try:
-            import time, uuid
+            import time
+            import uuid
 
             if not urls:
                 return "Error: no URLs provided."
@@ -73,6 +79,7 @@ def register(mcp: FastMCP) -> None:
                     "runtime_python": None,
                     "runtime_source": None,
                     "runtime_conda_env": None,
+                    "session_id": client_session_id.get(),
                 }
 
             runtime = resolve_python_runtime()
@@ -118,6 +125,7 @@ def register(mcp: FastMCP) -> None:
                 f"  job_id: {job_id}\n"
                 f"  topic:  {topic}\n"
                 f"  seeds:  {len(expanded_urls)} URL(s)\n"
+                f"  runtime: {runtime.get('python')} [{runtime.get('source')}]\n"
                 f"\nUse get_index_status('{job_id}') to monitor progress.\n"
                 f"Use search_documentation(query, topic='{topic}') once done."
             )

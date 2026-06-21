@@ -6,11 +6,11 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 
 | Tool | Usefulness | Improvements Needed | Pertinent Details |
 | :--- | :--- | :--- | :--- |
-| `add_memory` | **High** | Add support for tags/categories and importance levels for better organization. | **Tested**: Successfully added a memory and verified with `list_memories`. Persistent and reliable. |
+| `add_memory` | **High** | None for durable fact/decision capture. | **Fixed/Tested**: Supports normalized tags, category, and 1–5 importance; `list_memories` can filter and displays the metadata. |
 | `cancel_index_job` | **Medium** | None for the current admin workflow. | **Fixed**: Strict session-locking now explains the denial and supports `force=True` for an explicit admin override. |
-| `delete_documentation` | **Medium** | Implement "delete by age" or "unused" filters. Link with usage metrics. | **Tested**: Safety check intercepted attempt with a hint. Excellent guardrail against accidental wipes. |
+| `delete_documentation` | **Medium** | Usage-based cleanup requires retrieval metrics that do not exist yet. | **Fixed/Tested**: Supports guarded age-based cleanup with dry-run URL/count previews, while preserving explicit whole-topic confirmation. |
 | `describe_file` | **Very High** | Include an LLM-generated natural language summary in the output. | **Tested**: Correctly identified 5 symbols in `mcp_server.py`. Fails if file/path is ambiguous or parser lags. |
-| `download_documentation` | **High** | Improve status polling/reporting for background crawl jobs. | **Value**: Essential for expanding context beyond the repo. Idempotent updates are a plus. |
+| `download_documentation` | **High** | None for current background crawl operations. | **Fixed/Tested**: Jobs retain initiating-session ownership, report runtime/seeds, and integrate with detailed `get_index_status` polling. |
 | `extract_class_interface` | **High** | None for known-file API inspection. | **Fixed/Tested**: Interfaces now include parser signatures, decorators such as `@classmethod`, and explicit property/member kinds. |
 | `extract_function_body` | **Very High** | None - very precise. | **Tested**: Extracted `get_project_id` cleanly using AST. Superior to manual line-range reading. |
 | `find_code_duplication` | **High** | None for focused duplicate triage. | **Fixed/Tested**: Supports an explicit recursive `directory_path` scope in addition to include/exclude globs. |
@@ -19,7 +19,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `find_symbol_usages` | **High** | None - very useful for local scope. | **Tested**: Found 3 hits for `WorkspaceRegistry` in `_helpers.py`. Faster than cross-file search for local work. |
 | `get_app_flow_summary` | **Niche/High** | Prefer returning route-qualified paths before broad fallbacks. | **Tested**: Useful once indexing completes; no separate rebuild step should be required. |
 | `get_backend_flow_summary` | **Niche/High** | Keep backend symbol filtering tight to avoid frontend noise. | **Tested**: Useful for API/service mapping after a normal index. |
-| `get_call_chain` | **Critical** | Include markers for dynamic/inferred calls if possible. | **Tested**: Traced `get_project_id` up 3 levels. Found vast impact across the codebase. Essential for risk assessment. |
+| `get_call_chain` | **Critical** | None for current exact/inferred graph traversal. | **Fixed/Tested**: Inferred call edges are explicitly marked so users can distinguish resolver evidence from exact calls. |
 | `get_changed_symbols` | **Very High** | None for the current pre-commit review workflow. | **Fixed/Tested**: Changed symbols, source files without detected definitions, and non-code/support files are reported separately. Much more actionable than a standard git diff. |
 | `get_code_communities` | **High** | Continue comparing live output against real onboarding workflows before promotion. | **Fixed/Tested**: Now opens with a Community Summary, dominant concerns, first cluster recommendation, and omitted-tail accounting. |
 | `get_code_importance` | **Critical** | None - PageRank implementation is solid. | **Tested**: Ranked `memory/store_core.py` as most important. Uses functional centrality, not just file size. |
@@ -32,7 +32,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `get_related_files` | **Very High** | Continue validating relationship labels across more repo shapes. | **Fixed/Tested**: Structural results now label caller/importer/sibling/import relationships explicitly, making blast-radius review easier without raw graph inspection. |
 | `get_symbol_context` | **Critical** | None for bounded source inspection. | **Fixed/Tested**: Configurable line/character caps and `full_source_preview` can return the indexed symbol span without unbounded tool output. |
 | `get_symbol_exports_summary` | **High** | Continue promoting only after more cross-language workflow evidence. | **Fixed/Tested**: Falls back to visibility metadata and Python non-underscore public naming when export edges are absent. |
-| `get_symbol_imports_overview` | **High** | Report index-health guidance when symbol import edges are absent. | **Tested**: Essential for granular refactoring (e.g., "what specifically do we use from this 5k-line module?"). |
+| `get_symbol_imports_overview` | **High** | None for indexed symbol-import review. | **Fixed/Tested**: Empty-edge responses explain the IMPORTS_SYMBOL dependency, health/reindex recovery, and file-level fallback. |
 | `get_test_coverage_for` | **Very High** | None for current test-discovery workflows. | **Fixed/Tested**: Falls through name, graph import, exact text, route, and semantic test-chunk strategies with role-aware filtering. |
 | `git_summary` | **High** | None. | **Tested**: Summarized branch, untracked files, and 10+ recent commits. Perfect for checking recent project velocity. |
 | `grep_codebase` | **Critical** | Group results by file (implemented). Recommend adding pre-filtering for binary files. | **Fixed**: Updated `_which` to resolve environment-specific `rg` paths. Now successfully searching across all files. |

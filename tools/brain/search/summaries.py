@@ -341,7 +341,13 @@ async def get_symbol_imports_overview_impl(
             )
 
     if not exp_symbols and not exp_files and not imp_symbols and not imp_files:
-        return "No symbol import edges found."
+        return (
+            "No symbol import edges found for this project.\n"
+            "This view depends on IMPORTS_SYMBOL edges. Run `get_indexing_health` to verify "
+            "the structural index is current, then reindex with the current ts-pack contract if "
+            "source files are present but symbol-import coverage remains empty. Use "
+            "`get_related_files` for file-level imports in the meantime."
+        )
 
     lines = [f"# Symbol import overview: {project_path.split('/')[-1]}", ""]
     lines.append("Use this to decide which files pull the widest symbol surface and where import coupling is concentrated.")

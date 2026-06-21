@@ -12,6 +12,7 @@ def register(mcp: FastMCP) -> None:
         url_patterns: list | None = None,
         allow_all: bool = False,
         dry_run: bool = False,
+        older_than_days: int | None = None,
     ) -> str:
         """
         Delete indexed documentation chunks for a topic, optionally filtered by URL patterns.
@@ -23,6 +24,7 @@ def register(mcp: FastMCP) -> None:
             allow_all:    If True, allows deleting the entire topic when no
                           url_patterns are provided.
             dry_run:      If True, return counts and sample URLs without deleting.
+            older_than_days: Only delete chunks not refreshed within this many days.
         """
         try:
             import memory.store as ms
@@ -36,10 +38,14 @@ def register(mcp: FastMCP) -> None:
                 for p in (url_patterns or [])
                 if isinstance(p, str) and p.strip()
             ]
-            if not patterns and not allow_all:
+            if older_than_days is not None:
+                older_than_days = int(older_than_days)
+                if older_than_days < 1:
+                    return "Error: older_than_days must be at least 1."
+            if not patterns and older_than_days is None and not allow_all:
                 return (
-                    "Refusing to delete without url_patterns. "
-                    "Provide patterns like ['%fal.ai/%'] or set allow_all=True."
+                    "Refusing to delete without url_patterns or older_than_days. "
+                    "Provide a filter or set allow_all=True."
                 )
 
             clauses = ["source = %(topic)s"]
@@ -53,6 +59,11 @@ def register(mcp: FastMCP) -> None:
                     params[key] = pat
                     url_clauses.append(f"url ILIKE %({key})s")
                 clauses.append("(" + " OR ".join(url_clauses) + ")")
+            if older_than_days is not None:
+                params["older_than_seconds"] = older_than_days * 86400
+                clauses.append(
+                    "created_at < EXTRACT(EPOCH FROM NOW()) - %(older_than_seconds)s"
+                )
 
             where_sql = " AND ".join(clauses)
 

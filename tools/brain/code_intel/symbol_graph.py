@@ -769,6 +769,7 @@ def build_call_chain_path_cypher(direction: str, depth: int, *, is_backend_root:
         + " RETURN [n IN nodes(path) | n.name] AS chain,"
         "        [n IN nodes(path) | n.filepath] AS files,"
         "        [n IN nodes(path) | n.start_line] AS lines,"
+        "        [r IN relationships(path) | type(r)] AS edge_types,"
         "        [n IN nodes(path) |\n"
         "           head([(_path_parent)-[:CONTAINS]->(n) | _path_parent.semantic_file_roles])\n"
         "        ] AS file_roles"
@@ -1065,9 +1066,10 @@ def format_call_chain_rows(
     if resolved_name and resolved_name != symbol_name:
         out.append(f"Resolved `{symbol_name}` → `{resolved_name}`\n")
     anonymous_hints: list[str] = []
-    first_hop_groups: "OrderedDict[tuple[str, str], OrderedDict[tuple[str, str], None]]" = OrderedDict()
+    first_hop_groups: "OrderedDict[tuple[str, str], OrderedDict[tuple[str, str], bool]]" = OrderedDict()
     first_hop_counts: dict[tuple[str, str], int] = {}
     first_hop_roles: dict[tuple[str, str], object] = {}
+    first_hop_inferred: dict[tuple[str, str], bool] = {}
     terminal_paths = 0
     root_focus = focus_prefix(resolved_filepath)
     root_is_backend = is_backend_filepath(resolved_filepath)
@@ -1076,6 +1078,7 @@ def format_call_chain_rows(
         chain = rec["chain"]
         files = rec["files"]
         lines = rec.get("lines") or []
+        edge_types = rec.get("edge_types") or []
         file_roles = rec.get("file_roles") or []
         if any(
             not _is_language_compatible(resolved_filepath, file_path)
@@ -1083,21 +1086,26 @@ def format_call_chain_rows(
             if file_path
         ):
             continue
-        compact_chain: list[tuple[str | None, str | None, int | None, object]] = []
+        compact_chain: list[tuple[str | None, str | None, int | None, object, bool]] = []
+        pending_inferred = False
         for idx, name in enumerate(chain):
             file_path = files[idx] if idx < len(files) else None
             line = lines[idx] if idx < len(lines) else None
             roles = file_roles[idx] if idx < len(file_roles) else None
+            if idx > 0 and idx - 1 < len(edge_types):
+                pending_inferred = pending_inferred or edge_types[idx - 1] == REL_CALLS_INFERRED
             if idx > 0 and is_low_value_name(name):
                 hint = f"{file_path}:{line}" if file_path and line else (file_path or "?")
                 if hint not in anonymous_hints:
                     anonymous_hints.append(hint)
                 continue
-            compact_chain.append((name, file_path, line, roles))
+            compact_chain.append((name, file_path, line, roles, pending_inferred))
+            pending_inferred = False
         chain = [entry[0] for entry in compact_chain]
         files = [entry[1] for entry in compact_chain]
         lines = [entry[2] for entry in compact_chain]
         file_roles = [entry[3] for entry in compact_chain]
+        inferred_hops = [entry[4] for entry in compact_chain]
         if len(chain) < 2:
             continue
         first_name = chain[1]
@@ -1119,6 +1127,7 @@ def format_call_chain_rows(
         first_hop_groups.setdefault(first_key, OrderedDict())
         first_hop_counts[first_key] = first_hop_counts.get(first_key, 0) + 1
         first_hop_roles.setdefault(first_key, file_roles[1] if len(file_roles) > 1 else None)
+        first_hop_inferred[first_key] = first_hop_inferred.get(first_key, True) and inferred_hops[1]
 
         if len(chain) >= 3:
             child_name = chain[2]
@@ -1137,7 +1146,10 @@ def format_call_chain_rows(
                 terminal_paths += 1
                 continue
             child_file = files[2] or "?"
-            first_hop_groups[first_key][(child_name, child_file)] = None
+            child_key = (child_name, child_file)
+            first_hop_groups[first_key][child_key] = (
+                first_hop_groups[first_key].get(child_key, True) and inferred_hops[2]
+            )
         else:
             terminal_paths += 1
 
@@ -1164,11 +1176,13 @@ def format_call_chain_rows(
     hidden_first_hops = max(0, len(ranked_first_hops) - len(visible_first_hops))
 
     for (first_name, first_file), children in visible_first_hops:
-        out.append(f"   `{first_name}`  ({first_file})")
+        inferred_marker = " [inferred]" if first_hop_inferred.get((first_name, first_file)) else ""
+        out.append(f"   `{first_name}`{inferred_marker}  ({first_file})")
         emitted += 1
         child_items = list(children.keys())
         for child_idx, (child_name, child_file) in enumerate(child_items[:max_children_per_hop]):
-            out.append(f"    └─ `{child_name}`  ({child_file})")
+            child_marker = " [inferred]" if children[(child_name, child_file)] else ""
+            out.append(f"    └─ `{child_name}`{child_marker}  ({child_file})")
             emitted += 1
         hidden_children = max(0, len(child_items) - max_children_per_hop)
         extra_paths = max(0, first_hop_counts.get((first_name, first_file), 0) - max(len(child_items), 1))

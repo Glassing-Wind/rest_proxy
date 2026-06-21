@@ -21,7 +21,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "add_memory": ToolCatalogEntry(
         "memory",
         "context",
-        "Store a durable instruction or repo fact that should survive future sessions.",
+        "Store a tagged and prioritized instruction or repo fact for future sessions.",
     ),
     "analyze_duplicate_results": ToolCatalogEntry(
         "support",
@@ -229,7 +229,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "list_memories": ToolCatalogEntry(
         "memory",
         "context",
-        "Review durable repo/session memories before relying on them.",
+        "Review or filter durable repo/session memories by tags, category, and priority.",
     ),
     "list_symbol_matches": ToolCatalogEntry(
         "support",

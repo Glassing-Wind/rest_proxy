@@ -60,6 +60,22 @@ def load_module():
 
 
 class SearchSummaryTests(unittest.TestCase):
+    def test_symbol_imports_overview_explains_missing_edge_recovery(self):
+        with mock.patch.object(
+            self.module.graph_tools, "_execute_read", return_value=[]
+        ):
+            output = asyncio.run(
+                self.module.get_symbol_imports_overview_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    project_path="/tmp/repo",
+                )
+            )
+
+        self.assertIn("IMPORTS_SYMBOL", output)
+        self.assertIn("get_indexing_health", output)
+        self.assertIn("get_related_files", output)
+
     def setUp(self):
         self.module = load_module()
 
