@@ -1173,8 +1173,9 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     shadow_graph_health: Dict[str, int] = {}
 
     # --- Structural Integrity Metrics (Level 2) ---
-    import_total = 0
-    import_resolved_internal = 0
+    import_fact_total = 0
+    import_file_edges = 0
+    import_symbol_edges = 0
     isolated_files: List[str] = []
     suspicious_files: List[Dict[str, object]] = []
 
@@ -1244,20 +1245,34 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         shadow_graph_health = await _get_shadow_graph_health(session)
 
         if audit:
-            # 2. Internal Import Resolution Rate (Level 2)
+            # 2. Current structural import graph materialization (Level 2).
+            # Import nodes preserve extracted facts; resolved internal links are
+            # represented directly as File-[:IMPORTS]->File and
+            # File-[:IMPORTS_SYMBOL]->Node edges.
             import_records = await _execute_read(
                 session,
                 """
-                MATCH (f:File {project_id: $pid})-[:CONTAINS]->(i:Import)
-                OPTIONAL MATCH (i)-[:RESOLVES_TO]->(target:File {project_id: $pid})
-                RETURN count(i) AS total, count(target) AS resolved
+                CALL () {
+                  MATCH (:File {project_id: $pid})-[:CONTAINS]->(i:Import)
+                  RETURN count(DISTINCT i) AS facts
+                }
+                CALL () {
+                  MATCH (:File {project_id: $pid})-[r:IMPORTS]->(:File {project_id: $pid})
+                  RETURN count(DISTINCT r) AS file_edges
+                }
+                CALL () {
+                  MATCH (:File {project_id: $pid})-[r:IMPORTS_SYMBOL]->(:Node {project_id: $pid})
+                  RETURN count(DISTINCT r) AS symbol_edges
+                }
+                RETURN facts, file_edges, symbol_edges
                 """,
                 pid=project_id,
-                op="audit_import_resolution",
+                op="audit_import_materialization",
             )
             if import_records:
-                import_total = import_records[0]["total"] or 0
-                import_resolved_internal = import_records[0]["resolved"] or 0
+                import_fact_total = import_records[0]["facts"] or 0
+                import_file_edges = import_records[0]["file_edges"] or 0
+                import_symbol_edges = import_records[0]["symbol_edges"] or 0
 
             # 3. Symbol Density Audit (Level 2)
             density_records = await _execute_read(
@@ -1610,11 +1625,10 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         )
 
     if audit:
-        import_rate = (
-            (import_resolved_internal / import_total * 100) if import_total > 0 else 0
-        )
         lines.append(
-            f"  - **Internal Import Resolution**: {import_rate:.1f}% ({import_resolved_internal}/{import_total} resolved)"
+            "  - **Import Graph Materialization**: "
+            f"facts={import_fact_total}, file_edges={import_file_edges}, "
+            f"symbol_edges={import_symbol_edges}"
         )
         lines.append(
             f"  - **Isolated Source Files**: {len(isolated_files)} detected (supporting heuristic)"
@@ -1674,11 +1688,15 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         )
 
     if audit:
-        if source_parse_rate < 80 or (
-            import_total > 0 and (import_resolved_internal / import_total) < 0.5
-        ):
+        if source_parse_rate < 80:
             recommendations.append(
                 f"- ⚠️ **Strongly Recommended**: Run `index_workspace(workspace_id='{workspace_id}', mode='rebuild')` or investigate parser/grammar compatibility."
+            )
+        if import_fact_total > 0 and import_file_edges == 0 and import_symbol_edges == 0:
+            recommendations.append(
+                "- Import facts were extracted but no internal import links were materialized. "
+                "Investigate language-specific import resolution before relying on related-file, "
+                "dependency, or flow tools."
             )
         elif suspicious_files:
             recommendations.append(

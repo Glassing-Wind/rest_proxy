@@ -140,6 +140,26 @@ class IndexCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         jobs.load_job_record.assert_not_called()
 
+    def test_does_not_wait_for_unrelated_capacity_blocking_job(self):
+        indexing, jobs = self._modules(
+            started=(
+                "Another indexing job is already running.\n"
+                "  job_id: other-project-job\n"
+                "  project: /tmp/other"
+            ),
+            jobs=[{"status": "running"}],
+        )
+        with mock.patch.dict(
+            sys.modules,
+            {"tools.hands.indexing": indexing, "_jobs": jobs},
+        ):
+            exit_code = asyncio.run(
+                run_index_workspace_cli("/tmp/repo", emit=lambda value: None)
+            )
+
+        self.assertEqual(exit_code, 1)
+        jobs.load_job_record.assert_not_called()
+
     def test_rejects_relative_project_path_before_starting(self):
         indexing, jobs = self._modules(started="job_id: should-not-run", jobs=[])
         with mock.patch.dict(

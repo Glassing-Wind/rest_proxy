@@ -22,6 +22,9 @@ gaps that still matter for enterprise hardening.
   the requested latest SDK version, preserving the backward-compatible header path.
 - Automated protocol lifecycle checks run in both the CI gate and the standard
   retrieval-quality trust gate.
+- The STDIO lifecycle smoke holds a session past delayed startup work, lists
+  tools, and executes a tool call; the server does not write JSON-RPC frames
+  outside the SDK transport.
 - Watcher activation is manual by default via `watch_project` /
   `unwatch_project`, which avoids incorrect workspace inference from transport
   sessions alone.
@@ -42,6 +45,8 @@ gaps that still matter for enterprise hardening.
 ## Operational Guidance
 
 - Use `scripts/check_mcp_protocol.py` against the local daemon after transport
+  changes.
+- Use `scripts/check_mcp_stdio_lifecycle.py` after STDIO startup or lifecycle
   changes.
 - For shared HTTP clients, treat workspace watching as an explicit operator
   action: pass a path to `watch_project(path)` or call `watch_project()` to

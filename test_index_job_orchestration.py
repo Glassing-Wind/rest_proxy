@@ -312,6 +312,53 @@ class IndexJobOrchestrationTests(unittest.TestCase):
                 )
                 self.assertTrue(claimed)
 
+    def test_dead_owner_does_not_hold_recent_running_capacity_lock(self):
+        module = load_jobs_module(FakeDriver(FakeTx()))
+        with tempfile.TemporaryDirectory() as tmp:
+            module._PROJECT_LOCKS_DIR = Path(tmp)
+            lock_path = module._project_lock_path(module._GLOBAL_INDEX_LOCK_ID)
+            lock_path.write_text(
+                '{"job_id":"dead-job","project_id":"old","pid":99999999,'
+                '"created_at":9999999999}',
+                encoding="utf-8",
+            )
+            with module._JOBS_LOCK:
+                module._JOBS["dead-job"] = {
+                    "status": "running",
+                    "project_id": "old",
+                    "struct_pid": None,
+                    "sem_pid": None,
+                }
+            with mock.patch.dict(
+                os.environ, {"LM_PROXY_MAX_CONCURRENT_INDEX_JOBS": "1"}
+            ):
+                claimed, blocking = module.claim_index_capacity_lock(
+                    "new-job", project_id="new", project_path="/tmp/new"
+                )
+
+            self.assertTrue(claimed)
+            self.assertIsNone(blocking)
+
+    def test_dead_owner_orphan_lock_is_reclaimed_without_job_record(self):
+        module = load_jobs_module(FakeDriver(FakeTx()))
+        with tempfile.TemporaryDirectory() as tmp:
+            module._PROJECT_LOCKS_DIR = Path(tmp)
+            lock_path = module._project_lock_path(module._GLOBAL_INDEX_LOCK_ID)
+            lock_path.write_text(
+                '{"job_id":"missing-job","project_id":"old","pid":99999999,'
+                '"created_at":9999999999}',
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                os.environ, {"LM_PROXY_MAX_CONCURRENT_INDEX_JOBS": "1"}
+            ):
+                claimed, blocking = module.claim_index_capacity_lock(
+                    "new-job", project_id="new", project_path="/tmp/new"
+                )
+
+            self.assertTrue(claimed)
+            self.assertIsNone(blocking)
+
     def test_post_index_maintenance_handles_same_running_loop(self):
         tx = FakeTx()
         module = load_jobs_module(FakeDriver(tx))

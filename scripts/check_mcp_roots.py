@@ -45,6 +45,12 @@ async def _run() -> None:
                 initialize_result = await session.initialize()
                 assert initialize_result.protocolVersion == LATEST_PROTOCOL_VERSION, initialize_result
 
+                # Keep the session open past startup. This catches delayed tasks
+                # that write outside the SDK transport or fail after initialize.
+                await asyncio.sleep(1.1)
+                tools_result = await session.list_tools()
+                assert tools_result.tools, "server returned no tools after startup"
+
                 watch_result = await session.call_tool("watch_project", {})
                 watch_text = _tool_text(watch_result)
                 assert not watch_result.isError, watch_text
@@ -60,6 +66,7 @@ async def _run() -> None:
                 assert "Removed pinned watch for project" in unwatch_text, unwatch_text
 
     print("MCP roots integration check passed")
+    print("- session remained usable after delayed startup work")
     print(f"- client root advertised and pinned: {root_path}")
     print("- temporary root watch removed")
 

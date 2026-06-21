@@ -30,6 +30,7 @@ echo "[ci] Running GraphRAG regression suite..."
 ./scripts/check_graph_pipeline.sh
 
 echo "[ci] Running MCP protocol checks..."
+"$PYTHON_BIN" ./scripts/check_mcp_stdio_lifecycle.py
 MCP_SERVER_STARTED=0
 cleanup_mcp_server() {
   if [[ "$MCP_SERVER_STARTED" -eq 1 ]]; then

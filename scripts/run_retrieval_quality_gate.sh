@@ -16,6 +16,7 @@ cd "$ROOT_DIR"
 "$PYTHON_BIN" "$ROOT_DIR/scripts/check_brain_server_freshness.py" --restart-if-stale --quiet
 
 echo "[retrieval-quality-gate] running MCP protocol lifecycle checks..."
+"$PYTHON_BIN" "$ROOT_DIR/scripts/check_mcp_stdio_lifecycle.py"
 "$PYTHON_BIN" "$ROOT_DIR/scripts/check_mcp_protocol.py"
 "$ROOT_DIR/scripts/check_mcp_stale_session_restart.sh"
 "$PYTHON_BIN" "$ROOT_DIR/scripts/check_mcp_roots.py"

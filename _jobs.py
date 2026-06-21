@@ -367,12 +367,20 @@ def claim_index_capacity_lock(
             )
             existing_job = load_job_record(existing_job_id) if existing_job_id else None
             terminal_job = False
+            lock_owner_pid = (
+                (existing or {}).get("pid") if isinstance(existing, dict) else None
+            )
+            abandoned_job = bool(
+                lock_owner_pid and not _process_alive(lock_owner_pid)
+            )
             if existing_job_id and existing_job:
-                alive = _job_processes_alive(existing_job)
+                owner_alive = _process_alive(lock_owner_pid)
+                alive = owner_alive or _job_processes_alive(existing_job)
                 status = str(existing_job.get("status") or "").lower()
-                if alive or status in {"running", "cancelling"}:
+                if alive and status in {"running", "cancelling"}:
                     return False, existing_job
                 terminal_job = status in {"done", "failed", "cancelled"}
+                abandoned_job = not alive
             created_at = (
                 float((existing or {}).get("created_at") or 0.0)
                 if isinstance(existing, dict)
@@ -380,6 +388,7 @@ def claim_index_capacity_lock(
             )
             if (
                 not terminal_job
+                and not abandoned_job
                 and created_at
                 and (time.time() - created_at) < _PROJECT_LOCK_STALE_S
             ):
@@ -427,15 +436,23 @@ def claim_project_job_lock(
             existing_job_id = str(existing.get("job_id") or "").strip()
             existing_job = load_job_record(existing_job_id) if existing_job_id else None
             terminal_job = False
+            lock_owner_pid = existing.get("pid")
+            abandoned_job = bool(
+                lock_owner_pid and not _process_alive(lock_owner_pid)
+            )
             if existing_job_id and existing_job:
-                alive = _job_processes_alive(existing_job)
+                alive = _process_alive(lock_owner_pid) or _job_processes_alive(
+                    existing_job
+                )
                 status = str(existing_job.get("status") or "").lower()
-                if alive or status in {"running", "cancelling"}:
+                if alive and status in {"running", "cancelling"}:
                     return False, existing_job
                 terminal_job = status in {"done", "failed", "cancelled"}
+                abandoned_job = not alive
             created_at = float(existing.get("created_at") or 0.0)
             if (
                 not terminal_job
+                and not abandoned_job
                 and created_at
                 and (time.time() - created_at) < _PROJECT_LOCK_STALE_S
             ):

@@ -146,6 +146,13 @@ Current remaining goals:
 - keep live goldens and enterprise artifacts aligned with honest behavior when
   tools become more precise or less overconfident
 
+Latest workflow finding closed:
+
+- `get_indexing_health(audit=True)` now measures the active import graph
+  contract (`IMPORTS` and `IMPORTS_SYMBOL`) instead of the retired
+  `RESOLVES_TO` relation, and STDIO startup no longer injects raw JSON-RPC
+  notifications beside the SDK transport writer
+
 Current likely targets:
 
 - residual path-only compatibility logic in small helper/admin/debug surfaces

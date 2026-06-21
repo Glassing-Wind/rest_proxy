@@ -43,6 +43,8 @@ async def run_index_workspace_cli(
 
     started = await index_workspace(project_path)
     emit(started)
+    if "Another indexing job is already running." in started:
+        return 1
     match = _JOB_ID_RE.search(started)
     if not match or match.group(1).lower() == "unknown":
         return 1

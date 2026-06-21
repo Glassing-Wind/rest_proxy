@@ -20,8 +20,7 @@ sys.stdout = sys.stderr
 def _compute_tool_fingerprint() -> str:
     """Return a short hash of the registered tool names and source files.
 
-    Used to detect whether a tool_list_changed broadcast from another agent
-    actually represents a different tool set from the one we booted with.
+    Used to identify the exact tool set exposed by this server process.
     """
     fingerprint, _ = compute_tool_fingerprint(mcp)
     return fingerprint
@@ -50,28 +49,6 @@ async def main() -> None:
     try:
         # Restore stdout for the actual MCP communication
         sys.stdout = _REAL_STDOUT
-        
-        # Signal the client to reload tools after startup.
-        async def _notify_client_on_start() -> None:
-            await asyncio.sleep(1.0)
-
-            # 1. Notify our own IDE immediately via the JSON-RPC pipe.
-            msg = {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
-            print(json.dumps(msg), flush=True)
-
-            tool_count = 0
-            try:
-                tool_count = len(list(mcp._tool_manager.list_tools()))
-            except Exception:
-                pass
-            print(
-                f"[lm-proxy] Sent tool_list_changed to IDE. "
-                f"tools={tool_count} fingerprint={BOOT_FINGERPRINT}",
-                file=sys.stderr,
-            )
-
-        asyncio.create_task(_notify_client_on_start())
-
         await mcp.run_stdio_async()
     finally:
         await _idx.stop_watcher()

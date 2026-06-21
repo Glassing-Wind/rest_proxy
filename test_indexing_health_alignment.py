@@ -604,8 +604,8 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
                         "semantic_index_status": "done",
                     }
                 ]
-            if op == "audit_import_resolution":
-                return [{"total": 2, "resolved": 2}]
+            if op == "audit_import_materialization":
+                return [{"facts": 2, "file_edges": 1, "symbol_edges": 2}]
             if op == "audit_symbol_density":
                 return []
             if op == "audit_isolation":
@@ -632,11 +632,42 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             output = run_indexing_health(module, "/tmp/repo", audit=True)
 
         self.assertIn("**Isolated Source Files**: 1 detected", output)
+        self.assertIn(
+            "**Import Graph Materialization**: facts=2, file_edges=1, symbol_edges=2",
+            output,
+        )
         self.assertIn("isolated files have no structural links", output)
         self.assertIn("related-file, call-chain, and blast-radius tools may miss", output)
         self.assertIn(
             "Inspect isolated files for missing import/call extraction", output
         )
+
+    def test_audit_reports_disconnected_current_import_graph_without_rebuild_advice(self):
+        module = load_indexing_module()
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_indexing_health_files":
+                return [{"fp": "src/app.py", "ts": 2_000_000, "vts": None, "parsed": True}]
+            if op == "get_indexing_health_runs":
+                return []
+            if op == "audit_import_materialization":
+                return [{"facts": 4, "file_edges": 0, "symbol_edges": 0}]
+            if op in {"audit_symbol_density", "audit_isolation"}:
+                return []
+            return []
+
+        with (
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+            mock.patch("os.path.exists", return_value=True),
+            mock.patch("os.path.getmtime", return_value=1000.0),
+        ):
+            output = run_indexing_health(module, "/tmp/repo", audit=True)
+
+        self.assertIn("facts=4, file_edges=0, symbol_edges=0", output)
+        self.assertIn("no internal import links were materialized", output)
+        self.assertIn("Investigate language-specific import resolution", output)
+        self.assertNotIn("mode='rebuild'", output)
 
     def test_health_uses_structural_and_pg_coverage_not_timestamp_subsets(self):
         module = load_indexing_module()
