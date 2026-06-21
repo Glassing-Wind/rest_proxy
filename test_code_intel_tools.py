@@ -1989,6 +1989,79 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("architectural leverage", output)
         self.assertIn("Use this to decide where architectural leverage", output)
 
+    def test_get_code_importance_prefers_semantic_roles_over_misleading_paths(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.pagerank IS NOT NULL" in cypher:
+                self.assertIn("f.semantic_file_roles", cypher)
+                return [
+                    {
+                        "file": "src/public/assets/generated-looking.ts",
+                        "file_roles": ["service_surface"],
+                        "sym_count": 4,
+                        "sym_examples": ["dispatch"],
+                        "top_pagerank": 1.0,
+                        "score": 2.0,
+                        "betweenness": 0.0,
+                        "isolated": False,
+                    },
+                    {
+                        "file": "src/runtime.ts",
+                        "file_roles": ["generated_surface"],
+                        "sym_count": 20,
+                        "sym_examples": ["generatedClient"],
+                        "top_pagerank": 10.0,
+                        "score": 100.0,
+                        "betweenness": 0.0,
+                        "isolated": False,
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_importance"]("/tmp/app"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        recommendations = output.split("Recommended starting points:", 1)[1]
+        self.assertLess(
+            recommendations.index("src/public/assets/generated-looking.ts"),
+            recommendations.index("src/runtime.ts"),
+        )
+        self.assertIn("service boundary", recommendations)
+
+    def test_get_code_importance_reports_empty_result(self):
+        async def fake_executor(cypher, **kwargs):
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_importance"]("/tmp/empty"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No importance metrics found (ensure project is indexed).")
+
+    def test_get_code_communities_reports_empty_result(self):
+        async def fake_executor(cypher, **kwargs):
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/empty"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No communities found (ensure project is indexed).")
+
     def test_get_related_files_ignores_generic_swiftui_import_only_matches(self):
         async def fake_executor(cypher, **kwargs):
             if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:

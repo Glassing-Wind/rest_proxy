@@ -48,6 +48,7 @@ class JobStatePersistenceTests(unittest.TestCase):
                 self.assertEqual([], errors)
                 state_path = Path(tmpdir) / job_id / "state.json"
                 payload = json.loads(state_path.read_text(encoding="utf-8"))
+                self.assertEqual(job_id, payload["job_id"])
                 self.assertEqual("running", payload["status"])
                 self.assertEqual([], list(state_path.parent.glob("state.json.tmp.*")))
             finally:
@@ -55,6 +56,27 @@ class JobStatePersistenceTests(unittest.TestCase):
                 with _jobs._JOBS_LOCK:
                     _jobs._JOBS.clear()
                     _jobs._JOBS.update(original_jobs)
+
+    def test_load_persisted_job_backfills_job_id_for_legacy_state(self):
+        job_id = "legacyjob"
+        original_runtime_dir = _jobs._RUNTIME_JOBS_DIR
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                _jobs._RUNTIME_JOBS_DIR = Path(tmpdir)
+                state_path = Path(tmpdir) / job_id / "state.json"
+                state_path.parent.mkdir(parents=True)
+                state_path.write_text(
+                    json.dumps({"status": "running", "project_id": "proj123"}),
+                    encoding="utf-8",
+                )
+
+                payload = _jobs._load_persisted_job(job_id)
+
+                self.assertIsNotNone(payload)
+                assert payload is not None
+                self.assertEqual(job_id, payload["job_id"])
+            finally:
+                _jobs._RUNTIME_JOBS_DIR = original_runtime_dir
 
     def test_persist_job_state_handles_cancel_finalize_interleaving(self):
         job_id = "racejob2"

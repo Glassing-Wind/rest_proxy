@@ -70,7 +70,8 @@ These are still worth improving because they do not yet feel like obvious defaul
     summary, dominant concerns, and omitted-tail accounting, but remains behind
     `get_project_overview` for normal first-stop onboarding.
 - `get_code_importance`
-  - Useful ranking signal, but still closer to analysis support than a default user-facing tool.
+  - Useful secondary ranking signal with role-aware recommendations, but remains
+    behind `get_project_overview` for normal onboarding.
 - `find_definitions`
   - Good fallback, but for real work `get_symbol_context`, `list_symbol_matches`, and `search_codebase` are usually better.
 - `query_graph`
@@ -107,9 +108,9 @@ We still have several tools that partially overlap:
 - `get_code_importance`
 - `get_code_communities`
 
-The first two are the best user-facing surfaces. `get_code_communities` is now
-more decision-oriented for large or clustered repos, while `get_code_importance`
-still reads more like analysis support than a default onboarding surface.
+The first two are the best user-facing surfaces. `get_code_communities` and
+`get_code_importance` are decision-oriented secondary tools for clustered repos
+and blast-radius triage, respectively, rather than default onboarding surfaces.
 
 One concrete drift we found: `get_topology_summary` had been discussed in docs
 like a user-facing tool, but it is currently an internal helper path rather than

@@ -204,6 +204,7 @@ def _persist_job_state(job_id: str) -> None:
         if not job:
             return
         payload = _job_runtime_fields(job)
+        payload["job_id"] = job_id
     state_path = _job_state_path(job_id)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = state_path.with_name(
@@ -220,7 +221,10 @@ def _load_persisted_job(job_id: str) -> dict[str, Any] | None:
     if not state_path.exists():
         return None
     try:
-        return json.loads(state_path.read_text(encoding="utf-8"))
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            payload.setdefault("job_id", job_id)
+        return payload
     except Exception:
         return None
 

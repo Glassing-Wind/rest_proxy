@@ -475,7 +475,14 @@ def register(mcp: FastMCP) -> None:
                 fallback = line[:120]
         return fallback
 
-    def _importance_penalty(file_path: str | None) -> float:
+    def _importance_penalty(file_path: str | None, raw_roles=None) -> float:
+        roles = _normalize_file_roles(raw_roles)
+        if {"generated_surface", "binding_surface"} & roles:
+            return 0.08
+        if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+            return 0.24
+        if _file_roles_present(raw_roles):
+            return 1.0
         norm = (file_path or "").replace("\\", "/").lower()
         if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
             return 0.08
@@ -500,7 +507,21 @@ def register(mcp: FastMCP) -> None:
             return 0.35
         return 1.0
 
-    def _backend_bridge_boost(file_path: str | None) -> float:
+    def _backend_bridge_boost(file_path: str | None, raw_roles=None) -> float:
+        roles = _normalize_file_roles(raw_roles)
+        if {
+            "api_surface",
+            "controller_surface",
+            "request_handler_surface",
+            "route_definition_surface",
+            "service_surface",
+            "repository_surface",
+        } & roles:
+            return 1.9
+        if {"config_surface", "validator_surface"} & roles:
+            return 1.12
+        if _file_roles_present(raw_roles):
+            return 1.0
         norm = (file_path or "").replace("\\", "/").lower()
         if any(
             token in norm
@@ -521,7 +542,11 @@ def register(mcp: FastMCP) -> None:
         file_path = record.get("file")
         score = float(record.get("score") or 0.0)
         bridge = float(record.get("betweenness") or 0.0)
-        adjusted = ((score ** 0.7) + (bridge * 0.6)) * _importance_penalty(file_path) * _backend_bridge_boost(file_path)
+        adjusted = (
+            ((score ** 0.7) + (bridge * 0.6))
+            * _importance_penalty(file_path, record.get("file_roles"))
+            * _backend_bridge_boost(file_path, record.get("file_roles"))
+        )
         return adjusted
 
     def _cluster_kind(top_files: list[str]) -> tuple[str, float]:
@@ -597,6 +622,13 @@ def register(mcp: FastMCP) -> None:
 
     def _importance_focus_reason(record: dict) -> str:
         parts: list[str] = []
+        roles = _normalize_file_roles(record.get("file_roles"))
+        if {"api_surface", "controller_surface", "request_handler_surface", "route_definition_surface"} & roles:
+            parts.append("request boundary")
+        elif "service_surface" in roles:
+            parts.append("service boundary")
+        elif "repository_surface" in roles:
+            parts.append("data boundary")
         score = float(record.get("score") or 0.0)
         betweenness = float(record.get("betweenness") or 0.0)
         sym_count = int(record.get("sym_count") or 0)
@@ -1454,10 +1486,17 @@ def register(mcp: FastMCP) -> None:
             cypher_pr = """
             MATCH (f:File {project_id: $pid})
             WHERE f.pagerank IS NOT NULL
-              AND NOT f.filepath CONTAINS 'test'
-              AND NOT f.filepath CONTAINS 'Test'
-              AND NOT f.filepath CONTAINS 'spec'
-              AND NOT f.filepath CONTAINS 'vendor'
+              AND (
+                (f.semantic_file_roles IS NOT NULL AND
+                 NONE(role IN f.semantic_file_roles WHERE role IN
+                   ['test_surface', 'example_surface', 'benchmark_surface']))
+                OR
+                (f.semantic_file_roles IS NULL
+                 AND NOT f.filepath CONTAINS 'test'
+                 AND NOT f.filepath CONTAINS 'Test'
+                 AND NOT f.filepath CONTAINS 'spec'
+                 AND NOT f.filepath CONTAINS 'vendor')
+              )
             OPTIONAL MATCH (f)-[:CONTAINS]->(s)
               WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
             WITH f, count(s) AS sym_count, collect(DISTINCT s.name)[..4] AS sym_examples
@@ -1465,28 +1504,37 @@ def register(mcp: FastMCP) -> None:
                    f.pagerank      AS top_pagerank,
                    f.pagerank_sum  AS score,
                    f.betweenness   AS betweenness,
-                   coalesce(f.isolated, false) AS isolated
+                   coalesce(f.isolated, false) AS isolated,
+                   f.semantic_file_roles AS file_roles
             ORDER BY score DESC LIMIT 50
             """
 
             # Fallback query: heuristic for un-ranked projects
             cypher_fallback = """
             MATCH (f:File {project_id: $pid})
-            WHERE NOT f.filepath CONTAINS 'test'
-              AND NOT f.filepath CONTAINS 'Test'
-              AND NOT f.filepath CONTAINS 'spec'
-              AND NOT f.filepath CONTAINS 'vendor'
+            WHERE (
+              (f.semantic_file_roles IS NOT NULL AND
+               NONE(role IN f.semantic_file_roles WHERE role IN
+                 ['test_surface', 'example_surface', 'benchmark_surface']))
+              OR
+              (f.semantic_file_roles IS NULL
+               AND NOT f.filepath CONTAINS 'test'
+               AND NOT f.filepath CONTAINS 'Test'
+               AND NOT f.filepath CONTAINS 'spec'
+               AND NOT f.filepath CONTAINS 'vendor')
+            )
             OPTIONAL MATCH (f)-[:CONTAINS]->(s)
               WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
             WITH f, count(s) AS sym_count, collect(DISTINCT s.name)[..4] AS sym_examples
             OPTIONAL MATCH (caller:File {project_id: $pid})-[:CALLS|CALLS_INFERRED]->(cs)<-[:CONTAINS]-(f)
               WHERE caller <> f
             WITH f, sym_count, sym_examples, count(DISTINCT caller) AS callers_in
-            WITH f.filepath AS file, sym_count, sym_examples,
+            WITH f.filepath AS file, f.semantic_file_roles AS file_roles,
+                 sym_count, sym_examples,
                  callers_in * 3 + sym_count AS score, NULL AS top_pagerank
             WHERE score > 0
             ORDER BY score DESC LIMIT 50
-            RETURN file, sym_count, sym_examples, top_pagerank, score
+            RETURN file, file_roles, sym_count, sym_examples, top_pagerank, score
             """
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
@@ -1585,7 +1633,7 @@ def register(mcp: FastMCP) -> None:
                     output.append("")
                 for row in rendered_rows:
                     output.append(f"- {row['line']}")
-            if len(output) == 1:
+            if not rendered_rows:
                 return "No importance metrics found (ensure project is indexed)."
             return "\n".join(output)
         except Exception as e:
@@ -1787,7 +1835,7 @@ def register(mcp: FastMCP) -> None:
                 output.append(
                     f"Suppressed {total_suppressed_small} small long-tail cluster(s) to keep the view decision-oriented."
                 )
-            if len(output) == 1:
+            if not records:
                 return "No communities found (ensure project is indexed)."
             return "\n".join(output)
         except Exception as e:
