@@ -42,6 +42,8 @@ What is in good shape now:
 - stale semantic indexes are no longer silently tolerated:
   - current semantic-contract coverage is required for healthy code retrieval
   - the validated benchmark repos have been refreshed onto the current contract
+  - incremental indexing refreshes stale metadata for unchanged chunks without
+    re-embedding their content
 - semantic file-role metadata is now a real cross-layer contract:
   - `ts-pack` emits durable `file_roles` and focused dispatcher/routing facts
   - semantic ingest promotes those roles onto graph `File` nodes
@@ -118,7 +120,8 @@ too weak.
 Current remaining goals:
 
 - keep shrinking the remaining legacy-only path fallback pockets in smaller
-  helper/debug surfaces
+  helper/debug surfaces; architecture importance and community ranking now use
+  semantic file roles first and reserve path classification for legacy records
 - continue MCP-only workflow passes across real repos and log the next actual
   trust hesitation instead of preemptive churn
 - add deeper metadata only for the next proven weak family, rather than adding
@@ -131,8 +134,6 @@ Current likely targets:
 - residual path-only compatibility logic in small helper/admin/debug surfaces
 - the next lower-level routing/handler metadata pass if live usage still finds
   repo families where controller/route surfaces are under-described
-- explicit migration/reporting UX for semantic-contract upgrades, if stale
-  index enforcement becomes painful operationally
 - additional workflow cases only when they protect a current trust boundary
 
 ## What Is Not Worth Doing Blindly

@@ -15,6 +15,8 @@ from typing import Dict, Any
 from contextvars import ContextVar
 from pathlib import Path
 
+from _semantic_contract import SEMANTIC_CONTRACT_VERSION
+
 # Context for session-scoped operations in multi-client Brain server
 client_session_id: ContextVar[str | None] = ContextVar(
     "client_session_id", default=None
@@ -79,9 +81,14 @@ async def _promote_semantic_file_roles_async(project_id: str) -> dict[str, int]:
               END
             ) AS role ON TRUE
             WHERE project_id = $1
+              AND coalesce(
+                    (metadata->>'semantic_contract_version')::int,
+                    0
+                  ) = $2
             GROUP BY file_path
             """,
             project_id,
+            SEMANTIC_CONTRACT_VERSION,
         )
     finally:
         await conn.close()
@@ -107,11 +114,13 @@ async def _promote_semantic_file_roles_async(project_id: str) -> dict[str, int]:
             """
             UNWIND $batch AS item
             MATCH (f:File {project_id:$pid, filepath:item.filepath})
-            SET f.semantic_file_roles = item.roles
+            SET f.semantic_file_roles = item.roles,
+                f.semantic_contract_version = $semantic_contract_version
             RETURN count(f) AS matched
             """,
             pid=project_id,
             batch=batch,
+            semantic_contract_version=SEMANTIC_CONTRACT_VERSION,
         )
         record = await result.single()
     return {
@@ -752,7 +761,11 @@ def _run_post_index_maintenance(job_id: str) -> None:
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
         if not job:
-            return
+            persisted = _load_persisted_job(job_id)
+            if not persisted:
+                return
+            _JOBS[job_id] = dict(persisted)
+            job = _JOBS[job_id]
         pending_started_at = job.get("post_index_maintenance_pending")
         if job.get("post_index_maintenance_done"):
             return

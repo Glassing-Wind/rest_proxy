@@ -13,6 +13,19 @@ _JOB_ID_RE = re.compile(r"job_id:\s*([A-Za-z0-9_-]+)")
 _TERMINAL_STATUSES = {"done", "failed", "cancelled"}
 
 
+def _post_index_maintenance_complete(job: dict | None) -> bool:
+    if not isinstance(job, dict) or "struct_rc" not in job:
+        return True
+    if job.get("struct_rc") != 0 or job.get("sem_rc") != 0:
+        return True
+    if str(job.get("project_path") or "").startswith("docs://"):
+        return True
+    return bool(
+        job.get("post_index_maintenance_done")
+        or job.get("post_index_maintenance_error")
+    )
+
+
 async def run_index_workspace_cli(
     project_path: str,
     *,
@@ -46,9 +59,14 @@ async def run_index_workspace_cli(
     while True:
         job = load_job_record(job_id)
         status = str((job or {}).get("status") or "").lower()
-        if status in _TERMINAL_STATUSES:
+        if status in _TERMINAL_STATUSES and _post_index_maintenance_complete(job):
             emit(await get_index_status(job_id))
-            return 0 if status == "done" else 1
+            return (
+                0
+                if status == "done"
+                and not (job or {}).get("post_index_maintenance_error")
+                else 1
+            )
         if time.monotonic() >= deadline:
             emit(
                 f"Indexing CLI wait timed out for job {job_id}. "

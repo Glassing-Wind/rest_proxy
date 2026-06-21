@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 import tempfile
@@ -537,6 +538,77 @@ class FakePool:
 
 
 class IndexWorkspaceTests(unittest.TestCase):
+    def test_refresh_semantic_chunk_metadata_updates_stale_rows_without_embeddings(self):
+        class FakeCursor:
+            def __init__(self):
+                self.calls = []
+                self.rowcount = 0
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                payload = json.loads(params[0])
+                self.calls.append((query, params, payload))
+                self.rowcount = len(payload)
+
+            async def fetchall(self):
+                return [(f"chunk-{index}",) for index in range(self.rowcount)]
+
+        class FakeConnection:
+            def __init__(self):
+                self.cursor_instance = FakeCursor()
+
+            def cursor(self):
+                return self.cursor_instance
+
+        conn = FakeConnection()
+        chunks = [
+            [
+                {
+                    "ref_id": "proj:v6:a.py:1",
+                    "metadata": {
+                        "file_roles": ["test_surface"],
+                        "semantic_contract_version": self.module.SEMANTIC_CONTRACT_VERSION,
+                    },
+                },
+                {
+                    "ref_id": "proj:v6:b.py:1",
+                    "metadata": {
+                        "file_roles": ["service_surface"],
+                        "semantic_contract_version": self.module.SEMANTIC_CONTRACT_VERSION,
+                    },
+                },
+            ],
+            [
+                {
+                    "ref_id": "proj:v6:c.py:1",
+                    "metadata": {
+                        "file_roles": [],
+                        "semantic_contract_version": self.module.SEMANTIC_CONTRACT_VERSION,
+                    },
+                }
+            ],
+        ]
+
+        refreshed = asyncio.run(
+            self.module._refresh_semantic_chunk_metadata(
+                conn, "proj", chunks, batch_size=2
+            )
+        )
+
+        self.assertEqual(refreshed, 3)
+        self.assertEqual(len(conn.cursor_instance.calls), 2)
+        first_query, first_params, first_payload = conn.cursor_instance.calls[0]
+        self.assertIn("UPDATE codebase_embeddings", first_query)
+        self.assertIn("RETURNING existing.chunk_id", first_query)
+        self.assertEqual(first_params[1], "proj")
+        self.assertEqual(len(first_params), 2)
+        self.assertEqual(first_payload[0]["metadata"]["file_roles"], ["test_surface"])
+
     def setUp(self):
         self.module = load_index_workspace_module()
         self.module._TS_PACK_INIT_DONE = True

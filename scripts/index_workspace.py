@@ -796,6 +796,54 @@ async def _promote_semantic_file_roles_to_graph(
         driver.close()
 
 
+async def _refresh_semantic_chunk_metadata(
+    conn,
+    project_id: str,
+    all_chunks: List[List[Dict]],
+    *,
+    batch_size: int = 1000,
+) -> int:
+    """Refresh stale chunk metadata without re-embedding unchanged content."""
+    payload_by_id: dict[str, dict] = {}
+    for file_chunks in all_chunks:
+        for chunk in file_chunks:
+            chunk_id = str(chunk.get("ref_id") or chunk.get("chunk_id") or "").strip()
+            metadata = chunk.get("metadata")
+            if not chunk_id or not isinstance(metadata, dict):
+                continue
+            payload_by_id[chunk_id] = metadata
+    if not payload_by_id or not hasattr(conn, "cursor"):
+        return 0
+
+    items = list(payload_by_id.items())
+    refreshed = 0
+    query = """
+        UPDATE codebase_embeddings AS existing
+        SET metadata = payload.metadata
+        FROM jsonb_to_recordset(%s::jsonb)
+             AS payload(chunk_id text, metadata jsonb)
+        WHERE existing.project_id = %s
+          AND existing.chunk_id = payload.chunk_id
+          AND existing.metadata IS DISTINCT FROM payload.metadata
+        RETURNING existing.chunk_id
+    """
+    async with conn.cursor() as cur:
+        for start in range(0, len(items), max(1, batch_size)):
+            batch = [
+                {"chunk_id": chunk_id, "metadata": metadata}
+                for chunk_id, metadata in items[start : start + max(1, batch_size)]
+            ]
+            await cur.execute(
+                query,
+                (
+                    json.dumps(batch, ensure_ascii=False, sort_keys=True),
+                    project_id,
+                ),
+            )
+            refreshed += len(await cur.fetchall())
+    return refreshed
+
+
 async def index_project(
     target_dir: str,
     project_id: str,
@@ -1047,6 +1095,17 @@ async def index_project(
                     embed_batch_fn=_embed,
                     write_batch_fn=_write,
                     progress_fn=_progress,
+                )
+            metadata_refreshed = await _refresh_semantic_chunk_metadata(
+                conn, project_id, all_chunks
+            )
+            if metadata_refreshed:
+                print(
+                    "[lm-proxy:indexer] Refreshed semantic metadata for "
+                    f"{metadata_refreshed} unchanged chunk(s) to contract "
+                    f"v{SEMANTIC_CONTRACT_VERSION}",
+                    file=sys.stderr,
+                    flush=True,
                 )
     except Exception as exc:
         driver_error = str(exc)

@@ -937,6 +937,15 @@ async def get_index_status(job_id: str) -> str:
             f"{last_build.get('elapsed_ms')}ms "
             f"(project={last_build.get('project_path')})"
         )
+    if job.get("post_index_maintenance_error"):
+        lines.append(
+            "  maintenance: FAILED ("
+            f"{job['post_index_maintenance_error']})"
+        )
+    elif job.get("post_index_maintenance_done"):
+        lines.append("  maintenance: complete")
+    elif job.get("status") == "done" and struct_rc == 0:
+        lines.append("  maintenance: finalizing")
     if finished:
         lines.append(f"  finished:   {(finished - job['started_at']):.1f}s total")
         parse_summary = None

@@ -53,6 +53,63 @@ class IndexCliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
 
+    def test_waits_for_post_index_maintenance_after_children_finish(self):
+        indexing, jobs = self._modules(
+            started="job_id: maintained1",
+            jobs=[
+                {
+                    "status": "done",
+                    "struct_rc": 0,
+                    "sem_rc": 0,
+                    "project_path": "/tmp/repo",
+                },
+                {
+                    "status": "done",
+                    "struct_rc": 0,
+                    "sem_rc": 0,
+                    "project_path": "/tmp/repo",
+                    "post_index_maintenance_done": 200.0,
+                },
+            ],
+            final_status="Job maintained1: DONE",
+        )
+        with mock.patch.dict(
+            sys.modules,
+            {"tools.hands.indexing": indexing, "_jobs": jobs},
+        ):
+            exit_code = asyncio.run(
+                run_index_workspace_cli(
+                    "/tmp/repo", emit=lambda value: None, poll_interval=0.01
+                )
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(jobs.load_job_record.call_count, 2)
+
+    def test_returns_failure_for_post_index_maintenance_error(self):
+        indexing, jobs = self._modules(
+            started="job_id: maintenance-failed",
+            jobs=[
+                {
+                    "status": "done",
+                    "struct_rc": 0,
+                    "sem_rc": 0,
+                    "project_path": "/tmp/repo",
+                    "post_index_maintenance_error": "role promotion failed",
+                }
+            ],
+            final_status="Job maintenance-failed: DONE\n  maintenance: FAILED",
+        )
+        with mock.patch.dict(
+            sys.modules,
+            {"tools.hands.indexing": indexing, "_jobs": jobs},
+        ):
+            exit_code = asyncio.run(
+                run_index_workspace_cli("/tmp/repo", emit=lambda value: None)
+            )
+
+        self.assertEqual(exit_code, 1)
+
     def test_returns_failure_when_start_does_not_return_job_id(self):
         indexing, jobs = self._modules(
             started="Error: workspace does not exist", jobs=[]

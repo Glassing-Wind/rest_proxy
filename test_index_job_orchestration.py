@@ -508,6 +508,43 @@ class IndexJobOrchestrationTests(unittest.TestCase):
             self.assertIsNotNone(job.get("post_index_maintenance_done"))
             self.assertIsNone(job.get("post_index_maintenance_pending"))
 
+    def test_post_index_maintenance_resumes_terminal_persisted_job(self):
+        module = load_jobs_module(FakeDriver(FakeTx()))
+        persisted = {
+            "status": "done",
+            "project_path": "/tmp/repo",
+            "project_id": "proj123",
+            "struct_rc": 0,
+            "sem_rc": 0,
+            "logs": [],
+            "started_at": 100.0,
+            "finished_at": 200.0,
+            "cancel_requested": False,
+        }
+        with module._JOBS_LOCK:
+            module._JOBS.clear()
+
+        def run_and_close(coro, **kwargs):
+            return asyncio.run(coro)
+
+        with (
+            mock.patch.object(
+                module, "_load_persisted_job", return_value=persisted
+            ),
+            mock.patch.object(
+                module, "_run_coro_blocking", side_effect=run_and_close
+            ),
+            mock.patch.object(module, "_persist_job_state"),
+        ):
+            module._run_post_index_maintenance("persisted-job")
+
+        with module._JOBS_LOCK:
+            job = module._JOBS["persisted-job"]
+            self.assertIsNotNone(job.get("post_index_maintenance_done"))
+            self.assertEqual(
+                job["run_summary"]["semantic_active_struct_run_id"], "struct-1"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

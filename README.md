@@ -300,6 +300,8 @@ gate answers "would I trust the tools right now?"; enterprise eval answers
 Current baseline:
 
 - the validated benchmark corpus is on the current semantic contract
+- semantic-contract upgrades refresh unchanged chunk metadata in place during
+  incremental indexing, without recomputing embeddings
 - dispatcher and routing telemetry summaries are current-first
 - primary retrieval/orientation paths are semantic-role-first, with legacy path
   fallback mostly limited to older metadata shapes and smaller helper surfaces

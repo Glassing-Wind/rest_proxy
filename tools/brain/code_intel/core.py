@@ -549,55 +549,151 @@ def register(mcp: FastMCP) -> None:
         )
         return adjusted
 
-    def _cluster_kind(top_files: list[str]) -> tuple[str, float]:
+    def _cluster_kind(
+        top_files: list[str], top_file_roles: list[object] | None = None
+    ) -> tuple[str, float]:
         files = [str(fp).replace("\\", "/").lower() for fp in (top_files or [])]
         if not files:
             return "misc", 1.0
-        generated_count = sum(
-            any(
-                token in fp
-                for token in ("/gen/", "gen/", ".gen.ts", ".generated.ts", "_generated.swift", "pregeneratedspm/")
-            )
-            for fp in files
-        )
-        public_count = sum("/public/" in fp or fp.startswith("src/public/") for fp in files)
-        ui_count = sum(
-            any(
-                token in fp
-                for token in (
-                    "/packages/ui/",
-                    "packages/ui/",
-                    "/packages/app/",
-                    "packages/app/",
-                    "/src/components/",
-                    "src/components/",
-                    "/src/context/",
-                    "src/context/",
+        roles_by_file = list(top_file_roles or [])
+
+        def roles_at(index: int) -> set[str] | None:
+            if index >= len(roles_by_file):
+                return None
+            raw_roles = roles_by_file[index]
+            if not _file_roles_present(raw_roles):
+                return None
+            return _normalize_file_roles(raw_roles)
+
+        generated_count = 0
+        public_count = 0
+        ui_count = 0
+        cli_count = 0
+        web_count = 0
+        sdk_count = 0
+        api_count = 0
+        service_count = 0
+        db_count = 0
+        for index, fp in enumerate(files):
+            roles = roles_at(index)
+            if roles is not None:
+                generated_count += int(bool({"generated_surface", "binding_surface"} & roles))
+                public_count += int(
+                    "support_surface" in roles
+                    and ("/public/" in fp or fp.startswith("src/public/"))
+                )
+                ui_count += int("view_surface" in roles)
+                cli_count += int("command_surface" in roles)
+                web_count += int(
+                    "view_surface" in roles
+                    and any(
+                        token in fp
+                        for token in (
+                            "/packages/web/",
+                            "packages/web/",
+                            "/web/src/",
+                            "web/src/",
+                        )
+                    )
+                )
+                sdk_count += int(
+                    bool({"generated_surface", "binding_surface"} & roles)
+                    and any(
+                        token in fp
+                        for token in (
+                            "/packages/sdk/",
+                            "packages/sdk/",
+                            "/sdk/js/",
+                            "sdk/js/",
+                        )
+                    )
+                )
+                api_count += int(
+                    bool(
+                        {
+                            "api_surface",
+                            "controller_surface",
+                            "request_handler_surface",
+                            "route_definition_surface",
+                        }
+                        & roles
+                    )
+                )
+                service_count += int("service_surface" in roles)
+                db_count += int("repository_surface" in roles)
+                continue
+            generated_count += int(
+                any(
+                    token in fp
+                    for token in (
+                        "/gen/",
+                        "gen/",
+                        ".gen.ts",
+                        ".generated.ts",
+                        "_generated.swift",
+                        "pregeneratedspm/",
+                    )
                 )
             )
-            for fp in files
-        )
-        web_count = sum(
-            any(token in fp for token in ("/packages/web/", "packages/web/", "/web/src/", "web/src/"))
-            for fp in files
-        )
-        cli_count = sum(
-            any(token in fp for token in ("/cli/", "cli/", "/packages/opencode/src/", "packages/opencode/src/"))
-            for fp in files
-        )
-        sdk_count = sum(
-            any(token in fp for token in ("/packages/sdk/", "packages/sdk/", "/sdk/js/", "sdk/js/"))
-            for fp in files
-        )
-        api_count = sum("/src/api/" in fp or fp.startswith("src/api/") for fp in files)
-        service_count = sum("/src/services/" in fp or fp.startswith("src/services/") for fp in files)
-        db_count = sum(
-            "/src/db/" in fp
-            or fp.startswith("src/db/")
-            or "prisma/schema.prisma" in fp
-            or "/prisma/" in fp
-            for fp in files
-        )
+            public_count += int("/public/" in fp or fp.startswith("src/public/"))
+            ui_count += int(
+                any(
+                    token in fp
+                    for token in (
+                        "/packages/ui/",
+                        "packages/ui/",
+                        "/packages/app/",
+                        "packages/app/",
+                        "/src/components/",
+                        "src/components/",
+                        "/src/context/",
+                        "src/context/",
+                    )
+                )
+            )
+            cli_count += int(
+                any(
+                    token in fp
+                    for token in (
+                        "/cli/",
+                        "cli/",
+                        "/packages/opencode/src/",
+                        "packages/opencode/src/",
+                    )
+                )
+            )
+            web_count += int(
+                any(
+                    token in fp
+                    for token in (
+                        "/packages/web/",
+                        "packages/web/",
+                        "/web/src/",
+                        "web/src/",
+                    )
+                )
+            )
+            sdk_count += int(
+                any(
+                    token in fp
+                    for token in (
+                        "/packages/sdk/",
+                        "packages/sdk/",
+                        "/sdk/js/",
+                        "sdk/js/",
+                    )
+                )
+            )
+            api_count += int("/src/api/" in fp or fp.startswith("src/api/"))
+            service_count += int(
+                "/src/services/" in fp or fp.startswith("src/services/")
+            )
+            db_count += int(
+                "/src/db/" in fp
+                or fp.startswith("src/db/")
+                or "prisma/schema.prisma" in fp
+                or "/prisma/" in fp
+            )
         jobs_count = sum("/src/jobs/" in fp or fp.startswith("src/jobs/") for fp in files)
         total = max(len(files), 1)
         if generated_count / total >= 0.5 and sdk_count >= 1:
@@ -619,6 +715,30 @@ def register(mcp: FastMCP) -> None:
         if jobs_count >= 1:
             return "jobs/runtime", 1.25
         return "mixed", 1.0
+
+    def _hydrate_community_records(records: list[dict]) -> list[dict]:
+        hydrated: list[dict] = []
+        for raw_record in records:
+            record = dict(raw_record)
+            entries = record.get("top_file_entries")
+            if isinstance(entries, list):
+                record["top_files"] = [
+                    str(entry.get("path"))
+                    for entry in entries
+                    if isinstance(entry, dict) and entry.get("path")
+                ]
+                record["top_file_roles"] = [
+                    entry.get("roles") if isinstance(entry, dict) else None
+                    for entry in entries
+                    if isinstance(entry, dict) and entry.get("path")
+                ]
+            hydrated.append(record)
+        return hydrated
+
+    def _community_kind(record: dict) -> tuple[str, float]:
+        return _cluster_kind(
+            record.get("top_files") or [], record.get("top_file_roles")
+        )
 
     def _importance_focus_reason(record: dict) -> str:
         parts: list[str] = []
@@ -650,7 +770,7 @@ def register(mcp: FastMCP) -> None:
     def _is_small_community_tail(record: dict) -> bool:
         file_count = int(record.get("file_count") or 0)
         total_syms = int(record.get("total_syms") or 0)
-        kind_label, _ = _cluster_kind(record.get("top_files") or [])
+        kind_label, _ = _community_kind(record)
         if kind_label in {"backend/app", "cli/runtime", "sdk/runtime", "data/schema"}:
             return False
         return file_count <= 2 or total_syms <= 12
@@ -691,12 +811,12 @@ def register(mcp: FastMCP) -> None:
         top = records[0]
         top_files = top.get("top_files") or []
         top_file = str(top_files[0]) if top_files else "unknown file"
-        top_kind, _ = _cluster_kind(top_files)
+        top_kind, _ = _community_kind(top)
         total_files = sum(int(record.get("file_count") or 0) for record in records)
         total_syms = sum(int(record.get("total_syms") or 0) for record in records)
         kind_totals: dict[str, dict[str, int]] = {}
         for record in records:
-            kind, _ = _cluster_kind(record.get("top_files") or [])
+            kind, _ = _community_kind(record)
             bucket = kind_totals.setdefault(kind, {"files": 0, "symbols": 0})
             bucket["files"] += int(record.get("file_count") or 0)
             bucket["symbols"] += int(record.get("total_syms") or 0)
@@ -1489,7 +1609,8 @@ def register(mcp: FastMCP) -> None:
               AND (
                 (f.semantic_file_roles IS NOT NULL AND
                  NONE(role IN f.semantic_file_roles WHERE role IN
-                   ['test_surface', 'example_surface', 'benchmark_surface']))
+                   ['test_surface', 'example_surface', 'benchmark_surface',
+                    'docs_surface']))
                 OR
                 (f.semantic_file_roles IS NULL
                  AND NOT f.filepath CONTAINS 'test'
@@ -1515,7 +1636,8 @@ def register(mcp: FastMCP) -> None:
             WHERE (
               (f.semantic_file_roles IS NOT NULL AND
                NONE(role IN f.semantic_file_roles WHERE role IN
-                 ['test_surface', 'example_surface', 'benchmark_surface']))
+                 ['test_surface', 'example_surface', 'benchmark_surface',
+                  'docs_surface']))
               OR
               (f.semantic_file_roles IS NULL
                AND NOT f.filepath CONTAINS 'test'
@@ -1663,34 +1785,62 @@ def register(mcp: FastMCP) -> None:
             cypher_louvain = """
             MATCH (f:File {project_id: $pid})
             WHERE f.louvainCommunity IS NOT NULL
-              AND NOT f.filepath CONTAINS 'test'
-              AND NOT f.filepath CONTAINS 'vendor'
+              AND (
+                (f.semantic_file_roles IS NOT NULL AND
+                 NONE(role IN f.semantic_file_roles WHERE role IN
+                   ['test_surface', 'example_surface', 'benchmark_surface',
+                    'docs_surface']))
+                OR
+                (f.semantic_file_roles IS NULL
+                 AND NOT f.filepath CONTAINS 'test'
+                 AND NOT f.filepath CONTAINS 'vendor'
+                 AND NOT f.filepath STARTS WITH 'docs/'
+                 AND NOT f.filepath CONTAINS '/docs/')
+              )
             OPTIONAL MATCH (f)-[:CONTAINS]->(s)
             WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
             WITH f, f.louvainCommunity AS comm, count(s) AS sym_count
+            ORDER BY comm, sym_count DESC, f.filepath
             WITH comm,
-                 collect(f.filepath)[..5] AS top_files,
+                 collect({path: f.filepath, roles: f.semantic_file_roles})[..5]
+                   AS top_file_entries,
                  sum(sym_count)           AS total_syms,
                  count(f)                 AS file_count
             WHERE file_count > 0
             ORDER BY total_syms DESC
-            RETURN comm, file_count, total_syms, top_files
+            RETURN comm, file_count, total_syms, top_file_entries
             """
 
             # Fallback: directory grouping
             cypher_dir = """
             MATCH (f:File {project_id: $pid})
+            WHERE (
+              (f.semantic_file_roles IS NOT NULL AND
+               NONE(role IN f.semantic_file_roles WHERE role IN
+                 ['test_surface', 'example_surface', 'benchmark_surface',
+                  'docs_surface']))
+              OR
+              (f.semantic_file_roles IS NULL
+               AND NOT f.filepath CONTAINS 'test'
+               AND NOT f.filepath CONTAINS 'vendor'
+               AND NOT f.filepath STARTS WITH 'docs/'
+               AND NOT f.filepath CONTAINS '/docs/')
+            )
             WITH f, CASE WHEN f.filepath CONTAINS '/'
                          THEN split(f.filepath, '/')[0]
                          ELSE '(root)' END AS top_dir
             OPTIONAL MATCH (f)-[:CONTAINS]->(s)
             WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
-            WITH top_dir, f.filepath AS fp, count(s) AS sym_count
+            WITH top_dir, f.filepath AS fp, f.semantic_file_roles AS file_roles,
+                 count(s) AS sym_count
             ORDER BY top_dir, sym_count DESC
-            WITH top_dir, collect(fp)[..5] AS top_files, sum(sym_count) AS total_syms,
+            WITH top_dir, collect({path: fp, roles: file_roles})[..5]
+                   AS top_file_entries,
+                 sum(sym_count) AS total_syms,
                  count(fp) AS file_count
             ORDER BY total_syms DESC
-            RETURN NULL AS comm, top_dir AS dominant_dir, file_count, total_syms, top_files
+            RETURN NULL AS comm, top_dir AS dominant_dir, file_count, total_syms,
+                   top_file_entries
             """
 
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
@@ -1709,6 +1859,7 @@ def register(mcp: FastMCP) -> None:
                         pid=project_id,
                         op="get_code_communities_dir",
                     )
+                records = _hydrate_community_records(records)
                 cargo_rows = await _load_cargo_crate_rows(session, project_id)
 
             method = (
@@ -1724,7 +1875,7 @@ def register(mcp: FastMCP) -> None:
                 file_count = int(record.get("file_count") or 0)
                 total_syms = int(record.get("total_syms") or 0)
                 top_files = record.get("top_files") or []
-                kind_label, _ = _cluster_kind(top_files)
+                kind_label, _ = _community_kind(record)
                 if file_count <= 1 and total_syms == 0:
                     suppressed_small_records += 1
                     continue
@@ -1744,7 +1895,8 @@ def register(mcp: FastMCP) -> None:
             records = sorted(
                 filtered_records,
                 key=lambda record: (
-                    (int(record.get("total_syms") or 0) ** 0.5) * _cluster_kind(record.get("top_files") or [])[1],
+                    (int(record.get("total_syms") or 0) ** 0.5)
+                    * _community_kind(record)[1],
                     int(record.get("file_count") or 0),
                 ),
                 reverse=True,
@@ -1775,7 +1927,7 @@ def register(mcp: FastMCP) -> None:
                 output.append("Priority exploration order:")
                 for record in records[:3]:
                     cluster_name = _community_label(record, using_louvain, cargo_rows)
-                    kind_label, _ = _cluster_kind(record.get("top_files") or [])
+                    kind_label, _ = _community_kind(record)
                     top_file = (record.get("top_files") or [None])[0]
                     crate = _match_cargo_crate(top_file, cargo_rows)
                     suffix = f" [crate:{crate}]" if crate else ""
@@ -1808,7 +1960,7 @@ def register(mcp: FastMCP) -> None:
                 for record in visible_records:
                     if using_louvain:
                         comm_label = f"cluster #{record['comm']}"
-                        kind_label, _ = _cluster_kind(record.get("top_files") or [])
+                        kind_label, _ = _community_kind(record)
                         if cargo_rows:
                             dominant_crates: dict[str, int] = {}
                             for fp in record.get("top_files") or []:
@@ -1821,7 +1973,7 @@ def register(mcp: FastMCP) -> None:
                             crate_text = ""
                     else:
                         comm_label = record["dominant_dir"]
-                        kind_label, _ = _cluster_kind(record.get("top_files") or [])
+                        kind_label, _ = _community_kind(record)
                         crate_text = ""
                     output.append(
                         f"\n\U0001f4e6 {comm_label}"

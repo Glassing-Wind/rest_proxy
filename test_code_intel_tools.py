@@ -3088,6 +3088,68 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("[backend/app]", output)
         self.assertIn("[ui/public]", output)
 
+    def test_get_code_communities_uses_roles_before_misleading_paths(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.louvainCommunity IS NOT NULL" in cypher:
+                self.assertIn("f.semantic_file_roles", cypher)
+                self.assertIn("top_file_entries", cypher)
+                self.assertIn("'docs_surface'", cypher)
+                return [
+                    {
+                        "comm": 20,
+                        "file_count": 3,
+                        "total_syms": 30,
+                        "top_file_entries": [
+                            {
+                                "path": "src/public/api.ts",
+                                "roles": ["api_surface"],
+                            },
+                            {
+                                "path": "src/public/service.ts",
+                                "roles": ["service_surface"],
+                            },
+                            {
+                                "path": "src/public/store.ts",
+                                "roles": ["repository_surface"],
+                            },
+                        ],
+                    },
+                    {
+                        "comm": 21,
+                        "file_count": 3,
+                        "total_syms": 30,
+                        "top_file_entries": [
+                            {
+                                "path": "src/api/views/a.tsx",
+                                "roles": ["view_surface"],
+                            },
+                            {
+                                "path": "src/api/views/b.tsx",
+                                "roles": ["view_surface"],
+                            },
+                            {
+                                "path": "src/api/views/c.tsx",
+                                "roles": ["view_surface"],
+                            },
+                        ],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/repo"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("cluster #20 [backend/app]", output)
+        self.assertIn("cluster #21 [ui/app]", output)
+        self.assertLess(output.index("cluster #20"), output.index("cluster #21"))
+
     def test_get_code_communities_labels_monorepo_sdk_generated_and_cli_clusters(self):
         async def fake_executor(cypher, **kwargs):
             if "get_code_communities_louvain" in kwargs.get("op", "") or "f.louvainCommunity IS NOT NULL" in cypher:
