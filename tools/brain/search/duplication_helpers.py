@@ -157,6 +157,18 @@ def glob_to_like(pattern: str) -> str:
     return pattern
 
 
+def directory_include_pattern(directory_path: str | None) -> str | None:
+    """Normalize an indexed-repo directory into a recursive include glob."""
+    if directory_path is None:
+        return None
+    normalized = directory_path.strip().replace("\\", "/").strip("/")
+    if not normalized or normalized == ".":
+        return None
+    if ".." in normalized.split("/"):
+        raise ValueError("directory_path must stay within the indexed workspace")
+    return f"{normalized}/**"
+
+
 def path_allowed(
     file_path: str,
     *,

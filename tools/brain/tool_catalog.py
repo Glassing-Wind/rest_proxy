@@ -61,7 +61,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "extract_class_interface": ToolCatalogEntry(
         "support",
         "code investigation",
-        "Read the public API surface of one known class or struct.",
+        "Read signatures, member kinds, and decorators for one known class or struct.",
         ("get_symbol_context",),
     ),
     "extract_function_body": ToolCatalogEntry(
@@ -73,7 +73,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "find_code_duplication": ToolCatalogEntry(
         "secondary",
         "code quality",
-        "Find near-duplicate implementation chunks in an indexed project.",
+        "Find near-duplicate implementation chunks across a project or scoped directory.",
     ),
     "find_definitions": ToolCatalogEntry(
         "support",
@@ -176,7 +176,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_symbol_context": ToolCatalogEntry(
         "primary",
         "code investigation",
-        "Deep-dive one symbol: definitions, callers, callees, references, and nearby context.",
+        "Deep-dive one symbol with callers, callees, references, and bounded or full-span source.",
     ),
     "get_symbol_exports_summary": ToolCatalogEntry(
         "secondary",
@@ -219,7 +219,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "lint_project_subset": ToolCatalogEntry(
         "dev",
         "change review",
-        "Run the best available linter against a focused file set.",
+        "Run or apply supported linter fixes against a focused file set.",
     ),
     "list_documentation_sources": ToolCatalogEntry(
         "operational",

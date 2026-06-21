@@ -767,6 +767,9 @@ def register(mcp: FastMCP) -> None:
         include_source_preview: bool = True,
         file_path: str | None = None,
         signature: str | None = None,
+        source_preview_lines: int = 80,
+        source_preview_chars: int = 4000,
+        full_source_preview: bool = False,
     ) -> str:
         """
         Single-call deep dive into a symbol: definition location, signature,
@@ -780,9 +783,14 @@ def register(mcp: FastMCP) -> None:
             symbol_name:  Name of the function, class, or struct to inspect.
             file_path:    Optional file path to disambiguate overloaded symbols.
             signature:    Optional signature substring to disambiguate overloaded symbols.
+            source_preview_lines: Maximum preview lines (default 80, maximum 400).
+            source_preview_chars: Maximum preview characters (default 4000, maximum 16000).
+            full_source_preview: Prefer the indexed symbol's complete source span, within caps.
         """
         try:
             project_id = get_project_id(workspace_id)
+            preview_lines = max(1, min(int(source_preview_lines), 400))
+            preview_chars = max(200, min(int(source_preview_chars), 16000))
             import graph_bootstrap
 
             _, _, _, _, proxy = get_memory_modules()
@@ -844,10 +852,30 @@ def register(mcp: FastMCP) -> None:
                                 lines_list = fh.read().splitlines()
                             if lines_list:
                                 start_line = max(1, int(rec["start_line"] or 1))
-                                snippet = "\n".join(lines_list[start_line - 1 : start_line + 79]).strip()
+                                end_line = start_line + preview_lines - 1
+                                if full_source_preview and rec.get("end_line"):
+                                    end_line = min(
+                                        max(start_line, int(rec["end_line"])),
+                                        start_line + preview_lines - 1,
+                                    )
+                                snippet = "\n".join(
+                                    lines_list[start_line - 1 : end_line]
+                                ).strip()
                                 if snippet:
                                     fence = _source_preview_fence(rec.get("filepath"))
-                                    out += [f"\n**Source preview:**\n```{fence}\n{snippet[:900]}\n```"]
+                                    truncated = len(snippet) > preview_chars or (
+                                        full_source_preview
+                                        and rec.get("end_line")
+                                        and int(rec["end_line"]) > end_line
+                                    )
+                                    out += [
+                                        f"\n**Source preview:**\n```{fence}\n"
+                                        f"{snippet[:preview_chars]}\n```"
+                                    ]
+                                    if truncated:
+                                        out.append(
+                                            "_Source preview truncated at the requested safety cap._"
+                                        )
                                     return "\n".join(out)
                     except Exception:
                         pass
@@ -889,8 +917,13 @@ def register(mcp: FastMCP) -> None:
                             )
                             rows = await cur.fetchall()
                             if rows:
-                                src = str(rows[0][0] or "")[:900]
+                                raw_src = str(rows[0][0] or "")
+                                src = raw_src[:preview_chars]
                                 out += [f"\n**Source preview:**\n```\n{src}\n```"]
+                                if len(raw_src) > preview_chars:
+                                    out.append(
+                                        "_Source preview truncated at the requested safety cap._"
+                                    )
                 except Exception:
                     pass
 

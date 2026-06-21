@@ -14,6 +14,12 @@ spec.loader.exec_module(module)
 
 
 class DuplicationHelperTests(unittest.TestCase):
+    def test_directory_include_pattern_normalizes_and_rejects_parent_traversal(self):
+        self.assertEqual(module.directory_include_pattern("/src/api/"), "src/api/**")
+        self.assertIsNone(module.directory_include_pattern("."))
+        with self.assertRaises(ValueError):
+            module.directory_include_pattern("../other-repo")
+
     def test_path_allowed_respects_include_and_exclude_patterns(self):
         self.assertTrue(
             module.path_allowed(

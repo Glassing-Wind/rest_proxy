@@ -608,7 +608,9 @@ def register(mcp: FastMCP) -> None:
             return f"Error diffing symbols: {str(e)}"
 
     @mcp.tool()
-    async def lint_project_subset(workspace_id: str, relative_paths: List[str]) -> str:
+    async def lint_project_subset(
+        workspace_id: str, relative_paths: List[str], fix: bool = False
+    ) -> str:
         """
         Run best-available linter on a set of files within a workspace.
         Supports Swift (swiftlint) and Python (pylint/ruff).
@@ -616,10 +618,9 @@ def register(mcp: FastMCP) -> None:
         Args:
             workspace_id:   The logical workspace ID or absolute path to the project root.
             relative_paths: List of relative paths to files to lint.
+            fix: Apply supported safe linter fixes before reporting remaining issues.
         """
         import subprocess
-        import shutil
-        import sys
 
         project_path = get_workspace_path(workspace_id)
         results = []
@@ -635,8 +636,9 @@ def register(mcp: FastMCP) -> None:
 
             if f.endswith(".swift"):
                 if swiftlint:
+                    cmd = [swiftlint, "--fix", f] if fix else [swiftlint, "lint", f]
                     res = subprocess.run(
-                        [swiftlint, "lint", f], capture_output=True, text=True
+                        cmd, capture_output=True, text=True
                     )
                     results.append(
                         f"--- SwiftLint: {rel_f} ---\n{res.stdout or 'No issues found.'}"
@@ -647,13 +649,19 @@ def register(mcp: FastMCP) -> None:
                 linter = ruff or pylint
                 if linter:
                     cmd = (
-                        [linter, "check", f]
+                        [linter, "check", *(["--fix"] if fix else []), f]
                         if "ruff" in linter
                         else [linter, "--errors-only", f]
                     )
                     res = subprocess.run(cmd, capture_output=True, text=True)
+                    fix_note = (
+                        " (fixes applied where available)"
+                        if fix and "ruff" in linter
+                        else ""
+                    )
                     results.append(
-                        f"--- Python Linter ({os.path.basename(linter)}): {rel_f} ---\n{res.stdout or 'No issues found.'}"
+                        f"--- Python Linter ({os.path.basename(linter)}){fix_note}: {rel_f} ---\n"
+                        f"{res.stdout or 'No issues found.'}"
                     )
                 else:
                     results.append(
@@ -682,7 +690,6 @@ def register(mcp: FastMCP) -> None:
         import subprocess
         import json
         import shutil
-        import sys
 
         project_path = get_workspace_path(workspace_id)
         project_id = get_project_id(workspace_id)
@@ -975,7 +982,28 @@ def register(mcp: FastMCP) -> None:
 
             MAX_MEMBERS = 100
             children = cls_node.get("children") or []
-            
+            source_lines = code.splitlines()
+
+            def _decorator_labels(child: dict, start_line: int) -> list[str]:
+                labels: list[str] = []
+                for value in child.get("decorators") or child.get("attributes") or []:
+                    if isinstance(value, str):
+                        label = value
+                    elif isinstance(value, dict):
+                        label = value.get("text") or value.get("name") or ""
+                    else:
+                        label = ""
+                    label = str(label).strip()
+                    if label:
+                        if lang == "python" and not label.startswith("@"):
+                            label = f"@{label}"
+                        labels.append(label)
+                index = start_line - 2
+                while index >= 0 and source_lines[index].lstrip().startswith("@"):
+                    labels.insert(0, source_lines[index].strip())
+                    index -= 1
+                return list(dict.fromkeys(labels))
+
             for child in children[:MAX_MEMBERS]:
                 child_kind = child.get("kind") or ""
                 if child_kind in (
@@ -992,7 +1020,11 @@ def register(mcp: FastMCP) -> None:
                     name = child.get("name") or "?"
                     cspan = child.get("span") or {}
                     csl = (cspan.get("start_line") or 0) + 1
-                    out.append(f"  {name}  (L{csl})")
+                    decorators = _decorator_labels(child, csl)
+                    out.extend(f"  {label}" for label in decorators)
+                    marker = "property" if child_kind == "Property" else child_kind.lower()
+                    signature = child.get("signature") or name
+                    out.append(f"  {signature}  [{marker}, L{csl}]")
 
             if len(children) > MAX_MEMBERS:
                 out.append(f"  ... (and {len(children) - MAX_MEMBERS} more members truncated)")

@@ -991,6 +991,93 @@ class CodeIntelToolTests(unittest.TestCase):
             output.index("extension DynamicGraph {"),
         )
 
+    def test_get_symbol_context_full_preview_uses_symbol_end_line_with_caps(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "build",
+                        "qualified_name": None,
+                        "filepath": "src/build.py",
+                        "start_line": 2,
+                        "end_line": 7,
+                        "signature": "def build():",
+                        "parent_file": "src/build.py",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    }
+                ]
+            return []
+
+        source_text = "\n".join(
+            ["import os", "", "def build():", "    one()", "    two()", "    three()", "    four()", "after()"]
+        )
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}), mock.patch.object(
+            self.module.os.path, "exists", return_value=True
+        ), mock.patch("builtins.open", mock.mock_open(read_data=source_text)):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/repo",
+                        "build",
+                        full_source_preview=True,
+                        source_preview_lines=400,
+                        source_preview_chars=16000,
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("    four()", output)
+        self.assertNotIn("after()", output)
+
+    def test_get_symbol_context_reports_source_preview_truncation(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "build",
+                        "qualified_name": None,
+                        "filepath": "src/build.py",
+                        "start_line": 1,
+                        "end_line": 20,
+                        "signature": "def build():",
+                        "parent_file": "src/build.py",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    }
+                ]
+            return []
+
+        source_text = "\n".join(f"line_{index}" for index in range(1, 21))
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}), mock.patch.object(
+            self.module.os.path, "exists", return_value=True
+        ), mock.patch("builtins.open", mock.mock_open(read_data=source_text)):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/repo",
+                        "build",
+                        full_source_preview=True,
+                        source_preview_lines=3,
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Source preview truncated at the requested safety cap", output)
+        self.assertNotIn("line_4", output)
+
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:

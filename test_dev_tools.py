@@ -136,6 +136,90 @@ def load_module(memory_store):
 
 
 class DevToolsTests(unittest.TestCase):
+    def test_lint_project_subset_applies_ruff_fixes_when_requested(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        def path_exists(path):
+            return path == "/tmp/repo/src/app.py"
+
+        with mock.patch.object(module.os.path, "exists", side_effect=path_exists), mock.patch.object(
+            module.os.path, "isfile", return_value=False
+        ), mock.patch(
+            "shutil.which",
+            side_effect=lambda name: "/usr/bin/ruff" if name == "ruff" else None,
+        ), mock.patch(
+            "subprocess.run",
+            return_value=types.SimpleNamespace(stdout="Fixed 1 error.\n"),
+        ) as run:
+            output = asyncio.run(
+                mcp.tools["lint_project_subset"](
+                    "/tmp/repo", ["src/app.py"], fix=True
+                )
+            )
+
+        self.assertEqual(
+            run.call_args.args[0],
+            ["/usr/bin/ruff", "check", "--fix", "/tmp/repo/src/app.py"],
+        )
+        self.assertIn("fixes applied where available", output)
+
+    def test_extract_class_interface_includes_decorators_and_property_markers(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+        source = """class Service:
+    @classmethod
+    def build(cls):
+        return cls()
+
+    @property
+    def name(self):
+        return \"service\"
+"""
+        ts_pack = types.ModuleType("tree_sitter_language_pack")
+        ts_pack.detect_language = lambda path: "python"
+        ts_pack.ProcessConfig = lambda lang: types.SimpleNamespace(language=lang)
+        ts_pack.process = lambda code, config: {
+            "structure": [
+                {
+                    "name": "Service",
+                    "kind": "Class",
+                    "span": {"start_line": 0, "end_line": 7},
+                    "children": [
+                        {
+                            "name": "build",
+                            "kind": "Method",
+                            "signature": "build(cls)",
+                            "span": {"start_line": 2, "end_line": 3},
+                        },
+                        {
+                            "name": "name",
+                            "kind": "Property",
+                            "span": {"start_line": 6, "end_line": 7},
+                        },
+                    ],
+                }
+            ]
+        }
+
+        with mock.patch.object(module.os.path, "exists", return_value=True), mock.patch(
+            "builtins.open", mock.mock_open(read_data=source)
+        ), mock.patch.dict(sys.modules, {"tree_sitter_language_pack": ts_pack}):
+            output = asyncio.run(
+                mcp.tools["extract_class_interface"](
+                    "/tmp/repo", "service.py", "Service"
+                )
+            )
+
+        self.assertIn("@classmethod", output)
+        self.assertIn("build(cls)  [method, L3]", output)
+        self.assertIn("@property", output)
+        self.assertIn("name  [property, L7]", output)
+
     def test_grep_codebase_groups_hits_by_file_and_applies_glob(self):
         memory_store = FakeMemoryStore([])
         module = load_module(memory_store)
