@@ -89,11 +89,16 @@ if __name__ == "__main__":
     parser.add_argument("command", nargs="?", choices=["index_workspace", "bootstrap"])
     parser.add_argument("path", nargs="?", help="Project path for indexing")
     args = parser.parse_args()
-    if args.command == "index_workspace" and args.path:
+    if args.command == "index_workspace":
+        if not args.path:
+            parser.error("index_workspace requires an absolute project path")
+
         async def _run_index() -> None:
-            from tools.hands.indexing import index_workspace
-            result = await index_workspace(args.path)
-            print(result)
+            from _index_cli import run_index_workspace_cli
+
+            exit_code = await run_index_workspace_cli(args.path)
+            if exit_code:
+                raise SystemExit(exit_code)
 
         asyncio.run(_run_index())
     elif args.command == "bootstrap":

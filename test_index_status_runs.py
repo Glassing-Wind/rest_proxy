@@ -35,6 +35,7 @@ def load_indexing_module():
     jobs_mod = types.ModuleType("_jobs")
     jobs_mod._JOBS = {}
     jobs_mod._JOBS_LOCK = mock.MagicMock()
+    jobs_mod.claim_index_capacity_lock = lambda *args, **kwargs: (True, None)
     jobs_mod.claim_project_job_lock = lambda *args, **kwargs: (True, None)
     jobs_mod._drain_proc_output = lambda *args, **kwargs: None
     jobs_mod._finalize_job = lambda *args, **kwargs: None
@@ -44,6 +45,7 @@ def load_indexing_module():
         "semantic_log_path": f"/tmp/{job_id}/semantic.log",
     }
     jobs_mod._persist_job_state = lambda *args, **kwargs: None
+    jobs_mod._release_index_capacity_lock = lambda *args, **kwargs: None
     jobs_mod._release_project_job_lock = lambda *args, **kwargs: None
     jobs_mod._render_job_logs = lambda job: list(job.get("logs") or [])
     jobs_mod.load_job_record = lambda job_id: jobs_mod._JOBS.get(job_id)
@@ -104,16 +106,25 @@ def load_indexing_module():
         return []
     neo4j_utils_mod.execute_read = _execute_read
 
-    sys.modules["_jobs"] = jobs_mod
-    sys.modules["_helpers"] = helpers_mod
-    sys.modules["_runtime"] = runtime_mod
-    sys.modules["mcp.server.fastmcp"] = fastmcp_mod
-    sys.modules["graphrag_core.config"] = config_mod
-    sys.modules["graphrag_core.indexing.watcher"] = watcher_mod
-    sys.modules["graphrag_core.indexing.manifest"] = manifest_mod
-    sys.modules["graphrag_core.indexing.registry"] = registry_mod
-    sys.modules["graphrag_core.neo4j"] = neo4j_utils_mod
-    spec.loader.exec_module(module)
+    semantic_contract_mod = types.ModuleType("_semantic_contract")
+    semantic_contract_mod.SEMANTIC_CONTRACT_VERSION = 1
+
+    with mock.patch.dict(
+        sys.modules,
+        {
+            "_jobs": jobs_mod,
+            "_helpers": helpers_mod,
+            "_runtime": runtime_mod,
+            "_semantic_contract": semantic_contract_mod,
+            "mcp.server.fastmcp": fastmcp_mod,
+            "graphrag_core.config": config_mod,
+            "graphrag_core.indexing.watcher": watcher_mod,
+            "graphrag_core.indexing.manifest": manifest_mod,
+            "graphrag_core.indexing.registry": registry_mod,
+            "graphrag_core.neo4j": neo4j_utils_mod,
+        },
+    ):
+        spec.loader.exec_module(module)
     return module, jobs_mod
 
 

@@ -273,6 +273,45 @@ class IndexJobOrchestrationTests(unittest.TestCase):
                 self.assertTrue(claimed)
                 self.assertIsNone(blocking)
 
+    def test_terminal_jobs_do_not_hold_recent_project_or_capacity_locks(self):
+        module = load_jobs_module(FakeDriver(FakeTx()))
+        with tempfile.TemporaryDirectory() as tmp:
+            module._PROJECT_LOCKS_DIR = Path(tmp)
+            with mock.patch.dict(
+                os.environ, {"LM_PROXY_MAX_CONCURRENT_INDEX_JOBS": "1"}
+            ):
+                self.assertTrue(
+                    module.claim_project_job_lock(
+                        "proj1", "done-job", project_path="/tmp/repo1"
+                    )[0]
+                )
+                self.assertTrue(
+                    module.claim_index_capacity_lock(
+                        "done-job",
+                        project_id="proj1",
+                        project_path="/tmp/repo1",
+                    )[0]
+                )
+                with module._JOBS_LOCK:
+                    module._JOBS["done-job"] = {
+                        "status": "done",
+                        "project_id": "proj1",
+                        "project_path": "/tmp/repo1",
+                        "struct_pid": None,
+                        "sem_pid": None,
+                    }
+
+                claimed, _ = module.claim_project_job_lock(
+                    "proj1", "next-job", project_path="/tmp/repo1"
+                )
+                self.assertTrue(claimed)
+                claimed, _ = module.claim_index_capacity_lock(
+                    "next-job",
+                    project_id="proj2",
+                    project_path="/tmp/repo2",
+                )
+                self.assertTrue(claimed)
+
     def test_post_index_maintenance_handles_same_running_loop(self):
         tx = FakeTx()
         module = load_jobs_module(FakeDriver(tx))

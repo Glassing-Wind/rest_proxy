@@ -51,7 +51,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "describe_file": ToolCatalogEntry(
         "primary",
         "code investigation",
-        "Understand one file's structure and role without reading it manually.",
+        "Understand one file's purpose, role metadata, and symbol surface without reading it manually.",
     ),
     "download_documentation": ToolCatalogEntry(
         "docs",

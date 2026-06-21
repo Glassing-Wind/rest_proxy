@@ -353,17 +353,23 @@ def claim_index_capacity_lock(
                 else ""
             )
             existing_job = load_job_record(existing_job_id) if existing_job_id else None
+            terminal_job = False
             if existing_job_id and existing_job:
                 alive = _job_processes_alive(existing_job)
-                status = str(existing_job.get("status") or "")
-                if alive or status == "running":
+                status = str(existing_job.get("status") or "").lower()
+                if alive or status in {"running", "cancelling"}:
                     return False, existing_job
+                terminal_job = status in {"done", "failed", "cancelled"}
             created_at = (
                 float((existing or {}).get("created_at") or 0.0)
                 if isinstance(existing, dict)
                 else 0.0
             )
-            if created_at and (time.time() - created_at) < _PROJECT_LOCK_STALE_S:
+            if (
+                not terminal_job
+                and created_at
+                and (time.time() - created_at) < _PROJECT_LOCK_STALE_S
+            ):
                 return False, existing_job or existing
             try:
                 path.unlink()
@@ -407,13 +413,19 @@ def claim_project_job_lock(
             existing = _load_project_lock(project_id) or {}
             existing_job_id = str(existing.get("job_id") or "").strip()
             existing_job = load_job_record(existing_job_id) if existing_job_id else None
+            terminal_job = False
             if existing_job_id and existing_job:
                 alive = _job_processes_alive(existing_job)
-                status = str(existing_job.get("status") or "")
-                if alive or status == "running":
+                status = str(existing_job.get("status") or "").lower()
+                if alive or status in {"running", "cancelling"}:
                     return False, existing_job
+                terminal_job = status in {"done", "failed", "cancelled"}
             created_at = float(existing.get("created_at") or 0.0)
-            if created_at and (time.time() - created_at) < _PROJECT_LOCK_STALE_S:
+            if (
+                not terminal_job
+                and created_at
+                and (time.time() - created_at) < _PROJECT_LOCK_STALE_S
+            ):
                 return False, existing_job or existing
             try:
                 path.unlink()

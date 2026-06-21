@@ -22,6 +22,8 @@
 # Run the MCP server (tooling / indexing)
 # - Start MCP server:    python mcp_server.py
 # - Index a workspace:   python mcp_server.py index_workspace /abs/path/to/project
+#   The CLI waits for completion and exits nonzero on failure; the MCP tool
+#   returns a job ID immediately for asynchronous status polling.
 #
 # Run the HTTP proxy
 # - Uvicorn entry:       uvicorn proxy:app --host 0.0.0.0 --port 8000

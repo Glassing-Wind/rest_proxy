@@ -42,6 +42,30 @@ def format_ts_pack_symbols(result: dict) -> tuple[list[str], str]:
     return ts_symbols, language_label
 
 
+def format_file_purpose(
+    file_path: str,
+    file_roles: list[str] | None,
+    symbol_names: list[str],
+) -> str:
+    """Build a deterministic purpose summary from indexed semantic facts."""
+    role_labels = []
+    for raw_role in file_roles or []:
+        label = str(raw_role).strip().lower().removesuffix("_surface")
+        label = label.replace("_", " ")
+        if label and label not in role_labels:
+            role_labels.append(label)
+
+    parts = []
+    if role_labels:
+        parts.append(f"indexed as {', '.join(role_labels[:4])}")
+    if symbol_names:
+        samples = ", ".join(f"`{name}`" for name in symbol_names[:5])
+        parts.append(f"key symbols include {samples}")
+    if not parts:
+        return f"Purpose: `{file_path}` is an indexed support or data file with no symbol surface."
+    return f"Purpose: `{file_path}` is {'; '.join(parts)}."
+
+
 async def describe_file_impl(
     *,
     project_path: str,
@@ -50,6 +74,7 @@ async def describe_file_impl(
 ) -> str:
     abs_path, display_path = resolve_describe_paths(project_path, file_path)
     lines = [f"=== {display_path} ==="]
+    symbol_names: list[str] = []
 
     ts_symbols: list[str] = []
     try:
@@ -65,6 +90,11 @@ async def describe_file_impl(
                 result = normalize_ts_pack_result(code, lang, ts_pack.process(code, config=cfg))
                 result["_language"] = lang
                 ts_symbols, lang_label = format_ts_pack_symbols(result)
+                symbol_names = [
+                    str(item.get("name"))
+                    for item in result.get("structure") or []
+                    if item.get("name")
+                ]
                 lines.append(lang_label)
     except Exception:
         pass
@@ -102,6 +132,8 @@ async def describe_file_impl(
                     loc = f":{rec['start']}-{rec['end']}" if rec["start"] else ""
                     sig = f"  →  {rec['sig']}" if rec["sig"] else ""
                     neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
+                    if rec.get("name") and rec["name"] not in symbol_names:
+                        symbol_names.append(str(rec["name"]))
             use_symbols = neo_symbols or ts_symbols
         except Exception:
             use_symbols = ts_symbols
@@ -117,6 +149,8 @@ async def describe_file_impl(
     else:
         lines.append("No symbols found.")
 
+    semantic_roles: list[str] = []
+    preview_content = None
     if project_path:
         try:
             from _helpers import get_project_id
@@ -128,15 +162,22 @@ async def describe_file_impl(
             async with memory_store._pg_pool.connection() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(
-                        "SELECT content FROM codebase_embeddings "
+                        "SELECT content, metadata FROM codebase_embeddings "
                         "WHERE project_id = %s AND file_path = %s "
                         "ORDER BY chunk_index LIMIT 1",
                         (project_id, rel_path),
                     )
                     row = await cur.fetchone()
                 if row:
-                    lines.append(f"\nFirst chunk preview:\n{row[0][:500].rstrip()}")
+                    preview_content = row[0]
+                    metadata = row[1] if len(row) > 1 and isinstance(row[1], dict) else {}
+                    semantic_roles = metadata.get("file_roles") or []
         except Exception:
             pass
+
+    lines.append("")
+    lines.append(format_file_purpose(display_path, semantic_roles, symbol_names))
+    if preview_content:
+        lines.append(f"\nFirst chunk preview:\n{preview_content[:500].rstrip()}")
 
     return "\n".join(lines)
