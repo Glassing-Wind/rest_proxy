@@ -223,6 +223,7 @@ For the standard user-trust gate, run:
 
 This is the main retrieval-quality path for the repo. It runs:
 
+- MCP initialize/delete and stale-session restart lifecycle checks
 - canonical tool-choice evals
 - health-gated live graph regressions against the indexed benchmark repos
 - MCP transport parity smoke checks against the live daemon

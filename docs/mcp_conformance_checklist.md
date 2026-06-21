@@ -13,6 +13,13 @@ gaps that still matter for enterprise hardening.
   fingerprinting for restart validation.
 - `DELETE /mcp` with `Mcp-Session-Id` succeeds and terminates the transport
   session.
+- Daemon restart rotates boot identity, rejects the previous session with 404,
+  identifies it as unknown on the new boot, and accepts a newly initialized
+  session afterward.
+- Initialization without an `MCP-Protocol-Version` request header negotiates
+  `2025-06-18`, preserving the protocol's backward-compatible client path.
+- Automated protocol lifecycle checks run in both the CI gate and the standard
+  retrieval-quality trust gate.
 - Watcher activation is manual by default via `watch_project` /
   `unwatch_project`, which avoids incorrect workspace inference from transport
   sessions alone.
@@ -20,20 +27,15 @@ gaps that still matter for enterprise hardening.
 ## Partially Verified / Inferred
 
 - Transport/session lifecycle details are mostly delegated to FastMCP and should
-- be periodically checked against upstream MCP changes.
-- The server accepts requests without an `MCP-Protocol-Version` header. This is
-  compatible with the spec's backward-compatibility guidance, but the exact
-  negotiated fallback behavior should be regression-tested if client support
-  matters.
+  be periodically checked against upstream MCP changes.
 
 ## Known Gaps
 
 - No standards-based roots integration is currently implemented for shared HTTP
   clients. Workspace attribution is therefore explicit/manual rather than MCP
   roots-driven.
-- No automated MCP compliance suite is wired into CI yet.
-- No protocol regression currently checks stale-session behavior across daemon
-  restart.
+- The current suite is a focused transport contract rather than a complete
+  third-party MCP compliance suite.
 
 ## Operational Guidance
 

@@ -15,6 +15,10 @@ echo "[retrieval-quality-gate] python=$PYTHON_BIN"
 cd "$ROOT_DIR"
 "$PYTHON_BIN" "$ROOT_DIR/scripts/check_brain_server_freshness.py" --restart-if-stale --quiet
 
+echo "[retrieval-quality-gate] running MCP protocol lifecycle checks..."
+"$PYTHON_BIN" "$ROOT_DIR/scripts/check_mcp_protocol.py"
+"$ROOT_DIR/scripts/check_mcp_stale_session_restart.sh"
+
 echo "[retrieval-quality-gate] running tool-choice eval suite..."
 "$PYTHON_BIN" "$ROOT_DIR/scripts/run_tool_choice_eval_suite.py"
 

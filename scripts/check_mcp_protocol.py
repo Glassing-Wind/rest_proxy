@@ -110,9 +110,41 @@ def main() -> int:
     assert delete_status == 200, f"DELETE failed with status={delete_status}"
     assert delete_headers.get("mcp-session-id"), delete_headers
 
+    fallback_payload = {
+        **initialize_payload,
+        "id": 2,
+        "params": {
+            **initialize_payload["params"],
+            "clientInfo": {"name": "graphrag-headerless-smoke", "version": "1.0"},
+        },
+    }
+    fallback_status, fallback_headers, fallback_body = _request(
+        MCP_URL,
+        method="POST",
+        body=fallback_payload,
+    )
+    assert fallback_status == 200, f"headerless initialize failed with status={fallback_status}"
+    fallback_session_id = fallback_headers.get("mcp-session-id")
+    assert fallback_session_id, "headerless initialize did not include Mcp-Session-Id"
+    fallback_result = (_extract_sse_json(fallback_body).get("result") or {})
+    assert fallback_result.get("protocolVersion") == PROTOCOL_VERSION, fallback_result
+
+    fallback_delete_status, _, _ = _request(
+        MCP_URL,
+        method="DELETE",
+        headers={
+            "MCP-Protocol-Version": PROTOCOL_VERSION,
+            "Mcp-Session-Id": fallback_session_id,
+        },
+    )
+    assert fallback_delete_status == 200, (
+        f"headerless session DELETE failed with status={fallback_delete_status}"
+    )
+
     print("MCP protocol smoke check passed")
     print(f"- initialize protocol version: {PROTOCOL_VERSION}")
     print(f"- session id returned: {session_id}")
+    print(f"- headerless initialize negotiated: {fallback_result['protocolVersion']}")
     print(f"- health standard: {health['standard']}")
     print(f"- boot id: {health['boot_id']}")
     return 0
