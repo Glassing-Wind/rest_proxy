@@ -807,6 +807,29 @@ def _normalize_pkg_name(name: str) -> str:
     return (name or "").strip().replace("-", "_").lower()
 
 
+def _cargo_crate_context_rank(record: dict[str, object]) -> tuple[int, int, int, str, str]:
+    manifest = str(record.get("manifest_path") or "").replace("\\", "/").strip("/")
+    normalized = manifest.lower()
+    first_segment = normalized.split("/", 1)[0] if normalized else ""
+    low_signal_root = first_segment in {
+        "example",
+        "examples",
+        "test",
+        "tests",
+        "benchmark",
+        "benchmarks",
+        "benches",
+        "fixtures",
+    }
+    return (
+        1 if low_signal_root else 0,
+        normalized.count("/"),
+        len(normalized),
+        normalized,
+        str(record.get("crate") or "").lower(),
+    )
+
+
 def _repo_name_from_url(raw_url: str) -> str:
     path = urlparse(raw_url).path.rstrip("/")
     name = path.rsplit("/", 1)[-1] if path else ""
@@ -991,7 +1014,6 @@ def _directory_snapshot_priority_lines(
     file_roles_by_path: dict[str, set[str]] | None = None,
 ) -> list[str]:
     priorities: list[str] = []
-    directory_norm = (directory_path or "").replace("\\", "/").lower()
     code_context = _is_code_directory_context(directory_path)
     apple_dir_kind = _classify_apple_directory(directory_path) if has_apple_context else None
     if apple_dir_kind == "workspace":
@@ -1280,6 +1302,7 @@ async def load_apple_build_context(session, project_id: str, dir_prefix: str = "
 
 
 async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "", limit: int = 5):
+    crate_query_limit = max(limit * 10, 50)
     schema_labels = await graph_core._execute_read(
         session,
         """
@@ -1317,7 +1340,7 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
         """),
         p=project_id,
         dir=dir_prefix,
-        limit=limit,
+        limit=crate_query_limit,
         op="cargo_context_crates",
     )
     if not crates:
@@ -1333,7 +1356,7 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
             LIMIT $limit
             """),
             p=project_id,
-            limit=limit,
+            limit=crate_query_limit,
             op="cargo_context_crates_fallback",
         )
     if dir_prefix:
@@ -1360,11 +1383,13 @@ async def load_cargo_build_context(session, project_id: str, dir_prefix: str = "
                 """),
                 p=project_id,
                 dir=dir_prefix,
-                limit=limit,
+                limit=crate_query_limit,
                 op="cargo_context_crates_manifest_fallback",
             )
             if local_by_manifest:
                 crates = local_by_manifest
+
+    crates = sorted(crates, key=_cargo_crate_context_rank)[:limit]
 
     if CARGO_WORKSPACE_LABEL in labels and REL_HAS_PACKAGE in rels:
         workspaces = await graph_core._execute_read(

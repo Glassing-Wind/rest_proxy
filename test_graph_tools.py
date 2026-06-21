@@ -1228,6 +1228,12 @@ class GraphToolsTests(unittest.TestCase):
                 return [{"rels": ["HAS_PACKAGE", "DEPENDS_ON_PACKAGE"]}]
             if op == "cargo_context_crates":
                 return [
+                    {
+                        "crate": "example-demo",
+                        "crate_name": "example_demo",
+                        "manifest_path": "examples/demo/Cargo.toml",
+                        "manifest_files": 1,
+                    },
                     {"crate": "api", "crate_name": "api", "manifest_path": "crates/api/Cargo.toml", "manifest_files": 1},
                     {"crate": "core-lib", "crate_name": "core_lib", "manifest_path": "crates/core/Cargo.toml", "manifest_files": 1},
                 ]
@@ -1242,8 +1248,13 @@ class GraphToolsTests(unittest.TestCase):
                 output = asyncio.run(self.mcp.tools["get_project_overview"]("/tmp/rustws"))
 
         self.assertIn("## Cargo Workspace Context", output)
+        self.assertIn(
+            "inspect cargo workspace context next because crate `api` via `crates/api/Cargo.toml`",
+            output,
+        )
         self.assertIn("crate `api` (api) via `crates/api/Cargo.toml`", output)
         self.assertIn("crate `core-lib` (core_lib) via `crates/core/Cargo.toml`", output)
+        self.assertLess(output.index("crate `api`"), output.index("crate `example-demo`"))
         self.assertIn("workspace `Cargo.toml` includes api, core-lib", output)
         self.assertIn("crate `api` depends on core-lib, serde", output)
 

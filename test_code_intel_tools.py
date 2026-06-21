@@ -3327,11 +3327,25 @@ class CodeIntelToolTests(unittest.TestCase):
                 ]
             if "same crate" not in cypher and "MATCH (c:CargoCrate {project_id:$pid, name:$crate})-[:DEFINED_IN_FILE]" in cypher:
                 return [
+                    {
+                        "related_file": "crates/api/tests/routes.rs",
+                        "sym_count": 30,
+                        "file_roles": ["test_surface"],
+                    },
                     {"related_file": "crates/api/src/routes.rs", "sym_count": 8},
                     {"related_file": "crates/api/src/http.rs", "sym_count": 4},
                 ]
             if "MATCH (src:CargoCrate {project_id:$pid, name:$crate})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate" in cypher:
-                return [{"crate": "core", "files": ["crates/core/src/service.rs"]}]
+                return [
+                    {
+                        "crate": "core",
+                        "files": [
+                            "crates/core/README.md",
+                            "crates/core/Cargo.toml",
+                            "crates/core/src/service.rs",
+                        ],
+                    }
+                ]
             if "MATCH (src:CargoCrate {project_id:$pid})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$pid, name:$crate})" in cypher:
                 return [{"crate": "cli", "files": ["crates/cli/src/main.rs"]}]
             if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
@@ -3351,8 +3365,13 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Crate: api", output)
         self.assertIn("Use this to find the fastest adjacent files", output)
         self.assertIn("Inspect First:", output)
+        self.assertIn("- start with crates/api/src/routes.rs", output)
         self.assertIn("crates/api/src/routes.rs", output)
+        self.assertNotIn("crates/api/tests/routes.rs", output)
         self.assertIn("depends on crate `core`", output)
+        self.assertIn("crates/core/src/service.rs", output)
+        self.assertNotIn("crates/core/README.md", output)
+        self.assertNotIn("crates/core/Cargo.toml", output)
         self.assertIn("used by crate `cli`", output)
         self.assertIn("Import graph:", output)
 

@@ -56,7 +56,9 @@ def register(mcp: FastMCP) -> None:
     }
     _SWIFT_TYPE_MENTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9_]+\b")
     _LOW_SIGNAL_RELATED_RE = re.compile(
-        r"(^|/)(session-ses_[^/]+\.md|agents\.md|readme(?:\.[^/]+)?|changelog(?:\.[^/]+)?)$",
+        r"(^|/)(session-ses_[^/]+\.md|agents\.md|readme(?:\.[^/]+)?|"
+        r"changelog(?:\.[^/]+)?|cargo\.toml|package\.json|pyproject\.toml|"
+        r"go\.mod|pom\.xml|build\.gradle(?:\.kts)?)$",
         re.IGNORECASE,
     )
     _IMPLEMENTATION_FAMILY_ROLES = {
@@ -2036,9 +2038,10 @@ def register(mcp: FastMCP) -> None:
                         OPTIONAL MATCH (f)-[:CONTAINS]->(s)
                         WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
                         WITH f, count(s) AS sym_count
-                        RETURN f.filepath AS related_file, sym_count
+                        RETURN f.filepath AS related_file, sym_count,
+                               f.semantic_file_roles AS file_roles
                         ORDER BY sym_count DESC, related_file
-                        LIMIT 5
+                        LIMIT 40
                         """,
                         pid=project_id,
                         crate=target_crate,
@@ -2056,9 +2059,12 @@ def register(mcp: FastMCP) -> None:
                         OPTIONAL MATCH (f)-[:CONTAINS]->(s)
                         WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
                         WITH tgt, f, count(s) AS sym_count
-                        RETURN tgt.name AS crate, collect(f.filepath)[..3] AS files
-                        ORDER BY crate
-                        LIMIT 5
+                        RETURN tgt.name AS crate,
+                               f.filepath AS related_file,
+                               sym_count,
+                               f.semantic_file_roles AS file_roles
+                        ORDER BY crate, sym_count DESC, related_file
+                        LIMIT 100
                         """,
                         pid=project_id,
                         crate=target_crate,
@@ -2075,26 +2081,75 @@ def register(mcp: FastMCP) -> None:
                         OPTIONAL MATCH (f)-[:CONTAINS]->(s)
                         WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum
                         WITH src, f, count(s) AS sym_count
-                        RETURN src.name AS crate, collect(f.filepath)[..3] AS files
-                        ORDER BY crate
-                        LIMIT 5
+                        RETURN src.name AS crate,
+                               f.filepath AS related_file,
+                               sym_count,
+                               f.semantic_file_roles AS file_roles
+                        ORDER BY crate, sym_count DESC, related_file
+                        LIMIT 100
                         """,
                         pid=project_id,
                         crate=target_crate,
                         op="get_related_files_dependent_on_target",
                     )
+                    same_crate = [
+                        record
+                        for record in same_crate
+                        if not _is_test_like_related_candidate(
+                            record.get("related_file"), record.get("file_roles")
+                        )
+                        and not _is_low_signal_related_support_candidate(
+                            record.get("related_file"), record.get("file_roles")
+                        )
+                    ]
+                    same_crate.sort(
+                        key=lambda record: (
+                            -_shared_directory_depth(
+                                file_path, str(record.get("related_file") or "")
+                            ),
+                            -int(record.get("sym_count") or 0),
+                            str(record.get("related_file") or ""),
+                        )
+                    )
+                    same_crate = same_crate[:5]
                     if same_crate:
                         cargo_related.append(f"Crate: {target_crate}")
                         for record in same_crate:
                             cargo_related.append(
                                 f"- {record['related_file']} (same crate, symbols: {record.get('sym_count') or 0})"
                             )
-                    for record in downstream:
-                        files = ", ".join(record.get("files") or [])
-                        cargo_related.append(f"- depends on crate `{record['crate']}` via {files}")
-                    for record in upstream:
-                        files = ", ".join(record.get("files") or [])
-                        cargo_related.append(f"- used by crate `{record['crate']}` via {files}")
+                    for relation, rows in (
+                        ("depends on", downstream),
+                        ("used by", upstream),
+                    ):
+                        grouped: dict[str, list[str]] = {}
+                        for record in rows:
+                            crate = str(record.get("crate") or "").strip()
+                            legacy_files = record.get("files") or []
+                            candidates = (
+                                [str(item) for item in legacy_files]
+                                if legacy_files
+                                else [str(record.get("related_file") or "")]
+                            )
+                            for candidate in candidates:
+                                if (
+                                    not crate
+                                    or not candidate
+                                    or _is_test_like_related_candidate(
+                                        candidate, record.get("file_roles")
+                                    )
+                                    or _is_low_signal_related_support_candidate(
+                                        candidate, record.get("file_roles")
+                                    )
+                                ):
+                                    continue
+                                files = grouped.setdefault(crate, [])
+                                if candidate not in files and len(files) < 3:
+                                    files.append(candidate)
+                        for crate, files in list(grouped.items())[:5]:
+                            cargo_related.append(
+                                f"- {relation} crate `{crate}` via {', '.join(files)}"
+                            )
 
                 if file_path.endswith(".xcworkspace/contents.xcworkspacedata"):
                     workspace_refs = await _execute_read(
@@ -2665,11 +2720,17 @@ def register(mcp: FastMCP) -> None:
                 ]
                 focus_lines: list[str] = []
                 highlighted_entries: set[str] = set()
+                highlighted_paths: set[str] = set()
+
+                def line_path(line: str) -> str:
+                    return line.removeprefix("- ").split(" (", 1)[0].strip()
+
                 if cargo_related:
                     first_same_crate = next((line for line in cargo_related if line.startswith("- ") and "(same crate" in line), None)
                     if first_same_crate:
                         focus_lines.append(f"- start with {first_same_crate[2:]}")
                         highlighted_entries.add(first_same_crate[2:])
+                        highlighted_paths.add(line_path(first_same_crate))
                     first_boundary = next(
                         (line for line in cargo_related if "depends on crate" in line or "used by crate" in line),
                         None,
@@ -2695,7 +2756,9 @@ def register(mcp: FastMCP) -> None:
                     (
                         line
                         for line in structural_related
-                        if line.startswith("- ") and line[2:] not in highlighted_entries
+                        if line.startswith("- ")
+                        and line[2:] not in highlighted_entries
+                        and line_path(line) not in highlighted_paths
                     ),
                     None,
                 )
@@ -2703,12 +2766,15 @@ def register(mcp: FastMCP) -> None:
                     prefix = "- then inspect" if focus_lines else "- start with"
                     focus_lines.append(f"{prefix} {structural_focus[2:]}")
                     highlighted_entries.add(structural_focus[2:])
+                    highlighted_paths.add(line_path(structural_focus))
                 else:
                     structural_import_focus = next(
                         (
                             line
                             for line in structural_import_related
-                            if line.startswith("- ") and line[2:] not in highlighted_entries
+                            if line.startswith("- ")
+                            and line[2:] not in highlighted_entries
+                            and line_path(line) not in highlighted_paths
                         ),
                         None,
                     )
@@ -2716,12 +2782,15 @@ def register(mcp: FastMCP) -> None:
                         prefix = "- then inspect" if focus_lines else "- start with"
                         focus_lines.append(f"{prefix} {structural_import_focus[2:]}")
                         highlighted_entries.add(structural_import_focus[2:])
+                        highlighted_paths.add(line_path(structural_import_focus))
                     else:
                         same_directory_focus = next(
                             (
                                 line
                                 for line in same_directory_related
-                                if line.startswith("- ") and line[2:] not in highlighted_entries
+                                if line.startswith("- ")
+                                and line[2:] not in highlighted_entries
+                                and line_path(line) not in highlighted_paths
                             ),
                             None,
                         )

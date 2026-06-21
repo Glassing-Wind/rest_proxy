@@ -2720,7 +2720,10 @@
           "required_substrings": [
             "# Project Overview: axum",
             "## Inspect First",
-            "axum/"
+            "inspect cargo workspace context next because crate `axum` via `axum/Cargo.toml`"
+          ],
+          "forbidden_substrings": [
+            "inspect cargo workspace context next because crate `auto-reload`"
           ]
         },
         {
@@ -2748,7 +2751,12 @@
           "required_substrings": [
             "Related Files:",
             "Inspect First:",
-            "axum/src/routing/mod.rs"
+            "- start with axum/src/routing/mod.rs",
+            "depends on crate `axum-core` via axum-core/src/"
+          ],
+          "forbidden_substrings": [
+            "- start with axum/src/routing/tests/",
+            "depends on crate `axum-core` via axum-core/CHANGELOG.md"
           ]
         }
       ],
