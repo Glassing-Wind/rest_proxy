@@ -195,7 +195,7 @@ class FlowSummaryTests(unittest.TestCase):
             output,
         )
 
-    def test_get_app_flow_summary_as_table_reports_empty_when_no_rows(self):
+    def test_get_app_flow_summary_as_table_diagnoses_empty_graph(self):
         async def fake_execute_read(session, query, **kwargs):
             return []
 
@@ -211,7 +211,35 @@ class FlowSummaryTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual("No UI → API → Service → DB paths found.", output)
+        self.assertTrue(output.startswith("No UI → API → Service → DB paths found."))
+        self.assertIn("Diagnosis:", output)
+        self.assertIn("ui_files=0 js_files=0", output)
+        self.assertIn("Missing evidence: HTML/Astro UI entry files", output)
+        self.assertIn("get_flow_summary('/tmp/rentallaw', mode='auto')", output)
+
+    def test_get_app_flow_summary_diagnoses_missing_edges_with_source_files_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_coverage_files":
+                return [{"ui_files": 3, "js_files": 8}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/fullstack",
+                    include_coverage=True,
+                    limit=20,
+                )
+            )
+
+        self.assertIn("ui_files=3 js_files=8", output)
+        self.assertNotIn("HTML/Astro UI entry files", output)
+        self.assertNotIn("JavaScript/TypeScript client files", output)
+        self.assertIn("ASSET_LINKS UI-to-client edges", output)
+        self.assertIn("CALLS_API or CALLS_API_ROUTE edges", output)
 
     def test_coverage_lines_include_file_graph_links(self):
         async def fake_execute_read(session, query, **kwargs):

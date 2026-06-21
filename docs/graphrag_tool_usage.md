@@ -68,7 +68,8 @@ These are the tools that should normally beat raw grep, raw Cypher, or manual gr
 
 - `get_app_flow_summary(workspace_id, ...)`
   - UI -> API -> Service -> DB paths.
-  - Best for JS/TS or mixed app repos.
+  - Best for full-stack JS/TS or mixed web repos where those layers should exist.
+  - Empty results diagnose missing source/edge coverage and route to `get_flow_summary(mode='auto')`.
 - `get_backend_flow_summary(workspace_id, ...)`
   - API -> Service -> DB paths.
   - Supports `crate_contains` for Rust workspaces.

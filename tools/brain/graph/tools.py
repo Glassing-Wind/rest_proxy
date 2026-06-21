@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
 from tools.brain.graph import flow_summary as graph_flow_summary
 from tools.brain.graph import overview as graph_overview
@@ -106,7 +104,9 @@ def register(mcp: FastMCP) -> None:
         expand_api_calls: bool = False,
     ) -> str:
         """
-        Summarize UI → API → Service → DB paths for a project.
+        Summarize UI → API → Service → DB paths for a full-stack web project.
+        Reach for this specialty view when those layers should exist; empty
+        results diagnose missing graph evidence and route to get_flow_summary.
         """
         try:
             import graph_bootstrap

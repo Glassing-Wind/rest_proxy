@@ -95,7 +95,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_app_flow_summary": ToolCatalogEntry(
         "experimental",
         "architecture",
-        "Check UI to API to service to database paths when the repo has enough full-stack graph edges.",
+        "Check UI-to-API-to-service paths in a full-stack web repo, or diagnose which required graph edges are missing.",
     ),
     "get_apple_build_summary": ToolCatalogEntry(
         "secondary",

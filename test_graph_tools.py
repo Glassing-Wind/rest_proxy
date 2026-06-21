@@ -1733,6 +1733,34 @@ class GraphToolsTests(unittest.TestCase):
         apple_mock.assert_awaited_once()
         backend_mock.assert_not_awaited()
 
+    def test_get_flow_summary_auto_falls_through_rich_app_flow_diagnostic(self):
+        app_diagnostic = (
+            "No UI → API → Service → DB paths found.\n\n"
+            "Diagnosis:\n- Coverage: ui_files=0 js_files=1 asset_links=0 api_links=0"
+        )
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module.graph_flow_summary,
+                "get_app_flow_summary_impl",
+                new=mock.AsyncMock(return_value=app_diagnostic),
+            ) as app_mock:
+                with mock.patch.object(
+                    self.module.graph_flow_summary,
+                    "get_backend_flow_summary_impl",
+                    new=mock.AsyncMock(return_value="backend result"),
+                ) as backend_mock:
+                    output = asyncio.run(
+                        self.mcp.tools["get_flow_summary"](
+                            "/tmp/fullstack",
+                            mode="auto",
+                            limit=5,
+                        )
+                    )
+
+        self.assertEqual("### Flow Type: API -> Service -> DB\nbackend result", output)
+        app_mock.assert_awaited_once()
+        backend_mock.assert_awaited_once()
+
 
 if __name__ == "__main__":
     unittest.main()

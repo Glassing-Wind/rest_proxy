@@ -89,6 +89,11 @@ What recent live-workflow hardening improved:
     positioned as a follow-up to `get_project_overview`
   - clusters without a specialized API/UI/data/CLI role use stable dominant
     implementation areas instead of collapsing most output into `mixed`
+- `get_app_flow_summary`
+  - empty results now distinguish absent UI source surfaces from missing
+    cross-layer graph edges and recommend the best available flow fallback
+  - the tool remains experimental until positive end-to-end paths are validated
+    on a real indexed full-stack repository
 
 What this means in practice:
 

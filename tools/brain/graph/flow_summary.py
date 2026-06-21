@@ -931,7 +931,7 @@ async def _build_app_flow_literal_fallback(session, project_id: str, workspace_i
     return fallback_rows
 
 
-async def _coverage_lines(session, project_id: str) -> list[str]:
+async def _coverage_snapshot(session, project_id: str) -> dict[str, int]:
     coverage_result = await graph_core._execute_read(
         session,
         _schema_cypher("""
@@ -988,13 +988,62 @@ async def _coverage_lines(session, project_id: str) -> list[str]:
     db_links = db_result[0].get("db_links") if db_result else 0
     api_route_links = route_result[0].get("api_route_links") if route_result else 0
     file_graph_links = file_graph_result[0].get("file_graph_links") if file_graph_result else 0
-    return [
+    return {
+        "ui_files": int(ui_files or 0),
+        "js_files": int(js_files or 0),
+        "asset_links": int(asset_links or 0),
+        "api_links": int(api_links or 0),
+        "api_route_links": int(api_route_links or 0),
+        "service_links": int(service_links or 0),
+        "db_links": int(db_links or 0),
+        "file_graph_links": int(file_graph_links or 0),
+    }
+
+
+def _coverage_line(coverage: dict[str, int]) -> str:
+    return (
         "Coverage: "
-        f"ui_files={ui_files} js_files={js_files} "
-        f"asset_links={asset_links} api_links={api_links} "
-        f"api_route_links={api_route_links} service_links={service_links} "
-        f"db_links={db_links} file_graph_links={file_graph_links}"
-    ]
+        f"ui_files={coverage.get('ui_files', 0)} js_files={coverage.get('js_files', 0)} "
+        f"asset_links={coverage.get('asset_links', 0)} api_links={coverage.get('api_links', 0)} "
+        f"api_route_links={coverage.get('api_route_links', 0)} "
+        f"service_links={coverage.get('service_links', 0)} "
+        f"db_links={coverage.get('db_links', 0)} "
+        f"file_graph_links={coverage.get('file_graph_links', 0)}"
+    )
+
+
+async def _coverage_lines(session, project_id: str) -> list[str]:
+    return [_coverage_line(await _coverage_snapshot(session, project_id))]
+
+
+def _empty_app_flow_diagnostic(workspace_id: str, coverage: dict[str, int]) -> str:
+    missing: list[str] = []
+    if coverage.get("ui_files", 0) == 0:
+        missing.append("HTML/Astro UI entry files")
+    if coverage.get("js_files", 0) == 0:
+        missing.append("JavaScript/TypeScript client files")
+    if coverage.get("asset_links", 0) == 0:
+        missing.append("ASSET_LINKS UI-to-client edges")
+    if coverage.get("api_links", 0) + coverage.get("api_route_links", 0) == 0:
+        missing.append("CALLS_API or CALLS_API_ROUTE edges")
+    if coverage.get("service_links", 0) == 0:
+        missing.append("CALLS_SERVICE edges")
+    if coverage.get("db_links", 0) == 0:
+        missing.append("CALLS_DB edges")
+    missing_text = ", ".join(missing) if missing else "a connected end-to-end path across the indexed edge families"
+    return "\n".join(
+        [
+            "No UI → API → Service → DB paths found.",
+            "",
+            "Diagnosis:",
+            f"- {_coverage_line(coverage)}",
+            f"- Missing evidence: {missing_text}.",
+            "",
+            "Next action:",
+            f"- use get_flow_summary('{workspace_id}', mode='auto') to select the best available flow family",
+            "- if this is expected to be a full-stack web app, reindex after verifying the UI assets and API/service calls are represented in source",
+        ]
+    )
 
 
 async def get_app_flow_summary_impl(
@@ -1021,12 +1070,14 @@ async def get_app_flow_summary_impl(
         query_limit = max(limit * 10, 300)
 
     rows: list[str] = []
+    coverage: dict[str, int] = {}
     coverage_lines: list[str] = []
     ui_routes: dict[str, list[str]] = {}
     async with driver.session(database=neo4j_db) as session:
         entry_files = await _resolve_entry_files(session, project_id, entry_files, entry_glob)
         if include_coverage:
-            coverage_lines = await _coverage_lines(session, project_id)
+            coverage = await _coverage_snapshot(session, project_id)
+            coverage_lines = [_coverage_line(coverage)]
         api_route_counts = await _load_api_route_counts(session, project_id)
 
         result = await graph_core._execute_read(
@@ -1101,6 +1152,9 @@ async def get_app_flow_summary_impl(
         raw_rows = _prefer_concrete_app_rows(raw_rows)
         raw_rows = _collapse_ambiguous_app_rows(raw_rows)
 
+        if not raw_rows and not coverage:
+            coverage = await _coverage_snapshot(session, project_id)
+
         if expand_api_calls:
             ui_candidates = sorted({row[0] for row in raw_rows if row[0]})
             for ui_path in ui_candidates:
@@ -1120,7 +1174,7 @@ async def get_app_flow_summary_impl(
                 ui_routes[ui_path] = sorted(route for route in routes if route)
 
     if not raw_rows:
-        return "No UI → API → Service → DB paths found."
+        return _empty_app_flow_diagnostic(workspace_id, coverage)
 
     focus_lines = _app_flow_focus_lines(raw_rows, grouped_by_ui=group_by_ui)
 

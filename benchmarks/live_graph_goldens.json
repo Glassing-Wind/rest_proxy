@@ -320,6 +320,26 @@
       ]
     },
     {
+      "id": "rest_proxy_app_flow_diagnostic",
+      "workspace_name": "rest_proxy",
+      "tool": "get_app_flow_summary",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "limit": 12
+      },
+      "required_substrings": [
+        "No UI → API → Service → DB paths found.",
+        "Diagnosis:",
+        "Coverage: ui_files=0",
+        "Missing evidence: HTML/Astro UI entry files",
+        "Next action:",
+        "mode='auto'"
+      ],
+      "forbidden_substrings": [
+        "Error building flow summary"
+      ]
+    },
+    {
       "id": "rest_proxy_backend_context_workflow",
       "workspace_name": "rest_proxy",
       "steps": [

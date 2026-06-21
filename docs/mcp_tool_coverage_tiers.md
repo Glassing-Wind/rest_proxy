@@ -65,7 +65,7 @@ repo or investigation path justifies stronger coverage.
 | `get_code_communities` | unit/script, live, mcp parity, workflow |
 | `get_repo_dependency_summary` | unit/script, live, mcp parity |
 | `get_flow_summary` | unit/script, live, mcp parity |
-| `get_app_flow_summary` | unit/script |
+| `get_app_flow_summary` | unit/script, live diagnostic |
 | `get_backend_flow_summary` | unit/script, live, mcp parity |
 | `get_apple_build_summary` | unit/script, live, mcp parity, workflow |
 | `get_symbol_exports_summary` | unit/script, live, mcp parity, workflow |
@@ -89,7 +89,8 @@ Current promoted Tier 2 trust set:
 Still intentionally unpromoted:
 
 - `get_app_flow_summary`, because current benchmark repos do not yet produce
-  consistently useful UI → API → service → DB paths.
+  consistently useful UI → API → service → DB paths. Its empty state is now a
+  live-tested coverage diagnostic rather than a dead end.
 - `query_graph`, because it is admin-gated in the normal daemon and is not a
   standard end-user MCP parity target.
 
