@@ -162,6 +162,12 @@ def register(mcp: FastMCP) -> None:
     def _list_symbol_match_test_rank(file_path: str | None, raw_roles) -> int:
         return 1 if _is_test_like_related_candidate(file_path, raw_roles) else 0
 
+    def _compact_symbol_signature(signature: object, max_chars: int = 140) -> str:
+        value = " ".join(str(signature or "").split())
+        if len(value) <= max_chars:
+            return value
+        return value[: max_chars - 3].rstrip() + "..."
+
     def _is_low_signal_related_import_source(source: str | None) -> bool:
         value = str(source or "").strip()
         if not value:
@@ -1374,8 +1380,7 @@ def register(mcp: FastMCP) -> None:
 
             lines = [f"Symbol matches for '{q}':", ""]
             for rec in rows:
-                sig = rec.get("signature") or ""
-                sig = sig.strip().replace("\n", " ")
+                sig = _compact_symbol_signature(rec.get("signature"))
                 sig = f" — {sig}" if sig else ""
                 qn = rec.get("qualified_name") or ""
                 qn = f" ({qn})" if qn and qn != rec.get("name") else ""

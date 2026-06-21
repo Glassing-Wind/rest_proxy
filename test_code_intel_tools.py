@@ -3466,6 +3466,44 @@ class CodeIntelToolTests(unittest.TestCase):
         output = asyncio.run(self.mcp.tools["list_symbol_matches"]("/tmp/rental", "   "))
         self.assertEqual(output, "Query is empty. Provide a symbol name substring to match.")
 
+    def test_list_symbol_matches_compacts_long_multiline_signatures(self):
+        async def fake_executor(cypher, **kwargs):
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "configure_provider",
+                    "qualified_name": "providers.configure_provider",
+                    "signature": (
+                        "def configure_provider(\n"
+                        "    provider: Provider[Any], model: Model, settings: ModelSettings, "
+                        "request_parameters: ModelRequestParameters, instrumentation: InstrumentationSettings,\n"
+                        ") -> ConfiguredProvider"
+                    ),
+                    "filepath": "src/providers.py",
+                }
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/rental",
+                        "configure_provider",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        match_line = next(line for line in output.splitlines() if line.startswith("- "))
+        self.assertIn("configure_provider", match_line)
+        self.assertIn("src/providers.py", match_line)
+        self.assertTrue(match_line.endswith("..."))
+        self.assertNotIn("\n", match_line)
+        signature_text = match_line.split(" — ", 1)[1]
+        self.assertLessEqual(len(signature_text), 140)
+
     def test_list_symbol_matches_accepts_workspace_id_keyword(self):
         async def fake_executor(cypher, **kwargs):
             self.assertEqual(kwargs["q"], "infer_provider")

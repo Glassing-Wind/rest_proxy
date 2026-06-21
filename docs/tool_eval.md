@@ -41,7 +41,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `list_dir` | **Low-Medium** | Add directory/file type markers and sizes for visual parity with shell tools. | **Tested**: Listed `proxy/` contents. Useful but basic. |
 | `list_documentation_sources` | **High** | None. | **Tested**: Identified 5 documentation topics including `neo4j-gds`. Vital for verifying what external context is available. |
 | `list_memories` | **Critical** | None. | **Tested**: Successfully retrieved 6 architectural and task memories. Essential for cross-session continuity. |
-| `list_symbol_matches` | **High** | Include abbreviated signatures in output to help disambiguate similarly named functions. | **Tested**: Found 7 symbols matching 'workspace'. Great for exploratory navigation. |
+| `list_symbol_matches` | **High** | None for the current exploratory lookup workflow. | **Fixed/Tested**: Results include normalized signatures, with long signatures abbreviated to keep similarly named symbols easy to scan and disambiguate. |
 | `query_graph` | **High (Admin/Expert)** | Keep it hidden from the default user-facing surface; expose only for admin/debug workflows. | **Tested**: Powerful raw Cypher escape hatch, but not a normal product tool and no longer part of the default registered surface. |
 | `research_and_index` | **Very High** | None. | **Tested**: Automates the external knowledge acquisition loop. Best for "learning" a new library. |
 | `research_documentation` | **Critical** | None. | **Tested**: Found relevant URLs and detected `llms.txt` for Neo4j GDS. Outstanding for contextual research. |
