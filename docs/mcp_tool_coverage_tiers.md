@@ -62,7 +62,7 @@ repo or investigation path justifies stronger coverage.
 | --- | --- |
 | `get_related_files` | unit/script, live, mcp parity, workflow |
 | `get_code_importance` | unit/script, live, mcp parity, workflow |
-| `get_code_communities` | unit/script, mcp parity |
+| `get_code_communities` | unit/script, live, mcp parity, workflow |
 | `get_repo_dependency_summary` | unit/script, live, mcp parity |
 | `get_flow_summary` | unit/script, live, mcp parity |
 | `get_app_flow_summary` | unit/script |
@@ -77,6 +77,7 @@ Current promoted Tier 2 trust set:
 
 - `get_related_files`
 - `get_code_importance`
+- `get_code_communities`
 - `get_repo_dependency_summary`
 - `get_flow_summary`
 - `get_backend_flow_summary`
@@ -87,9 +88,6 @@ Current promoted Tier 2 trust set:
 
 Still intentionally unpromoted:
 
-- `get_code_communities`, because it is now more decision-oriented but still
-  needs more live workflow evidence before it should compete with
-  `get_project_overview` as an onboarding default.
 - `get_app_flow_summary`, because current benchmark repos do not yet produce
   consistently useful UI → API → service → DB paths.
 - `query_graph`, because it is admin-gated in the normal daemon and is not a

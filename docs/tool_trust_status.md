@@ -82,6 +82,13 @@ What recent live-workflow hardening improved:
   - better ambiguity handling
   - less cross-language graph noise
   - better call ordering and less same-file clutter
+- `get_code_communities`
+  - root-level test and benchmark basenames now receive lower-level ts-pack
+    file roles instead of leaking into implementation clusters
+  - live clustered-repo orientation starts from implementation files and is
+    positioned as a follow-up to `get_project_overview`
+  - clusters without a specialized API/UI/data/CLI role use stable dominant
+    implementation areas instead of collapsing most output into `mixed`
 
 What this means in practice:
 
@@ -121,7 +128,8 @@ Current remaining goals:
 
 - keep shrinking the remaining legacy-only path fallback pockets in smaller
   helper/debug surfaces; architecture importance and community ranking now use
-  semantic file roles first and reserve path classification for legacy records
+  semantic file roles first, including root-level test/benchmark basename
+  classification from ts-pack, and reserve path classification for legacy records
 - continue MCP-only workflow passes across real repos and log the next actual
   trust hesitation instead of preemptive churn
 - add deeper metadata only for the next proven weak family, rather than adding

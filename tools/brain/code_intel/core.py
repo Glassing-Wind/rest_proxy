@@ -716,6 +716,22 @@ def register(mcp: FastMCP) -> None:
             return "data/schema", 1.4
         if jobs_count >= 1:
             return "jobs/runtime", 1.25
+        if len(files) >= 2:
+            area_counts: dict[str, int] = {}
+            generic_roots = {"app", "apps", "crate", "crates", "lib", "packages", "src"}
+            for file_path in files:
+                parts = [part for part in file_path.split("/") if part]
+                if not parts:
+                    continue
+                area_index = 1 if parts[0] in generic_roots and len(parts) > 1 else 0
+                area = parts[area_index]
+                area_counts[area] = area_counts.get(area, 0) + 1
+            if area_counts:
+                area, area_count = max(
+                    area_counts.items(), key=lambda item: (item[1], item[0])
+                )
+                if area_count / len(files) >= 0.6:
+                    return f"area/{area}", 1.05
         return "mixed", 1.0
 
     def _hydrate_community_records(records: list[dict]) -> list[dict]:
@@ -799,6 +815,8 @@ def register(mcp: FastMCP) -> None:
             return "likely support or generated surface"
         if kind_label in {"ui/app", "web/site"}:
             return "user-facing surface"
+        if kind_label.startswith("area/"):
+            return "cohesive implementation area"
         return "broadest symbol-rich area"
 
     def _render_community_summary(
@@ -1766,9 +1784,9 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def get_code_communities(workspace_id: str) -> str:
         """
-        Identify architectural clusters in the codebase by grouping files by their
-        top-level directory. Shows the structure of the project at a glance.
-        For each cluster, lists its most symbol-rich files.
+        Identify topology-based architectural clusters and their strongest files.
+        Reach for this after get_project_overview when a large or modular repo
+        needs concern-level exploration rather than a single global starting point.
 
         Run index_workspace() first to enable real PageRank and
         community detection via get_code_importance and
@@ -1869,7 +1887,7 @@ def register(mcp: FastMCP) -> None:
             )
             output = [
                 f"Architectural clusters [{method}]:",
-                "Use this to decide which architectural area to inspect first and which areas are likely separate concerns.",
+                "Use this after `get_project_overview` to choose an architectural area and identify concerns that can be explored separately.",
             ]
             filtered_records = []
             suppressed_small_records = 0

@@ -3007,7 +3007,7 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crate `api`", output)
         self.assertIn("crate `core`", output)
         self.assertIn("crates/api/src/lib.rs", output)
-        self.assertIn("Use this to decide which architectural area", output)
+        self.assertIn("Use this after `get_project_overview` to choose an architectural area", output)
         self.assertIn("Community Summary:", output)
         self.assertIn("- Start with api", output)
         self.assertIn("Dominant concerns:", output)
@@ -3149,6 +3149,48 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("cluster #20 [backend/app]", output)
         self.assertIn("cluster #21 [ui/app]", output)
         self.assertLess(output.index("cluster #20"), output.index("cluster #21"))
+
+    def test_get_code_communities_labels_dominant_implementation_areas(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.louvainCommunity IS NOT NULL" in cypher:
+                return [
+                    {
+                        "comm": 20,
+                        "file_count": 5,
+                        "total_syms": 40,
+                        "top_files": [
+                            "tools/brain/graph/overview.py",
+                            "tools/brain/graph/flow_summary.py",
+                            "tools/brain/code_intel/core.py",
+                            "scripts/check_parity.py",
+                        ],
+                    },
+                    {
+                        "comm": 21,
+                        "file_count": 4,
+                        "total_syms": 30,
+                        "top_files": [
+                            "packages/provider/openai.py",
+                            "packages/provider/anthropic.py",
+                            "packages/provider/google.py",
+                        ],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/repo"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("cluster #20 [area/tools]", output)
+        self.assertIn("cluster #21 [area/provider]", output)
+        self.assertIn("cohesive implementation area", output)
 
     def test_get_code_communities_labels_monorepo_sdk_generated_and_cli_clusters(self):
         async def fake_executor(cypher, **kwargs):

@@ -264,6 +264,48 @@
       ]
     },
     {
+      "id": "rest_proxy_community_orientation_workflow",
+      "workspace_name": "rest_proxy",
+      "steps": [
+        {
+          "name": "Establish the repository-wide starting point",
+          "tool": "get_project_overview",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview: rest_proxy",
+            "## Inspect First"
+          ]
+        },
+        {
+          "name": "Separate the repository into implementation concerns",
+          "tool": "get_code_communities",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "Use this after `get_project_overview`",
+            "Community Summary:",
+            "[area/tools]",
+            "Dominant concerns: area/tools",
+            "first file: tools/brain/graph/overview.py",
+            "Top files: tools/brain/graph/overview.py",
+            "Suppressed"
+          ],
+          "forbidden_substrings": [
+            "first file: test_",
+            "Top files: test_"
+          ]
+        }
+      ],
+      "required_substrings": [
+        "# Project Overview: rest_proxy",
+        "Community Summary:",
+        "tools/brain/graph/overview.py"
+      ]
+    },
+    {
       "id": "rest_proxy_backend_flow_summary",
       "workspace_name": "rest_proxy",
       "tool": "get_backend_flow_summary",
