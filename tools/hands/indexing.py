@@ -1868,8 +1868,7 @@ async def get_indexed_projects(query: Optional[str] = None) -> str:
                     WHERE p.project_path IS NOT NULL
                     RETURN p.id AS id,
                            p.project_path AS path,
-                           p.last_indexed AS last_indexed,
-                           p.source_url AS source_url
+                           p.last_indexed AS last_indexed
                     """,
                     op="list_indexed_projects",
                 )
@@ -1883,7 +1882,7 @@ async def get_indexed_projects(query: Optional[str] = None) -> str:
                             pid,
                             path,
                             row.get("last_indexed"),
-                            row.get("source_url"),
+                            None,
                         )
                     )
     except Exception:

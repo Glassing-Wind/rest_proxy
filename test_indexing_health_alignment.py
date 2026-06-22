@@ -41,6 +41,35 @@ class FakeMemoryStore:
         return False
 
 
+class IndexedProjectsTests(unittest.TestCase):
+    def test_graph_registry_query_uses_current_project_properties(self):
+        module = load_indexing_module()
+        graph_bootstrap = types.ModuleType("graph_bootstrap")
+        graph_bootstrap._NEO4J_ENABLED = True
+        graph_bootstrap._NEO4J_DB = "proxy"
+        graph_bootstrap.require_driver = mock.AsyncMock(return_value=FakeDriver())
+        seen_queries = []
+
+        async def fake_execute_read(session, query, **kwargs):
+            seen_queries.append(str(query))
+            return [
+                {
+                    "id": "project-id",
+                    "path": "/tmp/project",
+                    "last_indexed": 10,
+                }
+            ]
+
+        with (
+            mock.patch.dict(sys.modules, {"graph_bootstrap": graph_bootstrap}),
+            mock.patch.object(module, "_execute_read", side_effect=fake_execute_read),
+        ):
+            output = asyncio.run(module.get_indexed_projects())
+
+        self.assertIn("/tmp/project", output)
+        self.assertNotIn("source_url", "\n".join(seen_queries))
+
+
 class FakeCursor:
     def __init__(self, rows_by_query):
         self._rows_by_query = rows_by_query

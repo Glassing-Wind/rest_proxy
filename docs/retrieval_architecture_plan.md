@@ -168,9 +168,9 @@ These belong in `ts-pack` or a lower-level retrieval/indexing layer, not in MCP 
 ### Boundary Drift
 
 - docs retrieval semantics still partly live in Python MCP code
-- some admin/debug-only surfaces still carry legacy path-only fallback logic;
-  promoted retrieval, orientation, graph, summary, and code-intel tools use the
-  same semantic role precedence
+- legacy path fallback remains only where current semantic metadata is absent or
+  cannot exist yet (for example pre-index source eligibility); promoted tools use
+  the same semantic role precedence
 - a few query families still rely on `rest_proxy` policy where lower-level
   metadata is not yet rich enough
 
@@ -246,13 +246,11 @@ These are not obviously wrong to keep higher:
 This plan should not be interpreted as “move everything down immediately.”
 Current next steps should follow this order:
 
-1. Finish shrinking the remaining legacy-only fallback pockets in admin/debug
-   surfaces when they affect a real workflow.
-2. Use live MCP workflows and telemetry to find the next real hesitation.
-3. If the issue is a durable structural fact, move it down into `ts-pack` or a
+1. Use live MCP workflows and telemetry to find the next real hesitation.
+2. If the issue is a durable structural fact, move it down into `ts-pack` or a
    lower-level index contract.
-4. If the issue is a query/product tradeoff, keep it in `rest_proxy`.
-5. Only add new goldens or workflow cases when they protect a real current
+3. If the issue is a query/product tradeoff, keep it in `rest_proxy`.
+4. Only add new goldens or workflow cases when they protect a real current
    boundary.
 
 

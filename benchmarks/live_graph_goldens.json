@@ -3204,6 +3204,29 @@
         "App/Account/AccountView.swift",
         "App/Store/RefundView.swift"
       ]
+    },
+    {
+      "id": "ts_pack_detect_language_cross_project",
+      "workspace_name": "tree-sitter-language-pack",
+      "tool": "trace_symbol_cross_project",
+      "params": {
+        "symbol_name": "detect_language",
+        "source_workspace": "$workspace_id",
+        "target_workspace": "/Users/michaelmarler/Projects/rest_proxy"
+      },
+      "required_substrings": [
+        "## Cross-project trace: `detect_language`",
+        "tree-sitter-language-pack  →  rest_proxy",
+        "### Definition  [tree-sitter-language-pack]",
+        "pub fn detect_language",
+        "### Usages  [rest_proxy]",
+        "**Implementation / consumer text hits**",
+        "scripts/index_workspace.py"
+      ],
+      "forbidden_substrings": [
+        "only test/support references were found",
+        "search_multi_project"
+      ]
     }
   ]
 }

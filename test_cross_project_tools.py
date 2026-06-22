@@ -182,6 +182,13 @@ class CrossProjectToolTests(unittest.TestCase):
                 ["implementation_surface", "test_surface"],
             )
         )
+
+    def test_symbol_centered_preview_keeps_requested_definition_visible(self):
+        prefix = "// generated wrapper metadata\n" * 30
+        content = prefix + "pub fn detect_language(path: String) -> Option<String> { todo!() }"
+        preview = self.module._symbol_centered_preview(content, "detect_language", limit=180)
+        self.assertIn("pub fn detect_language", preview)
+        self.assertLessEqual(len(preview), 180)
     def test_trace_symbol_cross_project_resolves_export_alias_definition(self):
         async def fake_execute_read(session, cypher, **kwargs):
             op = kwargs.get("op")

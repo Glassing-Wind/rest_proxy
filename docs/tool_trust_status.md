@@ -153,10 +153,6 @@ too weak.
 
 Current remaining goals:
 
-- keep shrinking the remaining legacy-only path fallback pockets in admin and
-  debug-only surfaces; promoted retrieval, orientation, graph, summary, and
-  code-intel tools now share semantic-role precedence and reserve ordinary path
-  classification for legacy records
 - continue MCP-only workflow passes across real repos and log the next actual
   trust hesitation instead of preemptive churn
 - add deeper metadata only for the next proven weak family, rather than adding
@@ -166,6 +162,13 @@ Current remaining goals:
 
 Latest workflow finding closed:
 
+- `trace_symbol_cross_project` is now promoted into the live and MCP parity
+  trust set; candidate retrieval ranks the full bounded exact/semantic window
+  before truncation, symbol previews center on the requested definition, and a
+  live tree-sitter-language-pack to rest_proxy case protects implementation-side
+  consumer discovery
+- `get_indexed_projects` no longer queries the retired Neo4j `Project.source_url`
+  property, eliminating a DBMS warning on an otherwise healthy operator call
 - `get_indexing_health(audit=True)` now measures the active import graph
   contract (`IMPORTS` and `IMPORTS_SYMBOL`) instead of the retired
   `RESOLVES_TO` relation, and STDIO startup no longer injects raw JSON-RPC
@@ -180,7 +183,6 @@ Latest workflow finding closed:
 
 Current likely targets:
 
-- residual path-only compatibility logic in small admin/debug surfaces
 - the next lower-level routing/handler metadata pass if live usage still finds
   repo families where controller/route surfaces are under-described
 - additional workflow cases only when they protect a current trust boundary

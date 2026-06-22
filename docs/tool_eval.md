@@ -48,7 +48,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `search_documentation` | **Critical** | None. | **Tested**: Retrieved specific `maxIterations` parameter for Neo4j GDS. Outstanding for technical accuracy. |
 | `search_memory` | **Critical** | None. | **Tested**: Recalled architectural decisions from previous sessions. Key to agent consistency. |
 | `swift_doc_lookup` | **Niche** | Requires SourceKitten. Only works for Swift projects. | **Value**: Essential for Apple platform development but irrelevant for Python/JS repos. |
-| `trace_symbol_cross_project` | **Very High** | None. | **Value**: Invaluable for gRPC and monorepo workflows to trace impact across boundaries. |
+| `trace_symbol_cross_project` | **Very High** | None. | **Fixed/Tested**: Invaluable for binding, gRPC, and monorepo workflows; role-aware candidate ranking now happens before output truncation, source previews center on the requested symbol, and live ts-pack-to-rest_proxy parity protects real cross-repo consumer discovery. |
 | `unwatch_project` | **Medium** | None. | **Tested**: Companion tool for resource management. |
 | `visualize_subgraph` | **Critical** | None. | **Tested**: Generated a Mermaid diagram for `get_project_id`. Best tool for immediate mental mapping of a symbol's neighborhood. |
 | `watch_project` | **High** | None. | **Fixed/Tested**: Explicitly pins a repo for manual background watching; a no-argument call requests standards-based client roots and accepts only valid local `file://` directories. Roots are never consumed implicitly. |

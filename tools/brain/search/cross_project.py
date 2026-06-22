@@ -151,6 +151,21 @@ def _render_semantic_hit(record: dict) -> str:
     )
 
 
+def _symbol_centered_preview(content: str, symbol_name: str, limit: int = 600) -> str:
+    text = str(content or "").strip()
+    if len(text) <= limit:
+        return text
+    hit = text.lower().find(str(symbol_name or "").lower())
+    if hit < 0:
+        return text[:limit].rstrip()
+    start = max(0, hit - limit // 3)
+    line_start = text.rfind("\n", 0, start)
+    if line_start >= 0:
+        start = line_start + 1
+    end = min(len(text), start + limit)
+    return text[start:end].rstrip()
+
+
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
@@ -300,7 +315,7 @@ def register(mcp: FastMCP) -> None:
                                     content ILIKE %(ilike)s
                                     OR (%(ilike_alt)s <> '' AND content ILIKE %(ilike_alt)s)
                                   )
-                                LIMIT 20
+                                LIMIT 200
                             ),
                             sem AS (
                                 SELECT file_path, chunk_index, content, metadata,
@@ -335,7 +350,7 @@ def register(mcp: FastMCP) -> None:
                                 s.content ILIKE %(ilike)s
                                 OR (%(ilike_alt)s <> '' AND s.content ILIKE %(ilike_alt)s)
                             )
-                            ORDER BY rrf DESC LIMIT 12
+                            ORDER BY rrf DESC LIMIT 200
                         """,
                             {
                                 "vec": vec_str,
@@ -356,8 +371,6 @@ def register(mcp: FastMCP) -> None:
                                 continue
                             seen.add(key)
                             deduped.append(row)
-                            if len(deduped) >= 5:
-                                break
                         return deduped
 
             async def _fetch_src_preview():
@@ -369,9 +382,20 @@ def register(mcp: FastMCP) -> None:
                             """
                             SELECT content FROM codebase_embeddings
                             WHERE project_id = %s AND file_path = %s
-                            ORDER BY chunk_index LIMIT 2
+                            ORDER BY
+                              CASE WHEN content ILIKE %s THEN 0 ELSE 1 END,
+                              ABS(
+                                COALESCE((metadata->>'start_line')::int, 0) - %s
+                              ),
+                              chunk_index
+                            LIMIT 2
                         """,
-                            (src_id, definition["filepath"]),
+                            (
+                                src_id,
+                                definition["filepath"],
+                                f"%{symbol_name}%",
+                                int(definition.get("start_line") or 0),
+                            ),
                         )
                         return await cur.fetchall()
 
@@ -436,7 +460,10 @@ def register(mcp: FastMCP) -> None:
                 if definition.get("signature"):
                     lines.append(f"  Signature: {definition['signature']}")
                 if src_rows:
-                    preview = "\n".join(r[0][:400] for r in src_rows)
+                    preview = "\n".join(
+                        _symbol_centered_preview(r[0], symbol_name)
+                        for r in src_rows
+                    )
                     lines += ["", f"```\n{preview.strip()}\n```"]
             else:
                 lines.append(f"⚠️  `{symbol_name}` not found in Neo4j for [{src_name}].")
@@ -490,7 +517,7 @@ def register(mcp: FastMCP) -> None:
                 lines += [
                     "",
                     f"💡 `{symbol_name}` appears to be defined in [{src_name}] but not yet referenced in [{tgt_name}].",
-                    f"   Try `search_multi_project` with a broader semantic query.",
+                    f"   Try `search_codebase` in [{tgt_name}] with a broader semantic query.",
                 ]
 
             return "\n".join(lines)

@@ -72,6 +72,7 @@ repo or investigation path justifies stronger coverage.
 | `query_graph` | unit/script, live |
 | `get_symbol_imports_overview` | unit/script, live, mcp parity, workflow |
 | `visualize_subgraph` | unit/script, live, mcp parity, workflow |
+| `trace_symbol_cross_project` | unit/script, live, mcp parity |
 
 Current promoted Tier 2 trust set:
 
@@ -85,6 +86,7 @@ Current promoted Tier 2 trust set:
 - `get_symbol_exports_summary`
 - `get_symbol_imports_overview`
 - `visualize_subgraph`
+- `trace_symbol_cross_project`
 
 Still intentionally unpromoted:
 

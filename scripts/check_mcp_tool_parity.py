@@ -84,6 +84,7 @@ DEFAULT_WORKSPACES = {
     "spring-petclinic-upstream": "/Users/michaelmarler/Projects/spring-petclinic-upstream",
     "okhttp-upstream": "/Users/michaelmarler/Projects/okhttp-upstream",
     "swift-nio": "/Users/michaelmarler/Projects/swift-nio",
+    "tree-sitter-language-pack": "/Users/michaelmarler/Projects/tree-sitter-language-pack",
 }
 
 DEFAULT_CASE_IDS = [
@@ -107,6 +108,7 @@ DEFAULT_CASE_IDS = [
     "okhttp_proceed_symbol_context",
     "swift_nio_code_importance",
     "swift_nio_bytebuffer_exports_summary",
+    "ts_pack_detect_language_cross_project",
 ]
 
 DEFAULT_DIRECT_PARITY_CHECKS = [
@@ -764,6 +766,7 @@ def main() -> int:
         "get_call_chain",
         "find_references",
         "trace_graph_provenance",
+        "trace_symbol_cross_project",
         "get_related_files",
         "get_code_importance",
         "get_code_communities",

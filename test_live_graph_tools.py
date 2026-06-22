@@ -122,6 +122,7 @@ def _build_tool_registry() -> FakeMCP:
     from tools.brain.code_intel import core as code_intel_core
     from tools.brain.graph import tools as graph_tools
     from tools.brain.search import graph_query as graph_query_tools
+    from tools.brain.search import cross_project as cross_project_tools
     from tools.brain.search import semantic as semantic_tools
     from tools.brain.search import tools as search_tools
     from tools.hands import dev as dev_tools
@@ -130,6 +131,7 @@ def _build_tool_registry() -> FakeMCP:
     code_intel_core.register(mcp)
     graph_tools.register(mcp)
     graph_query_tools.register(mcp, include_admin=True)
+    cross_project_tools.register(mcp)
     semantic_tools.register(mcp)
     search_tools.register(mcp)
     dev_tools.register(mcp)

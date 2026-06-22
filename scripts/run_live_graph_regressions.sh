@@ -25,6 +25,7 @@ WORKSPACES=(
   "/Users/michaelmarler/Projects/spring-petclinic-upstream"
   "/Users/michaelmarler/Projects/okhttp-upstream"
   "/Users/michaelmarler/Projects/swift-nio"
+  "/Users/michaelmarler/Projects/tree-sitter-language-pack"
 )
 
 AVAILABLE_WORKSPACES=()
@@ -119,6 +120,7 @@ CASES=(
   "swift_nio_bytebuffer_exports_summary"
   "swift_nio_core_orientation_workflow"
   "swift_nio_posix_orientation_workflow"
+  "ts_pack_detect_language_cross_project"
   "spring_petclinic_owner_orientation_workflow"
   "sample_food_truck_store_orientation_workflow"
 )
