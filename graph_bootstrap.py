@@ -13,7 +13,9 @@ from neo4j import AsyncGraphDatabase, unit_of_work
 try:
     from tools.brain.graph_contract import node_label, rel_type
 except ModuleNotFoundError:
-    _GRAPH_CONTRACT_PATH = Path(__file__).resolve().parent / "tools" / "brain" / "graph_contract.py"
+    _GRAPH_CONTRACT_PATH = (
+        Path(__file__).resolve().parent / "tools" / "brain" / "graph_contract.py"
+    )
     _GRAPH_CONTRACT_SPEC = importlib.util.spec_from_file_location(
         "_brain_graph_contract", _GRAPH_CONTRACT_PATH
     )
@@ -68,6 +70,118 @@ _INIT_FAILURE_COOLDOWN_SECONDS = max(
 FILE_LABEL = node_label("file")
 REL_CONTAINS = rel_type("contains")
 
+_SCHEMA_CONSTRAINTS = (
+    (
+        "node_id_unique",
+        "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE",
+    ),
+    (
+        "file_id_unique",
+        f"CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:{FILE_LABEL}) REQUIRE f.id IS UNIQUE",
+    ),
+    (
+        "session_id_unique",
+        "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.id IS UNIQUE",
+    ),
+    (
+        "project_id_unique",
+        "CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE",
+    ),
+    (
+        "memory_turn_id_unique",
+        "CREATE CONSTRAINT memory_turn_id_unique IF NOT EXISTS FOR (t:MemoryTurn) REQUIRE t.id IS UNIQUE",
+    ),
+    (
+        "memory_summary_id_unique",
+        "CREATE CONSTRAINT memory_summary_id_unique IF NOT EXISTS FOR (s:MemorySummary) REQUIRE s.id IS UNIQUE",
+    ),
+    (
+        "memory_checkpoint_id_unique",
+        "CREATE CONSTRAINT memory_checkpoint_id_unique IF NOT EXISTS FOR (c:MemoryCheckpoint) REQUIRE c.id IS UNIQUE",
+    ),
+    (
+        "tool_output_id_unique",
+        "CREATE CONSTRAINT tool_output_id_unique IF NOT EXISTS FOR (o:ToolOutput) REQUIRE o.id IS UNIQUE",
+    ),
+    (
+        "chunk_id_unique",
+        "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE",
+    ),
+)
+_SCHEMA_INDEXES = (
+    (
+        "node_project_id",
+        "CREATE INDEX node_project_id IF NOT EXISTS FOR (n:Node) ON (n.project_id)",
+    ),
+    (
+        "node_project_name",
+        "CREATE INDEX node_project_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name)",
+    ),
+    (
+        "node_project_name_filepath",
+        "CREATE INDEX node_project_name_filepath IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name, n.filepath)",
+    ),
+    (
+        "node_project_qualified_name",
+        "CREATE INDEX node_project_qualified_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.qualified_name)",
+    ),
+    (
+        "file_project_id",
+        f"CREATE INDEX file_project_id IF NOT EXISTS FOR (f:{FILE_LABEL}) ON (f.project_id)",
+    ),
+    (
+        "contains_idx",
+        f"CREATE INDEX contains_idx IF NOT EXISTS FOR ()-[r:{REL_CONTAINS}]-() ON (r.project_id)",
+    ),
+    (
+        "codebase_chunks_vector",
+        f"""
+        CREATE VECTOR INDEX `codebase_chunks_vector` IF NOT EXISTS
+        FOR (n:Chunk)
+        ON (n.embedding)
+        OPTIONS {{indexConfig: {{
+          `vector.dimensions`: {_EMBEDDING_DIM},
+          `vector.similarity_function`: 'cosine'
+        }}}}
+        """,
+    ),
+)
+_EXPECTED_CONSTRAINT_SIGNATURES = {
+    "node_id_unique": ("UNIQUENESS", ("Node",), ("id",)),
+    "file_id_unique": ("UNIQUENESS", (FILE_LABEL,), ("id",)),
+    "session_id_unique": ("UNIQUENESS", ("Session",), ("id",)),
+    "project_id_unique": ("UNIQUENESS", ("Project",), ("id",)),
+    "memory_turn_id_unique": ("UNIQUENESS", ("MemoryTurn",), ("id",)),
+    "memory_summary_id_unique": ("UNIQUENESS", ("MemorySummary",), ("id",)),
+    "memory_checkpoint_id_unique": ("UNIQUENESS", ("MemoryCheckpoint",), ("id",)),
+    "tool_output_id_unique": ("UNIQUENESS", ("ToolOutput",), ("id",)),
+    "chunk_id_unique": ("UNIQUENESS", ("Chunk",), ("id",)),
+}
+_EXPECTED_INDEX_SIGNATURES = {
+    "node_project_id": ("RANGE", "NODE", ("Node",), ("project_id",)),
+    "node_project_name": ("RANGE", "NODE", ("Node",), ("project_id", "name")),
+    "node_project_name_filepath": (
+        "RANGE",
+        "NODE",
+        ("Node",),
+        ("project_id", "name", "filepath"),
+    ),
+    "node_project_qualified_name": (
+        "RANGE",
+        "NODE",
+        ("Node",),
+        ("project_id", "qualified_name"),
+    ),
+    "file_project_id": ("RANGE", "NODE", (FILE_LABEL,), ("project_id",)),
+    "contains_idx": ("RANGE", "RELATIONSHIP", (REL_CONTAINS,), ("project_id",)),
+    "codebase_chunks_vector": (
+        "VECTOR",
+        "NODE",
+        ("Chunk",),
+        ("embedding",),
+    ),
+}
+
 _driver: Optional[Any] = None
 _last_init_error: Optional[str] = None
 _last_init_error_at: float = 0.0
@@ -78,9 +192,7 @@ _init_lock_loop = None
 def _driver_config() -> dict[str, Any]:
     return {
         "max_connection_pool_size": max(1, _MAX_CONNECTION_POOL_SIZE),
-        "connection_acquisition_timeout": max(
-            1.0, _CONNECTION_ACQUISITION_TIMEOUT
-        ),
+        "connection_acquisition_timeout": max(1.0, _CONNECTION_ACQUISITION_TIMEOUT),
         "max_transaction_retry_time": max(0.0, _MAX_TRANSACTION_RETRY_TIME),
         "liveness_check_timeout": max(0.0, _LIVENESS_CHECK_TIMEOUT),
         "keep_alive": _KEEP_ALIVE,
@@ -115,6 +227,59 @@ def _get_init_lock() -> asyncio.Lock:
     return _init_lock
 
 
+async def _read_schema_state(session) -> tuple[list[dict], list[dict]] | None:
+    """Return constraint/index descriptors, or None when introspection is unavailable."""
+    metadata = dict(_TX_METADATA_BASE)
+    metadata["op"] = (
+        f"{_TX_OP_PREFIX}.schema_check" if _TX_OP_PREFIX else "schema_check"
+    )
+
+    async def _tx(tx):
+        constraints_result = await tx.run(
+            "SHOW CONSTRAINTS YIELD name, type, labelsOrTypes, properties "
+            "RETURN name, type, labelsOrTypes, properties"
+        )
+        constraint_rows = await constraints_result.data()
+        indexes_result = await tx.run(
+            "SHOW INDEXES YIELD name, type, entityType, labelsOrTypes, properties "
+            "RETURN name, type, entityType, labelsOrTypes, properties"
+        )
+        index_rows = await indexes_result.data()
+        return constraint_rows, index_rows
+
+    try:
+        if hasattr(session, "execute_read"):
+            return await session.execute_read(
+                unit_of_work(timeout=_TX_TIMEOUT, metadata=metadata)(_tx)
+            )
+        return await unit_of_work(timeout=_TX_TIMEOUT, metadata=metadata)(_tx)(session)
+    except Exception as exc:
+        _debug("neo4j_schema_introspection_failed", error=str(exc))
+        return None
+
+
+def _constraint_signature(row: dict) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+    constraint_type = str(row.get("type") or "")
+    if constraint_type in {"NODE_PROPERTY_UNIQUENESS", "UNIQUENESS"}:
+        constraint_type = "UNIQUENESS"
+    return (
+        constraint_type,
+        tuple(row.get("labelsOrTypes") or ()),
+        tuple(row.get("properties") or ()),
+    )
+
+
+def _index_signature(
+    row: dict,
+) -> tuple[str, str, tuple[str, ...], tuple[str, ...]]:
+    return (
+        str(row.get("type") or ""),
+        str(row.get("entityType") or ""),
+        tuple(row.get("labelsOrTypes") or ()),
+        tuple(row.get("properties") or ()),
+    )
+
+
 async def init_graph_db() -> None:
     """Initialize Neo4j driver and ensure basic schema constraints exist."""
     global _driver, _last_init_error, _last_init_error_at
@@ -127,7 +292,8 @@ async def init_graph_db() -> None:
         if (
             _last_init_error
             and _INIT_FAILURE_COOLDOWN_SECONDS > 0.0
-            and (time.monotonic() - _last_init_error_at) < _INIT_FAILURE_COOLDOWN_SECONDS
+            and (time.monotonic() - _last_init_error_at)
+            < _INIT_FAILURE_COOLDOWN_SECONDS
         ):
             _debug(
                 "neo4j_init_suppressed_after_recent_failure",
@@ -176,56 +342,45 @@ async def init_graph_db() -> None:
                             session
                         )
 
-                # Uniqueness constraints — ensure all MERGE operations use NodeUniqueIndexSeek.
-                # Without these, Session/Project/Chunk MERGE falls back to NodeByLabelScan
-                # (confirmed by PROFILE: full label scan + Eager on Session).
-                constraints = [
-                    # Global structural node identity (already exists, kept for safety)
-                    "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.id IS UNIQUE",
-                    # File nodes are MERGE'd by id; ensure index-backed MERGE
-                    f"CREATE CONSTRAINT file_id_unique IF NOT EXISTS FOR (f:{FILE_LABEL}) REQUIRE f.id IS UNIQUE",
-                    # Per-project lookup index for read-heavy queries
-                    "CREATE INDEX node_project_id IF NOT EXISTS FOR (n:Node) ON (n.project_id)",
-                    "CREATE INDEX node_project_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name)",
-                    "CREATE INDEX node_project_name_filepath IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.name, n.filepath)",
-                    "CREATE INDEX node_project_qualified_name IF NOT EXISTS FOR (n:Node) ON (n.project_id, n.qualified_name)",
-                    f"CREATE INDEX file_project_id IF NOT EXISTS FOR (f:{FILE_LABEL}) ON (f.project_id)",
-                    # Session/Project: MERGE'd on every semantic batch — must use index
-                    "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.id IS UNIQUE",
-                    "CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE",
-                    "CREATE CONSTRAINT memory_turn_id_unique IF NOT EXISTS FOR (t:MemoryTurn) REQUIRE t.id IS UNIQUE",
-                    "CREATE CONSTRAINT memory_summary_id_unique IF NOT EXISTS FOR (s:MemorySummary) REQUIRE s.id IS UNIQUE",
-                    "CREATE CONSTRAINT memory_checkpoint_id_unique IF NOT EXISTS FOR (c:MemoryCheckpoint) REQUIRE c.id IS UNIQUE",
-                    "CREATE CONSTRAINT tool_output_id_unique IF NOT EXISTS FOR (o:ToolOutput) REQUIRE o.id IS UNIQUE",
-                    # Chunk: dedicated label constraint for vector index alignment
-                    "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (c:Chunk) REQUIRE c.id IS UNIQUE",
-                    # Relationship index: eliminates O(degree) edge scan in CONTAINS MERGE
-                    f"CREATE INDEX contains_idx IF NOT EXISTS FOR ()-[r:{REL_CONTAINS}]-() ON (r.project_id)",
+                schema_state = await _read_schema_state(session)
+                constraint_signatures = {
+                    _constraint_signature(row)
+                    for row in (schema_state[0] if schema_state else [])
+                }
+                index_signatures = {
+                    _index_signature(row)
+                    for row in (schema_state[1] if schema_state else [])
+                }
+                missing_constraints = [
+                    (name, query)
+                    for name, query in _SCHEMA_CONSTRAINTS
+                    if _EXPECTED_CONSTRAINT_SIGNATURES[name]
+                    not in constraint_signatures
+                ]
+                missing_indexes = [
+                    (name, query)
+                    for name, query in _SCHEMA_INDEXES
+                    if _EXPECTED_INDEX_SIGNATURES[name] not in index_signatures
                 ]
 
-                for query in constraints:
+                for name, query in (*missing_constraints, *missing_indexes):
                     try:
                         await _run_write(query, op="schema_bootstrap")
                     except Exception as e:
-                        _debug("constraint_creation_warning", error=str(e), query=query)
+                        _debug(
+                            "schema_object_creation_warning",
+                            error=str(e),
+                            name=name,
+                        )
 
-                # 3. Vector Index for Codebase Search
-                vector_index_query = f"""
-                CREATE VECTOR INDEX `codebase_chunks_vector` IF NOT EXISTS
-                FOR (n:Chunk)
-                ON (n.embedding)
-                OPTIONS {{indexConfig: {{
-                  `vector.dimensions`: {_EMBEDDING_DIM},
-                  `vector.similarity_function`: 'cosine'
-                }}}}
-                """
-                try:
-                    await _run_write(vector_index_query, op="vector_index")
-                    _debug("neo4j_vector_index_initialized")
-                except Exception as e:
-                    _debug("vector_index_creation_error", error=str(e))
-
-                _debug("neo4j_schema_initialized")
+                if missing_constraints or missing_indexes:
+                    _debug(
+                        "neo4j_schema_reconciled",
+                        constraints_created=len(missing_constraints),
+                        indexes_created=len(missing_indexes),
+                    )
+                else:
+                    _debug("neo4j_schema_current")
 
         except Exception as exc:
             if created_driver is not None:

@@ -155,6 +155,10 @@ Latest workflow finding closed:
 - `find_code_duplication` now collapses overlapping sliding-window matches and
   explains candidates with declaration-level anchors, avoiding misleading
   `continue`/path-setup previews and generic registration-wrapper findings
+- fresh MCP processes now inspect Neo4j constraint/index signatures before
+  schema bootstrap, issue no DDL when the schema is current, and create only
+  genuinely missing objects; equivalent legacy constraint names and Neo4j
+  uniqueness type variants are accepted
 
 Current likely targets:
 

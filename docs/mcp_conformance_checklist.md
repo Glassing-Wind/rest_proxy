@@ -25,6 +25,9 @@ gaps that still matter for enterprise hardening.
 - The STDIO lifecycle smoke holds a session past delayed startup work, lists
   tools, and executes a tool call; the server does not write JSON-RPC frames
   outside the SDK transport.
+- Short-lived MCP processes inspect Neo4j schema signatures and skip bootstrap
+  DDL when all required constraints and indexes already exist, avoiding
+  repeated metadata writes and DBMS notification noise.
 - Watcher activation is manual by default via `watch_project` /
   `unwatch_project`, which avoids incorrect workspace inference from transport
   sessions alone.
