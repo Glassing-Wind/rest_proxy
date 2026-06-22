@@ -477,6 +477,71 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertEqual(contract["suppressed_indices"], [1])
         self.assertEqual(contract["pairs"][0]["right"], 1)
 
+    def test_compact_duplicate_analysis_reports_decisions_without_content(self):
+        results = [
+            {"file_path": "src/a.py", "content": "large source A"},
+            {"file_path": "src/b.py", "content": "large source B"},
+        ]
+        compact = module.compact_duplicate_analysis(
+            {
+                "mode": "code_retrieval",
+                "keep_indices": [0],
+                "suppressed_indices": [1],
+                "pairs": [{"left": 0, "right": 1, "duplicate": True, "score": 0.99}],
+            },
+            results,
+        )
+        self.assertEqual(compact["summary"]["suppressed_count"], 1)
+        self.assertEqual(compact["duplicate_pairs"][0]["right_path"], "src/b.py")
+        self.assertNotIn("content", json.dumps(compact))
+
+    def test_compact_rerank_contract_reports_order_and_health(self):
+        results = [
+            {"file_path": "src/a.py", "content": "A"},
+            {"file_path": "src/b.py", "content": "B"},
+        ]
+        compact = module.compact_rerank_contract(
+            {
+                "keep_indices": [1],
+                "suppressed_indices": [0],
+                "suppression_policy": "exact_only",
+                "telemetry": {
+                    "relation_counts": {"exact_duplicate": 1},
+                    "topk_redundancy_before": 0.5,
+                    "topk_redundancy_after": 0.0,
+                    "regression_alerts": [],
+                },
+            },
+            results,
+        )
+        self.assertEqual(compact["ordered_results"], [{"index": 1, "path": "src/b.py"}])
+        self.assertEqual(compact["redundancy"], {"before": 0.5, "after": 0.0})
+
+    def test_compact_ranking_trace_omits_zero_components_and_guides_empty_input(self):
+        compact = module.compact_implementation_ranking_trace(
+            {
+                "query_class": "implementation_explanation",
+                "rows": [
+                    {
+                        "file_path": "src/service.py",
+                        "base_relevance": 0.8,
+                        "rank_score": 0.9,
+                        "role": "internal_implementation",
+                        "node_types": ["function_definition"],
+                        "components": {
+                            "base_relevance": 0.8,
+                            "definition_bonus": 0.1,
+                            "doc_penalty": 0.0,
+                            "role": "internal_implementation",
+                        },
+                    }
+                ],
+            }
+        )
+        self.assertEqual(compact["rows"][0]["contributions"], {"definition_bonus": 0.1})
+        empty = module.compact_implementation_ranking_trace({"query_class": "general", "rows": []})
+        self.assertIn("guidance", empty)
+
     def test_rerank_contract_is_deterministic_for_same_input(self):
         case = load_benchmark_case("docs_prose_near_duplicates_do_not_overcollapse")
         fake_trace = {
@@ -1012,6 +1077,18 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertTrue(module.is_low_signal_support_path("scripts/clone_vendors.py"))
         self.assertTrue(module.is_low_signal_support_path("tools/dev.py"))
         self.assertFalse(module.is_low_signal_support_path("crates/ts-pack-core/src/lib.rs"))
+        self.assertFalse(
+            module.is_low_signal_support_path(
+                "tools/brain/search/semantic.py",
+                {"support_surface", "implementation_surface"},
+            )
+        )
+        self.assertTrue(
+            module.is_low_signal_support_path(
+                "tools/dev.py",
+                {"support_surface"},
+            )
+        )
 
     def test_implementation_rank_tuple_prefers_code_over_docs_and_parser_data(self):
         rows = [
@@ -2374,6 +2451,28 @@ class SemanticHelperTests(unittest.TestCase):
             "",
         )
 
+    def test_dispatcher_role_wins_over_coexisting_profile_role(self):
+        meta = {
+            "file_roles": [
+                "dispatcher_surface",
+                "model_dispatcher_surface",
+                "profile_surface",
+            ],
+            "chunk_role": "canonical_dispatcher_definition",
+        }
+        self.assertFalse(
+            module.implementation_is_profile_candidate(
+                "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+                meta,
+            )
+        )
+        self.assertTrue(
+            module.implementation_is_profile_candidate(
+                "pydantic_ai_slim/pydantic_ai/profiles/openai.py",
+                {"file_roles": ["profile_surface"], "chunk_role": "profile_definition"},
+            )
+        )
+
     def test_runtime_entrypoint_hit_skips_path_fallback_when_file_roles_are_present(self):
         query = "where is the main entrypoint in cmd/server"
         self.assertEqual(
@@ -2442,6 +2541,20 @@ class SemanticHelperTests(unittest.TestCase):
             "examples/python_smoke/main.py",
             {"chunk_role": "example_usage", "node_types": ["call_expression"]},
             definition_hit=0,
+            export_hit=0,
+            api_entrypoint_hit=0,
+        )
+        self.assertEqual(role, "test_example")
+
+    def test_test_file_role_overrides_definition_chunk_role(self):
+        role = module.implementation_result_role(
+            "test_search_rerank_tools.py",
+            {
+                "file_roles": ["test_surface"],
+                "chunk_role": "definition",
+                "node_types": ["function_definition"],
+            },
+            definition_hit=1,
             export_hit=0,
             api_entrypoint_hit=0,
         )

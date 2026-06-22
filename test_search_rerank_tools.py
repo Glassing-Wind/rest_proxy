@@ -122,6 +122,7 @@ class SearchRerankToolTests(unittest.TestCase):
                 case["query"],
                 case["results"],
                 mode=case["mode"],
+                include_debug=True,
             )
         )
         payload = json.loads(output)
@@ -151,6 +152,7 @@ class SearchRerankToolTests(unittest.TestCase):
             mcp.tools["trace_code_ranking"](
                 "where is parser.parse used in tree-sitter-language-pack",
                 [{"file_path": "examples/python_smoke/main.py", "content": "tree = parser.parse(b'x')"}],
+                include_debug=True,
             )
         )
         payload = json.loads(output)

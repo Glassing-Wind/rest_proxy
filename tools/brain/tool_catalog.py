@@ -26,7 +26,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "analyze_duplicate_results": ToolCatalogEntry(
         "support",
         "retrieval QA",
-        "Inspect duplicate pressure in a caller-supplied ranked result list before changing ranking policy.",
+        "Diagnose duplicate pressure in caller-supplied results before changing ranking policy.",
     ),
     "author_and_index_documentation": ToolCatalogEntry(
         "docs",
@@ -245,7 +245,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "rerank_retrieval_results": ToolCatalogEntry(
         "support",
         "retrieval QA",
-        "Apply duplicate-aware reranking to externally supplied search results.",
+        "Get a compact duplicate-aware order and suppression decision for external search results.",
     ),
     "research_and_index": ToolCatalogEntry(
         "docs",
@@ -293,7 +293,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "trace_code_ranking": ToolCatalogEntry(
         "support",
         "retrieval QA",
-        "Explain ranking factors for implementation-intent code search results.",
+        "Explain only the factors that changed an implementation-intent result ranking.",
     ),
     "trace_graph_provenance": ToolCatalogEntry(
         "primary",

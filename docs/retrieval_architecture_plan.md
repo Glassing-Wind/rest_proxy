@@ -320,14 +320,20 @@ Cross-repo callers should use:
 
 `rerank_retrieval_results` accepts a caller-supplied ranked list and returns:
 
-- final reranked/diversified results
-- kept and suppressed original indices
-- duplicate groups and pairs
-- selection metadata
-- telemetry and suppression policy
-- optional compact debug trace
+- a compact ordered path/index decision list by default
+- kept and suppressed counts plus redundancy before/after
+- duplicate-relation counts and regression alerts
+- the full results, groups, pairs, selection metadata, and candidate trace only
+  when `include_debug=true`
 
-`analyze_duplicate_results` exposes duplicate group and pair structure without changing order.
+`analyze_duplicate_results` exposes duplicate decisions without changing order. Its
+default output includes only detected duplicate pairs with path labels; use
+`include_debug=true` for full group and pair internals.
+
+Both tools expect each caller-supplied row to contain `content` and either
+`file_path` or `source_url`. Relevance can be supplied as `rrf` or `rank_score`.
+For code ranking QA, current semantic metadata belongs under `metadata`, notably
+`file_roles`, `chunk_role`, `node_types`, and `file_symbols`.
 
 This keeps duplicate-policy logic centralized in `rest_proxy` while allowing other repos to reuse it without reimplementing retrieval semantics locally.
 

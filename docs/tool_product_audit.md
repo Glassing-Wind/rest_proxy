@@ -129,6 +129,12 @@ The weaker tools often still provide:
 - topology data without a next action
 - architecture blobs without enough prioritization
 
+The retrieval-QA tranche now follows this rule: `rerank_retrieval_results`,
+`analyze_duplicate_results`, and `trace_code_ranking` return compact decisions
+by default and reserve raw contracts for `include_debug=true`. Ranking traces
+show only factors that actually changed a score, and empty traces state the
+candidate metadata needed for a useful diagnosis.
+
 ### 3. Some tool names still expose implementation shape instead of product intent
 
 Examples:

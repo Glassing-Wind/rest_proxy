@@ -2012,7 +2012,7 @@
       },
       "required_substrings": [
         "--- packages/zod/src/v4/classic/from-json-schema.ts",
-        "function detectVersion(schema: JSONSchema.JSONSchema"
+        "function convertSchema(schema: JSONSchema.JSONSchema"
       ]
     },
     {
@@ -2096,7 +2096,7 @@
           },
           "required_substrings": [
             "--- packages/zod/src/v4/classic/from-json-schema.ts",
-            "function detectVersion(schema: JSONSchema.JSONSchema"
+            "function convertSchema(schema: JSONSchema.JSONSchema"
           ]
         },
         {

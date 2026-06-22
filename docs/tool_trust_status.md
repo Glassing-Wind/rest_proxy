@@ -106,6 +106,12 @@ What this means in practice:
   corpus
 - most remaining low-signal demotion logic is now legacy-only fallback for
   rows that genuinely do not have current metadata
+- semantic contract v4 distinguishes implementation-bearing files under
+  support-oriented directories such as `tools/`; current semantic roles now
+  override path fallback in ranking, removes false declaration anchors from
+  return/throw statements, and forces older rows through incremental refresh
+- retrieval QA tools now default to decision-sized output and expose their full
+  forensic contracts only with `include_debug=true`
 - the registered MCP surface now has an explicit tool-choice catalog contract:
   every registered tool has a documented "reach for this when..." use case, and
   `get_mcp_tool_catalog` exposes that guidance inside the MCP surface

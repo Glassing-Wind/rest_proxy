@@ -265,7 +265,7 @@ def register(mcp: FastMCP) -> None:
             results: Ranked candidate list. Each item should include content plus file_path or source_url.
             mode: Retrieval corpus mode: "code" or "docs".
             experiments: Optional duplicate-policy overrides.
-            include_debug: Include compact duplicate decision trace.
+            include_debug: Return the full forensic contract instead of the compact decision summary.
         """
         try:
             mode_norm = (mode or "code").strip().lower()
@@ -280,7 +280,8 @@ def register(mcp: FastMCP) -> None:
                 experiments=experiments,
                 include_debug=include_debug,
             )
-            return json.dumps(contract, indent=2, sort_keys=True)
+            payload = contract if include_debug else sem_helpers.compact_rerank_contract(contract, results)
+            return json.dumps(payload, indent=2, sort_keys=True)
         except Exception as e:
             return json.dumps({"error": f"Error reranking retrieval results: {str(e)}"}, indent=2)
 
@@ -289,6 +290,7 @@ def register(mcp: FastMCP) -> None:
         query: str,
         results: list[dict],
         mode: str = "code",
+        include_debug: bool = False,
     ) -> str:
         """
         Analyze duplicate structure for a ranked result list without reranking it.
@@ -297,6 +299,7 @@ def register(mcp: FastMCP) -> None:
             query: Retrieval query that produced the ranked candidates.
             results: Ranked candidate list. Each item should include content plus file_path or source_url.
             mode: Retrieval corpus mode: "code" or "docs".
+            include_debug: Return full pair/group internals instead of the compact diagnosis.
         """
         try:
             mode_norm = (mode or "code").strip().lower()
@@ -309,7 +312,8 @@ def register(mcp: FastMCP) -> None:
                 query=query,
                 mode=mode_norm,
             )
-            return json.dumps(contract, indent=2, sort_keys=True)
+            payload = contract if include_debug else sem_helpers.compact_duplicate_analysis(contract, results)
+            return json.dumps(payload, indent=2, sort_keys=True)
         except Exception as e:
             return json.dumps({"error": f"Error analyzing duplicate results: {str(e)}"}, indent=2)
 
@@ -317,19 +321,22 @@ def register(mcp: FastMCP) -> None:
     async def trace_code_ranking(
         query: str,
         results: list[dict],
+        include_debug: bool = False,
     ) -> str:
         """
         Build a code-ranking trace for implementation-intent queries.
 
         Args:
             query: Retrieval query to classify and trace.
-            results: Candidate result rows to score and explain.
+            results: Candidate rows with content, file_path, optional rrf/rank_score, and semantic metadata.
+            include_debug: Return every ranking component instead of only non-zero contributions.
         """
         try:
             if not isinstance(results, list):
                 return json.dumps({"error": "results must be a list of dict items."}, indent=2)
             trace = sem_helpers.build_implementation_ranking_trace(results, query)
-            return json.dumps(trace, indent=2, sort_keys=True)
+            payload = trace if include_debug else sem_helpers.compact_implementation_ranking_trace(trace)
+            return json.dumps(payload, indent=2, sort_keys=True)
         except Exception as e:
             return json.dumps({"error": f"Error tracing code ranking: {str(e)}"}, indent=2)
 
@@ -1306,14 +1313,7 @@ def register(mcp: FastMCP) -> None:
                     non_profile_results: list[dict] = []
                     for r in all_results:
                         meta = sem_helpers.coerce_meta(r)
-                        file_roles = sem_helpers.implementation_file_roles(meta)
-                        chunk_role = sem_helpers.implementation_chunk_role(meta, r.get("file_path"))
-                        norm = (r.get("file_path") or "").replace("\\", "/").lower()
-                        if (
-                            "/profiles/" in norm
-                            or "profile_surface" in file_roles
-                            or chunk_role == "profile_definition"
-                        ):
+                        if sem_helpers.implementation_is_profile_candidate(r.get("file_path"), meta):
                             continue
                         non_profile_results.append(r)
                     if non_profile_results:
