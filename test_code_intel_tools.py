@@ -1447,10 +1447,17 @@ class CodeIntelToolTests(unittest.TestCase):
             async def fetchall(self):
                 return [
                     (
-                        "FrameCreator/Views/ContentView.swift",
+                        "tools/FrameCreator/Views/ContentView.swift",
                         "12",
-                        "// File: FrameCreator/Views/ContentView.swift\nSidebarView(viewModel: viewModel)",
-                    )
+                        "// File: tools/FrameCreator/Views/ContentView.swift\nSidebarView(viewModel: viewModel)",
+                        ["implementation_surface", "support_surface"],
+                    ),
+                    (
+                        "FrameCreator/Support/GeneratedView.swift",
+                        "8",
+                        "// File: FrameCreator/Support/GeneratedView.swift\nSidebarView(viewModel: model)",
+                        ["support_surface"],
+                    ),
                 ]
 
         class _FakeConnection:
@@ -1491,7 +1498,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     CURRENT_EXECUTOR = None
 
         self.assertIn("Swift caller-like usages", output)
-        self.assertIn("FrameCreator/Views/ContentView.swift", output)
+        self.assertIn("tools/FrameCreator/Views/ContentView.swift", output)
+        self.assertNotIn("FrameCreator/Support/GeneratedView.swift", output)
         self.assertTrue(executed)
 
     def test_get_call_chain_uses_swift_protocol_graph_fallback_before_semantic_usage(self):

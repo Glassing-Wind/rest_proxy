@@ -79,6 +79,21 @@ class SearchSummaryTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
 
+    def test_import_rank_prefers_implementation_over_docs_role(self):
+        implementation_rank = self.module._import_file_rank(
+            "tools/docs/provider.py",
+            5,
+            ["Provider"],
+            ["implementation_surface", "docs_surface"],
+        )
+        docs_rank = self.module._import_file_rank(
+            "tools/docs/provider.py",
+            5,
+            ["Provider"],
+            ["docs_surface"],
+        )
+        self.assertGreater(implementation_rank, docs_rank)
+
     def test_symbol_exports_summary_applies_filters(self):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "get_symbol_exports_summary_filtered_rows":

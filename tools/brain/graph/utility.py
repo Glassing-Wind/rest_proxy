@@ -101,12 +101,13 @@ def _coerce_file_roles(raw_roles) -> set[str] | None:
 def _is_test_like_graph_path(filepath: str | None, raw_roles) -> bool:
     roles = _coerce_file_roles(raw_roles)
     if roles is not None:
+        if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+            return True
+        if "implementation_surface" in roles:
+            return False
         return any(
             role in roles
             for role in (
-                "test_surface",
-                "example_surface",
-                "benchmark_surface",
                 "docs_surface",
                 "support_surface",
             )

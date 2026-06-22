@@ -720,7 +720,11 @@ def _normalize_file_roles(raw_roles) -> set[str]:
 
 def _is_low_signal_flow_path(filepath: str | None, raw_roles) -> bool:
     roles = _normalize_file_roles(raw_roles)
-    if {"test_surface", "example_surface", "benchmark_surface", "docs_surface", "support_surface"} & roles:
+    if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+        return True
+    if "implementation_surface" in roles:
+        return False
+    if {"docs_surface", "support_surface"} & roles:
         return True
     if _file_roles_present(raw_roles):
         return False

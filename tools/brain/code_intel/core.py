@@ -155,6 +155,8 @@ def register(mcp: FastMCP) -> None:
 
     def _is_low_signal_related_support_candidate(file_path: str | None, raw_roles) -> bool:
         roles = _normalize_file_roles(raw_roles)
+        if "implementation_surface" in roles:
+            return False
         if {"docs_surface", "config_surface", "support_surface"} & roles:
             return True
         if _file_roles_present(raw_roles):
@@ -1211,7 +1213,8 @@ def register(mcp: FastMCP) -> None:
                                     """
                                     SELECT file_path,
                                            metadata->>'start_line' AS start_line,
-                                           content
+                                           content,
+                                           metadata->'file_roles' AS file_roles
                                     FROM codebase_embeddings
                                     WHERE project_id = %s
                                       AND file_path <> %s
@@ -1234,8 +1237,8 @@ def register(mcp: FastMCP) -> None:
                                 )
                                 semantic_rows = await cur.fetchall()
                         grouped_rows: dict[str, tuple[int, str, str]] = {}
-                        for fp, sl, content in semantic_rows or []:
-                            if _is_low_signal_support_path(fp):
+                        for fp, sl, content, file_roles in semantic_rows or []:
+                            if _is_low_signal_related_support_candidate(fp, file_roles):
                                 continue
                             snippet = _best_symbol_snippet(content, symbol_name)
                             if not snippet:

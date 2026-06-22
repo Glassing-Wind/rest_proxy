@@ -1658,6 +1658,35 @@ class GraphToolsTests(unittest.TestCase):
             overview._directory_snapshot_path_penalty("examples/demo.py", None),
             overview._directory_snapshot_path_penalty("examples/demo.py", set()),
         )
+        implementation_roles = {"implementation_surface", "support_surface"}
+        self.assertEqual(
+            overview._semantic_file_roles_penalty(implementation_roles),
+            0,
+        )
+        self.assertFalse(overview._has_generated_support_surface(implementation_roles))
+        self.assertFalse(
+            overview._is_overview_low_signal_key_file(
+                "tools/docs/architecture.py",
+                implementation_roles,
+            )
+        )
+        self.assertEqual(
+            overview._directory_snapshot_path_penalty(
+                "docs/architecture.py",
+                implementation_roles,
+            ),
+            0,
+        )
+        self.assertEqual(
+            overview._importance_penalty("tools/docs/architecture.py", implementation_roles),
+            1.0,
+        )
+        self.assertGreater(
+            overview._semantic_file_roles_penalty(
+                {"implementation_surface", "test_surface"}
+            ),
+            0,
+        )
         self.assertLess(
             overview._overview_file_rank("src/http/OwnerResource.kt", 8, None),
             overview._overview_file_rank("src/http/OwnerResource.kt", 8, {"api_surface"}),

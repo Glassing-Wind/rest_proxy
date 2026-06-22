@@ -2489,6 +2489,20 @@ class SemanticHelperTests(unittest.TestCase):
             module.implementation_chunk_role({"file_roles": ["config_surface"]}, None),
             "config_support",
         )
+        self.assertEqual(
+            module.implementation_chunk_role(
+                {"file_roles": ["implementation_surface", "support_surface"]},
+                None,
+            ),
+            "",
+        )
+        self.assertEqual(
+            module.implementation_chunk_role(
+                {"file_roles": ["implementation_surface", "test_surface"]},
+                None,
+            ),
+            "test_usage",
+        )
 
     def test_implementation_chunk_role_skips_path_fallback_when_file_roles_are_present(self):
         self.assertEqual(
@@ -2614,6 +2628,23 @@ class SemanticHelperTests(unittest.TestCase):
             api_entrypoint_hit=0,
         )
         self.assertEqual(role, "generated_surface")
+
+    def test_implementation_role_overrides_coexisting_docs_and_support_roles(self):
+        role = module.implementation_result_role(
+            "tools/docs/provider.py",
+            {
+                "file_roles": [
+                    "implementation_surface",
+                    "docs_surface",
+                    "support_surface",
+                ],
+                "node_types": ["function_definition"],
+            },
+            definition_hit=1,
+            export_hit=0,
+            api_entrypoint_hit=0,
+        )
+        self.assertEqual(role, "internal_implementation")
 
     def test_exact_member_usage_site_hit_requires_usage_context(self):
         self.assertTrue(

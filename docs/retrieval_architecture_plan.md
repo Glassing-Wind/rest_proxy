@@ -168,7 +168,9 @@ These belong in `ts-pack` or a lower-level retrieval/indexing layer, not in MCP 
 ### Boundary Drift
 
 - docs retrieval semantics still partly live in Python MCP code
-- some smaller helper/debug surfaces still carry legacy path-only fallback logic
+- some admin/debug-only surfaces still carry legacy path-only fallback logic;
+  promoted retrieval, orientation, graph, summary, and code-intel tools use the
+  same semantic role precedence
 - a few query families still rely on `rest_proxy` policy where lower-level
   metadata is not yet rich enough
 
@@ -216,6 +218,9 @@ than when this plan was first written.
   structural ranking were strong enough
 - many path-only test/example/docs/benchmark suppressions in retrieval,
   orientation, summaries, and code-intel paths
+- conflicting support-role demotion across promoted tools: implementation now
+  overrides coexisting docs/config/support roles, while generated and
+  test/example/benchmark classifications remain deliberately low signal
 
 ### What Is Still Intentionally In `rest_proxy`
 
@@ -228,9 +233,9 @@ These are not obviously wrong to keep higher:
 
 ### What Is Still Not Clean Enough
 
-- primary code search now classifies all normal and rescue candidates through
-  one semantic-role-first surface contract; some smaller helper/debug/admin
-  surfaces still use legacy path fallbacks
+- primary and secondary promoted tools now classify candidates through the same
+  semantic-role-first precedence contract; remaining path-only compatibility is
+  confined to smaller admin/debug surfaces and legacy records
 - some query families may still need richer lower-level metadata if real usage
   finds another repeated weak spot
 - docs retrieval still has more Python-owned semantics than code retrieval does
@@ -241,8 +246,8 @@ These are not obviously wrong to keep higher:
 This plan should not be interpreted as “move everything down immediately.”
 Current next steps should follow this order:
 
-1. Finish shrinking the remaining legacy-only fallback pockets in smaller
-   helper/debug surfaces.
+1. Finish shrinking the remaining legacy-only fallback pockets in admin/debug
+   surfaces when they affect a real workflow.
 2. Use live MCP workflows and telemetry to find the next real hesitation.
 3. If the issue is a durable structural fact, move it down into `ts-pack` or a
    lower-level index contract.

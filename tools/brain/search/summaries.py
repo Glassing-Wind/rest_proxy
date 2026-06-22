@@ -158,7 +158,8 @@ def _import_file_rank(file_path: str, count: int, symbols: list[str], raw_roles=
     if "/components/" in lowered:
         score -= 10
     if "docs_surface" in roles:
-        score -= 18
+        if "implementation_surface" not in roles:
+            score -= 18
     elif not roles_known and ("/docs/" in lowered or lowered.startswith("docs/")):
         score -= 18
     if "example_surface" in roles:

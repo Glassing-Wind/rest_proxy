@@ -531,6 +531,19 @@ class CodeIntelHelperTests(unittest.TestCase):
         )
         self.assertGreater(low_signal_bucket, normal_bucket)
 
+    def test_reference_path_penalty_prefers_implementation_over_support_role(self):
+        module = load_references_module()
+        bucket, _ = module._reference_path_penalty(
+            "tools/docs/provider.py",
+            ["implementation_surface", "support_surface"],
+        )
+        support_bucket, _ = module._reference_path_penalty(
+            "tools/docs/provider.py",
+            ["support_surface"],
+        )
+        self.assertEqual(bucket, 1)
+        self.assertLess(bucket, support_bucket)
+
     def test_format_symbol_context_includes_external_calls(self):
         module = load_symbol_graph_module()
         output = module.format_symbol_context(
@@ -645,6 +658,16 @@ class CodeIntelHelperTests(unittest.TestCase):
         self.assertEqual(
             module._symbol_path_penalty("packages/sdk/js/benchmarks/provider_walkthrough.ts", None),
             4,
+        )
+
+    def test_symbol_path_penalty_prefers_implementation_over_support_role(self):
+        module = load_symbol_graph_module()
+        self.assertEqual(
+            module._symbol_path_penalty(
+                "tools/docs/provider.py",
+                ["implementation_surface", "support_surface"],
+            ),
+            0,
         )
 
     def test_symbol_context_callee_rank_skips_test_path_fallback_when_file_roles_are_present(self):

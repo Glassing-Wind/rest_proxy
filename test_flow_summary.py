@@ -501,6 +501,18 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertTrue(self.module._is_low_signal_flow_path("benchmarks/routes_benchmark.ts", None))
         self.assertTrue(self.module._is_low_signal_flow_path("docs/architecture.md", None))
         self.assertTrue(self.module._is_low_signal_flow_path("src/app.ts", ["docs_surface"]))
+        self.assertFalse(
+            self.module._is_low_signal_flow_path(
+                "tools/docs/app.py",
+                ["implementation_surface", "support_surface"],
+            )
+        )
+        self.assertTrue(
+            self.module._is_low_signal_flow_path(
+                "src/app.py",
+                ["implementation_surface", "test_surface"],
+            )
+        )
 
     def test_build_app_flow_literal_fallback_keeps_test_like_asset_pair_when_roles_are_present(self):
         async def fake_execute_read(session, query, **kwargs):

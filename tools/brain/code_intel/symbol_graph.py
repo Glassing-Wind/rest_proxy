@@ -198,8 +198,6 @@ def _symbol_path_penalty(filepath: str | None, raw_roles=None) -> int:
         return 5
     if {"test_surface", "example_surface", "benchmark_surface"} & roles:
         return 4
-    if "support_surface" in roles:
-        return 3
     if any(
         token in normalized
         for token in (
@@ -217,6 +215,10 @@ def _symbol_path_penalty(filepath: str | None, raw_roles=None) -> int:
         )
     ):
         return 5
+    if "implementation_surface" in roles:
+        return 0
+    if "support_surface" in roles:
+        return 3
     if not roles_known and any(
         token in normalized
         for token in (

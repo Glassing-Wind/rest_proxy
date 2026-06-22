@@ -36,12 +36,20 @@ def _reference_path_penalty(file_path: str | None, raw_roles=None) -> tuple[int,
     roles = _normalize_file_roles(raw_roles)
     if not norm:
         return (9, norm)
-    if _LOW_SIGNAL_REFERENCE_RE.search(norm) or _LOW_SIGNAL_REFERENCE_DIR_RE.search(norm):
-        return (8, norm)
-    if norm.endswith((".md", ".rst", ".txt")):
-        return (7, norm)
     if {"test_surface", "example_surface", "benchmark_surface"} & roles:
         return (5, norm)
+    if {"generated_surface", "binding_surface"} & roles:
+        return (4, norm)
+    if "implementation_surface" in roles:
+        return (0, norm) if norm.endswith(".swift") else (1, norm)
+    if {"docs_surface", "config_surface", "support_surface"} & roles:
+        return (7, norm)
+    if not _file_roles_present(raw_roles) and (
+        _LOW_SIGNAL_REFERENCE_RE.search(norm) or _LOW_SIGNAL_REFERENCE_DIR_RE.search(norm)
+    ):
+        return (8, norm)
+    if not _file_roles_present(raw_roles) and norm.endswith((".md", ".rst", ".txt")):
+        return (7, norm)
     if _file_roles_present(raw_roles):
         test_like = False
     else:
@@ -70,8 +78,6 @@ def _reference_path_penalty(file_path: str | None, raw_roles=None) -> tuple[int,
         )
     if test_like:
         return (5, norm)
-    if {"generated_surface", "binding_surface"} & roles:
-        return (4, norm)
     if not _file_roles_present(raw_roles) and any(
         token in norm for token in ("/generated/", "/gen/", ".gen.", "_generated.", "pregeneratedspm/")
     ):

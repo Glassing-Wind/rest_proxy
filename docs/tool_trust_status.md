@@ -108,8 +108,16 @@ What this means in practice:
   rows that genuinely do not have current metadata
 - semantic contract v4 distinguishes implementation-bearing files under
   support-oriented directories such as `tools/`; current semantic roles now
-  override path fallback in ranking, removes false declaration anchors from
+  override path fallback in ranking, remove false declaration anchors from
   return/throw statements, and forces older rows through incremental refresh
+- role precedence is now consistent across semantic result classification,
+  project overview, graph flow/utility helpers, symbol context/references,
+  import summaries, and cross-project tracing: `implementation_surface`
+  overrides coexisting docs/config/support roles, while explicit
+  generated/test/example/benchmark roles remain low signal
+- generated filename markers remain a deliberate conservative safeguard for
+  generated artifacts even when a current record carries an empty role list;
+  other docs/test/example path classification is legacy-only fallback
 - retrieval QA tools now default to decision-sized output and expose their full
   forensic contracts only with `include_debug=true`
 - every `search_codebase` retrieval branch now uses one role-first surface
@@ -145,10 +153,10 @@ too weak.
 
 Current remaining goals:
 
-- keep shrinking the remaining legacy-only path fallback pockets in smaller
-  helper/debug surfaces; architecture importance and community ranking now use
-  semantic file roles first, including root-level test/benchmark basename
-  classification from ts-pack, and reserve path classification for legacy records
+- keep shrinking the remaining legacy-only path fallback pockets in admin and
+  debug-only surfaces; promoted retrieval, orientation, graph, summary, and
+  code-intel tools now share semantic-role precedence and reserve ordinary path
+  classification for legacy records
 - continue MCP-only workflow passes across real repos and log the next actual
   trust hesitation instead of preemptive churn
 - add deeper metadata only for the next proven weak family, rather than adding
@@ -172,8 +180,7 @@ Latest workflow finding closed:
 
 Current likely targets:
 
-- residual path-only compatibility logic outside the primary code-search path,
-  especially small helper/admin/debug surfaces
+- residual path-only compatibility logic in small admin/debug surfaces
 - the next lower-level routing/handler metadata pass if live usage still finds
   repo families where controller/route surfaces are under-described
 - additional workflow cases only when they protect a current trust boundary

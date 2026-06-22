@@ -614,6 +614,7 @@ def implementation_support_surface_penalties(
         )
     if (
         "config_surface" in file_roles
+        and "implementation_surface" not in file_roles
         and implementation_query_prefers_request_routing(query)
         and not implementation_query_prefers_supporting_context(query)
     ):
@@ -1979,14 +1980,16 @@ def implementation_chunk_role(meta: dict, file_path: str | None = None) -> str:
     if isinstance(role, str) and role.strip():
         return role.strip().lower()
     file_roles = implementation_file_roles(meta)
-    if "docs_surface" in file_roles:
-        return "docs_support"
-    if "config_surface" in file_roles:
-        return "config_support"
     if "example_surface" in file_roles:
         return "example_usage"
     if "test_surface" in file_roles:
         return "test_usage"
+    if "implementation_surface" in file_roles:
+        return ""
+    if "docs_surface" in file_roles:
+        return "docs_support"
+    if "config_surface" in file_roles:
+        return "config_support"
     if "support_surface" in file_roles:
         return "script_support"
     if not implementation_allows_path_fallback(meta):
@@ -2442,11 +2445,11 @@ def implementation_result_role(
         return "generated_surface"
     if allows_path_fallback and is_low_signal_binding_surface_path(file_path):
         return "generated_surface"
-    if "docs_surface" in file_roles:
+    if "docs_surface" in file_roles and "implementation_surface" not in file_roles:
         return "docs"
     if allows_path_fallback and is_doc_like_path(file_path, file_roles):
         return "docs"
-    if "config_surface" in file_roles:
+    if "config_surface" in file_roles and "implementation_surface" not in file_roles:
         return "supporting_context"
     if file_roles & {"example_surface", "test_surface"}:
         return "test_example"

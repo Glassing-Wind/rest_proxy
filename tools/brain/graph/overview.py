@@ -88,10 +88,6 @@ def _file_roles_known(file_roles: set[str] | None) -> bool:
 def _semantic_file_roles_penalty(file_roles: set[str] | None) -> int:
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
     penalty = 0
-    if "docs_surface" in roles:
-        penalty = max(penalty, 80)
-    if "config_surface" in roles:
-        penalty = max(penalty, 65)
     if "generated_surface" in roles or "binding_surface" in roles:
         penalty = max(penalty, 40)
     if "example_surface" in roles:
@@ -100,6 +96,12 @@ def _semantic_file_roles_penalty(file_roles: set[str] | None) -> int:
         penalty = max(penalty, 60)
     if "test_surface" in roles:
         penalty = max(penalty, 70)
+    if "implementation_surface" in roles:
+        return penalty
+    if "docs_surface" in roles:
+        penalty = max(penalty, 80)
+    if "config_surface" in roles:
+        penalty = max(penalty, 65)
     if "support_surface" in roles:
         penalty = max(penalty, 40)
     return penalty
@@ -107,19 +109,18 @@ def _semantic_file_roles_penalty(file_roles: set[str] | None) -> int:
 
 def _has_generated_support_surface(file_roles: set[str] | None) -> bool:
     roles = {str(role).strip().lower() for role in (file_roles or set()) if str(role).strip()}
-    return bool(
-        {
-            "generated_surface",
-            "binding_surface",
-            "example_surface",
-            "benchmark_surface",
-            "test_surface",
-            "support_surface",
-            "docs_surface",
-            "config_surface",
-        }
-        & roles
-    )
+    hard_low_signal_roles = {
+        "generated_surface",
+        "binding_surface",
+        "example_surface",
+        "benchmark_surface",
+        "test_surface",
+    }
+    if hard_low_signal_roles & roles:
+        return True
+    if "implementation_surface" in roles:
+        return False
+    return bool({"support_surface", "docs_surface", "config_surface"} & roles)
 
 
 async def _load_semantic_file_roles(conn, project_id: str, file_paths: list[str]) -> dict[str, set[str]]:
@@ -282,7 +283,7 @@ def _directory_snapshot_path_penalty(file_path: str | None, file_roles: set[str]
     norm = (file_path or "").replace("\\", "/").lower()
     penalty = _semantic_file_roles_penalty(file_roles)
     roles_known = _file_roles_known(file_roles)
-    if _is_low_signal_semantic_path(norm):
+    if not roles_known and _is_low_signal_semantic_path(norm):
         penalty = max(penalty, 100)
     if any(
         marker in norm
@@ -560,10 +561,6 @@ def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None
     roles_known = _file_roles_known(file_roles)
     if ("src/public/assets/" in norm or "/public/assets/" in norm) and norm.endswith((".js", ".ts", ".jsx", ".tsx")):
         return 0.08
-    if "docs_surface" in roles:
-        return 0.02
-    if "config_surface" in roles:
-        return 0.05
     if "generated_surface" in roles or "binding_surface" in roles:
         return 0.08
     if "test_surface" in roles:
@@ -572,6 +569,12 @@ def _importance_penalty(filepath: str | None, file_roles: set[str] | None = None
         return 0.005
     if "benchmark_surface" in roles:
         return 0.02
+    if "implementation_surface" in roles:
+        return 1.0
+    if "docs_surface" in roles:
+        return 0.02
+    if "config_surface" in roles:
+        return 0.05
     if "support_surface" in roles:
         return 0.2
     if any(token in norm for token in ("/gen/",) + _GENERATED_OVERVIEW_PATH_MARKERS):
@@ -726,6 +729,9 @@ def _is_overview_low_signal_key_file(filepath: str | None, file_roles: set[str] 
         "test_surface",
         "example_surface",
         "benchmark_surface",
+    } & roles:
+        return True
+    if "implementation_surface" not in roles and {
         "support_surface",
         "docs_surface",
         "config_surface",

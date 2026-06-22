@@ -158,6 +158,30 @@ class CrossProjectToolTests(unittest.TestCase):
         self.graph_bootstrap_mod.require_driver = _require_driver
         self.graph_bootstrap_mod._NEO4J_DB = "neo4j"
 
+    def test_role_rankers_prefer_implementation_over_support(self):
+        implementation = {
+            "filepath": "tools/docs/provider.py",
+            "kind": "Function",
+            "start_line": 10,
+            "file_roles": ["implementation_surface", "support_surface"],
+        }
+        support = dict(implementation, file_roles=["support_surface"])
+        self.assertGreater(
+            self.module._definition_rank(implementation),
+            self.module._definition_rank(support),
+        )
+        self.assertFalse(
+            self.module._is_test_like_cross_project_hit(
+                "tools/docs/provider.py",
+                implementation["file_roles"],
+            )
+        )
+        self.assertTrue(
+            self.module._is_test_like_cross_project_hit(
+                "src/provider.py",
+                ["implementation_surface", "test_surface"],
+            )
+        )
     def test_trace_symbol_cross_project_resolves_export_alias_definition(self):
         async def fake_execute_read(session, cypher, **kwargs):
             op = kwargs.get("op")
