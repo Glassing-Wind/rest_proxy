@@ -569,13 +569,6 @@ def register(mcp: FastMCP) -> None:
                                 r_meta = sem_helpers.coerce_meta(r)
                                 r["_meta"] = r_meta
                                 r["meta_score"] = sem_helpers.meta_score(r_meta)
-                                r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                                r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
-                                    r.get("file_path")
-                                )
-                                r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
-                                    r.get("file_path")
-                                )
                                 sem_helpers.enrich_implementation_result(
                                     r,
                                     query=query,
@@ -600,13 +593,6 @@ def register(mcp: FastMCP) -> None:
                                 r_meta = sem_helpers.coerce_meta(r)
                                 r["_meta"] = r_meta
                                 r["meta_score"] = sem_helpers.meta_score(r_meta)
-                                r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                                r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
-                                    r.get("file_path")
-                                )
-                                r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
-                                    r.get("file_path")
-                                )
                                 sem_helpers.enrich_implementation_result(
                                     r,
                                     query=query,
@@ -761,13 +747,10 @@ def register(mcp: FastMCP) -> None:
                             meta_boost=meta_boost,
                         )
                     else:
-                        is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
-                        is_low_signal_parser_data = sem_helpers.is_low_signal_parser_data_path(
-                            r.get("file_path")
-                        )
-                        is_low_signal_binding_surface = sem_helpers.is_low_signal_binding_surface_path(
-                            r.get("file_path")
-                        )
+                        sem_helpers.apply_result_surface_flags(r)
+                        is_doc_like = r["doc_like"]
+                        is_low_signal_parser_data = r["low_signal_parser_data"]
+                        is_low_signal_binding_surface = r["low_signal_binding_surface"]
                         doc_penalty = 0.05 if is_doc_like else 0.0
                         parser_data_penalty = 0.08 if is_low_signal_parser_data else 0.0
                         binding_surface_penalty = 0.06 if is_low_signal_binding_surface else 0.0
@@ -785,10 +768,7 @@ def register(mcp: FastMCP) -> None:
             else:
                 if impl_intent:
                     for r in all_results:
-                        r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                        r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
-                            r.get("file_path")
-                        )
+                        sem_helpers.apply_result_surface_flags(r)
                     all_results.sort(key=sem_helpers.implementation_rank_tuple)
                 else:
                     all_results.sort(key=lambda r: r["rrf"], reverse=True)
@@ -821,7 +801,7 @@ def register(mcp: FastMCP) -> None:
 
             if impl_intent:
                 non_parser_candidates = [
-                    r for r in all_results if not sem_helpers.is_low_signal_parser_data_path(r.get("file_path"))
+                    r for r in all_results if not r.get("low_signal_parser_data")
                 ]
                 if non_parser_candidates:
                     all_results = non_parser_candidates
@@ -859,13 +839,6 @@ def register(mcp: FastMCP) -> None:
                             r_meta = sem_helpers.coerce_meta(r)
                             r["_meta"] = r_meta
                             r["meta_score"] = sem_helpers.meta_score(r_meta)
-                            r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                            r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
-                                r.get("file_path")
-                            )
-                            r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
-                                r.get("file_path")
-                            )
                             sem_helpers.enrich_implementation_result(
                                 r,
                                 query=query,
@@ -890,16 +863,6 @@ def register(mcp: FastMCP) -> None:
                             r_meta = sem_helpers.coerce_meta(r)
                             r["_meta"] = r_meta
                             r["meta_score"] = sem_helpers.meta_score(r_meta)
-                            is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
-                            is_low_signal_parser_data = sem_helpers.is_low_signal_parser_data_path(
-                                r.get("file_path")
-                            )
-                            is_low_signal_binding_surface = sem_helpers.is_low_signal_binding_surface_path(
-                                r.get("file_path")
-                            )
-                            r["doc_like"] = is_doc_like
-                            r["low_signal_parser_data"] = is_low_signal_parser_data
-                            r["low_signal_binding_surface"] = is_low_signal_binding_surface
                             sem_helpers.enrich_implementation_result(
                                 r,
                                 query=query,
@@ -951,16 +914,6 @@ def register(mcp: FastMCP) -> None:
                             r_meta = sem_helpers.coerce_meta(r)
                             r["_meta"] = r_meta
                             r["meta_score"] = sem_helpers.meta_score(r_meta)
-                            is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
-                            is_low_signal_parser_data = sem_helpers.is_low_signal_parser_data_path(
-                                r.get("file_path")
-                            )
-                            is_low_signal_binding_surface = sem_helpers.is_low_signal_binding_surface_path(
-                                r.get("file_path")
-                            )
-                            r["doc_like"] = is_doc_like
-                            r["low_signal_parser_data"] = is_low_signal_parser_data
-                            r["low_signal_binding_surface"] = is_low_signal_binding_surface
                             sem_helpers.enrich_implementation_result(
                                 r,
                                 query=query,
@@ -1013,13 +966,6 @@ def register(mcp: FastMCP) -> None:
                             r_meta = sem_helpers.coerce_meta(r)
                             r["_meta"] = r_meta
                             r["meta_score"] = sem_helpers.meta_score(r_meta)
-                            r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                            r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
-                                r.get("file_path")
-                            )
-                            r["low_signal_binding_surface"] = sem_helpers.is_low_signal_binding_surface_path(
-                                r.get("file_path")
-                            )
                             sem_helpers.enrich_implementation_result(
                                 r,
                                 query=query,

@@ -112,6 +112,10 @@ What this means in practice:
   return/throw statements, and forces older rows through incremental refresh
 - retrieval QA tools now default to decision-sized output and expose their full
   forensic contracts only with `include_debug=true`
+- every `search_codebase` retrieval branch now uses one role-first surface
+  classifier for docs, parser/config data, generated bindings, support files,
+  tests, and examples; path heuristics are reserved for legacy rows without
+  semantic roles, including exact/path/definition/member-usage rescue results
 - the registered MCP surface now has an explicit tool-choice catalog contract:
   every registered tool has a documented "reach for this when..." use case, and
   `get_mcp_tool_catalog` exposes that guidance inside the MCP surface
@@ -168,7 +172,8 @@ Latest workflow finding closed:
 
 Current likely targets:
 
-- residual path-only compatibility logic in small helper/admin/debug surfaces
+- residual path-only compatibility logic outside the primary code-search path,
+  especially small helper/admin/debug surfaces
 - the next lower-level routing/handler metadata pass if live usage still finds
   repo families where controller/route surfaces are under-described
 - additional workflow cases only when they protect a current trust boundary

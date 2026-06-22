@@ -261,8 +261,8 @@ def is_doc_like_path(file_path: str | None, file_roles: set[str] | None = None) 
         for role in (file_roles or set())
         if str(role).strip()
     }
-    if "docs_surface" in roles:
-        return True
+    if roles:
+        return "docs_surface" in roles
     if not file_path:
         return False
     norm = (file_path or "").replace("\\", "/").lower()
@@ -730,9 +730,17 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
     return policy
 
 
-def is_low_signal_parser_data_path(file_path: str | None) -> bool:
+def is_low_signal_parser_data_path(
+    file_path: str | None,
+    file_roles: set[str] | None = None,
+) -> bool:
     if not file_path:
         return False
+    roles = file_roles or set()
+    if "implementation_surface" in roles:
+        return False
+    if roles:
+        return bool({"binding_surface", "config_surface"} & roles)
     norm = (file_path or "").replace("\\", "/").lower()
     return (
         norm.startswith("node-types/")
@@ -752,9 +760,15 @@ def is_low_signal_parser_data_path(file_path: str | None) -> bool:
     )
 
 
-def is_low_signal_binding_surface_path(file_path: str | None) -> bool:
+def is_low_signal_binding_surface_path(
+    file_path: str | None,
+    file_roles: set[str] | None = None,
+) -> bool:
     if not file_path:
         return False
+    roles = file_roles or set()
+    if roles:
+        return "binding_surface" in roles
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
     return (
@@ -765,9 +779,15 @@ def is_low_signal_binding_surface_path(file_path: str | None) -> bool:
     )
 
 
-def is_generated_implementation_surface_path(file_path: str | None) -> bool:
+def is_generated_implementation_surface_path(
+    file_path: str | None,
+    file_roles: set[str] | None = None,
+) -> bool:
     if not file_path:
         return False
+    roles = file_roles or set()
+    if roles:
+        return "generated_surface" in roles
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
     return (
@@ -782,24 +802,39 @@ def is_generated_implementation_surface_path(file_path: str | None) -> bool:
     )
 
 
-def is_usage_heavy_path(file_path: str | None) -> bool:
+def is_usage_heavy_path(
+    file_path: str | None,
+    file_roles: set[str] | None = None,
+) -> bool:
     if not file_path:
         return False
+    roles = file_roles or set()
+    if roles:
+        return bool({"test_surface", "example_surface"} & roles)
     norm = (file_path or "").replace("\\", "/").lower()
     basename = norm.rsplit("/", 1)[-1]
+    production_language_roots = (
+        "/src/main/java/",
+        "src/main/java/",
+        "/src/main/kotlin/",
+        "src/main/kotlin/",
+        "/src/main/scala/",
+        "src/main/scala/",
+    )
+    if norm.startswith(("samples/", "examples/")):
+        return True
+    if any(segment in norm for segment in ("/samples/", "/examples/")) and not any(
+        segment in norm for segment in production_language_roots
+    ):
+        return True
     if any(
         segment in norm
         for segment in (
-            "/src/main/java/",
-            "src/main/java/",
+            *production_language_roots,
             "/src/test/java/",
             "src/test/java/",
-            "/src/main/kotlin/",
-            "src/main/kotlin/",
             "/src/test/kotlin/",
             "src/test/kotlin/",
-            "/src/main/scala/",
-            "src/main/scala/",
             "/src/test/scala/",
             "src/test/scala/",
         )
@@ -1872,6 +1907,21 @@ def implementation_file_roles(meta: dict) -> set[str]:
     }
 
 
+def apply_result_surface_flags(result: dict) -> dict:
+    """Attach role-first surface classifications used by search ranking."""
+    meta = coerce_meta(result)
+    roles = implementation_file_roles(meta)
+    file_path = result.get("file_path")
+    result["doc_like"] = is_doc_like_path(file_path, roles)
+    result["low_signal_parser_data"] = is_low_signal_parser_data_path(file_path, roles)
+    result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(file_path, roles)
+    result["generated_implementation_surface"] = is_generated_implementation_surface_path(
+        file_path, roles
+    )
+    result["low_signal_support_path"] = is_low_signal_support_path(file_path, roles)
+    return result
+
+
 def implementation_has_file_roles(meta: dict) -> bool:
     if not isinstance(meta, dict):
         return False
@@ -2537,18 +2587,9 @@ def enrich_implementation_result(
     base_bonus: float = 0.0,
 ) -> dict:
     meta = coerce_meta(result)
+    file_roles = implementation_file_roles(meta)
     result["_meta"] = meta
-    result["doc_like"] = is_doc_like_path(
-        result.get("file_path"),
-        implementation_file_roles(coerce_meta(result)),
-    )
-    result["low_signal_parser_data"] = is_low_signal_parser_data_path(result.get("file_path"))
-    result["low_signal_binding_surface"] = is_low_signal_binding_surface_path(result.get("file_path"))
-    result["generated_implementation_surface"] = is_generated_implementation_surface_path(result.get("file_path"))
-    result["low_signal_support_path"] = is_low_signal_support_path(
-        result.get("file_path"),
-        implementation_file_roles(meta),
-    )
+    apply_result_surface_flags(result)
     result["implementation_callable_priority"] = int(
         implementation_declares_callable(meta, result.get("content", ""))
     )
@@ -2657,7 +2698,8 @@ def enrich_implementation_result(
         meta,
     )
     result["implementation_usage_heavy_penalty"] = (
-        query_class_prefers_definitions(query_class) and is_usage_heavy_path(result.get("file_path", ""))
+        query_class_prefers_definitions(query_class)
+        and is_usage_heavy_path(result.get("file_path", ""), file_roles)
     )
     result["implementation_node_type_priority"] = implementation_node_type_priority(meta, query_class)
     result["implementation_node_type_score"] = implementation_node_type_score(meta, query_class)
@@ -2668,7 +2710,6 @@ def enrich_implementation_result(
         export_hit=int(result.get("implementation_export_hit", 0) or 0),
         api_entrypoint_hit=int(result.get("implementation_api_entrypoint_hit", 0) or 0),
     )
-    file_roles = implementation_file_roles(meta)
     if (
         implementation_query_prefers_request_routing(query)
         and "controller_surface" in file_roles

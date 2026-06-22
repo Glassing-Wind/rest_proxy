@@ -1008,6 +1008,12 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertTrue(module.is_doc_like_path("QUICKBOOKS_INTEGRATION_GUIDE.md"))
         self.assertTrue(module.is_doc_like_path("src/guide.txt", {"docs_surface"}))
         self.assertFalse(module.is_doc_like_path("src/services/QuickBooksService.ts"))
+        self.assertFalse(
+            module.is_doc_like_path(
+                "docs/generator.py",
+                {"implementation_surface"},
+            )
+        )
 
     def test_implementation_query_intent_detects_code_seeking_queries(self):
         self.assertTrue(module.implementation_query_intent("QuickBooks accounting sync attempts and tenant credit application"))
@@ -1060,6 +1066,18 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertTrue(module.is_low_signal_parser_data_path("packages/go/v1/types.go"))
         self.assertTrue(module.is_low_signal_parser_data_path("packages/php/src/ProcessConfig.php"))
         self.assertFalse(module.is_low_signal_parser_data_path("repo_analyzer/parser.py"))
+        self.assertFalse(
+            module.is_low_signal_parser_data_path(
+                "crates/ts-pack-python/python/tree_sitter_language_pack/_semantic_payload.py",
+                {"implementation_surface", "support_surface"},
+            )
+        )
+        self.assertTrue(
+            module.is_low_signal_parser_data_path(
+                "node-types/typescript/node-types.json",
+                {"config_surface"},
+            )
+        )
         self.assertFalse(module.implementation_query_intent("overview of the system"))
 
     def test_is_low_signal_binding_surface_path_flags_wrappers(self):
@@ -1073,7 +1091,24 @@ class SemanticHelperTests(unittest.TestCase):
         self.assertFalse(module.is_low_signal_binding_surface_path("crates/ts-pack-core/src/lib.rs"))
         self.assertTrue(module.is_usage_heavy_path("crates/ts-pack-cli/src/main.rs"))
         self.assertTrue(module.is_usage_heavy_path("e2e/ruby/spec/process_spec.rb"))
+        self.assertTrue(
+            module.is_usage_heavy_path(
+                "samples/guide/src/main/java/okhttp3/recipes/LoggingInterceptors.java"
+            )
+        )
         self.assertFalse(module.is_usage_heavy_path("crates/ts-pack-core/src/lib.rs"))
+        self.assertFalse(
+            module.is_usage_heavy_path(
+                "examples/runtime.py",
+                {"implementation_surface"},
+            )
+        )
+        self.assertTrue(
+            module.is_usage_heavy_path(
+                "src/runtime.py",
+                {"example_surface"},
+            )
+        )
         self.assertTrue(module.is_low_signal_support_path("scripts/clone_vendors.py"))
         self.assertTrue(module.is_low_signal_support_path("tools/dev.py"))
         self.assertFalse(module.is_low_signal_support_path("crates/ts-pack-core/src/lib.rs"))
@@ -1089,6 +1124,16 @@ class SemanticHelperTests(unittest.TestCase):
                 {"support_surface"},
             )
         )
+
+    def test_apply_result_surface_flags_uses_roles_before_misleading_paths(self):
+        row = {
+            "file_path": "docs/generated/_semantic_payload.py",
+            "metadata": {"file_roles": ["implementation_surface"]},
+        }
+        module.apply_result_surface_flags(row)
+        self.assertFalse(row["doc_like"])
+        self.assertFalse(row["low_signal_parser_data"])
+        self.assertFalse(row["generated_implementation_surface"])
 
     def test_implementation_rank_tuple_prefers_code_over_docs_and_parser_data(self):
         rows = [

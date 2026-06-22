@@ -228,7 +228,9 @@ These are not obviously wrong to keep higher:
 
 ### What Is Still Not Clean Enough
 
-- some smaller helper/debug/admin surfaces still use legacy path fallbacks
+- primary code search now classifies all normal and rescue candidates through
+  one semantic-role-first surface contract; some smaller helper/debug/admin
+  surfaces still use legacy path fallbacks
 - some query families may still need richer lower-level metadata if real usage
   finds another repeated weak spot
 - docs retrieval still has more Python-owned semantics than code retrieval does
