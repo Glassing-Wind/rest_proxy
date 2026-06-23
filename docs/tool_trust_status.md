@@ -190,6 +190,9 @@ Latest workflow finding closed:
 - documentation, memory, and git-state read tools are now part of MCP parity
   smoke coverage; the direct parity harness loads `.env` like the daemon and
   registers the same docs/memory tool families
+- retrieval-QA support tools now have MCP parity coverage for their compact
+  default contracts: caller-supplied reranking, duplicate analysis, and code
+  ranking traces must stay direct/MCP equivalent and decision-sized
 - durable-memory reads no longer reference optional Neo4j metadata properties
   directly, avoiding DBMS warnings on older memory nodes that predate tags,
   categories, or importance

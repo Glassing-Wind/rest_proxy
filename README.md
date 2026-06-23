@@ -200,7 +200,9 @@ For a narrow end-to-end MCP tool parity check against the live daemon:
 
 This verifies a small high-value subset of retrieval tools through the actual
 MCP transport and compares the outputs to direct in-process tool invocation, so
-transport wiring drift is caught separately from ranking regressions.
+transport wiring drift is caught separately from ranking regressions. It also
+checks compact contracts for the retrieval-QA support tools over deterministic
+caller-supplied candidates.
 
 For a restart regression that verifies stale MCP sessions are rejected after a
 daemon restart:

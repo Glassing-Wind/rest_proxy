@@ -131,5 +131,10 @@ the standard parity smoke now includes representative checks for
 `search_memory` because they are common companion tools once the catalog routes
 users toward docs or remembered project context.
 
+Retrieval-QA tools are still support/debug surfaces, but their compact default
+contracts are now MCP-parity protected: `rerank_retrieval_results`,
+`analyze_duplicate_results`, and `trace_code_ranking` must expose decision-sized
+outputs over caller-supplied candidates without requiring live index state.
+
 These should keep strong unit/script coverage. Add live or MCP parity coverage
 only if a tool becomes operationally flaky or user-critical.

@@ -308,6 +308,125 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "retrieval_qa_rerank_compact_contract",
+        "tool": "rerank_retrieval_results",
+        "params": {
+            "query": "parse_config implementation",
+            "mode": "code",
+            "results": [
+                {
+                    "file_path": "src/parser.py",
+                    "content": "def parse_config(text):\n    return json.loads(text)\n",
+                    "rank_score": 0.91,
+                    "metadata": {
+                        "chunk_role": "implementation",
+                        "node_types": ["function_definition"],
+                        "file_roles": ["runtime"],
+                        "file_symbols": ["parse_config"],
+                    },
+                },
+                {
+                    "file_path": "src/parser_copy.py",
+                    "content": "def parse_config(text):\n    return json.loads(text)\n",
+                    "rank_score": 0.88,
+                    "metadata": {
+                        "chunk_role": "implementation",
+                        "node_types": ["function_definition"],
+                        "file_roles": ["runtime"],
+                        "file_symbols": ["parse_config"],
+                    },
+                },
+                {
+                    "file_path": "tests/test_parser.py",
+                    "content": "def test_parse_config():\n    assert parse_config('{}') == {}\n",
+                    "rank_score": 0.72,
+                    "metadata": {
+                        "chunk_role": "test",
+                        "node_types": ["function_definition"],
+                        "file_roles": ["test"],
+                        "file_symbols": ["test_parse_config"],
+                    },
+                },
+            ],
+        },
+        "required_substrings": [
+            '"input_count": 3',
+            '"suppressed_count": 1',
+            '"path": "src/parser.py"',
+            '"path": "src/parser_copy.py"',
+            '"exact_duplicate": 1',
+        ],
+    },
+    {
+        "id": "retrieval_qa_duplicate_analysis_compact_contract",
+        "tool": "analyze_duplicate_results",
+        "params": {
+            "query": "parse_config implementation",
+            "mode": "code",
+            "results": [
+                {
+                    "file_path": "src/parser.py",
+                    "content": "def parse_config(text):\n    return json.loads(text)\n",
+                    "rank_score": 0.91,
+                },
+                {
+                    "file_path": "src/parser_copy.py",
+                    "content": "def parse_config(text):\n    return json.loads(text)\n",
+                    "rank_score": 0.88,
+                },
+                {
+                    "file_path": "tests/test_parser.py",
+                    "content": "def test_parse_config():\n    assert parse_config('{}') == {}\n",
+                    "rank_score": 0.72,
+                },
+            ],
+        },
+        "required_substrings": [
+            '"mode": "code_retrieval"',
+            '"duplicate_pair_count": 1',
+            '"right_path": "src/parser_copy.py"',
+            '"exact_duplicate"',
+        ],
+    },
+    {
+        "id": "retrieval_qa_code_ranking_trace_compact_contract",
+        "tool": "trace_code_ranking",
+        "params": {
+            "query": "parse_config implementation",
+            "results": [
+                {
+                    "file_path": "src/parser.py",
+                    "content": "def parse_config(text):\n    return json.loads(text)\n",
+                    "rank_score": 0.91,
+                    "metadata": {
+                        "chunk_role": "implementation",
+                        "node_types": ["function_definition"],
+                        "file_roles": ["runtime"],
+                        "file_symbols": ["parse_config"],
+                    },
+                },
+                {
+                    "file_path": "tests/test_parser.py",
+                    "content": "def test_parse_config():\n    assert parse_config('{}') == {}\n",
+                    "rank_score": 0.72,
+                    "metadata": {
+                        "chunk_role": "test",
+                        "node_types": ["function_definition"],
+                        "file_roles": ["test"],
+                        "file_symbols": ["test_parse_config"],
+                    },
+                },
+            ],
+        },
+        "required_substrings": [
+            '"query_class": "implementation_search"',
+            '"path": "src/parser.py"',
+            '"contributions"',
+            '"exact_identifier_bonus"',
+            '"function_definition"',
+        ],
+    },
+    {
         "id": "framecreator_indexing_health",
         "tool": "get_indexing_health",
         "workspace_name": "FrameCreator",
@@ -953,6 +1072,9 @@ def main() -> int:
         "search_documentation",
         "list_memories",
         "search_memory",
+        "rerank_retrieval_results",
+        "analyze_duplicate_results",
+        "trace_code_ranking",
         "describe_file",
         "extract_function_body",
         "extract_class_interface",
