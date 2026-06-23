@@ -266,6 +266,24 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "mcp_tool_catalog_route_handler_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "where is this route handled", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `where is this route handled`:",
+            "`search_codebase`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_framework_route_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "gin route handler", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `gin route handler`:",
+            "`search_codebase`",
+        ],
+    },
+    {
         "id": "stale_shadow_cleanup_dry_run",
         "tool": "cleanup_stale_shadow_graph",
         "params": {"dry_run": True, "max_project_ids": 25},

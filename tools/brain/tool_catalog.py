@@ -269,7 +269,8 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "search_codebase": ToolCatalogEntry(
         "primary",
         "code investigation",
-        "Find implementation or usage sites for natural-language code questions.",
+        "Find implementation, API route handler, request controller endpoint, "
+        "or usage sites for natural-language code questions.",
     ),
     "search_documentation": ToolCatalogEntry(
         "docs",
@@ -349,6 +350,7 @@ _INTENT_TOKEN_ALIASES = {
     "database": "db",
     "databases": "db",
     "frontend": "ui",
+    "handled": "handler",
     "ranking": "rank",
     "memories": "memory",
     "onboarding": "onboard",
@@ -368,6 +370,7 @@ _INTENT_STOP_WORDS = {
     "before",
     "did",
     "does",
+    "find",
     "for",
     "go",
     "how",
@@ -375,6 +378,7 @@ _INTENT_STOP_WORDS = {
     "jump",
     "learn",
     "library",
+    "lookup",
     "my",
     "of",
     "please",
@@ -382,6 +386,9 @@ _INTENT_STOP_WORDS = {
     "repo",
     "repository",
     "reach",
+    "spring",
+    "gin",
+    "axum",
     "result",
     "results",
     "the",

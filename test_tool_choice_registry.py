@@ -232,6 +232,21 @@ class ToolChoiceRegistryTests(unittest.TestCase):
         self.assertIn("get_backend_flow_summary", backend_output)
         self.assertNotIn("get_app_flow_summary", backend_output)
 
+    def test_tool_catalog_renderer_handles_route_handler_intents(self):
+        from tools.brain.tool_catalog import render_tool_catalog
+
+        for intent in (
+            "where is this route handled",
+            "request handler route lookup",
+            "api route implementation",
+            "spring controller endpoint",
+            "gin route handler",
+            "axum route handler",
+        ):
+            with self.subTest(intent=intent):
+                output = render_tool_catalog(intent=intent, limit=5)
+                self.assertIn("search_codebase", output)
+
     def test_tool_choice_goldens_reference_registered_tools(self):
         payload = json.loads(Path(GOLDENS_PATH).read_text(encoding="utf-8"))
         registry = _build_tool_registry()
