@@ -207,6 +207,44 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "mcp_tool_catalog_jump_definition_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "jump to definition", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `jump to definition`:",
+            "`find_definitions`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_ranking_debug_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "why did search rank this result", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `why did search rank this result`:",
+            "`trace_code_ranking`",
+            "`analyze_duplicate_results`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_duplicate_results_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "duplicate search results", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `duplicate search results`:",
+            "`analyze_duplicate_results`",
+            "`rerank_retrieval_results`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_change_review_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "review changed code before commit", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `review changed code before commit`:",
+            "`get_changed_symbols`",
+        ],
+    },
+    {
         "id": "stale_shadow_cleanup_dry_run",
         "tool": "cleanup_stale_shadow_graph",
         "params": {"dry_run": True, "max_project_ids": 25},

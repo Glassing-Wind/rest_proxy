@@ -183,6 +183,33 @@ class ToolChoiceRegistryTests(unittest.TestCase):
         )
         self.assertIn("find_definitions", definition_output)
 
+    def test_tool_catalog_renderer_handles_debug_and_review_intents(self):
+        from tools.brain.tool_catalog import render_tool_catalog
+
+        jump_output = render_tool_catalog(intent="jump to definition", limit=5)
+        self.assertIn("find_definitions", jump_output)
+
+        rank_output = render_tool_catalog(
+            intent="why did search rank this result", limit=5
+        )
+        self.assertIn("trace_code_ranking", rank_output)
+        self.assertIn("analyze_duplicate_results", rank_output)
+
+        duplicate_output = render_tool_catalog(intent="duplicate search results", limit=5)
+        self.assertIn("analyze_duplicate_results", duplicate_output)
+        self.assertIn("rerank_retrieval_results", duplicate_output)
+
+        change_review_output = render_tool_catalog(
+            intent="review changed code before commit", limit=5
+        )
+        self.assertIn("get_changed_symbols", change_review_output)
+
+        code_search_output = render_tool_catalog(intent="code search", limit=5)
+        self.assertLess(
+            code_search_output.find("`search_codebase`"),
+            code_search_output.find("`grep_codebase`"),
+        )
+
     def test_tool_choice_goldens_reference_registered_tools(self):
         payload = json.loads(Path(GOLDENS_PATH).read_text(encoding="utf-8"))
         registry = _build_tool_registry()

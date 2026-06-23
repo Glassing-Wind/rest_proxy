@@ -173,6 +173,12 @@ as bad first tools, while the catalog still routes targeted "blast radius" and
 "clustered architecture" intents to those secondary surfaces with
 `get_project_overview` as the preferred prior step.
 
+The support-tool naming issue is also partially mitigated at the catalog layer:
+natural wording such as "jump to definition", "why did search rank this result",
+"duplicate search results", and "review changed code before commit" routes to
+the exact support/dev surfaces even when the tool names remain implementation
+shaped.
+
 The bar is simple:
 
 - if we would not personally choose the tool first, it should not be treated as a peer first-class surface

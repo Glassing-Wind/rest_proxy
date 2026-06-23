@@ -27,7 +27,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "analyze_duplicate_results": ToolCatalogEntry(
         "support",
         "retrieval QA",
-        "Diagnose duplicate pressure in caller-supplied results before changing ranking policy.",
+        "Diagnose duplicate search-result pressure in caller-supplied results before changing ranking policy.",
     ),
     "author_and_index_documentation": ToolCatalogEntry(
         "docs",
@@ -294,7 +294,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "trace_code_ranking": ToolCatalogEntry(
         "support",
         "retrieval QA",
-        "Explain only the factors that changed an implementation-intent result ranking.",
+        "Debug search result ranking by explaining only the factors that changed an implementation-intent rank.",
     ),
     "trace_graph_provenance": ToolCatalogEntry(
         "primary",
@@ -346,6 +346,7 @@ _INTENT_TOKEN_ALIASES = {
     "clusters": "cluster",
     "defined": "definition",
     "definitions": "definition",
+    "ranking": "rank",
     "memories": "memory",
     "onboarding": "onboard",
     "precommit": "change",
@@ -360,9 +361,13 @@ _INTENT_STOP_WORDS = {
     "about",
     "an",
     "and",
+    "before",
+    "did",
     "for",
+    "go",
     "how",
     "is",
+    "jump",
     "learn",
     "library",
     "my",
@@ -371,6 +376,8 @@ _INTENT_STOP_WORDS = {
     "pre",
     "repo",
     "repository",
+    "result",
+    "results",
     "the",
     "this",
     "to",
@@ -379,6 +386,7 @@ _INTENT_STOP_WORDS = {
     "what",
     "where",
     "which",
+    "why",
 }
 
 

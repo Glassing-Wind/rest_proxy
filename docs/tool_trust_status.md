@@ -192,6 +192,9 @@ Latest workflow finding closed:
   `get_code_communities`, while natural catalog intents for architecture
   onboarding, blast radius, clustered architecture, and symbol definitions route
   to the intended surfaces
+- `get_mcp_tool_catalog` now also recognizes common action phrasing for support
+  workflows, including jump/go-to-definition, ranking-debug, duplicate search
+  results, and pre-commit changed-code review prompts
 - documentation, memory, and git-state read tools are now part of MCP parity
   smoke coverage; the direct parity harness loads `.env` like the daemon and
   registers the same docs/memory tool families

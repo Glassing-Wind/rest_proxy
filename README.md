@@ -231,6 +231,8 @@ This is the main retrieval-quality path for the repo. It runs:
 - canonical tool-choice evals
 - product-shape checks that keep secondary architecture tools behind the
   preferred onboarding flow
+- catalog intent checks for support-tool phrasing such as definition navigation,
+  ranking debug, duplicate-result review, and changed-code review
 - health-gated live graph regressions against the indexed benchmark repos
 - MCP transport parity smoke checks against the live daemon
 
