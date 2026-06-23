@@ -167,6 +167,12 @@ If we want the tool surface to feel genuinely first-class, the next work should 
 3. add live evaluations that compare tool choice against realistic user intents
 4. avoid shipping raw capability surfaces as if they were equal to preferred tools
 
+The overlapping discovery tranche now has explicit tool-choice protection:
+generic repo onboarding treats `get_code_importance` and `get_code_communities`
+as bad first tools, while the catalog still routes targeted "blast radius" and
+"clustered architecture" intents to those secondary surfaces with
+`get_project_overview` as the preferred prior step.
+
 The bar is simple:
 
 - if we would not personally choose the tool first, it should not be treated as a peer first-class surface

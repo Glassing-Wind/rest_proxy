@@ -30,6 +30,15 @@ class ToolChoiceEvalTests(unittest.TestCase):
         self.assertEqual("regressed", report["status"])
         self.assertTrue(report["first_tool_avoided"])
 
+    def test_secondary_architecture_tools_do_not_start_onboarding(self):
+        for tool_name in ("get_code_importance", "get_code_communities"):
+            with self.subTest(tool_name=tool_name):
+                report = evaluate_tool_choice(
+                    "repo_onboarding", [tool_name, "get_project_overview"]
+                )
+                self.assertEqual("regressed", report["status"])
+                self.assertTrue(report["first_tool_avoided"])
+
     def test_cli_script_emits_json(self):
         result = subprocess.run(
             [

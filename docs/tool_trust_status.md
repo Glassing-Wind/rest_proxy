@@ -187,6 +187,11 @@ Latest workflow finding closed:
 - `get_mcp_tool_catalog` now handles natural intent wording such as "learn
   library docs", "remember repo fact", and "precommit test coverage" instead
   of requiring exact internal workflow taxonomy terms
+- tool-choice/product-shape drift is now covered for overlapping discovery
+  tools: generic repo onboarding must not start with `get_code_importance` or
+  `get_code_communities`, while natural catalog intents for architecture
+  onboarding, blast radius, clustered architecture, and symbol definitions route
+  to the intended surfaces
 - documentation, memory, and git-state read tools are now part of MCP parity
   smoke coverage; the direct parity harness loads `.env` like the daemon and
   registers the same docs/memory tool families

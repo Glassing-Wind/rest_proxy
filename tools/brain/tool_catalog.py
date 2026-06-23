@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from mcp.server.fastmcp import FastMCP
@@ -160,7 +161,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_project_overview": ToolCatalogEntry(
         "primary",
         "code investigation",
-        "Onboard to an unfamiliar indexed repo and identify first inspection targets.",
+        "Onboard to an unfamiliar indexed repo, summarize architecture, and identify first inspection targets.",
         ("get_indexing_health",),
     ),
     "get_related_files": ToolCatalogEntry(
@@ -339,8 +340,14 @@ _TIER_ORDER = {
 _INTENT_TOKEN_ALIASES = {
     "doc": "documentation",
     "docs": "documentation",
+    "architectural": "architecture",
     "commit": "change",
+    "clustered": "cluster",
+    "clusters": "cluster",
+    "defined": "definition",
+    "definitions": "definition",
     "memories": "memory",
+    "onboarding": "onboard",
     "precommit": "change",
     "pre-commit": "change",
     "remember": "memory",
@@ -355,6 +362,7 @@ _INTENT_STOP_WORDS = {
     "and",
     "for",
     "how",
+    "is",
     "learn",
     "library",
     "my",
@@ -364,16 +372,18 @@ _INTENT_STOP_WORDS = {
     "repo",
     "repository",
     "the",
+    "this",
     "to",
     "tool",
     "use",
     "what",
+    "where",
     "which",
 }
 
 
 def _intent_tokens(intent: str) -> list[str]:
-    raw_tokens = intent.lower().replace("_", " ").split()
+    raw_tokens = re.findall(r"[a-z0-9]+", intent.lower().replace("_", " "))
     tokens: list[str] = []
     for raw_token in raw_tokens:
         token = raw_token.strip("`'\".,:;!?()[]{}")

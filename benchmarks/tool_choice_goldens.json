@@ -12,7 +12,9 @@
         "describe_file"
       ],
       "avoid_as_primary": [
-        "query_graph"
+        "query_graph",
+        "get_code_importance",
+        "get_code_communities"
       ]
     },
     {

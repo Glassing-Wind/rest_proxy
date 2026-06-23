@@ -164,6 +164,49 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "mcp_tool_catalog_architecture_onboarding_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "repo architecture onboarding", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `repo architecture onboarding`:",
+            "`get_project_overview`",
+            "summarize architecture",
+        ],
+        "forbidden_substrings": [
+            "`get_code_importance`",
+            "`get_code_communities`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_blast_radius_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "blast radius", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `blast radius`:",
+            "`get_code_importance`",
+            "Prefer after: get_project_overview",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_clustered_architecture_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "clustered repo architecture", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `clustered repo architecture`:",
+            "`get_code_communities`",
+            "Prefer after: get_project_overview",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_symbol_definition_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "where is this symbol defined", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `where is this symbol defined`:",
+            "`find_definitions`",
+        ],
+    },
+    {
         "id": "stale_shadow_cleanup_dry_run",
         "tool": "cleanup_stale_shadow_graph",
         "params": {"dry_run": True, "max_project_ids": 25},
@@ -959,6 +1002,11 @@ async def _run_direct_parity_cases(cases: list[dict], session_id: str) -> list[d
             assert any(variant in mcp_norm for variant in variants), (
                 f"Missing expected substring for {case_id}: {expected}"
             )
+        for forbidden in case.get("forbidden_substrings") or []:
+            variants = _normalized_expected_variants(str(forbidden))
+            assert not any(variant in mcp_norm for variant in variants), (
+                f"Unexpected forbidden substring for {case_id}: {forbidden}"
+            )
         results.append(
             {
                 "case_id": case_id,
@@ -1012,6 +1060,14 @@ async def _run_direct_tier1_checks(checks: list[dict], session_id: str) -> list[
             )
             assert any(variant in mcp_norm for variant in variants), (
                 f"Missing expected substring for {check_id}: {expected}"
+            )
+        for forbidden in check.get("forbidden_substrings") or []:
+            variants = _normalized_expected_variants(str(forbidden))
+            assert not any(variant in direct_norm for variant in variants), (
+                f"Unexpected forbidden substring for {check_id} direct output: {forbidden}"
+            )
+            assert not any(variant in mcp_norm for variant in variants), (
+                f"Unexpected forbidden substring for {check_id}: {forbidden}"
             )
         results.append(
             {

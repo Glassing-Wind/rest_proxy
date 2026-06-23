@@ -229,6 +229,8 @@ This is the main retrieval-quality path for the repo. It runs:
 
 - MCP initialize/delete and stale-session restart lifecycle checks
 - canonical tool-choice evals
+- product-shape checks that keep secondary architecture tools behind the
+  preferred onboarding flow
 - health-gated live graph regressions against the indexed benchmark repos
 - MCP transport parity smoke checks against the live daemon
 

@@ -158,6 +158,31 @@ class ToolChoiceRegistryTests(unittest.TestCase):
         coverage_output = render_tool_catalog(intent="test coverage", limit=10)
         self.assertIn("get_test_coverage_for", coverage_output)
 
+    def test_tool_catalog_renderer_handles_product_shape_intents(self):
+        from tools.brain.tool_catalog import render_tool_catalog
+
+        architecture_output = render_tool_catalog(
+            intent="repo architecture onboarding", limit=5
+        )
+        self.assertIn("get_project_overview", architecture_output)
+        self.assertNotIn("get_code_importance", architecture_output)
+        self.assertNotIn("get_code_communities", architecture_output)
+
+        blast_radius_output = render_tool_catalog(intent="blast radius", limit=5)
+        self.assertIn("get_code_importance", blast_radius_output)
+        self.assertIn("Prefer after: get_project_overview", blast_radius_output)
+
+        cluster_output = render_tool_catalog(
+            intent="clustered repo architecture", limit=5
+        )
+        self.assertIn("get_code_communities", cluster_output)
+        self.assertIn("Prefer after: get_project_overview", cluster_output)
+
+        definition_output = render_tool_catalog(
+            intent="where is this symbol defined", limit=5
+        )
+        self.assertIn("find_definitions", definition_output)
+
     def test_tool_choice_goldens_reference_registered_tools(self):
         payload = json.loads(Path(GOLDENS_PATH).read_text(encoding="utf-8"))
         registry = _build_tool_registry()
