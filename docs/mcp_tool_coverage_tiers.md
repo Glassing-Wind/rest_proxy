@@ -42,6 +42,7 @@ These are the tools we expect to reach for first during normal codebase work.
 | `find_definitions` | unit/script, mcp parity, tool-choice |
 | `list_symbol_matches` | unit/script, mcp parity |
 | `grep_codebase` | unit/script, mcp parity |
+| `describe_file` | unit/script, mcp parity, tool-choice |
 | `trace_graph_provenance` | unit/script, live, mcp parity, tool-choice |
 | `get_mcp_tool_catalog` | unit/script, mcp parity |
 
@@ -114,6 +115,10 @@ Examples:
 - `git_summary`
 - `lint_project_subset`
 - `get_test_coverage_for`
+- `get_changed_symbols`
+- `extract_function_body`
+- `extract_class_interface`
+- `find_symbol_usages`
 - `restart_brain_server`
 - `rerank_retrieval_results`
 - `analyze_duplicate_results`

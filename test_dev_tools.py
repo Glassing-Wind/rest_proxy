@@ -97,6 +97,47 @@ class FakeGraphDriver:
         return FakeGraphSession()
 
 
+class FakeRowsGraphResult:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def data(self):
+        return list(self.rows)
+
+
+class FakeRowsGraphTx:
+    def __init__(self, rows):
+        self.rows = rows
+        self.calls = []
+
+    async def run(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return FakeRowsGraphResult(self.rows)
+
+
+class FakeRowsGraphSession:
+    def __init__(self, rows):
+        self.tx = FakeRowsGraphTx(rows)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def execute_read(self, fn):
+        return await fn(self.tx)
+
+
+class FakeRowsGraphDriver:
+    def __init__(self, rows):
+        self.rows = rows
+        self.session_obj = FakeRowsGraphSession(rows)
+
+    def session(self, database=None):
+        return self.session_obj
+
+
 def load_module(memory_store):
     spec = importlib.util.spec_from_file_location("dev_tools_under_test", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
@@ -433,6 +474,56 @@ diff --git a/.env.example b/.env.example
         self.assertIn("README.md", output)
         self.assertIn(".env.example", output)
         self.assertLess(output.index("src/misc.ts"), output.index("README.md"))
+
+    def test_extract_function_body_uses_graph_fallback_with_execute_read(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        source = """def unrelated():
+    return None
+
+def graph_only():
+    return 42
+"""
+        ts_pack = types.ModuleType("tree_sitter_language_pack")
+        ts_pack.detect_language = lambda path: "python"
+
+        class FakeProcessConfig:
+            @classmethod
+            def all(cls, lang):
+                return types.SimpleNamespace(language=lang)
+
+        ts_pack.ProcessConfig = FakeProcessConfig
+        ts_pack.process = lambda code, config: {"structure": []}
+        driver = FakeRowsGraphDriver(
+            [{"sl": 4, "el": 5, "labels": ["Function"]}]
+        )
+
+        async def fake_require_driver():
+            return driver
+
+        module._graph_bootstrap_mod.require_driver = fake_require_driver
+
+        with mock.patch.object(module.os.path, "exists", return_value=True), mock.patch(
+            "builtins.open", mock.mock_open(read_data=source)
+        ), mock.patch.dict(
+            sys.modules,
+            {
+                "tree_sitter_language_pack": ts_pack,
+                "graph_bootstrap": module._graph_bootstrap_mod,
+            },
+        ):
+            output = asyncio.run(
+                mcp.tools["extract_function_body"](
+                    "/tmp/repo", "src/service.py", "graph_only"
+                )
+            )
+
+        self.assertIn("## `graph_only` (Function)  —  L4–5", output)
+        self.assertIn("def graph_only():", output)
+        self.assertTrue(driver.session_obj.tx.calls)
 
 
 if __name__ == "__main__":

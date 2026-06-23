@@ -887,6 +887,7 @@ def register(mcp: FastMCP) -> None:
                             database=graph_bootstrap._NEO4J_DB
                         ) as session:
                             records = await _execute_read(
+                                session,
                                 """
                                 MATCH (f:File {project_id:$pid, filepath:$fp})-[:CONTAINS]->(s)
                                 WHERE s.name = $name

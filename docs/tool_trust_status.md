@@ -180,6 +180,10 @@ Latest workflow finding closed:
   schema bootstrap, issue no DDL when the schema is current, and create only
   genuinely missing objects; equivalent legacy constraint names and Neo4j
   uniqueness type variants are accepted
+- known-file and change-review tools now have MCP parity coverage for
+  `describe_file`, `extract_function_body`, `extract_class_interface`,
+  `find_symbol_usages`, `get_changed_symbols`, and `get_test_coverage_for`;
+  `extract_function_body` also has a regression for its graph fallback path
 
 Current likely targets:
 

@@ -135,6 +135,82 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "rest_proxy_describe_dev_file",
+        "tool": "describe_file",
+        "workspace_name": "rest_proxy",
+        "params": {
+            "project_path": "$workspace_id",
+            "file_path": "tools/hands/dev.py",
+        },
+        "required_substrings": [
+            "=== tools/hands/dev.py ===",
+            "Purpose:",
+            "register",
+        ],
+    },
+    {
+        "id": "rest_proxy_extract_changed_symbols_body",
+        "tool": "extract_function_body",
+        "workspace_name": "rest_proxy",
+        "params": {
+            "workspace_id": "$workspace_id",
+            "file_path": "tools/hands/dev.py",
+            "symbol_name": "get_changed_symbols",
+        },
+        "required_substrings": [
+            "## `get_changed_symbols`",
+            "git diff",
+        ],
+    },
+    {
+        "id": "rest_proxy_extract_fake_mcp_interface",
+        "tool": "extract_class_interface",
+        "workspace_name": "rest_proxy",
+        "params": {
+            "workspace_id": "$workspace_id",
+            "file_path": "test_dev_tools.py",
+            "class_name": "FakeMCP",
+        },
+        "required_substrings": [
+            "## `FakeMCP`",
+            "__init__",
+            "tool",
+        ],
+    },
+    {
+        "id": "rest_proxy_find_symbol_usages_local",
+        "tool": "find_symbol_usages",
+        "workspace_name": "rest_proxy",
+        "params": {
+            "workspace_id": "$workspace_id",
+            "file_path": "tools/hands/dev.py",
+            "symbol_name": "get_changed_symbols",
+        },
+        "required_substrings": [
+            "## `get_changed_symbols` in `dev.py`",
+        ],
+    },
+    {
+        "id": "rest_proxy_changed_symbols_parity",
+        "tool": "get_changed_symbols",
+        "workspace_name": "rest_proxy",
+        "params": {"workspace_id": "$workspace_id", "since": "HEAD"},
+    },
+    {
+        "id": "rest_proxy_test_coverage_for_dev_tools",
+        "tool": "get_test_coverage_for",
+        "workspace_name": "rest_proxy",
+        "params": {
+            "workspace_id": "$workspace_id",
+            "file_path": "tools/hands/dev.py",
+        },
+        "compare_output": False,
+        "required_substrings": [
+            "## Tests covering `tools/hands/dev.py`",
+            "test_dev_tools.py",
+        ],
+    },
+    {
         "id": "framecreator_indexing_health",
         "tool": "get_indexing_health",
         "workspace_name": "FrameCreator",
@@ -775,6 +851,12 @@ def main() -> int:
         "visualize_subgraph",
         "get_mcp_tool_catalog",
         "cleanup_stale_shadow_graph",
+        "describe_file",
+        "extract_function_body",
+        "extract_class_interface",
+        "find_symbol_usages",
+        "get_changed_symbols",
+        "get_test_coverage_for",
     ):
         assert expected_tool in tool_names, (
             f"Expected MCP tool '{expected_tool}' was not listed"
