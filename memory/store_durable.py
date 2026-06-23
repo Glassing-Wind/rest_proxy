@@ -48,7 +48,7 @@ async def get_project_preferences(project_id: str) -> List[str]:
         cypher = """
         MATCH (proj:Project {id: $pid})-[:PREFERS_ENV]->(pref:UserPreference)
         RETURN pref.instruction AS instruction
-        ORDER BY coalesce(pref.importance, 3) DESC, pref.created_at DESC
+        ORDER BY coalesce(properties(pref).importance, 3) DESC, pref.created_at DESC
         """
 
         prefs = []
@@ -76,7 +76,7 @@ async def get_global_instructions() -> List[str]:
         cypher = """
         MATCH (i:Instruction)
         RETURN i.text AS text
-        ORDER BY coalesce(i.importance, 3) DESC, i.created_at DESC
+        ORDER BY coalesce(properties(i).importance, 3) DESC, i.created_at DESC
         """
 
         instructions = []
@@ -211,8 +211,9 @@ async def list_durable_memories(
         pref_cypher = """
         MATCH (proj:Project {id: $pid})-[:PREFERS_ENV]->(pref:UserPreference)
         RETURN pref.instruction AS text, pref.created_at AS created_at,
-               coalesce(pref.tags, []) AS tags, pref.category AS category,
-               coalesce(pref.importance, 3) AS importance
+               coalesce(properties(pref).tags, []) AS tags,
+               properties(pref).category AS category,
+               coalesce(properties(pref).importance, 3) AS importance
         ORDER BY pref.created_at DESC
         """
         async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:
@@ -236,8 +237,9 @@ async def list_durable_memories(
             inst_cypher = """
             MATCH (i:Instruction)
             RETURN i.text AS text, i.created_at AS created_at,
-                   coalesce(i.tags, []) AS tags, i.category AS category,
-                   coalesce(i.importance, 3) AS importance
+                   coalesce(properties(i).tags, []) AS tags,
+                   properties(i).category AS category,
+                   coalesce(properties(i).importance, 3) AS importance
             ORDER BY i.created_at DESC
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as s:

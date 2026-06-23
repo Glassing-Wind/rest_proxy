@@ -41,7 +41,8 @@ class DurableMemoryStoreTests(unittest.TestCase):
             asyncio.run(store_durable.get_project_preferences("repo"))
 
         query = read.await_args.args[1]
-        self.assertIn("coalesce(pref.importance, 3) DESC", query)
+        self.assertIn("coalesce(properties(pref).importance, 3) DESC", query)
+        self.assertNotIn("coalesce(pref.importance", query)
 
     def test_add_durable_memory_writes_metadata_properties(self):
         write = mock.AsyncMock(return_value=[])
@@ -101,6 +102,12 @@ class DurableMemoryStoreTests(unittest.TestCase):
             )
 
         self.assertEqual([memory["text"] for memory in memories], ["critical"])
+        pref_query = read.await_args_list[0].args[1]
+        self.assertIn("coalesce(properties(pref).tags, []) AS tags", pref_query)
+        self.assertIn("properties(pref).category AS category", pref_query)
+        self.assertIn("coalesce(properties(pref).importance, 3) AS importance", pref_query)
+        self.assertNotIn("coalesce(pref.tags", pref_query)
+        self.assertNotIn("pref.category AS category", pref_query)
 
 
 if __name__ == "__main__":

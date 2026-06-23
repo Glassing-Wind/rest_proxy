@@ -187,6 +187,15 @@ Latest workflow finding closed:
 - `get_mcp_tool_catalog` now handles natural intent wording such as "learn
   library docs", "remember repo fact", and "precommit test coverage" instead
   of requiring exact internal workflow taxonomy terms
+- documentation, memory, and git-state read tools are now part of MCP parity
+  smoke coverage; the direct parity harness loads `.env` like the daemon and
+  registers the same docs/memory tool families
+- durable-memory reads no longer reference optional Neo4j metadata properties
+  directly, avoiding DBMS warnings on older memory nodes that predate tags,
+  categories, or importance
+- memory semantic retrieval now treats a missing optional
+  `memory_embeddings_vector` Neo4j index as a clean fallback instead of logging
+  an error before assembling working memory from durable instructions
 
 Current likely targets:
 

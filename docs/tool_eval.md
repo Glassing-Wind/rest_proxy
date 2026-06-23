@@ -46,7 +46,7 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `research_documentation` | **Critical** | None. | **Tested**: Found relevant URLs and detected `llms.txt` for Neo4j GDS. Outstanding for contextual research; natural catalog intents like "learn library docs" now route to documentation tools. |
 | `search_codebase` | **Critical** | None. | **Tested**: Answered "How is project_id derived?" with high-fidelity chunks. The foundation of codebase understanding. |
 | `search_documentation` | **Critical** | None. | **Tested**: Retrieved specific `maxIterations` parameter for Neo4j GDS. Outstanding for technical accuracy. |
-| `search_memory` | **Critical** | None. | **Tested**: Recalled architectural decisions from previous sessions. Key to agent consistency. |
+| `search_memory` | **Critical** | None. | **Fixed/Tested**: Recalled architectural decisions from previous sessions. Key to agent consistency; missing optional memory vector indexes now fall back cleanly while durable instructions still assemble. |
 | `swift_doc_lookup` | **Niche** | Requires SourceKitten. Only works for Swift projects. | **Value**: Essential for Apple platform development but irrelevant for Python/JS repos. |
 | `trace_symbol_cross_project` | **Very High** | None. | **Fixed/Tested**: Invaluable for binding, gRPC, and monorepo workflows; role-aware candidate ranking now happens before output truncation, source previews center on the requested symbol, and live ts-pack-to-rest_proxy parity protects real cross-repo consumer discovery. |
 | `unwatch_project` | **Medium** | None. | **Tested**: Companion tool for resource management. |

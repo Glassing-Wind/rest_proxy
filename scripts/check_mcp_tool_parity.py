@@ -14,10 +14,14 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+load_dotenv(ROOT / ".env")
 
 _LM_PROXY_FALLBACK_PYTHON = (
     "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
@@ -169,6 +173,62 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
             "Shadow project IDs found:",
             "Shadow nodes:",
             "Shadow relationships:",
+        ],
+    },
+    {
+        "id": "rest_proxy_git_summary",
+        "tool": "git_summary",
+        "workspace_name": "rest_proxy",
+        "params": {"workspace_id": "$workspace_id"},
+        "required_substrings": [
+            "### Git Summary: `/Users/michaelmarler/Projects/rest_proxy`",
+            "**Branch:** `codex/enterprise-hardening`",
+        ],
+    },
+    {
+        "id": "neo4j_documentation_sources",
+        "tool": "list_documentation_sources",
+        "params": {"topic": "neo4j", "limit": 8},
+        "required_substrings": [
+            "Documentation domains for topic='neo4j'",
+            "Topic members:",
+            "neo4j-gds",
+            "neo4j.com",
+        ],
+    },
+    {
+        "id": "neo4j_gds_documentation_search",
+        "tool": "search_documentation",
+        "params": {"query": "maxIterations parameter", "topic": "neo4j-gds", "k": 3},
+        "required_substrings": [
+            "Documentation search: 'maxIterations parameter'  [topic=neo4j-gds]",
+            "neo4j.com",
+        ],
+    },
+    {
+        "id": "rest_proxy_list_memories",
+        "tool": "list_memories",
+        "workspace_name": "rest_proxy",
+        "params": {
+            "workspace_id": "$workspace_id",
+            "include_global": True,
+            "min_importance": 1,
+        },
+        "required_substrings": [
+            "Memories for '/Users/michaelmarler/Projects/rest_proxy'",
+        ],
+    },
+    {
+        "id": "rest_proxy_search_memory",
+        "tool": "search_memory",
+        "workspace_name": "rest_proxy",
+        "params": {
+            "workspace_id": "$workspace_id",
+            "query": "architecture retrieval semantic roles",
+            "global_search": True,
+        },
+        "required_substrings": [
+            "## Working Memory",
         ],
     },
     {
@@ -888,6 +948,11 @@ def main() -> int:
         "visualize_subgraph",
         "get_mcp_tool_catalog",
         "cleanup_stale_shadow_graph",
+        "git_summary",
+        "list_documentation_sources",
+        "search_documentation",
+        "list_memories",
+        "search_memory",
         "describe_file",
         "extract_function_body",
         "extract_class_interface",

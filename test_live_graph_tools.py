@@ -18,11 +18,15 @@ import time
 from dataclasses import dataclass
 import types
 
+from dotenv import load_dotenv
+
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 GRAPH_GOLDENS_PATH = os.path.join(REPO_ROOT, "benchmarks", "live_graph_goldens.json")
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
+
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
 from _runtime import resolve_python_runtime  # noqa: E402
 
@@ -119,6 +123,8 @@ def _validate_output(case_id: str, label: str, output: str, case: dict) -> None:
 
 def _build_tool_registry() -> FakeMCP:
     _install_mcp_stub()
+    from tools.brain import documentation as documentation_tools
+    from tools.brain import memory as memory_tools
     from tools.brain.code_intel import core as code_intel_core
     from tools.brain.graph import tools as graph_tools
     from tools.brain.search import graph_query as graph_query_tools
@@ -128,6 +134,8 @@ def _build_tool_registry() -> FakeMCP:
     from tools.hands import dev as dev_tools
 
     mcp = FakeMCP()
+    memory_tools.register(mcp)
+    documentation_tools.register(mcp)
     code_intel_core.register(mcp)
     graph_tools.register(mcp)
     graph_query_tools.register(mcp, include_admin=True)

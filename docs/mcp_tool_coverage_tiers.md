@@ -112,7 +112,7 @@ Examples:
 - `unwatch_project`
 - `get_indexed_projects`
 - `suggest_indexignore`
-- `git_summary`
+- `git_summary` (mcp parity)
 - `lint_project_subset`
 - `get_test_coverage_for`
 - `get_changed_symbols`
@@ -124,6 +124,12 @@ Examples:
 - `analyze_duplicate_results`
 - `trace_code_ranking`
 - `swift_doc_lookup`
+
+Read-only documentation and memory tools are operational/context surfaces, but
+the standard parity smoke now includes representative checks for
+`list_documentation_sources`, `search_documentation`, `list_memories`, and
+`search_memory` because they are common companion tools once the catalog routes
+users toward docs or remembered project context.
 
 These should keep strong unit/script coverage. Add live or MCP parity coverage
 only if a tool becomes operationally flaky or user-critical.
