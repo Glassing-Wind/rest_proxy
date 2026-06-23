@@ -184,6 +184,9 @@ Latest workflow finding closed:
   `describe_file`, `extract_function_body`, `extract_class_interface`,
   `find_symbol_usages`, `get_changed_symbols`, and `get_test_coverage_for`;
   `extract_function_body` also has a regression for its graph fallback path
+- `get_mcp_tool_catalog` now handles natural intent wording such as "learn
+  library docs", "remember repo fact", and "precommit test coverage" instead
+  of requiring exact internal workflow taxonomy terms
 
 Current likely targets:
 

@@ -39,11 +39,11 @@ This document evaluates the tools provided by the `graphrag-brain` MCP server, r
 | `index_workspace` | **Critical** | None. | **Fixed/Tested**: MCP remains asynchronous, while the documented CLI waits for its project to reach persisted terminal state, reports final status, and exits nonzero on failure or timeout. Dead owner/worker PIDs release orphan project and global-capacity locks immediately; a CLI blocked by a different project fails fast instead of waiting on that unrelated job. |
 | `lint_project_subset` | **High** | None for focused lint workflows. | **Fixed/Tested**: `fix=True` applies supported Ruff/SwiftLint fixes and reports remaining issues. |
 | `list_documentation_sources` | **High** | None. | **Tested**: Identified 5 documentation topics including `neo4j-gds`. Vital for verifying what external context is available. |
-| `list_memories` | **Critical** | None. | **Tested**: Successfully retrieved 6 architectural and task memories. Essential for cross-session continuity. |
+| `list_memories` | **Critical** | None. | **Tested**: Successfully retrieved 6 architectural and task memories. Essential for cross-session continuity; natural catalog intents like "remember repo fact" now route to memory tools. |
 | `list_symbol_matches` | **High** | None for the current exploratory lookup workflow. | **Fixed/Tested**: Results include normalized signatures, with long signatures abbreviated to keep similarly named symbols easy to scan and disambiguate. |
 | `query_graph` | **High (Admin/Expert)** | Keep it hidden from the default user-facing surface; expose only for admin/debug workflows. | **Tested**: Powerful raw Cypher escape hatch, but not a normal product tool and no longer part of the default registered surface. |
 | `research_and_index` | **Very High** | None. | **Tested**: Automates the external knowledge acquisition loop. Best for "learning" a new library. |
-| `research_documentation` | **Critical** | None. | **Tested**: Found relevant URLs and detected `llms.txt` for Neo4j GDS. Outstanding for contextual research. |
+| `research_documentation` | **Critical** | None. | **Tested**: Found relevant URLs and detected `llms.txt` for Neo4j GDS. Outstanding for contextual research; natural catalog intents like "learn library docs" now route to documentation tools. |
 | `search_codebase` | **Critical** | None. | **Tested**: Answered "How is project_id derived?" with high-fidelity chunks. The foundation of codebase understanding. |
 | `search_documentation` | **Critical** | None. | **Tested**: Retrieved specific `maxIterations` parameter for Neo4j GDS. Outstanding for technical accuracy. |
 | `search_memory` | **Critical** | None. | **Tested**: Recalled architectural decisions from previous sessions. Key to agent consistency. |

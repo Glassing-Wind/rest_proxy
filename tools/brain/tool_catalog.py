@@ -336,13 +336,71 @@ _TIER_ORDER = {
 }
 
 
-def _matches_intent(entry: ToolCatalogEntry, intent: str) -> bool:
-    if not intent:
+_INTENT_TOKEN_ALIASES = {
+    "doc": "documentation",
+    "docs": "documentation",
+    "commit": "change",
+    "memories": "memory",
+    "precommit": "change",
+    "pre-commit": "change",
+    "remember": "memory",
+    "recall": "memory",
+    "tests": "test",
+}
+
+_INTENT_STOP_WORDS = {
+    "a",
+    "about",
+    "an",
+    "and",
+    "for",
+    "how",
+    "learn",
+    "library",
+    "my",
+    "of",
+    "please",
+    "pre",
+    "repo",
+    "repository",
+    "the",
+    "to",
+    "tool",
+    "use",
+    "what",
+    "which",
+}
+
+
+def _intent_tokens(intent: str) -> list[str]:
+    raw_tokens = intent.lower().replace("_", " ").split()
+    tokens: list[str] = []
+    for raw_token in raw_tokens:
+        token = raw_token.strip("`'\".,:;!?()[]{}")
+        if not token:
+            continue
+        token = _INTENT_TOKEN_ALIASES.get(token, token)
+        if token in _INTENT_STOP_WORDS:
+            continue
+        tokens.append(token)
+    return tokens
+
+
+def _matches_intent(name: str, entry: ToolCatalogEntry, intent: str) -> bool:
+    tokens = _intent_tokens(intent)
+    if not tokens:
         return True
-    haystack = " ".join(
-        [entry.tier, entry.workflow, entry.reach_for_when, *entry.prefer_after]
-    ).lower()
-    return all(token in haystack for token in intent.lower().split())
+    haystack_text = " ".join(
+        [
+            name.replace("_", " "),
+            entry.tier,
+            entry.workflow,
+            entry.reach_for_when,
+            *entry.prefer_after,
+        ]
+    )
+    haystack = set(_intent_tokens(haystack_text))
+    return all(token in haystack for token in tokens)
 
 
 def render_tool_catalog(
@@ -355,7 +413,7 @@ def render_tool_catalog(
     for name, entry in TOOL_CATALOG.items():
         if not include_admin and entry.tier == "admin":
             continue
-        if _matches_intent(entry, intent):
+        if _matches_intent(name, entry, intent):
             rows.append((name, entry))
     rows.sort(
         key=lambda item: (_TIER_ORDER.get(item[1].tier, 99), item[1].workflow, item[0])

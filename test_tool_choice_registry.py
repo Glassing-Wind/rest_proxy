@@ -138,6 +138,26 @@ class ToolChoiceRegistryTests(unittest.TestCase):
         self.assertIn("find_references", output)
         self.assertNotIn("delete_documentation", output)
 
+    def test_tool_catalog_renderer_handles_natural_intents(self):
+        from tools.brain.tool_catalog import render_tool_catalog
+
+        docs_output = render_tool_catalog(intent="learn library docs", limit=10)
+        self.assertIn("search_documentation", docs_output)
+        self.assertIn("research_documentation", docs_output)
+
+        memory_output = render_tool_catalog(intent="remember repo fact", limit=10)
+        self.assertIn("add_memory", memory_output)
+
+        memory_review_output = render_tool_catalog(intent="review memories", limit=10)
+        self.assertIn("list_memories", memory_review_output)
+
+        precommit_output = render_tool_catalog(intent="precommit", limit=10)
+        self.assertIn("git_summary", precommit_output)
+        self.assertNotIn("trace_code_ranking", precommit_output)
+
+        coverage_output = render_tool_catalog(intent="test coverage", limit=10)
+        self.assertIn("get_test_coverage_for", coverage_output)
+
     def test_tool_choice_goldens_reference_registered_tools(self):
         payload = json.loads(Path(GOLDENS_PATH).read_text(encoding="utf-8"))
         registry = _build_tool_registry()

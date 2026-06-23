@@ -123,6 +123,43 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "mcp_tool_catalog_natural_docs_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "learn library docs", "limit": 10},
+        "required_substrings": [
+            "MCP tool catalog for `learn library docs`:",
+            "`search_documentation`",
+            "`research_documentation`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_natural_memory_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "remember repo fact", "limit": 10},
+        "required_substrings": [
+            "MCP tool catalog for `remember repo fact`:",
+            "`add_memory`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_natural_memory_review_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "review memories", "limit": 10},
+        "required_substrings": [
+            "MCP tool catalog for `review memories`:",
+            "`list_memories`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_natural_change_review_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "precommit test coverage", "limit": 10},
+        "required_substrings": [
+            "MCP tool catalog for `precommit test coverage`:",
+            "`get_test_coverage_for`",
+        ],
+    },
+    {
         "id": "stale_shadow_cleanup_dry_run",
         "tool": "cleanup_stale_shadow_graph",
         "params": {"dry_run": True, "max_project_ids": 25},
