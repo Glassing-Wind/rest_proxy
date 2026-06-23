@@ -235,6 +235,8 @@ This is the main retrieval-quality path for the repo. It runs:
   ranking debug, duplicate-result review, and changed-code review
 - catalog flow-routing checks that separate full-stack app flow from backend
   request/database flow
+- positive full-stack UI-to-route/API parity on the indexed `rental` benchmark,
+  while preserving the separate empty-coverage diagnostic
 - catalog route/controller intent checks that route handler questions to
   `search_codebase`
 - health-gated live graph regressions against the indexed benchmark repos

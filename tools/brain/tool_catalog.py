@@ -94,9 +94,9 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
         ("find_references",),
     ),
     "get_app_flow_summary": ToolCatalogEntry(
-        "experimental",
+        "secondary",
         "architecture",
-        "Check UI/frontend-to-API/backend-to-service-to-DB/database paths in a full-stack web repo, or diagnose which required graph edges are missing.",
+        "Trace concrete UI/frontend-to-backend route/API paths in a full-stack web repo, include deeper service/database hops when unambiguous, or diagnose missing graph evidence.",
     ),
     "get_apple_build_summary": ToolCatalogEntry(
         "secondary",

@@ -21,7 +21,7 @@ The working standard is:
 
 ## Current Position
 
-As of 2026-05-11, the repo is past blanket enterprise-hardening work and past
+As of 2026-06-23, the repo is past blanket enterprise-hardening work and past
 the biggest retrieval-boundary cleanup pass. The main investigation surfaces
 are now on a stable, semantic-role-first baseline.
 
@@ -96,8 +96,10 @@ What recent live-workflow hardening improved:
 - `get_app_flow_summary`
   - empty results now distinguish absent UI source surfaces from missing
     cross-layer graph edges and recommend the best available flow fallback
-  - the tool remains experimental until positive end-to-end paths are validated
-    on a real indexed full-stack repository
+  - a positive indexed `rental` workflow now validates concrete UI-to-route/API
+    paths through live regression and MCP parity
+  - deeper service/database hops remain conditional on unambiguous graph
+    attribution instead of presenting file-level joins as route-level truth
 
 What this means in practice:
 
@@ -201,6 +203,9 @@ Latest workflow finding closed:
 - route/controller/handler catalog wording now routes framework-neutral and
   common framework prompts to `search_codebase`, matching the existing
   route-aware ranking contract instead of returning no catalog match
+- `get_app_flow_summary` is now promoted into the secondary trust set with a
+  positive `rental` live/MCP parity case; its honest product contract is
+  UI-to-route/API tracing with deeper hops only when attribution is concrete
 - documentation, memory, and git-state read tools are now part of MCP parity
   smoke coverage; the direct parity harness loads `.env` like the daemon and
   registers the same docs/memory tool families

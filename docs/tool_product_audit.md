@@ -51,6 +51,9 @@ These are good tools, but their domain is narrower or their output is more speci
 - `get_directory_snapshot`
 - `get_repo_dependency_summary`
 - `get_app_flow_summary`
+  - Preferred for concrete UI-to-route/API tracing in full-stack web repos.
+  - Deeper service/database hops are shown only when the graph can attribute
+    them without misleading route-level precision.
 - `get_backend_flow_summary`
 - `get_flow_summary`
 - `get_symbol_exports_summary`
@@ -180,8 +183,10 @@ the exact support/dev surfaces even when the tool names remain implementation
 shaped.
 
 Flow-tool routing is similarly explicit: full-stack UI/API/service/DB wording
-routes to the experimental app-flow diagnostic, while backend request-to-database
-wording routes to the backend flow summary instead of over-promoting app flow.
+routes to the app-flow summary, while backend request-to-database wording routes
+to the backend flow summary. A positive `rental` workflow now protects concrete
+UI-to-route/API output through both live regression and MCP parity; ambiguous
+file-level service/database attribution remains suppressed.
 
 Route/controller discovery is now also protected at the product layer: natural
 prompts such as "where is this route handled" or "gin route handler" route to

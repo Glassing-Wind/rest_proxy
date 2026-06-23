@@ -320,6 +320,31 @@
       ]
     },
     {
+      "id": "rental_app_flow_summary",
+      "workspace_name": "rental",
+      "tool": "get_app_flow_summary",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "limit": 8
+      },
+      "required_substrings": [
+        "Use this to decide which UI entrypoints reach real APIs or services and which path to inspect first.",
+        "Coverage: ui_files=15",
+        "api_route_links=81",
+        "UI: src/public/assets/financials.js",
+        "POST /api/financials/accounting-sync/quickbooks/export-batch",
+        "src/api/routes/accountingSyncRoutes.ts",
+        "UI: src/public/assets/landlord-dashboard.js",
+        "GET /api/leases",
+        "src/api/routes/leaseRoutes.ts"
+      ],
+      "forbidden_substrings": [
+        "No UI → API → Service → DB paths found.",
+        "tests/",
+        ".spec."
+      ]
+    },
+    {
       "id": "rest_proxy_app_flow_diagnostic",
       "workspace_name": "rest_proxy",
       "tool": "get_app_flow_summary",
