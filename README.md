@@ -233,6 +233,8 @@ This is the main retrieval-quality path for the repo. It runs:
   preferred onboarding flow
 - catalog intent checks for support-tool phrasing such as definition navigation,
   ranking debug, duplicate-result review, and changed-code review
+- catalog flow-routing checks that separate full-stack app flow from backend
+  request/database flow
 - health-gated live graph regressions against the indexed benchmark repos
 - MCP transport parity smoke checks against the live daemon
 

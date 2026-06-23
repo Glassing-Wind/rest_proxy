@@ -179,6 +179,10 @@ natural wording such as "jump to definition", "why did search rank this result",
 the exact support/dev surfaces even when the tool names remain implementation
 shaped.
 
+Flow-tool routing is similarly explicit: full-stack UI/API/service/DB wording
+routes to the experimental app-flow diagnostic, while backend request-to-database
+wording routes to the backend flow summary instead of over-promoting app flow.
+
 The bar is simple:
 
 - if we would not personally choose the tool first, it should not be treated as a peer first-class surface

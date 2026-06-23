@@ -96,7 +96,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_app_flow_summary": ToolCatalogEntry(
         "experimental",
         "architecture",
-        "Check UI-to-API-to-service paths in a full-stack web repo, or diagnose which required graph edges are missing.",
+        "Check UI/frontend-to-API/backend-to-service-to-DB/database paths in a full-stack web repo, or diagnose which required graph edges are missing.",
     ),
     "get_apple_build_summary": ToolCatalogEntry(
         "secondary",
@@ -106,7 +106,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_backend_flow_summary": ToolCatalogEntry(
         "secondary",
         "architecture",
-        "Summarize API to service to database paths in backend-heavy repos.",
+        "Summarize backend request flow from API to service to database paths in backend-heavy repos.",
     ),
     "get_call_chain": ToolCatalogEntry(
         "primary",
@@ -138,7 +138,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "get_flow_summary": ToolCatalogEntry(
         "secondary",
         "architecture",
-        "Ask for the best available application/backend flow summary without choosing a specific flow tool.",
+        "Ask for the best available application/backend request flow summary without choosing a specific flow tool.",
     ),
     "get_index_status": ToolCatalogEntry(
         "operational",
@@ -346,9 +346,13 @@ _INTENT_TOKEN_ALIASES = {
     "clusters": "cluster",
     "defined": "definition",
     "definitions": "definition",
+    "database": "db",
+    "databases": "db",
+    "frontend": "ui",
     "ranking": "rank",
     "memories": "memory",
     "onboarding": "onboard",
+    "path": "paths",
     "precommit": "change",
     "pre-commit": "change",
     "remember": "memory",
@@ -363,6 +367,7 @@ _INTENT_STOP_WORDS = {
     "and",
     "before",
     "did",
+    "does",
     "for",
     "go",
     "how",
@@ -376,6 +381,7 @@ _INTENT_STOP_WORDS = {
     "pre",
     "repo",
     "repository",
+    "reach",
     "result",
     "results",
     "the",

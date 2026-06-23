@@ -245,6 +245,27 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         ],
     },
     {
+        "id": "mcp_tool_catalog_fullstack_flow_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "ui api service db flow", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `ui api service db flow`:",
+            "`get_app_flow_summary`",
+        ],
+    },
+    {
+        "id": "mcp_tool_catalog_backend_request_flow_intent",
+        "tool": "get_mcp_tool_catalog",
+        "params": {"intent": "how does a request reach the database", "limit": 5},
+        "required_substrings": [
+            "MCP tool catalog for `how does a request reach the database`:",
+            "`get_backend_flow_summary`",
+        ],
+        "forbidden_substrings": [
+            "`get_app_flow_summary`",
+        ],
+    },
+    {
         "id": "stale_shadow_cleanup_dry_run",
         "tool": "cleanup_stale_shadow_graph",
         "params": {"dry_run": True, "max_project_ids": 25},

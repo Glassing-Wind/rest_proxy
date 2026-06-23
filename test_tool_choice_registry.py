@@ -210,6 +210,28 @@ class ToolChoiceRegistryTests(unittest.TestCase):
             code_search_output.find("`grep_codebase`"),
         )
 
+    def test_tool_catalog_renderer_handles_flow_intents(self):
+        from tools.brain.tool_catalog import render_tool_catalog
+
+        full_stack_output = render_tool_catalog(
+            intent="ui api service db flow", limit=5
+        )
+        self.assertIn("get_app_flow_summary", full_stack_output)
+
+        frontend_output = render_tool_catalog(
+            intent="frontend backend database path", limit=5
+        )
+        self.assertIn("get_app_flow_summary", frontend_output)
+
+        application_output = render_tool_catalog(intent="application flow", limit=5)
+        self.assertIn("get_flow_summary", application_output)
+
+        backend_output = render_tool_catalog(
+            intent="how does a request reach the database", limit=5
+        )
+        self.assertIn("get_backend_flow_summary", backend_output)
+        self.assertNotIn("get_app_flow_summary", backend_output)
+
     def test_tool_choice_goldens_reference_registered_tools(self):
         payload = json.loads(Path(GOLDENS_PATH).read_text(encoding="utf-8"))
         registry = _build_tool_registry()
