@@ -58,6 +58,7 @@ CASES=(
   "loombackgroundmusic_apple_investigation_workflow"
   "loombackgroundmusic_workspace_context_workflow"
   "rental_app_flow_summary"
+  "rental_backend_route_flow_summary"
   "rest_proxy_repo_dependency_summary"
   "rest_proxy_backend_flow_summary"
   "rest_proxy_backend_context_workflow"

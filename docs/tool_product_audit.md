@@ -55,6 +55,9 @@ These are good tools, but their domain is narrower or their output is more speci
   - Deeper service/database hops are shown only when the graph can attribute
     them without misleading route-level precision.
 - `get_backend_flow_summary`
+  - Preferred for backend route-handler and downstream-flow inspection.
+  - Route-only fallback remains useful without overstating route-specific
+    service/database attribution.
 - `get_flow_summary`
 - `get_symbol_exports_summary`
 - `get_symbol_imports_overview`

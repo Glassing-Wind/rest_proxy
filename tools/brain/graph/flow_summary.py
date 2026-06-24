@@ -317,9 +317,99 @@ def _group_backend_flow_rows(rows: list[dict], limit: int) -> list[str]:
     return output
 
 
-def _format_backend_flow_empty_message(crate_rows) -> str:
+def _backend_route_only_rows(api_routes: dict[str, list[str]]) -> list[dict]:
+    rows = []
+    for api, routes in sorted(api_routes.items()):
+        for route in routes:
+            rows.append(
+                {
+                    "api": api,
+                    "route": route,
+                    "svc": None,
+                    "model": None,
+                    "schema": None,
+                    "external": None,
+                }
+            )
+    return rows
+
+
+async def _backend_coverage_snapshot(session, project_id: str) -> dict[str, int]:
+    rows = await graph_core._execute_read(
+        session,
+        _schema_cypher("""
+        CALL () {
+          MATCH (route:__API_ROUTE__ {project_id:$p})
+          RETURN count(route) AS routes
+        }
+        CALL () {
+          MATCH (:__API_ROUTE__ {project_id:$p})-[rel:__HANDLED_BY__]->(:__FILE__ {project_id:$p})
+          RETURN count(rel) AS handled_routes
+        }
+        CALL () {
+          MATCH (:__FILE__ {project_id:$p})-[rel:__CALLS_SERVICE__]->(:__FILE__ {project_id:$p})
+          RETURN count(rel) AS service_links
+        }
+        CALL () {
+          MATCH (:__FILE__ {project_id:$p})-[rel:__CALLS_DB_MODEL__]->(:__MODEL__ {project_id:$p})
+          RETURN count(rel) AS model_links
+        }
+        CALL () {
+          MATCH (:__FILE__ {project_id:$p})-[rel:__CALLS_DB__]->()
+          RETURN count(rel) AS db_links
+        }
+        CALL () {
+          MATCH (:__FILE__ {project_id:$p})-[rel:__CALLS_API_EXTERNAL__]->(:__EXTERNAL_API__ {project_id:$p})
+          RETURN count(rel) AS external_links
+        }
+        RETURN routes, handled_routes, service_links, model_links, db_links, external_links
+        """),
+        p=project_id,
+        op="get_backend_flow_summary_coverage",
+    )
+    if not rows:
+        return {}
+    return {
+        key: int(rows[0].get(key) or 0)
+        for key in (
+            "routes",
+            "handled_routes",
+            "service_links",
+            "model_links",
+            "db_links",
+            "external_links",
+        )
+    }
+
+
+def _format_backend_flow_empty_message(
+    workspace_id: str,
+    crate_rows,
+    coverage: dict[str, int],
+) -> str:
+    coverage_line = (
+        "Coverage: "
+        f"routes={coverage.get('routes', 0)} "
+        f"handled_routes={coverage.get('handled_routes', 0)} "
+        f"service_links={coverage.get('service_links', 0)} "
+        f"model_links={coverage.get('model_links', 0)} "
+        f"db_links={coverage.get('db_links', 0)} "
+        f"external_links={coverage.get('external_links', 0)}"
+    )
     if not crate_rows:
-        return "No API → Service → DB paths found."
+        return "\n".join(
+            [
+                "No API → Service → DB paths found.",
+                "",
+                "Diagnosis:",
+                f"- {coverage_line}",
+                "- No connected backend path is available from the current graph evidence.",
+                "",
+                "Next action:",
+                f"- use get_flow_summary('{workspace_id}', mode='auto') to select the best available flow family",
+                "- if this is an application backend, inspect route/controller search results and reindex after verifying handler-to-service calls are represented in source",
+            ]
+        )
     crate_names = [row.get("crate") or row.get("crate_name") for row in crate_rows]
     crate_names = [name for name in crate_names if name]
     preview = ", ".join(crate_names[:4])
@@ -330,7 +420,8 @@ def _format_backend_flow_empty_message(crate_rows) -> str:
         "No API → Service → DB paths found. "
         "This workspace looks crate/library-oriented rather than app-backend shaped."
         + detail
-        + " Prefer project overview, code importance, related files, communities, and directory snapshots here."
+        + f"\n\nDiagnosis:\n- {coverage_line}"
+        + "\n\nNext action:\n- prefer project overview, code importance, related files, communities, and directory snapshots here"
     )
 
 
@@ -1317,6 +1408,9 @@ async def get_backend_flow_summary_impl(
             )
         api_routes = await _load_backend_api_routes(session, project_id)
         cargo_crate_rows = await _load_cargo_crate_roots(session, project_id)
+        backend_coverage = {}
+        if not result and not api_routes:
+            backend_coverage = await _backend_coverage_snapshot(session, project_id)
     rows = [
         {
             "api": row.get("api"),
@@ -1329,6 +1423,9 @@ async def get_backend_flow_summary_impl(
         for row in result
     ]
     rows = _expand_backend_rows_by_route_context(rows, api_routes)
+    route_only = not rows and bool(api_routes)
+    if route_only:
+        rows = _backend_route_only_rows(api_routes)
     for row in rows:
         row["api_crate"], row["api_crate_name"] = _match_cargo_crate(row["api"], cargo_crate_rows)
         row["svc_crate"], row["svc_crate_name"] = _match_cargo_crate(row["svc"], cargo_crate_rows)
@@ -1351,7 +1448,11 @@ async def get_backend_flow_summary_impl(
 
     rows = [r for r in rows if r.get("route") or r["svc"] or r["model"] or r["schema"] or r["external"]]
     if not rows:
-        return _format_backend_flow_empty_message(cargo_crate_rows)
+        return _format_backend_flow_empty_message(
+            workspace_id,
+            cargo_crate_rows,
+            backend_coverage,
+        )
 
     focus_lines = _backend_flow_focus_lines(rows)
 
@@ -1388,6 +1489,13 @@ async def get_backend_flow_summary_impl(
     prefix = [
         "Use this to decide which API entrypoints reach real services, models, or external systems first."
     ]
+    if route_only:
+        prefix.extend(
+            [
+                "",
+                "Route-level coverage only: handlers are indexed, but no unambiguous route-specific service, model, database, or external-system binding is available.",
+            ]
+        )
     if focus_lines:
         prefix.extend(["", "Inspect First:", *focus_lines, ""])
     return "\n".join(prefix + output)

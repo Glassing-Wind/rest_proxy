@@ -33,8 +33,9 @@ What is in good shape now:
   normal investigation work.
 - MCP daemon/runtime reliability is materially better:
   - stale-daemon fingerprint drift is detected
-  - transport-runtime source drift is included in freshness identity, not only
-    registered tool implementation drift
+  - delegated MCP implementation and shared graph/index/memory helper drift is
+    included in freshness identity, not only registered wrapper drift
+  - transport-runtime source drift is included in freshness identity
   - direct-run scripts self-heal into the expected `lmproxy` runtime
   - parity/live wrappers normalize interpreter selection
   - current/compat protocol negotiation, restart recovery, and opt-in MCP roots
@@ -198,14 +199,20 @@ Latest workflow finding closed:
   workflows, including jump/go-to-definition, ranking-debug, duplicate search
   results, and pre-commit changed-code review prompts
 - flow-oriented catalog routing now distinguishes full-stack UI/API/service/DB
-  wording from backend request-to-database wording, keeping the experimental
-  app-flow tool behind explicit full-stack intent
+  wording from backend request-to-database wording
 - route/controller/handler catalog wording now routes framework-neutral and
   common framework prompts to `search_codebase`, matching the existing
   route-aware ranking contract instead of returning no catalog match
 - `get_app_flow_summary` is now promoted into the secondary trust set with a
   positive `rental` live/MCP parity case; its honest product contract is
   UI-to-route/API tracing with deeper hops only when attribution is concrete
+- `get_backend_flow_summary` now falls back to indexed route-handler inventory
+  when no unambiguous downstream path exists, and empty results report measured
+  route/service/database coverage; a positive `rental` route-only case protects
+  this behavior through live regression and MCP parity
+- daemon freshness fingerprints now include delegated MCP implementation
+  modules and shared graph/index/memory helpers, closing a stale-process gap
+  where wrapper files were unchanged but their implementation modules changed
 - documentation, memory, and git-state read tools are now part of MCP parity
   smoke coverage; the direct parity harness loads `.env` like the daemon and
   registers the same docs/memory tool families

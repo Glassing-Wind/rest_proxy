@@ -104,6 +104,7 @@ DEFAULT_CASE_IDS = [
     "loombackgroundmusic_workspace_related_files",
     "loombackgroundmusic_workspace_directory_snapshot",
     "rental_app_flow_summary",
+    "rental_backend_route_flow_summary",
     "rest_proxy_repo_dependency_summary",
     "rest_proxy_backend_flow_summary",
     "pydantic_ai_symbol_imports_overview",

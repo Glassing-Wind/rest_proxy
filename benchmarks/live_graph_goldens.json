@@ -345,6 +345,25 @@
       ]
     },
     {
+      "id": "rental_backend_route_flow_summary",
+      "workspace_name": "rental",
+      "tool": "get_backend_flow_summary",
+      "params": {
+        "workspace_id": "$workspace_id",
+        "limit": 8
+      },
+      "required_substrings": [
+        "Use this to decide which API entrypoints reach real services, models, or external systems first.",
+        "Route-level coverage only:",
+        "src/api/routes/accountingSyncRoutes.ts -> GET /api/financials/accounting-sync/journal-entries",
+        "src/api/routes/accountingSyncRoutes.ts -> POST /api/financials/accounting-sync/quickbooks/export-batch"
+      ],
+      "forbidden_substrings": [
+        "No API → Service → DB paths found.",
+        "src/services/"
+      ]
+    },
+    {
       "id": "rest_proxy_app_flow_diagnostic",
       "workspace_name": "rest_proxy",
       "tool": "get_app_flow_summary",

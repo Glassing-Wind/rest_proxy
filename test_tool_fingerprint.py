@@ -71,6 +71,24 @@ class ToolFingerprintTests(unittest.TestCase):
 
         self.assertNotEqual(before, after)
 
+    def test_fingerprint_changes_when_delegated_implementation_changes(self):
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT) as tmpdir:
+            implementation_path = Path(tmpdir) / "delegated_tool_impl.py"
+            implementation_path.write_text("VALUE = 1\n", encoding="utf-8")
+            mcp = _FakeMCP([_FakeTool("sample_tool", _sample_tool)])
+
+            before, _ = compute_tool_fingerprint(
+                mcp,
+                implementation_source_roots=[tmpdir],
+            )
+            implementation_path.write_text("VALUE = 2\n", encoding="utf-8")
+            after, _ = compute_tool_fingerprint(
+                mcp,
+                implementation_source_roots=[tmpdir],
+            )
+
+        self.assertNotEqual(before, after)
+
 
 if __name__ == "__main__":
     unittest.main()

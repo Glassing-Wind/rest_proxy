@@ -177,8 +177,9 @@ curl -sS -D - http://127.0.0.1:8001/health
 Look for:
 
 - `x-graphrag-boot-id`: changes after a real restart
-- `x-graphrag-tool-fingerprint`: changes when registered tool implementations
-  or the shared HTTP transport runtime changes
+- `x-graphrag-tool-fingerprint`: changes when registered wrappers, delegated
+  MCP implementation modules, shared graph/index/memory helpers, or the HTTP
+  transport runtime change
 - `x-graphrag-session-known: 0`: the client is sending no MCP session or a stale one
 
 The JSON bodies also include `boot_id`, `fingerprint`, `uptime_seconds`, and a
@@ -237,6 +238,8 @@ This is the main retrieval-quality path for the repo. It runs:
   request/database flow
 - positive full-stack UI-to-route/API parity on the indexed `rental` benchmark,
   while preserving the separate empty-coverage diagnostic
+- backend route-handler fallback parity on `rental`, without inventing
+  route-specific service/database bindings from file-level graph edges
 - catalog route/controller intent checks that route handler questions to
   `search_codebase`
 - health-gated live graph regressions against the indexed benchmark repos

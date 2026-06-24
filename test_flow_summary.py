@@ -1309,6 +1309,51 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("ts-pack-index", output)
         self.assertIn("project overview", output)
 
+    def test_get_backend_flow_summary_diagnoses_missing_backend_graph_evidence(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op in {
+                "get_backend_flow_summary",
+                "get_backend_flow_summary_fallback",
+                "get_backend_flow_summary_import_fallback",
+                "get_backend_flow_summary_routes",
+                "backend_flow_cargo_crates",
+            }:
+                return []
+            if op == "backend_flow_cargo_schema_labels":
+                return [{"labels": []}]
+            if op == "get_backend_flow_summary_coverage":
+                return [
+                    {
+                        "routes": 0,
+                        "handled_routes": 0,
+                        "service_links": 3,
+                        "model_links": 0,
+                        "db_links": 2,
+                        "external_links": 0,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_backend_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/backend",
+                    limit=20,
+                    as_table=False,
+                )
+            )
+
+        self.assertIn("No API → Service → DB paths found.", output)
+        self.assertIn(
+            "Coverage: routes=0 handled_routes=0 service_links=3 model_links=0 db_links=2 external_links=0",
+            output,
+        )
+        self.assertIn("No connected backend path", output)
+        self.assertIn("get_flow_summary('/tmp/backend', mode='auto')", output)
+
     def test_get_backend_flow_summary_expands_multi_route_api_without_fake_service_binding(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -1353,6 +1398,53 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("GET /api/charges", output)
         self.assertIn("POST /api/financials/accounting-sync/quickbooks/export-batch", output)
         self.assertNotIn("src/services/AccountingSyncBatchService.ts", output)
+
+    def test_get_backend_flow_summary_uses_route_only_fallback_without_fake_downstream_binding(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op in {
+                "get_backend_flow_summary",
+                "get_backend_flow_summary_fallback",
+                "get_backend_flow_summary_import_fallback",
+            }:
+                return []
+            if op == "get_backend_flow_summary_routes":
+                return [
+                    {
+                        "api": "src/api/routes/leaseRoutes.ts",
+                        "routes": [
+                            "GET /api/leases",
+                            "POST /api/leases",
+                        ],
+                    }
+                ]
+            if op == "backend_flow_cargo_schema_labels":
+                return [{"labels": []}]
+            if op == "backend_flow_cargo_crates":
+                return []
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_backend_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    limit=20,
+                    as_table=False,
+                )
+            )
+
+        self.assertIn("Route-level coverage only", output)
+        self.assertIn(
+            "src/api/routes/leaseRoutes.ts -> GET /api/leases",
+            output,
+        )
+        self.assertIn(
+            "src/api/routes/leaseRoutes.ts -> POST /api/leases",
+            output,
+        )
+        self.assertNotIn("src/services/", output)
 
     def test_get_backend_flow_summary_falls_back_for_fastapi_import_repo(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1575,7 +1667,10 @@ class FlowSummaryTests(unittest.TestCase):
                     )
                 )
 
-        self.assertEqual("No API → Service → DB paths found.", output)
+        self.assertIn("No API → Service → DB paths found.", output)
+        self.assertIn("Diagnosis:", output)
+        self.assertIn("Coverage: routes=0 handled_routes=0", output)
+        self.assertIn("get_flow_summary(", output)
 
     def test_extract_python_import_map_supports_parenthesized_imports(self):
         source_text = (

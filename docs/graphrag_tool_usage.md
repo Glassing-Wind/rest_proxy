@@ -71,6 +71,11 @@ These are the tools that should normally beat raw grep, raw Cypher, or manual gr
   - Best for full-stack JS/TS or mixed web repos where those layers should exist.
   - Empty results diagnose missing source/edge coverage and route to `get_flow_summary(mode='auto')`.
 - `get_backend_flow_summary(workspace_id, ...)`
+  - Returns connected API/service/database paths when attribution is concrete.
+  - Falls back to route-handler inventory with an explicit partial-coverage
+    warning instead of binding file-level service edges to individual routes.
+  - Empty results include measured route/service/database graph coverage and a
+    next action.
   - API -> Service -> DB paths.
   - Supports `crate_contains` for Rust workspaces.
   - For non-app Rust library repos, may return guidance instead of pretending a backend path exists.

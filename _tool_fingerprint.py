@@ -9,6 +9,21 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
+DEFAULT_IMPLEMENTATION_SOURCE_ROOTS = (
+    REPO_ROOT / "tools",
+    REPO_ROOT / "graphrag_core",
+    REPO_ROOT / "memory",
+    REPO_ROOT / "local_embeddings",
+    REPO_ROOT / "_helpers.py",
+    REPO_ROOT / "_jobs.py",
+    REPO_ROOT / "_mcp.py",
+    REPO_ROOT / "_runtime.py",
+    REPO_ROOT / "_semantic_contract.py",
+    REPO_ROOT / "_tool_fingerprint.py",
+    REPO_ROOT / "embedding_service.py",
+    REPO_ROOT / "graph_bootstrap.py",
+)
+
 
 def _tool_source_files(mcp) -> list[str]:
     paths: set[str] = set()
@@ -26,12 +41,35 @@ def _tool_source_files(mcp) -> list[str]:
     return sorted(paths)
 
 
+def _implementation_source_files(
+    roots: list[str | Path] | tuple[str | Path, ...],
+) -> list[str]:
+    paths: set[str] = set()
+    for root_value in roots:
+        try:
+            root = Path(root_value).resolve()
+        except Exception:
+            continue
+        if root.is_file():
+            if root.suffix == ".py":
+                paths.add(str(root))
+            continue
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            paths.add(str(path.resolve()))
+    return sorted(paths)
+
+
 def compute_tool_fingerprint(
     mcp,
     *,
     runtime_source_files: list[str | Path] | None = None,
+    implementation_source_roots: list[str | Path] | tuple[str | Path, ...] | None = None,
 ) -> tuple[str, int]:
-    """Return a short fingerprint of the registered tools and transport runtime."""
+    """Return a short fingerprint of registered tools and their local runtime."""
     try:
         tools = sorted(mcp._tool_manager.list_tools(), key=lambda tool: tool.name)
     except Exception:
@@ -41,6 +79,11 @@ def compute_tool_fingerprint(
     # Keep freshness stable across import order while including explicit
     # transport entrypoints that are not themselves registered tool sources.
     source_files = set(_tool_source_files(mcp))
+    source_files.update(
+        _implementation_source_files(
+            implementation_source_roots or DEFAULT_IMPLEMENTATION_SOURCE_ROOTS
+        )
+    )
     for source in runtime_source_files or []:
         try:
             source_files.add(str(Path(source).resolve()))
