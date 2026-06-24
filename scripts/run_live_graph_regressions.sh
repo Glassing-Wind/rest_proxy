@@ -109,6 +109,7 @@ CASES=(
   "gin_handle_http_request_symbol_context"
   "gin_request_flow_workflow"
   "spring_petclinic_owner_request_workflow"
+  "spring_petclinic_backend_route_flow_summary"
   "spring_petclinic_owner_controller_symbol_context"
   "spring_petclinic_process_find_form_symbol_context"
   "spring_petclinic_vet_controller_symbol_context"

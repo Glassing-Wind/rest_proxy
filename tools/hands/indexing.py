@@ -397,6 +397,33 @@ async def _get_shadow_graph_health(session) -> dict[str, int]:
     }
 
 
+async def _list_shadow_project_ids(session, limit: int) -> list[str]:
+    project_rows = await _execute_read(
+        session,
+        """
+        CALL () {
+          MATCH (n)
+          WHERE n.project_id CONTAINS '::shadow::'
+          RETURN n.project_id AS pid
+          UNION
+          MATCH ()-[r]->()
+          WHERE r.project_id CONTAINS '::shadow::'
+          RETURN r.project_id AS pid
+        }
+        RETURN DISTINCT pid
+        ORDER BY pid
+        LIMIT $limit
+        """,
+        limit=limit,
+        op="list_stale_shadow_project_ids",
+    )
+    return [
+        row.get("pid")
+        for row in project_rows
+        if isinstance(row.get("pid"), str) and row.get("pid")
+    ]
+
+
 def _describe_apple_graph_health(coverage: dict[str, int]) -> list[str]:
     notes: List[str] = []
     if coverage.get("project_files", 0) > 0 and coverage.get("targets", 0) == 0:
@@ -1741,31 +1768,16 @@ async def cleanup_stale_shadow_graph(
 
     driver = await graph_bootstrap.require_driver()
     async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+        initial = await _get_shadow_graph_health(session)
+        project_ids = await _list_shadow_project_ids(session, max_project_ids)
         before = await _get_shadow_graph_health(session)
-        project_rows = await _execute_read(
-            session,
-            """
-            CALL () {
-              MATCH (n)
-              WHERE n.project_id CONTAINS '::shadow::'
-              RETURN n.project_id AS pid
-              UNION
-              MATCH ()-[r]->()
-              WHERE r.project_id CONTAINS '::shadow::'
-              RETURN r.project_id AS pid
-            }
-            RETURN DISTINCT pid
-            ORDER BY pid
-            LIMIT $limit
-            """,
-            limit=max_project_ids,
-            op="list_stale_shadow_project_ids",
-        )
-        project_ids = [
-            row.get("pid")
-            for row in project_rows
-            if isinstance(row.get("pid"), str) and row.get("pid")
-        ]
+        activity_changed = initial != before
+
+        has_counts = bool(int(before.get("nodes") or 0) or int(before.get("rels") or 0))
+        if activity_changed or bool(project_ids) != has_counts:
+            project_ids = await _list_shadow_project_ids(session, max_project_ids)
+            before = await _get_shadow_graph_health(session)
+            activity_changed = True
 
         if dry_run:
             lines = ["## Stale Shadow Graph Cleanup Dry Run"]
@@ -1777,7 +1789,17 @@ async def cleanup_stale_shadow_graph(
                     "- To clean: run `cleanup_stale_shadow_graph(dry_run=False)` "
                     "during a quiet indexing window."
                 )
+            elif int(before.get("nodes") or 0) or int(before.get("rels") or 0):
+                lines.append(
+                    "- Shadow activity changed during inspection and no stable project IDs "
+                    "were found; retry during a quiet indexing window."
+                )
             else:
+                if activity_changed:
+                    lines.append(
+                        "- Transient shadow activity cleared during inspection; no stale "
+                        "residue remains."
+                    )
                 lines.append("- No stale shadow graph data found.")
             return "\n".join(lines)
 

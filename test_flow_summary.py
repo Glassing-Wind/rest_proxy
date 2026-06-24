@@ -1413,6 +1413,7 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "api": "src/api/routes/leaseRoutes.ts",
                         "routes": [
+                            "GET /leases",
                             "GET /api/leases",
                             "POST /api/leases",
                         ],
@@ -1444,6 +1445,7 @@ class FlowSummaryTests(unittest.TestCase):
             "src/api/routes/leaseRoutes.ts -> POST /api/leases",
             output,
         )
+        self.assertLess(output.find("GET /api/leases"), output.find("GET /leases"))
         self.assertNotIn("src/services/", output)
 
     def test_get_backend_flow_summary_falls_back_for_fastapi_import_repo(self):

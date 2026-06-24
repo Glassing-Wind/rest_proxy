@@ -179,7 +179,7 @@ Look for:
 - `x-graphrag-boot-id`: changes after a real restart
 - `x-graphrag-tool-fingerprint`: changes when registered wrappers, delegated
   MCP implementation modules, shared graph/index/memory helpers, or the HTTP
-  transport runtime change
+  transport runtime change, and when pinned runtime/CI dependencies change
 - `x-graphrag-session-known: 0`: the client is sending no MCP session or a stale one
 
 The JSON bodies also include `boot_id`, `fingerprint`, `uptime_seconds`, and a
@@ -240,6 +240,8 @@ This is the main retrieval-quality path for the repo. It runs:
   while preserving the separate empty-coverage diagnostic
 - backend route-handler fallback parity on `rental`, without inventing
   route-specific service/database bindings from file-level graph edges
+- Spring controller route inventory parity on Petclinic, backed by declared
+  mapping facts from the pinned ts-pack fork rather than search heuristics
 - catalog route/controller intent checks that route handler questions to
   `search_codebase`
 - health-gated live graph regressions against the indexed benchmark repos

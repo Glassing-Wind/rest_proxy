@@ -320,7 +320,14 @@ def _group_backend_flow_rows(rows: list[dict], limit: int) -> list[str]:
 def _backend_route_only_rows(api_routes: dict[str, list[str]]) -> list[dict]:
     rows = []
     for api, routes in sorted(api_routes.items()):
-        for route in routes:
+        ordered_routes = sorted(
+            routes,
+            key=lambda route: (
+                0 if route.split(" ", 1)[-1].startswith("/api/") else 1,
+                route,
+            ),
+        )
+        for route in ordered_routes:
             rows.append(
                 {
                     "api": api,

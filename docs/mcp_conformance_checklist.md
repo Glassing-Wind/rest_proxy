@@ -13,7 +13,8 @@ gaps that still matter for enterprise hardening.
   version list; explicit `2025-06-18` clients remain regression-tested.
 - Health/fingerprint diagnostics expose server boot identity and a runtime
   fingerprint covering registered wrappers, delegated MCP implementation
-  modules, shared graph/index/memory helpers, and `brain_server.py`.
+  modules, shared graph/index/memory helpers, pinned dependency files, and
+  `brain_server.py`.
 - `DELETE /mcp` with `Mcp-Session-Id` succeeds and terminates the transport
   session.
 - Daemon restart rotates boot identity, rejects the previous session with 404,

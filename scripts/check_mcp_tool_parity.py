@@ -111,6 +111,7 @@ DEFAULT_CASE_IDS = [
     "pydantic_ai_provider_wiring_search",
     "pydantic_ai_provider_related_files",
     "pydantic_ai_provider_subgraph",
+    "spring_petclinic_backend_route_flow_summary",
     "spring_petclinic_owner_controller_symbol_context",
     "okhttp_proceed_symbol_context",
     "swift_nio_code_importance",

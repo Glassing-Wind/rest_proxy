@@ -9,6 +9,8 @@ not upstream `kreuzberg-dev/tree-sitter-language-pack`.
   - Neo4j database selection for structural writes
   - native semantic ingestion controls
   - graph fidelity and write-stability fixes
+  - declared API-route materialization, including Spring mapping annotations,
+    even when no indexed client call references the route
 - We intentionally pin an exact git commit in `requirements.txt` and
   `requirements-ci.txt` so production, local testing, and CI all resolve the
   same Rust/Python binding behavior.

@@ -58,6 +58,8 @@ These are good tools, but their domain is narrower or their output is more speci
   - Preferred for backend route-handler and downstream-flow inspection.
   - Route-only fallback remains useful without overstating route-specific
     service/database attribution.
+  - Declared Spring mappings are now available even when no frontend/client
+    call references them.
 - `get_flow_summary`
 - `get_symbol_exports_summary`
 - `get_symbol_imports_overview`

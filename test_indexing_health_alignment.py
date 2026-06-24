@@ -70,6 +70,37 @@ class IndexedProjectsTests(unittest.TestCase):
         self.assertNotIn("source_url", "\n".join(seen_queries))
 
 
+class ShadowCleanupTests(unittest.TestCase):
+    def test_dry_run_rechecks_transient_shadow_activity(self):
+        module = load_indexing_module()
+        graph_bootstrap = types.ModuleType("graph_bootstrap")
+        graph_bootstrap._NEO4J_DB = "proxy"
+        graph_bootstrap.require_driver = mock.AsyncMock(return_value=FakeDriver())
+        health = mock.AsyncMock(
+            side_effect=[
+                {"nodes": 0, "projects": 0, "rels": 605, "rel_projects": 1},
+                {"nodes": 0, "projects": 0, "rels": 0, "rel_projects": 0},
+                {"nodes": 0, "projects": 0, "rels": 0, "rel_projects": 0},
+            ]
+        )
+
+        with (
+            mock.patch.dict(sys.modules, {"graph_bootstrap": graph_bootstrap}),
+            mock.patch.object(module, "_get_shadow_graph_health", health),
+            mock.patch.object(
+                module,
+                "_list_shadow_project_ids",
+                new=mock.AsyncMock(side_effect=[[], []]),
+            ),
+        ):
+            output = asyncio.run(module.cleanup_stale_shadow_graph())
+
+        self.assertIn("Shadow project IDs found: 0", output)
+        self.assertIn("Shadow relationships: 0", output)
+        self.assertIn("Transient shadow activity cleared during inspection", output)
+        self.assertNotIn("Shadow relationships: 605", output)
+
+
 class FakeCursor:
     def __init__(self, rows_by_query):
         self._rows_by_query = rows_by_query

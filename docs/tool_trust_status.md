@@ -210,9 +210,16 @@ Latest workflow finding closed:
   when no unambiguous downstream path exists, and empty results report measured
   route/service/database coverage; a positive `rental` route-only case protects
   this behavior through live regression and MCP parity
+- the pinned ts-pack fork now extracts Spring `@GetMapping`, `@PostMapping`,
+  and `@RequestMapping` declarations with class-level path composition, and
+  materializes declared `ApiRoute -> HANDLED_BY -> File` graph facts without
+  requiring a matching client call; Petclinic live/MCP coverage protects the
+  Java route inventory and Javadoc false-positive boundary
 - daemon freshness fingerprints now include delegated MCP implementation
   modules and shared graph/index/memory helpers, closing a stale-process gap
   where wrapper files were unchanged but their implementation modules changed
+- pinned dependency files are also part of daemon freshness identity, so a
+  native ts-pack upgrade forces the shared process to reload the new extension
 - documentation, memory, and git-state read tools are now part of MCP parity
   smoke coverage; the direct parity harness loads `.env` like the daemon and
   registers the same docs/memory tool families
@@ -228,9 +235,9 @@ Latest workflow finding closed:
 
 Current likely targets:
 
-- the next lower-level routing/handler metadata pass if live usage still finds
-  repo families where controller/route surfaces are under-described
 - additional workflow cases only when they protect a current trust boundary
+- the next lower-level metadata family only after live usage exposes another
+  repeated under-described surface
 
 ## What Is Not Worth Doing Blindly
 
