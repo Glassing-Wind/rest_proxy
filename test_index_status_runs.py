@@ -79,6 +79,7 @@ def load_indexing_module():
     runtime_mod.resolve_python_runtime = lambda: {"cmd": ["python"], "python": "python", "source": "test"}
 
     fastmcp_mod = types.ModuleType("mcp.server.fastmcp")
+    fastmcp_mod.Context = type("Context", (), {})
     fastmcp_mod.FastMCP = FakeMCP
 
     config_mod = types.ModuleType("graphrag_core.config")

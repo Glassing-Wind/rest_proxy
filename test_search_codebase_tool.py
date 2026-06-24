@@ -9,8 +9,6 @@ from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent
 MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "semantic.py"
-HELPERS_PATH = REPO_ROOT / "tools" / "brain" / "search" / "semantic_helpers.py"
-FALLBACKS_PATH = REPO_ROOT / "tools" / "brain" / "search" / "fallbacks.py"
 
 
 class FakeMCP:
@@ -73,9 +71,17 @@ class FakePool:
 class FakeMemoryStore:
     def __init__(self, rows_by_pid):
         self._pg_pool = FakePool(rows_by_pid)
+        self._core_module = None
+        self._store_module = None
 
     async def open_pool(self):
         return None
+
+    async def search_codebase_core(self, *args, **kwargs):
+        assert self._core_module is not None
+        assert self._store_module is not None
+        with mock.patch.dict(sys.modules, {"memory.store": self._store_module}):
+            return await self._core_module.search_codebase_core(*args, **kwargs)
 
 
 class FakeSession:
@@ -128,23 +134,6 @@ def fake_mcp_modules():
 
 
 def load_module(memory_store):
-    helpers_spec = importlib.util.spec_from_file_location(
-        "tools.brain.search.semantic_helpers", HELPERS_PATH
-    )
-    helpers_module = importlib.util.module_from_spec(helpers_spec)
-    assert helpers_spec.loader is not None
-    helpers_spec.loader.exec_module(helpers_module)
-
-    fallbacks_spec = importlib.util.spec_from_file_location(
-        "tools.brain.search.fallbacks", FALLBACKS_PATH
-    )
-    fallbacks_module = importlib.util.module_from_spec(fallbacks_spec)
-    assert fallbacks_spec.loader is not None
-    fallbacks_spec.loader.exec_module(fallbacks_module)
-    fallbacks_module.run_definition_fallback_grep = mock.AsyncMock(return_value=([], {}))
-    fallbacks_module.run_member_usage_fallback_grep = mock.AsyncMock(return_value=([], {}))
-    fallbacks_module.run_fallback_grep = mock.AsyncMock(return_value=([], {}))
-
     spec = importlib.util.spec_from_file_location("tools.brain.search.semantic", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -163,36 +152,34 @@ def load_module(memory_store):
         "repo": "/tmp/repo",
     }.get(workspace_id, workspace_id)
 
-    search_core = types.ModuleType("tools.brain.search.core")
-    search_core._execute_read = mock.AsyncMock(return_value=[])
-
     proxy_logging = types.ModuleType("proxy.logging")
     proxy_logging.debug_log = lambda *args, **kwargs: None
     graph_bootstrap = fake_graph_bootstrap_module()
 
-    tools_pkg = types.ModuleType("tools")
-    tools_pkg.__path__ = []
-    brain_pkg = types.ModuleType("tools.brain")
-    brain_pkg.__path__ = []
-    search_pkg = types.ModuleType("tools.brain.search")
-    search_pkg.__path__ = []
-    with mock.patch.dict(
-        sys.modules,
-        {
-            "_helpers": helpers_mod,
-            "embedding_service": fake_embedding_module(),
-            "proxy.logging": proxy_logging,
-            "graph_bootstrap": graph_bootstrap,
-            "tools": tools_pkg,
-            "tools.brain": brain_pkg,
-            "tools.brain.search": search_pkg,
-            "tools.brain.search.core": search_core,
-            "tools.brain.search.semantic_helpers": helpers_module,
-            "tools.brain.search.fallbacks": fallbacks_module,
-            **fake_mcp_modules(),
-        },
-    ):
-        spec.loader.exec_module(module)
+    memory_store_mod = types.ModuleType("memory.store")
+    memory_store_mod._pg_pool = memory_store._pg_pool
+    memory_store_mod.open_pool = memory_store.open_pool
+    memory_store._store_module = memory_store_mod
+    patched_modules = {
+        "_helpers": helpers_mod,
+        "embedding_service": fake_embedding_module(),
+        "proxy.logging": proxy_logging,
+        "graph_bootstrap": graph_bootstrap,
+        "memory.store": memory_store_mod,
+        **fake_mcp_modules(),
+    }
+    previous_core = sys.modules.pop("memory.code_retrieval", None)
+    try:
+        with mock.patch.dict(sys.modules, patched_modules):
+            import memory.code_retrieval as core_module
+
+            memory_store._core_module = core_module
+            module._core_module = core_module
+            spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop("memory.code_retrieval", None)
+        if previous_core is not None:
+            sys.modules["memory.code_retrieval"] = previous_core
     return module
 
 
@@ -333,11 +320,13 @@ class SearchCodebaseToolTests(unittest.TestCase):
                     "build_semantic_payload",
                     k=3,
                     include_metadata=True,
+                    meta_boost=0.0,
                 )
             )
 
         self.assertIn("--- scripts/index_workspace.py", output)
         self.assertIn("--- docs/reference/build_semantic_payload.md", output)
+        self.assertIn("meta: lang=python", output)
         self.assertLess(
             output.index("--- scripts/index_workspace.py"),
             output.index("--- docs/reference/build_semantic_payload.md"),
@@ -766,6 +755,7 @@ class SearchCodebaseToolTests(unittest.TestCase):
             }
         ]
 
+        cr = module._core_module
         with mock.patch.dict(
             sys.modules,
             {
@@ -775,7 +765,7 @@ class SearchCodebaseToolTests(unittest.TestCase):
             },
         ):
             with mock.patch.object(
-                module,
+                cr,
                 "_load_path_hint_rows",
                 mock.AsyncMock(return_value=rescue_rows),
             ):
@@ -804,6 +794,70 @@ class SearchCodebaseToolTests(unittest.TestCase):
         self.assertIn("*Browser.swift", patterns)
         self.assertIn("*Advertiser.swift", patterns)
         self.assertIn("*Signer.swift", patterns)
+
+    def test_sparse_exact_token_query_triggers_fallback_on_collapse(self):
+        rows_by_pid = {
+            "proj123": [
+                (
+                    "src/only_file.py",
+                    0,
+                    "def foo(): pass",
+                    "proj123",
+                    {"language": "python", "file_symbols": ["foo"]},
+                    0.95,
+                ),
+                (
+                    "src/only_file.py",
+                    1,
+                    "def bar(): pass",
+                    "proj123",
+                    {"language": "python", "file_symbols": ["bar"]},
+                    0.94,
+                )
+            ]
+        }
+        module = load_module(FakeMemoryStore(rows_by_pid))
+        mcp = FakeMCP()
+        module.register(mcp)
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": fake_graph_bootstrap_module(),
+                "embedding_service": fake_embedding_module(),
+                **fake_mcp_modules(),
+            },
+        ):
+            with (
+                mock.patch.object(
+                    module._core_module.search_fallbacks,
+                    "run_fallback_grep",
+                    mock.AsyncMock(
+                        return_value=(
+                            ["src/fallback_match.py"],
+                            {"code": 0, "count": 1},
+                        )
+                    ),
+                ),
+                mock.patch.object(
+                    module._core_module.search_fallbacks,
+                    "extract_fallback_tokens",
+                    return_value=["foo"],
+                ),
+            ):
+                output = asyncio.run(
+                    mcp.tools["search_codebase"](
+                        workspace_id="repo",
+                        query="foo",
+                        k=2,
+                        include_metadata=False,
+                        mode="precise",
+                        fallback="grep",
+                    )
+                )
+
+        self.assertIn("Fallback (grep):", output)
+        self.assertIn("- src/fallback_match.py", output)
 
 
 if __name__ == "__main__":

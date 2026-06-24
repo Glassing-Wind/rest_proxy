@@ -34,9 +34,7 @@ DEFAULT_TOPIC_SEED_URLS = {
     ]
 }
 
-TOPIC_FAMILIES = {
-    "neo4j": ["neo4j", "neo4j-%"],
-}
+from memory.docs_retrieval import TOPIC_FAMILIES
 
 # Host-specific crawling profiles. These exist to capture the selector-driven
 # extraction patterns recommended by the Crawlee docs for JS-heavy sites.
@@ -152,7 +150,5 @@ def score_documentation_url(topic: str, url: str) -> int:
 
 
 def topic_family_patterns(topic: str) -> list[str]:
-    topic = (topic or "").strip()
-    if not topic:
-        return []
-    return list(TOPIC_FAMILIES.get(topic, [topic]))
+    from memory.docs_retrieval import topic_family_patterns as tfp
+    return tfp(topic)

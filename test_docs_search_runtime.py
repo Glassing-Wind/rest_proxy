@@ -12,7 +12,6 @@ from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent
 SEARCH_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "search.py"
-POLICY_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "policy.py"
 CONFIG_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "config.py"
 
 
@@ -70,29 +69,8 @@ def load_search_module():
 
 
 def load_policy_module():
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("tools.brain.docs.policy", POLICY_MODULE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    tools_pkg = types.ModuleType("tools")
-    tools_pkg.__path__ = []
-    brain_pkg = types.ModuleType("tools.brain")
-    brain_pkg.__path__ = []
-    docs_pkg = types.ModuleType("tools.brain.docs")
-    docs_pkg.__path__ = []
-    config_mod = load_config_module()
-    with mock.patch.dict(
-        sys.modules,
-        {
-            "tools": tools_pkg,
-            "tools.brain": brain_pkg,
-            "tools.brain.docs": docs_pkg,
-            "tools.brain.docs.config": config_mod,
-        },
-    ):
-        spec.loader.exec_module(module)
-    return module
+    import memory.docs_retrieval
+    return memory.docs_retrieval
 
 
 class RuntimeResolutionTests(unittest.TestCase):
@@ -193,13 +171,25 @@ class DocsSearchHelperTests(unittest.TestCase):
         self.assertEqual(sql, "AND source = %(topic)s")
         self.assertEqual(params["topic"], "pgvector")
 
+    def test_topic_filter_sql_matches_curated_family_subtopics(self):
+        import re
+        sql, params = self.module.topic_filter_sql("neo4j")
+        subtopics = ["neo4j-python", "neo4j-cypher", "neo4j-apoc", "neo4j-gds"]
+        patterns = []
+        for key, pattern in params.items():
+            regex_pat = "^" + re.escape(pattern).replace("%", ".*") + "$"
+            patterns.append(re.compile(regex_pat, re.IGNORECASE))
+        for subtopic in subtopics:
+            matched = any(pat.match(subtopic) for pat in patterns)
+            self.assertTrue(matched, f"Subtopic {subtopic} did not match any family patterns: {list(params.values())}")
+
     def test_apply_diverse_docs_selection_prefers_shared_rerank_contract(self):
         rows = [
             {"source_url": "https://neo4j.com/docs/python-manual/current/transactions/", "content": "canonical", "rrf": 1.0},
             {"source_url": "https://mirror.example/transactions/", "content": "mirror", "rrf": 0.99},
             {"source_url": "https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/", "content": "ops", "rrf": 0.8},
         ]
-        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod = types.ModuleType("memory.retrieval_policy")
         helper_mod.duplicate_experiment_flags_from_env = (
             lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
         )
@@ -208,8 +198,8 @@ class DocsSearchHelperTests(unittest.TestCase):
             "selection": {"keep_indices": [0, 2]},
             "telemetry": {"experimental_suppressions": 1},
         }
-        with mock.patch.dict(sys.modules, {"tools.brain.search.semantic_helpers": helper_mod}):
-            selected, trace = self.search_module._apply_diverse_docs_selection(rows, query="neo4j transactions", k=2)
+        with mock.patch.dict(sys.modules, {"memory.retrieval_policy": helper_mod}):
+            selected, trace = self.module._apply_diverse_docs_selection(rows, query="neo4j transactions", k=2)
 
         self.assertEqual([row["source_url"] for row in selected], [rows[0]["source_url"], rows[2]["source_url"]])
         self.assertEqual(trace["telemetry"]["experimental_suppressions"], 1)
@@ -221,7 +211,7 @@ class DocsSearchHelperTests(unittest.TestCase):
             {"source_url": "https://neo4j.com/docs/cypher-manual/current/clauses/transaction-clauses/", "content": "chunk-c", "rrf": 0.94},
             {"source_url": "https://neo4j.com/docs/operations-manual/current/database-internals/transaction-management/", "content": "chunk-d", "rrf": 0.90},
         ]
-        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod = types.ModuleType("memory.retrieval_policy")
         helper_mod.duplicate_experiment_flags_from_env = (
             lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
         )
@@ -230,8 +220,8 @@ class DocsSearchHelperTests(unittest.TestCase):
             "selection": {"keep_indices": [0, 1, 2, 3]},
             "telemetry": {"experimental_suppressions": 0},
         }
-        with mock.patch.dict(sys.modules, {"tools.brain.search.semantic_helpers": helper_mod}):
-            selected, trace = self.search_module._apply_diverse_docs_selection(rows, query="neo4j 5.26 transactions", k=3)
+        with mock.patch.dict(sys.modules, {"memory.retrieval_policy": helper_mod}):
+            selected, trace = self.module._apply_diverse_docs_selection(rows, query="neo4j 5.26 transactions", k=3)
 
         self.assertEqual(
             [row["source_url"] for row in selected],
@@ -250,8 +240,8 @@ class DocsSearchHelperTests(unittest.TestCase):
             {"source_url": "https://neo4j.com/developer/kb/diagnose-locking-issues/", "content": "kb", "rrf": 0.8},
         ]
         with mock.patch.dict(sys.modules, {}, clear=False):
-            sys.modules.pop("tools.brain.search.semantic_helpers", None)
-            selected, trace = self.search_module._apply_diverse_docs_selection(rows, query="neo4j transactions", k=2)
+            sys.modules.pop("memory.retrieval_policy", None)
+            selected, trace = self.module._apply_diverse_docs_selection(rows, query="neo4j transactions", k=2)
 
         self.assertEqual(
             [row["source_url"] for row in selected],
@@ -261,7 +251,7 @@ class DocsSearchHelperTests(unittest.TestCase):
         self.assertEqual(trace["suppression_policy"], "exact_only")
 
     def test_docs_legacy_source_exclusion_sql_uses_metadata_before_source_name_fallback(self):
-        sql, params = self.search_module._docs_legacy_source_exclusion_sql("")
+        sql, params = self.module._docs_legacy_source_exclusion_sql("")
         self.assertIn("metadata ? 'doc_type'", sql)
         self.assertIn("metadata ? 'source_type'", sql)
         self.assertIn("source NOT ILIKE %(ex0)s", sql)
@@ -269,7 +259,7 @@ class DocsSearchHelperTests(unittest.TestCase):
         self.assertEqual(params["ex7"], "%draft%")
 
     def test_docs_legacy_source_exclusion_sql_skips_filter_for_topic_searches(self):
-        sql, params = self.search_module._docs_legacy_source_exclusion_sql("neo4j")
+        sql, params = self.module._docs_legacy_source_exclusion_sql("neo4j")
         self.assertEqual(sql, "")
         self.assertEqual(params, {})
 
@@ -375,7 +365,7 @@ class DocsSearchHelperTests(unittest.TestCase):
 
         embed_mod.get_embedding_service = lambda: FakeEmbeddingService()
 
-        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod = types.ModuleType("memory.retrieval_policy")
         helper_mod.duplicate_experiment_flags_from_env = (
             lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
         )
@@ -393,7 +383,7 @@ class DocsSearchHelperTests(unittest.TestCase):
             {
                 "memory.store": memory_mod,
                 "embedding_service": embed_mod,
-                "tools.brain.search.semantic_helpers": helper_mod,
+                "memory.retrieval_policy": helper_mod,
             },
         ):
             mcp = FakeMCP()
@@ -530,7 +520,7 @@ class DocsSearchHelperTests(unittest.TestCase):
 
         embed_mod.get_embedding_service = lambda: FakeEmbeddingService()
 
-        helper_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+        helper_mod = types.ModuleType("memory.retrieval_policy")
         helper_mod.duplicate_experiment_flags_from_env = (
             lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
         )
@@ -548,7 +538,7 @@ class DocsSearchHelperTests(unittest.TestCase):
             {
                 "memory.store": memory_mod,
                 "embedding_service": embed_mod,
-                "tools.brain.search.semantic_helpers": helper_mod,
+                "memory.retrieval_policy": helper_mod,
             },
         ):
             mcp = FakeMCP()

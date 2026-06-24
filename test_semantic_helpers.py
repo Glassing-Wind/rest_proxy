@@ -11,8 +11,8 @@ from _semantic_contract import SEMANTIC_CONTRACT_VERSION
 
 
 REPO_ROOT = Path(__file__).resolve().parent
-MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "semantic_helpers.py"
-FALLBACKS_PATH = REPO_ROOT / "tools" / "brain" / "search" / "fallbacks.py"
+MODULE_PATH = REPO_ROOT / "memory" / "retrieval_policy.py"
+FALLBACKS_PATH = REPO_ROOT / "memory" / "retrieval_fallbacks.py"
 GOLDENS_PATH = REPO_ROOT / "benchmarks" / "retrieval_duplicate_goldens.json"
 
 

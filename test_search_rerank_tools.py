@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import json
+import memory
 import sys
 import types
 import unittest
@@ -46,20 +47,21 @@ def load_semantic_module():
     logging_mod = types.ModuleType("proxy.logging")
     logging_mod.debug_log = lambda *args, **kwargs: None
 
-    search_core_mod = types.ModuleType("tools.brain.search.core")
-    sem_helpers_mod = types.ModuleType("tools.brain.search.semantic_helpers")
+    sem_helpers_mod = types.ModuleType("memory.retrieval_policy")
     mcp_mod = types.ModuleType("mcp.server.fastmcp")
     mcp_mod.FastMCP = FakeMCP
 
-    with mock.patch.dict(
-        sys.modules,
-        {
-            "_helpers": helpers_mod,
-            "proxy.logging": logging_mod,
-            "tools.brain.search.core": search_core_mod,
-            "tools.brain.search.semantic_helpers": sem_helpers_mod,
-            "mcp.server.fastmcp": mcp_mod,
-        },
+    with (
+        mock.patch.object(memory, "retrieval_policy", sem_helpers_mod, create=True),
+        mock.patch.dict(
+            sys.modules,
+            {
+                "_helpers": helpers_mod,
+                "proxy.logging": logging_mod,
+                "memory.retrieval_policy": sem_helpers_mod,
+                "mcp.server.fastmcp": mcp_mod,
+            },
+        ),
     ):
         spec.loader.exec_module(module)
     return module, sem_helpers_mod

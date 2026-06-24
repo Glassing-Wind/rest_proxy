@@ -91,6 +91,28 @@ class RetrievalDuplicateEvalTests(unittest.TestCase):
         self.assertTrue(promoted["version_sensitive_doc_retention"])
         self.assertNotIn("ndcg_regressed", promoted["promotion_alerts"])
 
+    def test_docs_neo4j_python_transaction_preferred(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_neo4j_python_transaction_preferred")
+        query_aware = case["configs"]["query_aware"]
+        self.assertEqual(query_aware["top_k"][0], 0)
+        self.assertTrue(query_aware["canonical_doc_preference_success"])
+
+    def test_docs_polluted_mirror_suppressed(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_polluted_mirror_suppressed")
+        promoted = case["configs"]["promoted_non_exact"]
+        self.assertEqual(promoted["top_k"][0], 0)
+        self.assertNotIn(1, promoted["top_k"])
+
+    def test_docs_deadlock_query_returns_locking_pages_first(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_prose_near_duplicates_do_not_overcollapse")
+        query_aware = case["configs"]["query_aware"]
+        top_k = query_aware["top_k"]
+        self.assertIn(0, top_k[:3])
+        self.assertIn(1, top_k[:3])
+
 
 if __name__ == "__main__":
     unittest.main()

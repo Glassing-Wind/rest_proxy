@@ -468,6 +468,73 @@
         "must_survive": [1, 2],
         "relevance_labels": {"0": 1.0, "1": 2.0, "2": 3.0}
       }
+    },
+    {
+      "id": "docs_neo4j_python_transaction_preferred",
+      "mode": "docs",
+      "query_class": "docs_version_lookup",
+      "query": "neo4j python transaction",
+      "results": [
+        {
+          "file_path": "https://neo4j.com/docs/python-manual/current/transactions/",
+          "project_id": "bench",
+          "rrf": 0.88,
+          "content": "Transactions guide for the Neo4j Python driver. Use driver.session() to manage transactions.",
+          "metadata": {"context_path": ["Python", "Transactions"], "source_type": "driver-manual", "file_symbols": []}
+        },
+        {
+          "file_path": "https://mirror.example.com/docs/python-manual/current/transactions/",
+          "project_id": "bench",
+          "rrf": 0.92,
+          "content": "Transactions guide mirror for the Neo4j Python driver. Use driver.session() to manage transactions.",
+          "metadata": {"context_path": ["Python", "Transactions"], "source_type": "mirror", "file_symbols": []}
+        },
+        {
+          "file_path": "https://neo4j.com/docs/operations-manual/current/database-internals/transaction-management/",
+          "project_id": "bench",
+          "rrf": 0.85,
+          "content": "Operations manual for Neo4j transactions. Internal transaction manager structures.",
+          "metadata": {"context_path": ["Operations", "Transactions"], "source_type": "operations-manual", "file_symbols": []}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0],
+        "must_survive": [0, 2],
+        "cluster_pairs": [[0, 1]],
+        "canonical_index": 0,
+        "relevance_labels": {"0": 3.0, "1": 1.0, "2": 2.0}
+      },
+      "experiments": {"canonical_docs_mirror_suppression": true}
+    },
+    {
+      "id": "docs_polluted_mirror_suppressed",
+      "mode": "docs",
+      "query_class": "docs_navigation",
+      "query": "neo4j driver installation",
+      "results": [
+        {
+          "file_path": "https://neo4j.com/docs/python-manual/current/installation/",
+          "project_id": "bench",
+          "rrf": 0.95,
+          "content": "Install Neo4j Python Driver using pip install neo4j.",
+          "metadata": {"context_path": ["Installation"], "source_type": "driver-manual", "file_symbols": []}
+        },
+        {
+          "file_path": "https://github.com/docs/python-manual/current/installation/",
+          "project_id": "bench",
+          "rrf": 0.96,
+          "content": "Install Neo4j Python Driver mirror source using pip install neo4j.",
+          "metadata": {"context_path": ["Installation"], "source_type": "mirror", "file_symbols": []}
+        }
+      ],
+      "expected": {
+        "best_answer_indices": [0],
+        "must_survive": [0],
+        "cluster_pairs": [[0, 1]],
+        "canonical_index": 0,
+        "relevance_labels": {"0": 3.0, "1": 1.0}
+      },
+      "experiments": {"canonical_docs_mirror_suppression": true}
     }
   ]
 }

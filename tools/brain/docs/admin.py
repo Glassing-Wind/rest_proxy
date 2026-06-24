@@ -1,7 +1,7 @@
 """tools/docs/admin.py — documentation cleanup and reporting tools."""
 
 from mcp.server.fastmcp import FastMCP
-from tools.brain.docs.config import topic_family_patterns
+from memory.docs_retrieval import topic_family_patterns
 
 
 def register(mcp: FastMCP) -> None:

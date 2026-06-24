@@ -22,6 +22,7 @@ DEFAULT_IMPLEMENTATION_SOURCE_ROOTS = (
     REPO_ROOT / "_tool_fingerprint.py",
     REPO_ROOT / "embedding_service.py",
     REPO_ROOT / "graph_bootstrap.py",
+    REPO_ROOT / "runtime_logging.py",
     REPO_ROOT / "requirements.txt",
     REPO_ROOT / "requirements-ci.txt",
 )
