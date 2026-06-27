@@ -69,9 +69,9 @@ def load_semantic_module():
 
 class SearchRerankToolTests(unittest.TestCase):
     def test_rerank_retrieval_results_tool_returns_json_contract(self):
-        module, sem_helpers_mod = load_semantic_module()
+        module, _ = load_semantic_module()
         case = load_case("docs_canonical_mirror_preferred")
-        sem_helpers_mod.rerank_retrieval_results_contract = mock.Mock(
+        module.retrieval_duplicates.rerank_retrieval_results_contract = mock.Mock(
             return_value={
                 "results": [
                     {"original_index": 0, "source_url": case["results"][0]["file_path"], "content": case["results"][0]["content"]},
@@ -106,9 +106,9 @@ class SearchRerankToolTests(unittest.TestCase):
         self.assertEqual(payload["trace"][0]["decision_reason"], "canonical_doc")
 
     def test_analyze_duplicate_results_tool_returns_groups_and_pairs(self):
-        module, sem_helpers_mod = load_semantic_module()
+        module, _ = load_semantic_module()
         case = load_case("code_exact_duplicate_helpers")
-        sem_helpers_mod.analyze_duplicate_results_contract = mock.Mock(
+        module.retrieval_duplicates.analyze_duplicate_results_contract = mock.Mock(
             return_value={
                 "keep_indices": [0, 2],
                 "suppressed_indices": [1],

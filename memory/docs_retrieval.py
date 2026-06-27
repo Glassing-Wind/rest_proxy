@@ -173,14 +173,14 @@ def _apply_diverse_docs_selection(
     if len(results) < 2:
         return results[:k], fallback_trace
     try:
-        from memory.retrieval_policy import rerank_retrieval_results_contract
+        from memory import retrieval_duplicates
         from memory.retrieval_telemetry import duplicate_experiment_flags_from_env
     except Exception:
         return _url_diverse_docs_selection(results, k), fallback_trace
 
     experiments = duplicate_experiment_flags_from_env("docs")
     try:
-        contract = rerank_retrieval_results_contract(
+        contract = retrieval_duplicates.rerank_retrieval_results_contract(
             results,
             query=query,
             mode="docs",

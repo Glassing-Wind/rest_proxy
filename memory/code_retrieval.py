@@ -10,6 +10,7 @@ from neo4j import unit_of_work
 
 from _helpers import get_project_id, WorkspaceRegistry, get_workspace_path
 from memory import retrieval_fallbacks as search_fallbacks
+from memory import retrieval_duplicates
 from memory import retrieval_metadata
 from memory import retrieval_policy as sem_helpers
 from memory import retrieval_telemetry
@@ -1106,7 +1107,7 @@ async def search_codebase_core(
     if dedupe_files:
         pre_duplicate_results = list(all_results)
         if duplicate_trace_enabled or duplicate_telemetry_enabled or any(duplicate_experiments.values()):
-            duplicate_trace = sem_helpers.rerank_retrieval_results_contract(
+            duplicate_trace = retrieval_duplicates.rerank_retrieval_results_contract(
                 all_results,
                 query=query,
                 mode="code",

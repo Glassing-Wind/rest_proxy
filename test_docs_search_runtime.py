@@ -189,16 +189,26 @@ class DocsSearchHelperTests(unittest.TestCase):
             {"source_url": "https://mirror.example/transactions/", "content": "mirror", "rrf": 0.99},
             {"source_url": "https://neo4j.com/docs/operations-manual/current/database-internals/concurrent-data-access/", "content": "ops", "rrf": 0.8},
         ]
-        helper_mod = types.ModuleType("memory.retrieval_policy")
-        helper_mod.duplicate_experiment_flags_from_env = (
-            lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
-        )
-        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
-            "results": [dict(rows[0]), dict(rows[2])],
-            "selection": {"keep_indices": [0, 2]},
-            "telemetry": {"experimental_suppressions": 1},
-        }
-        with mock.patch.dict(sys.modules, {"memory.retrieval_policy": helper_mod}):
+        from memory import retrieval_duplicates, retrieval_telemetry
+
+        def rerank_contract(results, query, mode, experiments, include_debug):
+            return {
+                "results": [dict(rows[0]), dict(rows[2])],
+                "selection": {"keep_indices": [0, 2]},
+                "telemetry": {"experimental_suppressions": 1},
+            }
+        with (
+            mock.patch.object(
+                retrieval_telemetry,
+                "duplicate_experiment_flags_from_env",
+                lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"},
+            ),
+            mock.patch.object(
+                retrieval_duplicates,
+                "rerank_retrieval_results_contract",
+                rerank_contract,
+            ),
+        ):
             selected, trace = self.module._apply_diverse_docs_selection(rows, query="neo4j transactions", k=2)
 
         self.assertEqual([row["source_url"] for row in selected], [rows[0]["source_url"], rows[2]["source_url"]])
@@ -211,16 +221,26 @@ class DocsSearchHelperTests(unittest.TestCase):
             {"source_url": "https://neo4j.com/docs/cypher-manual/current/clauses/transaction-clauses/", "content": "chunk-c", "rrf": 0.94},
             {"source_url": "https://neo4j.com/docs/operations-manual/current/database-internals/transaction-management/", "content": "chunk-d", "rrf": 0.90},
         ]
-        helper_mod = types.ModuleType("memory.retrieval_policy")
-        helper_mod.duplicate_experiment_flags_from_env = (
-            lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
-        )
-        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
-            "results": [dict(rows[0]), dict(rows[1]), dict(rows[2]), dict(rows[3])],
-            "selection": {"keep_indices": [0, 1, 2, 3]},
-            "telemetry": {"experimental_suppressions": 0},
-        }
-        with mock.patch.dict(sys.modules, {"memory.retrieval_policy": helper_mod}):
+        from memory import retrieval_duplicates, retrieval_telemetry
+
+        def rerank_contract(results, query, mode, experiments, include_debug):
+            return {
+                "results": [dict(rows[0]), dict(rows[1]), dict(rows[2]), dict(rows[3])],
+                "selection": {"keep_indices": [0, 1, 2, 3]},
+                "telemetry": {"experimental_suppressions": 0},
+            }
+        with (
+            mock.patch.object(
+                retrieval_telemetry,
+                "duplicate_experiment_flags_from_env",
+                lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"},
+            ),
+            mock.patch.object(
+                retrieval_duplicates,
+                "rerank_retrieval_results_contract",
+                rerank_contract,
+            ),
+        ):
             selected, trace = self.module._apply_diverse_docs_selection(rows, query="neo4j 5.26 transactions", k=3)
 
         self.assertEqual(
@@ -365,25 +385,27 @@ class DocsSearchHelperTests(unittest.TestCase):
 
         embed_mod.get_embedding_service = lambda: FakeEmbeddingService()
 
-        helper_mod = types.ModuleType("memory.retrieval_policy")
-        helper_mod.duplicate_experiment_flags_from_env = (
+        duplicates_mod = types.ModuleType("memory.retrieval_duplicates")
+        telemetry_mod = types.ModuleType("memory.retrieval_telemetry")
+        telemetry_mod.duplicate_experiment_flags_from_env = (
             lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
         )
-        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
+        duplicates_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
             "results": [dict(results[1]), dict(results[2])],
             "selection": {"keep_indices": [1, 2], "suppressed_indices": [0]},
             "telemetry": {"experimental_suppressions": 1},
             "suppression_policy": "experimental_non_exact",
             "experiments": experiments,
         }
-        helper_mod.append_duplicate_telemetry_event = lambda *args, **kwargs: None
+        telemetry_mod.append_duplicate_telemetry_event = lambda *args, **kwargs: None
 
         with mock.patch.dict(
             sys.modules,
             {
                 "memory.store": memory_mod,
                 "embedding_service": embed_mod,
-                "memory.retrieval_policy": helper_mod,
+                "memory.retrieval_duplicates": duplicates_mod,
+                "memory.retrieval_telemetry": telemetry_mod,
             },
         ):
             mcp = FakeMCP()
@@ -520,25 +542,27 @@ class DocsSearchHelperTests(unittest.TestCase):
 
         embed_mod.get_embedding_service = lambda: FakeEmbeddingService()
 
-        helper_mod = types.ModuleType("memory.retrieval_policy")
-        helper_mod.duplicate_experiment_flags_from_env = (
+        duplicates_mod = types.ModuleType("memory.retrieval_duplicates")
+        telemetry_mod = types.ModuleType("memory.retrieval_telemetry")
+        telemetry_mod.duplicate_experiment_flags_from_env = (
             lambda mode="code": {"canonical_docs_mirror_suppression": mode == "docs"}
         )
-        helper_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
+        duplicates_mod.rerank_retrieval_results_contract = lambda results, query, mode, experiments, include_debug: {
             "results": [dict(result) for result in results],
             "selection": {"keep_indices": list(range(len(results))), "suppressed_indices": []},
             "telemetry": {"experimental_suppressions": 0},
             "suppression_policy": "experimental_non_exact",
             "experiments": experiments,
         }
-        helper_mod.append_duplicate_telemetry_event = lambda *args, **kwargs: None
+        telemetry_mod.append_duplicate_telemetry_event = lambda *args, **kwargs: None
 
         with mock.patch.dict(
             sys.modules,
             {
                 "memory.store": memory_mod,
                 "embedding_service": embed_mod,
-                "memory.retrieval_policy": helper_mod,
+                "memory.retrieval_duplicates": duplicates_mod,
+                "memory.retrieval_telemetry": telemetry_mod,
             },
         ):
             mcp = FakeMCP()

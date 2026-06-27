@@ -6,6 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules
 from memory import retrieval_contracts
+from memory import retrieval_duplicates
 from memory import retrieval_metadata
 from memory import retrieval_policy as sem_helpers
 from memory import retrieval_telemetry
@@ -38,7 +39,7 @@ def register(mcp: FastMCP) -> None:
                 return json.dumps({"error": "Invalid mode. Use 'code' or 'docs'."}, indent=2)
             if not isinstance(results, list):
                 return json.dumps({"error": "results must be a list of dict items."}, indent=2)
-            contract = sem_helpers.rerank_retrieval_results_contract(
+            contract = retrieval_duplicates.rerank_retrieval_results_contract(
                 results,
                 query=query,
                 mode=mode_norm,
@@ -72,7 +73,7 @@ def register(mcp: FastMCP) -> None:
                 return json.dumps({"error": "Invalid mode. Use 'code' or 'docs'."}, indent=2)
             if not isinstance(results, list):
                 return json.dumps({"error": "results must be a list of dict items."}, indent=2)
-            contract = sem_helpers.analyze_duplicate_results_contract(
+            contract = retrieval_duplicates.analyze_duplicate_results_contract(
                 results,
                 query=query,
                 mode=mode_norm,
