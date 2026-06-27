@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import sys
@@ -968,21 +969,23 @@ class IndexWorkspaceTests(unittest.TestCase):
                             "_set_semantic_run_status",
                             side_effect=lambda *args, **kwargs: statuses.append((args, kwargs)),
                         ):
-                            result = asyncio.run(
-                                self.module.index_project(
-                                    "/tmp/project",
-                                    "proj123",
-                                    manifest,
-                                    rebuild=False,
-                                    cleanup_only=False,
+                            with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                                result = asyncio.run(
+                                    self.module.index_project(
+                                        "/tmp/project",
+                                        "proj123",
+                                        manifest,
+                                        rebuild=False,
+                                        cleanup_only=False,
+                                    )
                                 )
-                            )
 
         self.assertEqual(result, 1)
         self.assertFalse(self.module._LAST_INDEX_PROJECT_OK)
         self.assertTrue(statuses)
         self.assertEqual(statuses[-1][0][2], "failed")
         self.assertIn("semantic_partial_completion", statuses[-1][1]["error"])
+        self.assertIn("semantic_partial_completion", stderr.getvalue())
 
     def test_index_project_preserves_failed_status_on_semantic_driver_error(self):
         payload = {
@@ -1046,20 +1049,22 @@ class IndexWorkspaceTests(unittest.TestCase):
                                 "_set_semantic_run_status",
                                 side_effect=lambda *args, **kwargs: statuses.append((args, kwargs)),
                             ):
-                                result = asyncio.run(
-                                    self.module.index_project(
-                                        "/tmp/project",
-                                        "proj123",
-                                        manifest,
-                                        rebuild=True,
-                                        cleanup_only=False,
+                                with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                                    result = asyncio.run(
+                                        self.module.index_project(
+                                            "/tmp/project",
+                                            "proj123",
+                                            manifest,
+                                            rebuild=True,
+                                            cleanup_only=False,
+                                        )
                                     )
-                                )
 
         self.assertEqual(result, 0)
         self.assertTrue(statuses)
         self.assertEqual(statuses[-1][0][2], "failed")
         self.assertIn("LM Studio request failed", statuses[-1][1]["error"])
+        self.assertIn("LM Studio request failed", stderr.getvalue())
 
     def test_should_skip_diagnostic_file_honors_env(self):
         file_meta = {"file_diagnostics": {"count": 1, "items": [{"message": "bad"}]}}
