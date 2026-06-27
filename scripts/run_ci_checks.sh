@@ -26,6 +26,7 @@ echo "[ci] Running Ruff on the gated Python surface..."
   memory/retrieval_contracts.py \
   memory/retrieval_duplicates.py \
   memory/retrieval_metadata.py \
+  memory/retrieval_query.py \
   memory/retrieval_surfaces.py \
   tools/brain/docs/chunking.py \
   memory/retrieval_policy.py \
