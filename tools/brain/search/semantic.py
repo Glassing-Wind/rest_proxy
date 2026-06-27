@@ -5,6 +5,7 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules
+from memory import retrieval_contracts
 from memory import retrieval_metadata
 from memory import retrieval_policy as sem_helpers
 from memory import retrieval_telemetry
@@ -44,7 +45,7 @@ def register(mcp: FastMCP) -> None:
                 experiments=experiments,
                 include_debug=include_debug,
             )
-            payload = contract if include_debug else sem_helpers.compact_rerank_contract(contract, results)
+            payload = contract if include_debug else retrieval_contracts.compact_rerank_contract(contract, results)
             return json.dumps(payload, indent=2, sort_keys=True)
         except Exception as e:
             return json.dumps({"error": f"Error reranking retrieval results: {str(e)}"}, indent=2)
@@ -76,7 +77,7 @@ def register(mcp: FastMCP) -> None:
                 query=query,
                 mode=mode_norm,
             )
-            payload = contract if include_debug else sem_helpers.compact_duplicate_analysis(contract, results)
+            payload = contract if include_debug else retrieval_contracts.compact_duplicate_analysis(contract, results)
             return json.dumps(payload, indent=2, sort_keys=True)
         except Exception as e:
             return json.dumps({"error": f"Error analyzing duplicate results: {str(e)}"}, indent=2)
@@ -99,7 +100,7 @@ def register(mcp: FastMCP) -> None:
             if not isinstance(results, list):
                 return json.dumps({"error": "results must be a list of dict items."}, indent=2)
             trace = sem_helpers.build_implementation_ranking_trace(results, query)
-            payload = trace if include_debug else sem_helpers.compact_implementation_ranking_trace(trace)
+            payload = trace if include_debug else retrieval_contracts.compact_implementation_ranking_trace(trace)
             return json.dumps(payload, indent=2, sort_keys=True)
         except Exception as e:
             return json.dumps({"error": f"Error tracing code ranking: {str(e)}"}, indent=2)
@@ -234,7 +235,7 @@ def register(mcp: FastMCP) -> None:
 
             duplicate_trace = res["duplicate_trace"]
             if duplicate_trace and (include_debug or res["duplicate_trace_enabled"]):
-                lines.extend(sem_helpers.summarize_trace_for_debug(duplicate_trace))
+                lines.extend(retrieval_contracts.summarize_trace_for_debug(duplicate_trace))
                 lines.append("")
             if duplicate_trace and res["duplicate_telemetry_enabled"]:
                 telemetry = duplicate_trace.get("telemetry") if isinstance(duplicate_trace, dict) else {}

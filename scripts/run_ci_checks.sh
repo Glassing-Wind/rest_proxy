@@ -23,6 +23,7 @@ echo "[ci] Running Ruff on the gated Python surface..."
   test_store_embeddings.py \
   test_ts_pack_contract.py \
   test_ts_pack_facts.py \
+  memory/retrieval_contracts.py \
   memory/retrieval_metadata.py \
   tools/brain/docs/chunking.py \
   memory/retrieval_policy.py \
