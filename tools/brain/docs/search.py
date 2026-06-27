@@ -42,7 +42,7 @@ def register(mcp: FastMCP) -> None:
 
             if isinstance(trace, dict):
                 try:
-                    from memory.retrieval_policy import append_duplicate_telemetry_event
+                    from memory.retrieval_telemetry import append_duplicate_telemetry_event
 
                     append_duplicate_telemetry_event(
                         trace,

@@ -23,9 +23,11 @@ echo "[ci] Running Ruff on the gated Python surface..."
   test_store_embeddings.py \
   test_ts_pack_contract.py \
   test_ts_pack_facts.py \
+  memory/retrieval_metadata.py \
   tools/brain/docs/chunking.py \
   memory/retrieval_policy.py \
   memory/retrieval_fallbacks.py \
+  memory/retrieval_telemetry.py \
   tools/brain/search/semantic_helpers.py
 
 echo "[ci] Running GraphRAG regression suite..."

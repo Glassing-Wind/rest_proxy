@@ -5,7 +5,9 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_memory_modules
+from memory import retrieval_metadata
 from memory import retrieval_policy as sem_helpers
+from memory import retrieval_telemetry
 from proxy.logging import debug_log
 
 
@@ -221,7 +223,7 @@ def register(mcp: FastMCP) -> None:
                 projects = ", ".join(f"'{n}'" for n in res["pid_to_name"].values())
                 return f"No matching code found in {projects}.\nEnsure projects are indexed with index_workspace()."
 
-            lines = sem_helpers.render_results(
+            lines = retrieval_metadata.render_results(
                 res["all_results"],
                 query=query,
                 k=k,
@@ -237,7 +239,7 @@ def register(mcp: FastMCP) -> None:
             if duplicate_trace and res["duplicate_telemetry_enabled"]:
                 telemetry = duplicate_trace.get("telemetry") if isinstance(duplicate_trace, dict) else {}
                 if isinstance(telemetry, dict):
-                    sem_helpers.append_duplicate_telemetry_event(
+                    retrieval_telemetry.append_duplicate_telemetry_event(
                         duplicate_trace,
                         query=query,
                         tool="search_codebase",

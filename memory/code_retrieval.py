@@ -10,7 +10,9 @@ from neo4j import unit_of_work
 
 from _helpers import get_project_id, WorkspaceRegistry, get_workspace_path
 from memory import retrieval_fallbacks as search_fallbacks
+from memory import retrieval_metadata
 from memory import retrieval_policy as sem_helpers
+from memory import retrieval_telemetry
 from runtime_logging import debug_log
 
 
@@ -433,9 +435,9 @@ async def search_codebase_core(
                             member_exprs=member_exprs,
                         )
                     for r in exact_rows:
-                        r_meta = sem_helpers.coerce_meta(r)
+                        r_meta = retrieval_metadata.coerce_meta(r)
                         r["_meta"] = r_meta
-                        r["meta_score"] = sem_helpers.meta_score(r_meta)
+                        r["meta_score"] = retrieval_metadata.meta_score(r_meta)
                         sem_helpers.enrich_implementation_result(
                             r,
                             query=query,
@@ -457,9 +459,9 @@ async def search_codebase_core(
                             max_files=min(max(fallback_max, 8), 16),
                         )
                     for r in rescue_rows:
-                        r_meta = sem_helpers.coerce_meta(r)
+                        r_meta = retrieval_metadata.coerce_meta(r)
                         r["_meta"] = r_meta
-                        r["meta_score"] = sem_helpers.meta_score(r_meta)
+                        r["meta_score"] = retrieval_metadata.meta_score(r_meta)
                         sem_helpers.enrich_implementation_result(
                             r,
                             query=query,
@@ -579,18 +581,18 @@ async def search_codebase_core(
                 if pid:
                     grouped.setdefault(pid, []).append(result)
             for pid, rows in grouped.items():
-                sem_helpers.attach_cargo_crate_meta(rows, cargo_rows_by_pid.get(pid) or [])
+                retrieval_metadata.attach_cargo_crate_meta(rows, cargo_rows_by_pid.get(pid) or [])
 
     if include_metadata:
         for r in all_results:
-            r_meta = sem_helpers.coerce_meta(r)
+            r_meta = retrieval_metadata.coerce_meta(r)
             r["_meta"] = r_meta
-            r["meta_score"] = sem_helpers.meta_score(r_meta)
+            r["meta_score"] = retrieval_metadata.meta_score(r_meta)
         if filters_active:
             all_results = [
                 r
                 for r in all_results
-                if sem_helpers.passes_filters(
+                if retrieval_metadata.passes_filters(
                     r.get("_meta", {}),
                     languages=languages,
                     min_imports=min_imports,
@@ -598,14 +600,14 @@ async def search_codebase_core(
                     require_diagnostics=require_diagnostics,
                     require_context=require_context,
                 )
-                and sem_helpers.path_allowed(
+                and retrieval_metadata.path_allowed(
                     r.get("file_path", ""),
                     include_paths=include_paths,
                     exclude_paths=exclude_paths,
                 )
             ]
         if crate_contains:
-            all_results = sem_helpers.filter_by_cargo_crate(all_results, crate_contains)
+            all_results = retrieval_metadata.filter_by_cargo_crate(all_results, crate_contains)
         for r in all_results:
             base_score = r.get("rrf", 0.0)
             try:
@@ -710,9 +712,9 @@ async def search_codebase_core(
                         member_exprs=member_exprs,
                     )
                 for r in exact_rows:
-                    r_meta = sem_helpers.coerce_meta(r)
+                    r_meta = retrieval_metadata.coerce_meta(r)
                     r["_meta"] = r_meta
-                    r["meta_score"] = sem_helpers.meta_score(r_meta)
+                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
                     sem_helpers.enrich_implementation_result(
                         r,
                         query=query,
@@ -734,9 +736,9 @@ async def search_codebase_core(
                         max_files=min(max(fallback_max, 8), 16),
                     )
                 for r in rescue_rows:
-                    r_meta = sem_helpers.coerce_meta(r)
+                    r_meta = retrieval_metadata.coerce_meta(r)
                     r["_meta"] = r_meta
-                    r["meta_score"] = sem_helpers.meta_score(r_meta)
+                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
                     sem_helpers.enrich_implementation_result(
                         r,
                         query=query,
@@ -785,9 +787,9 @@ async def search_codebase_core(
                         member_exprs=member_exprs,
                     )
                 for r in rescue_rows:
-                    r_meta = sem_helpers.coerce_meta(r)
+                    r_meta = retrieval_metadata.coerce_meta(r)
                     r["_meta"] = r_meta
-                    r["meta_score"] = sem_helpers.meta_score(r_meta)
+                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
                     sem_helpers.enrich_implementation_result(
                         r,
                         query=query,
@@ -837,9 +839,9 @@ async def search_codebase_core(
                         member_exprs=member_exprs,
                     )
                 for r in rescue_rows:
-                    r_meta = sem_helpers.coerce_meta(r)
+                    r_meta = retrieval_metadata.coerce_meta(r)
                     r["_meta"] = r_meta
-                    r["meta_score"] = sem_helpers.meta_score(r_meta)
+                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
                     sem_helpers.enrich_implementation_result(
                         r,
                         query=query,
@@ -877,7 +879,7 @@ async def search_codebase_core(
                 other_hits = []
                 for r in exact_usage_site_hits:
                     chunk_role = sem_helpers.implementation_chunk_role(
-                        sem_helpers.coerce_meta(r),
+                        retrieval_metadata.coerce_meta(r),
                         r.get("file_path"),
                     )
                     if chunk_role == "example_usage":
@@ -908,7 +910,7 @@ async def search_codebase_core(
         all_results = [
             r
             for r in all_results
-            if sem_helpers.path_allowed(
+            if retrieval_metadata.path_allowed(
                 r.get("file_path", ""),
                 include_paths=include_paths,
                 exclude_paths=exclude_paths,
@@ -924,7 +926,7 @@ async def search_codebase_core(
                 for r in all_results:
                     meta = r.get("_meta")
                     if not isinstance(meta, dict):
-                        meta = sem_helpers.coerce_meta(r)
+                        meta = retrieval_metadata.coerce_meta(r)
 
                 by_project: dict[str, list[dict]] = {}
                 for idx, r in enumerate(all_results):
@@ -1094,8 +1096,8 @@ async def search_codebase_core(
         "yes",
         "on",
     }
-    duplicate_telemetry_enabled = sem_helpers.duplicate_telemetry_enabled()
-    duplicate_experiments = sem_helpers.duplicate_experiment_flags_with_query_class(
+    duplicate_telemetry_enabled = retrieval_telemetry.duplicate_telemetry_enabled()
+    duplicate_experiments = retrieval_telemetry.duplicate_experiment_flags_with_query_class(
         "code",
         impl_query_class if impl_intent else None,
     )
@@ -1132,7 +1134,7 @@ async def search_codebase_core(
         ):
             non_profile_results: list[dict] = []
             for r in all_results:
-                meta = sem_helpers.coerce_meta(r)
+                meta = retrieval_metadata.coerce_meta(r)
                 if sem_helpers.implementation_is_profile_candidate(r.get("file_path"), meta):
                     continue
                 non_profile_results.append(r)
@@ -1149,7 +1151,7 @@ async def search_codebase_core(
             rescue_applied=dispatcher_rescue_applied,
         )
         if dispatcher_contract_trace:
-            sem_helpers.append_dispatcher_telemetry_event(
+            retrieval_telemetry.append_dispatcher_telemetry_event(
                 dispatcher_contract_trace,
                 query=query,
                 tool="search_codebase",
@@ -1189,7 +1191,7 @@ async def search_codebase_core(
             partition_applied=routing_partition_applied,
         )
         if routing_signal_trace:
-            sem_helpers.append_routing_telemetry_event(
+            retrieval_telemetry.append_routing_telemetry_event(
                 routing_signal_trace,
                 query=query,
                 tool="search_codebase",
@@ -1209,8 +1211,8 @@ async def search_codebase_core(
                 final_top=routing_signal_trace.get("final_top"),
             )
 
-    all_results = sem_helpers.cap_per_file(all_results, max_per_file)
-    all_results = sem_helpers.cap_per_dir(all_results, max_per_dir)
+    all_results = retrieval_metadata.cap_per_file(all_results, max_per_file)
+    all_results = retrieval_metadata.cap_per_dir(all_results, max_per_dir)
     top = all_results[:k]
 
     fallback_lines: list[str] = []

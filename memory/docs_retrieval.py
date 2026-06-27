@@ -173,10 +173,8 @@ def _apply_diverse_docs_selection(
     if len(results) < 2:
         return results[:k], fallback_trace
     try:
-        from memory.retrieval_policy import (
-            duplicate_experiment_flags_from_env,
-            rerank_retrieval_results_contract,
-        )
+        from memory.retrieval_policy import rerank_retrieval_results_contract
+        from memory.retrieval_telemetry import duplicate_experiment_flags_from_env
     except Exception:
         return _url_diverse_docs_selection(results, k), fallback_trace
 

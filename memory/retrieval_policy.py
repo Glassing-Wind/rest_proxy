@@ -2,256 +2,64 @@
 
 from __future__ import annotations
 
-import fnmatch
 import json
-import os
 import subprocess
 import re
-from datetime import datetime, timezone
-from pathlib import Path
 
 from _semantic_contract import (
     FOCUSED_DISPATCHER_ANCHOR_CAPABILITY,
     FOCUSED_DISPATCHER_ANCHOR_CONTRACT_VERSION,
     has_focused_dispatcher_anchor_contract,
 )
+from memory.retrieval_metadata import (
+    attach_cargo_crate_meta,
+    cap_per_dir,
+    cap_per_file,
+    cargo_manifest_dir,
+    coerce_meta,
+    filter_by_cargo_crate,
+    format_meta,
+    match_cargo_crate,
+    meta_score,
+    passes_filters,
+    path_allowed,
+    render_results,
+)
+from memory.retrieval_telemetry import (
+    append_dispatcher_telemetry_event,
+    append_duplicate_telemetry_event,
+    append_routing_telemetry_event,
+    dispatcher_telemetry_enabled,
+    duplicate_experiment_flags_from_env,
+    duplicate_experiment_flags_with_query_class,
+    duplicate_telemetry_enabled,
+    merge_duplicate_experiments,
+    routing_telemetry_enabled,
+)
 
-
-def merge_duplicate_experiments(mode: str, experiments: dict | None) -> dict:
-    merged = duplicate_experiment_flags_from_env(mode)
-    if isinstance(experiments, dict):
-        merged.update(experiments)
-    return merged
-
-
-def duplicate_experiment_flags_from_env(mode: str = "code") -> dict:
-    mode_norm = (mode or "code").strip().lower()
-    stage = (os.getenv("LM_PROXY_DUPLICATE_ROLLOUT_STAGE") or "stage2").strip().lower()
-    raw = (os.getenv("LM_PROXY_DUPLICATE_EXPERIMENTS") or "").strip()
-    flags = {
-        "boilerplate_variant_suppression": False,
-        "canonical_docs_mirror_suppression": False,
-        "helper_clone_suppression": False,
-        "threshold_struct": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_STRUCT"),
-        "threshold_lexical": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_LEXICAL"),
-        "threshold_role": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_ROLE"),
-        "min_length_ratio": _float_env("LM_PROXY_DUPLICATE_MIN_LENGTH_RATIO"),
-        "max_length_ratio": _float_env("LM_PROXY_DUPLICATE_MAX_LENGTH_RATIO"),
-        "threshold_query_distinction": _float_env("LM_PROXY_DUPLICATE_THRESHOLD_QUERY_DISTINCTION"),
-        "allow_cross_role_suppression": False,
-    }
-    stage_map = {
-        "off": {},
-        "none": {},
-        "exact_only": {},
-        "stage1": {"boilerplate_variant_suppression": True},
-        "stage2": {
-            "boilerplate_variant_suppression": True,
-            "canonical_docs_mirror_suppression": True,
-        },
-        "stage3": {
-            "boilerplate_variant_suppression": True,
-            "canonical_docs_mirror_suppression": True,
-            "helper_clone_suppression": True,
-        },
-    }
-    for key, value in stage_map.get(stage, {}).items():
-        flags[key] = value
-    if mode_norm == "docs":
-        flags["boilerplate_variant_suppression"] = False
-        flags["helper_clone_suppression"] = False
-    if not raw:
-        return flags
-    enabled = {
-        token.strip().lower()
-        for token in raw.split(",")
-        if token.strip()
-    }
-    if (
-        mode_norm != "docs"
-        and ("boilerplate" in enabled or "boilerplate_variant_suppression" in enabled)
-    ):
-        flags["boilerplate_variant_suppression"] = True
-    if "canonical_docs_mirror" in enabled or "canonical_docs_mirror_suppression" in enabled:
-        flags["canonical_docs_mirror_suppression"] = True
-    if (
-        mode_norm != "docs"
-        and ("helper_clone" in enabled or "helper_clone_suppression" in enabled)
-    ):
-        flags["helper_clone_suppression"] = True
-    return flags
-
-
-def duplicate_experiment_flags_with_query_class(
-    mode: str = "code",
-    query_class: str | None = None,
-) -> dict:
-    flags = duplicate_experiment_flags_from_env(mode)
-    if isinstance(query_class, str):
-        trimmed = query_class.strip()
-        if trimmed:
-            flags["query_class_override"] = trimmed
-    return flags
-
-
-def duplicate_telemetry_enabled() -> bool:
-    raw = os.getenv("LM_PROXY_DUPLICATE_TELEMETRY", "1").strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return True
-
-
-def append_duplicate_telemetry_event(
-    trace: dict,
-    *,
-    query: str,
-    tool: str,
-    mode: str,
-    topic: str = "",
-) -> None:
-    if not duplicate_telemetry_enabled() or not isinstance(trace, dict):
-        return
-    path = os.getenv("LM_PROXY_DUPLICATE_TELEMETRY_PATH", "").strip()
-    if path:
-        target = Path(os.path.expanduser(path))
-    else:
-        target = Path(__file__).resolve().parents[3] / ".runtime" / "duplicate_telemetry.ndjson"
-    event = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "tool": tool,
-        "mode": mode,
-        "topic": topic,
-        "query": (query or "")[:500],
-        "selection": trace.get("selection", {}),
-        "telemetry": trace.get("telemetry", {}),
-        "suppression_policy": trace.get("suppression_policy", "exact_only"),
-        "experiments": trace.get("experiments", {}),
-    }
-    try:
-        _append_bounded_ndjson_event(
-            target,
-            event,
-            max_events=_int_env("LM_PROXY_DUPLICATE_TELEMETRY_MAX_EVENTS", 500),
-        )
-    except Exception:
-        return
-
-
-def dispatcher_telemetry_enabled() -> bool:
-    raw = os.getenv("LM_PROXY_DISPATCHER_TELEMETRY", "1").strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return True
-
-
-def append_dispatcher_telemetry_event(
-    telemetry: dict,
-    *,
-    query: str,
-    tool: str,
-    topic: str = "",
-) -> None:
-    if not dispatcher_telemetry_enabled() or not isinstance(telemetry, dict):
-        return
-    path = os.getenv("LM_PROXY_DISPATCHER_TELEMETRY_PATH", "").strip()
-    if path:
-        target = Path(os.path.expanduser(path))
-    else:
-        target = Path(__file__).resolve().parents[3] / ".runtime" / "dispatcher_telemetry.ndjson"
-    event = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "tool": tool,
-        "topic": topic,
-        "query": (query or "")[:500],
-        "telemetry": telemetry,
-    }
-    try:
-        _append_bounded_ndjson_event(
-            target,
-            event,
-            max_events=_int_env("LM_PROXY_DISPATCHER_TELEMETRY_MAX_EVENTS", 200),
-        )
-    except Exception:
-        return
-
-
-def routing_telemetry_enabled() -> bool:
-    raw = os.getenv("LM_PROXY_ROUTING_TELEMETRY", "1").strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return True
-
-
-def append_routing_telemetry_event(
-    telemetry: dict,
-    *,
-    query: str,
-    tool: str,
-    topic: str = "",
-) -> None:
-    if not routing_telemetry_enabled() or not isinstance(telemetry, dict):
-        return
-    path = os.getenv("LM_PROXY_ROUTING_TELEMETRY_PATH", "").strip()
-    if path:
-        target = Path(os.path.expanduser(path))
-    else:
-        target = Path(__file__).resolve().parents[3] / ".runtime" / "routing_telemetry.ndjson"
-    event = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "tool": tool,
-        "topic": topic,
-        "query": (query or "")[:500],
-        "telemetry": telemetry,
-    }
-    try:
-        _append_bounded_ndjson_event(
-            target,
-            event,
-            max_events=_int_env("LM_PROXY_ROUTING_TELEMETRY_MAX_EVENTS", 200),
-        )
-    except Exception:
-        return
-
-
-def _append_bounded_ndjson_event(target: Path, event: dict, *, max_events: int) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    encoded = json.dumps(event, sort_keys=True)
-    if max_events <= 0:
-        with target.open("a", encoding="utf-8") as fh:
-            fh.write(encoded + "\n")
-        return
-    lines: list[str] = []
-    if target.exists():
-        try:
-            with target.open("r", encoding="utf-8") as fh:
-                lines = [line.rstrip("\n") for line in fh if line.strip()]
-        except Exception:
-            lines = []
-    lines.append(encoded)
-    if len(lines) > max_events:
-        lines = lines[-max_events:]
-    with target.open("w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines) + "\n")
-
-
-def _float_env(name: str) -> float | None:
-    raw = (os.getenv(name) or "").strip()
-    if not raw:
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        return None
-
-
-def _int_env(name: str, default: int) -> int:
-    raw = (os.getenv(name) or "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
+__all__ = [
+    "append_dispatcher_telemetry_event",
+    "append_duplicate_telemetry_event",
+    "append_routing_telemetry_event",
+    "attach_cargo_crate_meta",
+    "cap_per_dir",
+    "cap_per_file",
+    "cargo_manifest_dir",
+    "coerce_meta",
+    "dispatcher_telemetry_enabled",
+    "duplicate_experiment_flags_from_env",
+    "duplicate_experiment_flags_with_query_class",
+    "duplicate_telemetry_enabled",
+    "filter_by_cargo_crate",
+    "format_meta",
+    "match_cargo_crate",
+    "meta_score",
+    "merge_duplicate_experiments",
+    "passes_filters",
+    "path_allowed",
+    "render_results",
+    "routing_telemetry_enabled",
+]
 
 
 def is_doc_like_path(file_path: str | None, file_roles: set[str] | None = None) -> bool:
@@ -728,7 +536,6 @@ def implementation_intent_policy(query: str, query_class: str) -> dict[str, floa
     if implementation_query_prefers_runtime_main_entrypoint(query):
         policy["library_entrypoint_penalty"] = 0.05
     return policy
-
 
 def is_low_signal_parser_data_path(
     file_path: str | None,
@@ -3791,180 +3598,6 @@ def summarize_trace_for_debug(trace: dict) -> list[str]:
     return lines
 
 
-def format_meta(meta: dict) -> list[str]:
-    if not isinstance(meta, dict):
-        return []
-    parts: list[str] = []
-    language = meta.get("language")
-    if language:
-        parts.append(f"lang={language}")
-    imports = meta.get("file_imports")
-    if isinstance(imports, list) and imports:
-        parts.append(f"imports={len(imports)}")
-    symbols = meta.get("file_symbols")
-    if isinstance(symbols, list) and symbols:
-        parts.append(f"symbols={len(symbols)}")
-    node_types = meta.get("node_types")
-    if isinstance(node_types, list) and node_types:
-        parts.append(f"node_types={len(node_types)}")
-    diagnostics = meta.get("file_diagnostics") or {}
-    if isinstance(diagnostics, dict):
-        diag_count = diagnostics.get("count")
-        if isinstance(diag_count, int) and diag_count > 0:
-            parts.append(f"diagnostics={diag_count}")
-    metrics = meta.get("file_metrics") or {}
-    if isinstance(metrics, dict):
-        total_lines = metrics.get("total_lines")
-        if isinstance(total_lines, int):
-            parts.append(f"lines={total_lines}")
-    cargo_crate = meta.get("cargo_crate")
-    if cargo_crate:
-        parts.append(f"crate={cargo_crate}")
-    ctx = meta.get("context_path")
-    ctx_line = ""
-    if isinstance(ctx, list) and ctx:
-        ctx_line = "context=" + " > ".join(str(c) for c in ctx[:6])
-    output = []
-    if parts:
-        output.append("meta: " + ", ".join(parts))
-    if ctx_line:
-        output.append(ctx_line)
-    return output
-
-
-def cargo_manifest_dir(manifest_path: str | None) -> str:
-    if not manifest_path:
-        return ""
-    return manifest_path[:-len("Cargo.toml")] if manifest_path.endswith("Cargo.toml") else manifest_path
-
-
-def match_cargo_crate(file_path: str | None, crate_rows) -> tuple[str | None, str | None]:
-    if not file_path:
-        return None, None
-    for row in crate_rows:
-        manifest_path = row.get("manifest_path")
-        crate_root = cargo_manifest_dir(manifest_path)
-        if crate_root and file_path.startswith(crate_root):
-            return row.get("crate"), row.get("crate_name")
-    return None, None
-
-
-def attach_cargo_crate_meta(results: list[dict], crate_rows) -> list[dict]:
-    if not crate_rows:
-        return results
-    for result in results:
-        meta = coerce_meta(result)
-        crate, crate_name = match_cargo_crate(result.get("file_path"), crate_rows)
-        if crate:
-            meta["cargo_crate"] = crate
-        if crate_name:
-            meta["cargo_crate_name"] = crate_name
-    return results
-
-
-def filter_by_cargo_crate(results: list[dict], crate_contains: str) -> list[dict]:
-    needle = (crate_contains or "").strip().lower()
-    if not needle:
-        return results
-    filtered: list[dict] = []
-    for result in results:
-        meta = coerce_meta(result)
-        crate = meta.get("cargo_crate")
-        crate_name = meta.get("cargo_crate_name")
-        if (crate and needle in str(crate).lower()) or (
-            crate_name and needle in str(crate_name).lower()
-        ):
-            filtered.append(result)
-    return filtered
-
-
-def meta_score(meta: dict) -> int:
-    if not isinstance(meta, dict):
-        return 0
-    score = 0
-    for key in (
-        "file_imports",
-        "file_symbols",
-        "node_types",
-        "file_metrics",
-        "file_diagnostics",
-        "context_path",
-    ):
-        value = meta.get(key)
-        if isinstance(value, list) and value:
-            score += 1
-        elif isinstance(value, dict) and value:
-            score += 1
-    return score
-
-
-def passes_filters(
-    meta: dict,
-    *,
-    languages,
-    min_imports: int,
-    min_symbols: int,
-    require_diagnostics: bool,
-    require_context: bool,
-) -> bool:
-    if not isinstance(meta, dict):
-        return False
-    if languages:
-        language = meta.get("language")
-        if not language or language not in languages:
-            return False
-    if min_imports > 0:
-        imports = meta.get("file_imports")
-        if not isinstance(imports, list) or len(imports) < min_imports:
-            return False
-    if min_symbols > 0:
-        symbols = meta.get("file_symbols")
-        if not isinstance(symbols, list) or len(symbols) < min_symbols:
-            return False
-    if require_diagnostics:
-        diagnostics = meta.get("file_diagnostics") or {}
-        if not isinstance(diagnostics, dict) or diagnostics.get("count", 0) <= 0:
-            return False
-    if require_context:
-        ctx = meta.get("context_path")
-        if not isinstance(ctx, list) or not ctx:
-            return False
-    return True
-
-
-def path_allowed(file_path: str, *, include_paths, exclude_paths) -> bool:
-    if not file_path:
-        return True
-    if include_paths and not any(fnmatch.fnmatch(file_path, pat) for pat in include_paths):
-        return False
-    if exclude_paths:
-        file_lower = file_path.lower()
-        if any(
-            fnmatch.fnmatch(file_path, pat) or fnmatch.fnmatch(file_lower, pat.lower())
-            for pat in exclude_paths
-        ):
-            return False
-    return True
-
-
-def coerce_meta(result: dict) -> dict:
-    meta = result.get("_meta")
-    if isinstance(meta, dict):
-        return meta
-    raw = result.get("metadata")
-    if isinstance(raw, str):
-        try:
-            meta = json.loads(raw)
-        except Exception:
-            meta = {}
-    elif isinstance(raw, dict):
-        meta = raw
-    else:
-        meta = {}
-    result["_meta"] = meta
-    return meta
-
-
 def dedupe_files(results: list[dict]) -> list[dict]:
     def _has_implementation_ranking(result: dict) -> bool:
         return any(
@@ -3993,62 +3626,3 @@ def dedupe_files(results: list[dict]) -> list[dict]:
             if implementation_rank_tuple(result) < implementation_rank_tuple(existing):
                 chosen_by_file[file_path] = result
     return [chosen_by_file[file_path] for file_path in file_order]
-
-
-def cap_per_file(results: list[dict], max_per_file: int) -> list[dict]:
-    if max_per_file <= 0:
-        return results
-    per_file_counts: dict[str, int] = {}
-    capped: list[dict] = []
-    for result in results:
-        file_path = result.get("file_path") or ""
-        if not file_path:
-            continue
-        count = per_file_counts.get(file_path, 0)
-        if count >= max_per_file:
-            continue
-        per_file_counts[file_path] = count + 1
-        capped.append(result)
-    return capped
-
-
-def cap_per_dir(results: list[dict], max_per_dir: int) -> list[dict]:
-    if max_per_dir <= 0:
-        return results
-    dir_counts: dict[str, int] = {}
-    diversified: list[dict] = []
-    for result in results:
-        file_path = result.get("file_path") or ""
-        norm = file_path.replace("\\", "/")
-        top = norm.split("/")[0] if "/" in norm else os.path.dirname(norm) or "."
-        if dir_counts.get(top, 0) >= max_per_dir:
-            continue
-        dir_counts[top] = dir_counts.get(top, 0) + 1
-        diversified.append(result)
-    return diversified
-
-
-def render_results(
-    results: list[dict],
-    *,
-    query: str,
-    k: int,
-    multi: bool,
-    pid_to_name: dict[str, str],
-    include_metadata: bool,
-) -> list[str]:
-    top = results[:k]
-    lines: list[str] = []
-    if multi:
-        lines.append(f"Cross-project search: '{query}'  ({len(pid_to_name)} projects)\n")
-    for index, result in enumerate(top, 1):
-        project = pid_to_name.get(result["project_id"], result["project_id"])
-        if multi:
-            lines.append(f"[{index}] [{project}] {result['file_path']}")
-        else:
-            lines.append(f"--- {result['file_path']} ---")
-        if include_metadata:
-            lines.extend(format_meta(coerce_meta(result)))
-        lines.append(result["content"].strip())
-        lines.append("")
-    return lines
