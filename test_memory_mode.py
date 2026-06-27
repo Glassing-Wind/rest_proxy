@@ -24,6 +24,7 @@ def _load_config(env_updates: dict[str, str]):
     base_env.update(env_updates)
     dotenv_mod = type(sys)("dotenv")
     dotenv_mod.load_dotenv = lambda *args, **kwargs: None
+    dotenv_mod.dotenv_values = lambda *args, **kwargs: {}
     with mock.patch.dict(os.environ, base_env, clear=False), mock.patch.dict(
         sys.modules, {"dotenv": dotenv_mod}
     ):
