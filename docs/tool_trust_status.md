@@ -167,9 +167,10 @@ Latest workflow finding closed:
 
 - retrieval policy ownership is now split across focused `memory/retrieval_*`
   modules for duplicate handling, surfaces, query parsing, semantic metadata,
-  intent, scoring primitives, workflow-specific scoring, role/node rank policy,
-  enrichment, contracts, and telemetry; `memory/retrieval_policy.py` remains as
-  the compatibility facade instead of absorbing every new ranking rule
+  query intent classification, rank-intent policy, scoring primitives,
+  workflow-specific scoring, role/node rank policy, enrichment, contracts, and
+  telemetry; `memory/retrieval_policy.py` remains as the compatibility facade
+  instead of absorbing every new ranking rule
 - `trace_symbol_cross_project` is now promoted into the live and MCP parity
   trust set; candidate retrieval ranks the full bounded exact/semantic window
   before truncation, symbol previews center on the requested definition, and a

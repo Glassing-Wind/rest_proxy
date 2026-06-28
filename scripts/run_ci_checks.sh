@@ -27,6 +27,7 @@ echo "[ci] Running Ruff on the gated Python surface..."
   memory/retrieval_duplicates.py \
   memory/retrieval_enrichment.py \
   memory/retrieval_intent.py \
+  memory/retrieval_intent_queries.py \
   memory/retrieval_metadata.py \
   memory/retrieval_query.py \
   memory/retrieval_rank_policy.py \
