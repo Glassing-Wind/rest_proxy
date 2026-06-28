@@ -98,11 +98,37 @@ def duplicate_experiment_flags_with_query_class(
     return flags
 
 
+def _telemetry_enabled(env_var: str, default: str = "1") -> bool:
+    raw = os.getenv(env_var, default).strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _append_telemetry_event(
+    event: dict,
+    *,
+    path_env: str,
+    default_filename: str,
+    max_events_env: str,
+    default_max: int,
+) -> None:
+    """Resolve target path and write a bounded NDJSON event."""
+    path = os.getenv(path_env, "").strip()
+    if path:
+        target = Path(os.path.expanduser(path))
+    else:
+        target = Path(__file__).resolve().parents[3] / ".runtime" / default_filename
+    try:
+        _append_bounded_ndjson_event(
+            target,
+            event,
+            max_events=_int_env(max_events_env, default_max),
+        )
+    except Exception:
+        return
+
+
 def duplicate_telemetry_enabled() -> bool:
-    raw = os.getenv("LM_PROXY_DUPLICATE_TELEMETRY", "1").strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return True
+    return _telemetry_enabled("LM_PROXY_DUPLICATE_TELEMETRY")
 
 
 def append_duplicate_telemetry_event(
@@ -115,11 +141,6 @@ def append_duplicate_telemetry_event(
 ) -> None:
     if not duplicate_telemetry_enabled() or not isinstance(trace, dict):
         return
-    path = os.getenv("LM_PROXY_DUPLICATE_TELEMETRY_PATH", "").strip()
-    if path:
-        target = Path(os.path.expanduser(path))
-    else:
-        target = Path(__file__).resolve().parents[3] / ".runtime" / "duplicate_telemetry.ndjson"
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tool": tool,
@@ -131,21 +152,17 @@ def append_duplicate_telemetry_event(
         "suppression_policy": trace.get("suppression_policy", "exact_only"),
         "experiments": trace.get("experiments", {}),
     }
-    try:
-        _append_bounded_ndjson_event(
-            target,
-            event,
-            max_events=_int_env("LM_PROXY_DUPLICATE_TELEMETRY_MAX_EVENTS", 500),
-        )
-    except Exception:
-        return
+    _append_telemetry_event(
+        event,
+        path_env="LM_PROXY_DUPLICATE_TELEMETRY_PATH",
+        default_filename="duplicate_telemetry.ndjson",
+        max_events_env="LM_PROXY_DUPLICATE_TELEMETRY_MAX_EVENTS",
+        default_max=500,
+    )
 
 
 def dispatcher_telemetry_enabled() -> bool:
-    raw = os.getenv("LM_PROXY_DISPATCHER_TELEMETRY", "1").strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return True
+    return _telemetry_enabled("LM_PROXY_DISPATCHER_TELEMETRY")
 
 
 def append_dispatcher_telemetry_event(
@@ -157,11 +174,6 @@ def append_dispatcher_telemetry_event(
 ) -> None:
     if not dispatcher_telemetry_enabled() or not isinstance(telemetry, dict):
         return
-    path = os.getenv("LM_PROXY_DISPATCHER_TELEMETRY_PATH", "").strip()
-    if path:
-        target = Path(os.path.expanduser(path))
-    else:
-        target = Path(__file__).resolve().parents[3] / ".runtime" / "dispatcher_telemetry.ndjson"
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tool": tool,
@@ -169,21 +181,17 @@ def append_dispatcher_telemetry_event(
         "query": (query or "")[:500],
         "telemetry": telemetry,
     }
-    try:
-        _append_bounded_ndjson_event(
-            target,
-            event,
-            max_events=_int_env("LM_PROXY_DISPATCHER_TELEMETRY_MAX_EVENTS", 200),
-        )
-    except Exception:
-        return
+    _append_telemetry_event(
+        event,
+        path_env="LM_PROXY_DISPATCHER_TELEMETRY_PATH",
+        default_filename="dispatcher_telemetry.ndjson",
+        max_events_env="LM_PROXY_DISPATCHER_TELEMETRY_MAX_EVENTS",
+        default_max=200,
+    )
 
 
 def routing_telemetry_enabled() -> bool:
-    raw = os.getenv("LM_PROXY_ROUTING_TELEMETRY", "1").strip().lower()
-    if raw in {"0", "false", "no", "off"}:
-        return False
-    return True
+    return _telemetry_enabled("LM_PROXY_ROUTING_TELEMETRY")
 
 
 def append_routing_telemetry_event(
@@ -195,11 +203,6 @@ def append_routing_telemetry_event(
 ) -> None:
     if not routing_telemetry_enabled() or not isinstance(telemetry, dict):
         return
-    path = os.getenv("LM_PROXY_ROUTING_TELEMETRY_PATH", "").strip()
-    if path:
-        target = Path(os.path.expanduser(path))
-    else:
-        target = Path(__file__).resolve().parents[3] / ".runtime" / "routing_telemetry.ndjson"
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tool": tool,
@@ -207,14 +210,13 @@ def append_routing_telemetry_event(
         "query": (query or "")[:500],
         "telemetry": telemetry,
     }
-    try:
-        _append_bounded_ndjson_event(
-            target,
-            event,
-            max_events=_int_env("LM_PROXY_ROUTING_TELEMETRY_MAX_EVENTS", 200),
-        )
-    except Exception:
-        return
+    _append_telemetry_event(
+        event,
+        path_env="LM_PROXY_ROUTING_TELEMETRY_PATH",
+        default_filename="routing_telemetry.ndjson",
+        max_events_env="LM_PROXY_ROUTING_TELEMETRY_MAX_EVENTS",
+        default_max=200,
+    )
 
 
 def dispatcher_contract_telemetry(
