@@ -165,6 +165,11 @@ Current remaining goals:
 
 Latest workflow finding closed:
 
+- retrieval policy ownership is now split across focused `memory/retrieval_*`
+  modules for duplicate handling, surfaces, query parsing, semantic metadata,
+  intent, scoring primitives, role/node rank policy, contracts, and telemetry;
+  `memory/retrieval_policy.py` remains as the compatibility facade and
+  enrichment glue instead of absorbing every new ranking rule
 - `trace_symbol_cross_project` is now promoted into the live and MCP parity
   trust set; candidate retrieval ranks the full bounded exact/semantic window
   before truncation, symbol previews center on the requested definition, and a
