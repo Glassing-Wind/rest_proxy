@@ -12,7 +12,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from tool_choice_eval import evaluate_tool_choice  # noqa: E402
+from tool_choice_eval import evaluate_catalog_tool_choice, evaluate_tool_choice  # noqa: E402
 
 
 CANONICAL_CASES = [
@@ -34,6 +34,7 @@ CANONICAL_CASES = [
 
 def main() -> int:
     reports = []
+    catalog_reports = []
     failures = []
     for case_id, proposed_tools, expected_status in CANONICAL_CASES:
         report = evaluate_tool_choice(case_id, proposed_tools)
@@ -42,7 +43,22 @@ def main() -> int:
         if report["status"] != expected_status:
             failures.append(report)
 
-    payload = {"cases": reports, "failures": failures, "ok": not failures}
+        catalog_report = evaluate_catalog_tool_choice(case_id)
+        catalog_report["expected_status"] = "healthy"
+        catalog_reports.append(catalog_report)
+        if catalog_report["status"] != "healthy":
+            failures.append(catalog_report)
+
+    if not failures:
+        for report in catalog_reports:
+            report.pop("catalog_output", None)
+
+    payload = {
+        "cases": reports,
+        "catalog_cases": catalog_reports,
+        "failures": failures,
+        "ok": not failures,
+    }
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 1 if failures else 0
 

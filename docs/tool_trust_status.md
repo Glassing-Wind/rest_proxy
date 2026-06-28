@@ -208,6 +208,9 @@ Latest workflow finding closed:
   documentation lookup/inventory, memory capture/review, changed-code review,
   coverage lookup, and retrieval-ranking debug all have preferred first-tool
   goldens instead of living only in ad hoc catalog assertions
+- the canonical tool-choice eval now validates both curated proposed workflows
+  and actual `get_mcp_tool_catalog` output for each golden `catalog_intent`,
+  closing the gap where catalog wording could drift away from the baseline
 - flow-oriented catalog routing now distinguishes full-stack UI/API/service/DB
   wording from backend request-to-database wording
 - route/controller/handler catalog wording now routes framework-neutral and

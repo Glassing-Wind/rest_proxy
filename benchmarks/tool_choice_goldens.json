@@ -3,6 +3,7 @@
     {
       "id": "repo_onboarding",
       "intent": "Understand an unfamiliar repo quickly and choose where to start.",
+      "catalog_intent": "indexed repo start",
       "preferred_tools": [
         "get_indexing_health",
         "get_project_overview"
@@ -20,6 +21,7 @@
     {
       "id": "symbol_deep_dive",
       "intent": "Understand one symbol: definition, callers, callees, and nearby code.",
+      "catalog_intent": "symbol deep dive",
       "preferred_tools": [
         "get_symbol_context"
       ],
@@ -35,6 +37,7 @@
     {
       "id": "execution_path",
       "intent": "Trace what a symbol calls or what calls it.",
+      "catalog_intent": "execution flow",
       "preferred_tools": [
         "get_call_chain"
       ],
@@ -49,6 +52,7 @@
     {
       "id": "code_search_general",
       "intent": "Find the implementation or usage site that best answers a natural-language code question.",
+      "catalog_intent": "code search",
       "preferred_tools": [
         "search_codebase"
       ],
@@ -63,6 +67,7 @@
     {
       "id": "definition_disambiguation",
       "intent": "Find exact-name matches across projects when the symbol is overloaded or ambiguous.",
+      "catalog_intent": "symbol definition",
       "preferred_tools": [
         "find_definitions"
       ],
@@ -77,6 +82,7 @@
     {
       "id": "graph_suspect_result",
       "intent": "Explain why a graph/file-link result exists or appears suspicious.",
+      "catalog_intent": "graph provenance",
       "preferred_tools": [
         "trace_graph_provenance"
       ],
@@ -91,6 +97,7 @@
     {
       "id": "documentation_lookup",
       "intent": "Answer a question from already indexed library or project documentation.",
+      "catalog_intent": "library docs",
       "preferred_tools": [
         "search_documentation"
       ],
@@ -105,6 +112,7 @@
     {
       "id": "documentation_inventory",
       "intent": "Inspect which documentation topics and sources are indexed before searching them.",
+      "catalog_intent": "which docs are indexed",
       "preferred_tools": [
         "list_documentation_sources"
       ],
@@ -118,6 +126,7 @@
     {
       "id": "memory_capture",
       "intent": "Persist a durable repo fact, decision, or instruction for future sessions.",
+      "catalog_intent": "remember repo fact",
       "preferred_tools": [
         "add_memory"
       ],
@@ -131,6 +140,7 @@
     {
       "id": "memory_review",
       "intent": "Review durable repo memories before continuing work.",
+      "catalog_intent": "review memories",
       "preferred_tools": [
         "list_memories"
       ],
@@ -144,6 +154,7 @@
     {
       "id": "changed_code_review",
       "intent": "Review changed code before committing.",
+      "catalog_intent": "git change review",
       "preferred_tools": [
         "git_summary",
         "get_changed_symbols"
@@ -159,6 +170,7 @@
     {
       "id": "coverage_lookup",
       "intent": "Find tests likely to cover a changed source file.",
+      "catalog_intent": "test coverage",
       "preferred_tools": [
         "get_test_coverage_for"
       ],
@@ -173,6 +185,7 @@
     {
       "id": "retrieval_ranking_debug",
       "intent": "Explain why code search ranked a result or diagnose duplicate result pressure.",
+      "catalog_intent": "ranking debug",
       "preferred_tools": [
         "trace_code_ranking",
         "analyze_duplicate_results"

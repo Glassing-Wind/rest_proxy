@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -93,3 +94,23 @@ def evaluate_tool_choice(case_id: str, proposed_tools: list[str]) -> dict:
         "avoided_used": avoided_used,
         "guidance": guidance,
     }
+
+
+def extract_catalog_tools(rendered_catalog: str) -> list[str]:
+    """Extract ordered tool names from `get_mcp_tool_catalog` text output."""
+
+    return re.findall(r"^- `([^`]+)`", rendered_catalog, flags=re.MULTILINE)
+
+
+def evaluate_catalog_tool_choice(case_id: str, *, limit: int = 10) -> dict:
+    """Evaluate the actual catalog output against a golden tool-choice case."""
+
+    from tools.brain.tool_catalog import render_tool_catalog
+
+    case = get_tool_choice_case(case_id)
+    catalog_intent = case.get("catalog_intent") or case.get("intent", "")
+    rendered = render_tool_catalog(intent=catalog_intent, limit=limit)
+    report = evaluate_tool_choice(case_id, extract_catalog_tools(rendered))
+    report["catalog_intent"] = catalog_intent
+    report["catalog_output"] = rendered
+    return report

@@ -9,7 +9,11 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tool_choice_eval import evaluate_tool_choice
+from tool_choice_eval import (  # noqa: E402
+    evaluate_catalog_tool_choice,
+    evaluate_tool_choice,
+    extract_catalog_tools,
+)
 
 
 class ToolChoiceEvalTests(unittest.TestCase):
@@ -54,6 +58,32 @@ class ToolChoiceEvalTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual("symbol_deep_dive", payload["id"])
         self.assertEqual("healthy", payload["status"])
+
+    def test_extract_catalog_tools_preserves_order(self):
+        rendered = "\n".join(
+            [
+                "MCP tool catalog:",
+                "- `search_codebase` [primary / code investigation] - Search.",
+                "- `grep_codebase` [support / code search] - Grep.",
+            ]
+        )
+        self.assertEqual(
+            ["search_codebase", "grep_codebase"],
+            extract_catalog_tools(rendered),
+        )
+
+    def test_catalog_output_scores_against_goldens(self):
+        for case_id in (
+            "repo_onboarding",
+            "documentation_lookup",
+            "documentation_inventory",
+            "changed_code_review",
+            "retrieval_ranking_debug",
+        ):
+            with self.subTest(case_id=case_id):
+                report = evaluate_catalog_tool_choice(case_id)
+                self.assertEqual("healthy", report["status"], report["catalog_output"])
+                self.assertTrue(report["first_tool_preferred"])
 
 
 if __name__ == "__main__":

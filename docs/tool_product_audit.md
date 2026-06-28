@@ -193,6 +193,9 @@ inventory starts with `list_documentation_sources`, memory capture/review starts
 with `add_memory`/`list_memories`, changed-code review starts with
 `git_summary` and `get_changed_symbols`, and retrieval-ranking debug starts with
 `trace_code_ranking` before lower-level duplicate/rerank helpers.
+The canonical eval suite now also scores the actual `get_mcp_tool_catalog`
+rendered output for each golden workflow, so catalog phrasing and the preferred
+workflow baseline cannot drift independently.
 
 Flow-tool routing is similarly explicit: full-stack UI/API/service/DB wording
 routes to the app-flow summary, while backend request-to-database wording routes
