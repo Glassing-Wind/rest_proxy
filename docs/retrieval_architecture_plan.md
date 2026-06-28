@@ -213,7 +213,8 @@ than when this plan was first written.
 - `memory/docs_retrieval.py`: docs query expansion, topic-family matching,
   filtering, and docs ranking.
 - `memory/code_retrieval.py`: code retrieval orchestration across semantic,
-  exact, fallback, path-hint, crate, and final ranking stages.
+  exact, fallback, path-hint, crate, and final ranking stages; shared
+  `_enrich_rescue_rows` helper keeps all rescue-injection enrichment uniform.
 - `memory/code_retrieval_loaders.py`: database read helpers for code retrieval
   rescue rows, path-hint rows, Cargo crate metadata, and Neo4j read
   transaction policy.
