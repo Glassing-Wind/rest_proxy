@@ -219,6 +219,8 @@ than when this plan was first written.
   transaction policy.
 - `memory/code_retrieval_clone.py`: optional Neo4j-backed clone deduplication
   for code retrieval results, including debug-row insertion when requested.
+- `memory/code_retrieval_postprocess.py`: duplicate-aware reranking, per-file
+  dedupe, dispatcher/routing telemetry, and final implementation post-ranking.
 - `memory/retrieval_metadata.py`: shared metadata coercion, filtering, cargo
   scope handling, and result rendering helpers.
 - `memory/retrieval_surfaces.py`: docs/support/generated/usage-heavy surface

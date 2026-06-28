@@ -19,6 +19,7 @@ echo "[ci] Running Ruff on the gated Python surface..."
   memory/code_retrieval.py \
   memory/code_retrieval_clone.py \
   memory/code_retrieval_loaders.py \
+  memory/code_retrieval_postprocess.py \
   memory/store_embeddings.py \
   test_docs_chunking.py \
   test_index_workspace.py \
