@@ -1553,6 +1553,77 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("`EmbeddedEventLoop`", output)
         self.assertNotIn("Swift caller-like usages", output)
 
+    def test_get_call_chain_uses_swift_protocol_source_fallback_when_edges_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "EventLoop",
+                        "qualified_name": "EventLoop",
+                        "signature": "public protocol EventLoop: EventLoopGroup",
+                        "filepath": "Sources/NIOCore/EventLoop.swift",
+                        "kind": "Protocol",
+                        "rank": 0,
+                        "callers_in": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            if "IMPLEMENTS_TYPE" in cypher and "ORDER BY size(chain)" in cypher:
+                return []
+            if "candidate:Class" in cypher and "candidate.filepath ENDS WITH '.swift'" in cypher:
+                return [
+                    {
+                        "name": "NIOAsyncTestingEventLoop",
+                        "file": "Sources/NIOEmbedded/AsyncTestingEventLoop.swift",
+                        "start_line": 510,
+                    },
+                    {
+                        "name": "SupportHelper",
+                        "file": "Sources/NIOEmbedded/SupportHelper.swift",
+                        "start_line": 1,
+                    },
+                ]
+            return []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source_dir = root / "Sources" / "NIOEmbedded"
+            source_dir.mkdir(parents=True)
+            (source_dir / "AsyncTestingEventLoop.swift").write_text(
+                "public final class NIOAsyncTestingEventLoop: EventLoop, @unchecked Sendable {\n"
+                "    func execute(_ task: () -> Void) {}\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (source_dir / "SupportHelper.swift").write_text(
+                "struct SupportHelper {}\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_call_chain"](
+                            tmpdir,
+                            "EventLoop",
+                            depth=2,
+                            direction="up",
+                            file_path="Sources/NIOCore/EventLoop.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("Swift protocol conformer fallback", output)
+        self.assertIn("`NIOAsyncTestingEventLoop`", output)
+        self.assertIn("Sources/NIOEmbedded/AsyncTestingEventLoop.swift", output)
+        self.assertNotIn("SupportHelper", output)
+        self.assertNotIn("Swift caller-like usages", output)
+
     def test_pick_call_chain_candidate_prefers_swift_protocol_over_same_file_extension(self):
         picked = self.module.symbol_graph.pick_call_chain_candidate(
             [

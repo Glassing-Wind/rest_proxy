@@ -288,8 +288,9 @@
             "Use this after `get_project_overview`",
             "Community Summary:",
             "[area/tools]",
-            "Dominant concerns: area/tools",
-            "first file: tools/brain/",
+            "Dominant concerns:",
+            "area/tools",
+            "first file: memory/retrieval_duplicates.py",
             "Top files: tools/brain/",
             "Suppressed"
           ],
@@ -1293,8 +1294,9 @@
         "depth": 2
       },
       "required_substrings": [
-        "Call chain: `SidebarView`",
-        "`ContentView`  (FrameCreator/Views/ContentView.swift)"
+        "`SidebarView` resolved but no graph callers within 2 hops.",
+        "`FrameCreator/Views/ContentView.swift:49`  >> SidebarView(viewModel: viewModel)",
+        "SwiftUI/component composition is not always represented as CALLS edges"
       ]
     },
     {
@@ -1308,7 +1310,7 @@
       },
       "required_substrings": [
         "Apps/DrawThingsCLI/DrawThingsCLI.swift",
-        "Libraries/Trainer/Sources/LoRATrainer.swift",
+        "Libraries/ImageGenerator/Sources/GenerationEstimator.swift",
         "[generated/support]"
       ]
     },

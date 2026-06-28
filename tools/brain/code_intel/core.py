@@ -479,6 +479,65 @@ def register(mcp: FastMCP) -> None:
                 fallback = line[:120]
         return fallback
 
+    def _swift_declares_protocol_conformance(
+        workspace_path: str,
+        file_path: str,
+        start_line: int | None,
+        symbol_name: str,
+        protocol_name: str,
+    ) -> tuple[int, str] | None:
+        if not workspace_path or not file_path or not symbol_name or not protocol_name:
+            return None
+        absolute_path = os.path.join(workspace_path, file_path)
+        try:
+            with open(absolute_path, "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.readlines()
+        except OSError:
+            return None
+
+        if not lines:
+            return None
+        symbol_re = re.escape(symbol_name)
+        protocol_re = re.escape(protocol_name)
+        declaration_re = re.compile(
+            rf"\b(?:class|struct|actor|enum)\s+{symbol_re}\b[^{{}};=]*:\s*[^{{}};=]*\b{protocol_re}\b",
+        )
+        preferred_index = max(int(start_line or 1) - 1, 0)
+        candidates: list[tuple[int, str]] = []
+        for index, line in enumerate(lines):
+            if symbol_name not in line or ":" not in line or protocol_name not in line:
+                continue
+            window = " ".join(
+                candidate_line.strip()
+                for candidate_line in lines[index : min(index + 5, len(lines))]
+            )
+            declaration = re.sub(r"\s+", " ", window)
+            if declaration_re.search(declaration):
+                candidates.append((index + 1, line.strip()[:160]))
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: abs((item[0] - 1) - preferred_index))
+
+    def _format_swift_protocol_conformance_fallback(
+        *,
+        resolved_name: str,
+        depth: int,
+        rows: list[dict],
+    ) -> str:
+        lines = [
+            f"Call chain: `{resolved_name}` (Swift protocol conformer fallback, depth={depth})",
+            "",
+            "Graph conformance edges were unavailable, so these conformers were recovered from indexed symbols and local Swift declarations:",
+        ]
+        for row in rows[:8]:
+            line_part = f" line {row.get('line')}" if row.get("line") else ""
+            lines.append(
+                f"- `{row.get('name')}`  ({row.get('file')}){line_part}  >> {row.get('snippet')}"
+            )
+        if len(rows) > 8:
+            lines.append(f"- ... {len(rows) - 8} more conformer candidates omitted")
+        return "\n".join(lines)
+
     def _importance_penalty(file_path: str | None, raw_roles=None) -> float:
         roles = _normalize_file_roles(raw_roles)
         if {"generated_surface", "binding_surface"} & roles:
@@ -895,6 +954,75 @@ def register(mcp: FastMCP) -> None:
             return await session.execute_read(_tx)
         return await _tx(session)
 
+    async def _load_swift_protocol_conformance_fallback_rows(
+        session,
+        *,
+        workspace_id: str,
+        project_id: str,
+        protocol_name: str,
+        protocol_file_path: str,
+    ) -> list[dict]:
+        workspace_path = get_workspace_path(workspace_id)
+        if not workspace_path or not os.path.isdir(workspace_path):
+            return []
+        rows = await _execute_read(
+            session,
+            """
+            MATCH (candidate)
+            WHERE candidate.project_id = $pid
+              AND (candidate:Class OR candidate:Struct OR candidate:Enum)
+              AND candidate.filepath IS NOT NULL
+              AND candidate.filepath ENDS WITH '.swift'
+              AND candidate.filepath <> $protocol_file_path
+              AND candidate.name IS NOT NULL
+            RETURN candidate.name AS name,
+                   candidate.filepath AS file,
+                   candidate.start_line AS start_line
+            ORDER BY
+              CASE
+                WHEN candidate.filepath STARTS WITH 'Sources/' THEN 0
+                WHEN candidate.filepath STARTS WITH 'Tests/' THEN 1
+                ELSE 2
+              END,
+              candidate.filepath,
+              candidate.start_line
+            LIMIT 1200
+            """,
+            pid=project_id,
+            protocol_file_path=protocol_file_path,
+            op="get_call_chain_swift_protocol_source_fallback_candidates",
+        )
+        out: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            name = str(row.get("name") or "").strip()
+            file_path = str(row.get("file") or "").strip()
+            key = (file_path, name)
+            if not name or not file_path or key in seen:
+                continue
+            seen.add(key)
+            match = _swift_declares_protocol_conformance(
+                workspace_path,
+                file_path,
+                row.get("start_line"),
+                name,
+                protocol_name,
+            )
+            if not match:
+                continue
+            line, snippet = match
+            out.append(
+                {
+                    "name": name,
+                    "file": file_path,
+                    "line": line,
+                    "snippet": snippet,
+                }
+            )
+            if len(out) >= 40:
+                break
+        return out
+
     def _cargo_manifest_dir(manifest_path: str | None) -> str:
         if not manifest_path:
             return ""
@@ -1202,6 +1330,26 @@ def register(mcp: FastMCP) -> None:
                     )
                     if protocol_rows:
                         rows = protocol_rows
+
+                if (
+                    not rows
+                    and direction == "up"
+                    and resolved_filepath.endswith(".swift")
+                    and resolved_kind in {"Protocol", "Interface", "Trait"}
+                ):
+                    conformance_rows = await _load_swift_protocol_conformance_fallback_rows(
+                        session,
+                        workspace_id=workspace_id,
+                        project_id=project_id,
+                        protocol_name=resolved_name.split(".")[-1],
+                        protocol_file_path=resolved_filepath,
+                    )
+                    if conformance_rows:
+                        return _format_swift_protocol_conformance_fallback(
+                            resolved_name=resolved_name,
+                            depth=depth,
+                            rows=conformance_rows,
+                        )
 
                 if not rows:
                     if direction == "up" and resolved_filepath.endswith(".swift"):
