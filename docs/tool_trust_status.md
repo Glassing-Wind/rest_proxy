@@ -245,6 +245,12 @@ Latest workflow finding closed:
 - memory semantic retrieval now treats a missing optional
   `memory_embeddings_vector` Neo4j index as a clean fallback instead of logging
   an error before assembling working memory from durable instructions
+- redundant module-level rescue wrappers and repeated rescue enrichment loops in
+  `memory/code_retrieval.py` were removed and unified under a shared helper
+- generic telemetry logging, environment lookup, and path-resolution helpers in
+  `memory/retrieval_telemetry.py` were extracted to remove copy-pasted boilerplate
+- shared definition pattern regex matching helper in `memory/retrieval_scoring.py`
+  was extracted to eliminate duplicated lookup loops
 
 Current likely targets:
 
