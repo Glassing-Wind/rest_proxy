@@ -251,6 +251,10 @@ Latest workflow finding closed:
   `memory/retrieval_telemetry.py` were extracted to remove copy-pasted boilerplate
 - shared definition pattern regex matching helper in `memory/retrieval_scoring.py`
   was extracted to eliminate duplicated lookup loops
+- targeted MCP parity smoke runs can now select named direct-parity cases as
+  well as live graph golden cases with `--case-id`, so small operator workflow
+  passes no longer fail when they mix catalog/support checks with repo-backed
+  graph cases
 
 Current likely targets:
 

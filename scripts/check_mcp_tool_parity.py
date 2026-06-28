@@ -880,23 +880,44 @@ def _is_optional_search_dependency_unavailable(output: str) -> bool:
     ) or "Start the server or check LMSTUDIO_BASE_URL" in str(output)
 
 
-def _load_cases(case_ids: list[str]) -> list[dict]:
+def _select_direct_checks(checks: list[dict], case_ids: set[str]) -> tuple[list[dict], set[str]]:
+    selected = [
+        check for check in checks if str(check.get("id") or "") in case_ids
+    ]
+    return selected, {str(check.get("id") or "") for check in selected}
+
+
+def _load_cases(case_ids: set[str]) -> tuple[list[dict], set[str]]:
     with open(GRAPH_GOLDENS_PATH, "r", encoding="utf-8") as fh:
         payload = json.load(fh)
     selected: list[dict] = []
-    wanted = set(case_ids)
+    matched: set[str] = set()
     for case in payload.get("cases") or []:
         case_id = str(case.get("id") or "")
-        if case_id in wanted:
+        if case_id in case_ids:
             if case.get("steps"):
                 raise AssertionError(
                     f"Workflow case '{case_id}' is not supported in MCP parity smoke"
                 )
             selected.append(case)
-    missing = wanted - {str(case.get("id") or "") for case in selected}
+            matched.add(case_id)
+    return selected, matched
+
+
+def _select_parity_inputs(case_ids: list[str]) -> tuple[list[dict], list[dict]]:
+    if not case_ids:
+        graph_cases, _ = _load_cases(set(DEFAULT_CASE_IDS))
+        return list(DEFAULT_DIRECT_PARITY_CHECKS), graph_cases
+
+    wanted = {case_id.strip() for case_id in case_ids if case_id.strip()}
+    direct_checks, direct_ids = _select_direct_checks(
+        DEFAULT_DIRECT_PARITY_CHECKS, wanted
+    )
+    graph_cases, graph_ids = _load_cases(wanted)
+    missing = wanted - direct_ids - graph_ids
     if missing:
         raise AssertionError(f"Unknown case ids: {sorted(missing)}")
-    return selected
+    return direct_checks, graph_cases
 
 
 def _initialize_session() -> str:
@@ -1179,8 +1200,7 @@ def main() -> int:
     status, _, _ = _request(HEALTH_URL)
     assert status == 200, "brain server health check failed"
 
-    case_ids = args.case_id or DEFAULT_CASE_IDS
-    cases = _load_cases(case_ids)
+    checks, cases = _select_parity_inputs(args.case_id)
     session_id = _initialize_session()
     tool_names = _mcp_list_tools(session_id)
     for expected_tool in (
@@ -1226,7 +1246,7 @@ def main() -> int:
 
     try:
         results = asyncio.run(
-            _run_all_parity_checks(DEFAULT_DIRECT_PARITY_CHECKS, cases, session_id)
+            _run_all_parity_checks(checks, cases, session_id)
         )
     finally:
         _request(

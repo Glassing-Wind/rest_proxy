@@ -39,6 +39,8 @@ echo "[ci] Running Ruff on the gated Python surface..."
   memory/retrieval_scoring_workflows.py \
   memory/retrieval_semantics.py \
   memory/retrieval_surfaces.py \
+  scripts/check_mcp_tool_parity.py \
+  test_mcp_tool_parity_selection.py \
   tools/brain/docs/chunking.py \
   memory/retrieval_policy.py \
   memory/retrieval_fallbacks.py \
@@ -78,6 +80,7 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_indexing_health_alignment.py
 "$PYTHON_BIN" test_job_state_persistence.py
 "$PYTHON_BIN" test_memory_mode.py
+"$PYTHON_BIN" test_mcp_tool_parity_selection.py
 "$PYTHON_BIN" test_search_graph_query.py
 "$PYTHON_BIN" test_search_codebase_tool.py
 "$PYTHON_BIN" test_search_summary_tools.py
