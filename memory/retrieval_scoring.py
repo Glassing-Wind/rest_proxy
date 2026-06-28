@@ -182,12 +182,8 @@ def implementation_exact_member_usage_site_hit(result: dict) -> bool:
     return chunk_role in {"usage", "example_usage", "test_usage"}
 
 
-def implementation_definition_hit(content: str | None, query: str) -> int:
-    text = (content or "").strip()
-    if not text:
-        return 0
+def _count_definition_patterns(lowered_text: str, query: str) -> int:
     symbols = implementation_query_symbols(query)
-    lowered = text.lower()
     hits = 0
     for symbol in symbols:
         patterns = [
@@ -199,12 +195,19 @@ def implementation_definition_hit(content: str | None, query: str) -> int:
             rf"\bexport\s+(?:async\s+)?function\s+{re.escape(symbol)}\s*\(",
             rf"\b{re.escape(symbol)}\s*:\s*function\b",
         ]
-        if any(re.search(pattern, lowered) for pattern in patterns):
+        if any(re.search(pattern, lowered_text) for pattern in patterns):
             hits += 1
     for pattern in _implementation_definition_declaration_patterns(query):
-        if re.search(pattern, lowered):
+        if re.search(pattern, lowered_text):
             hits += 1
     return hits
+
+
+def implementation_definition_hit(content: str | None, query: str) -> int:
+    text = (content or "").strip()
+    if not text:
+        return 0
+    return _count_definition_patterns(text.lower(), query)
 
 
 def implementation_api_entrypoint_hit(file_path: str | None, definition_hit: int, meta: dict | None = None) -> int:
@@ -279,24 +282,8 @@ def implementation_exact_signature_symbol_hit(content: str | None, query: str) -
     if not text:
         return 0
     header = "\n".join(text.splitlines()[:3]).lower()
-    symbols = implementation_query_symbols(query)
-    hits = 0
-    for symbol in symbols:
-        patterns = [
-            rf"\bpub\s+fn\s+{re.escape(symbol)}\s*\(",
-            rf"\bfn\s+{re.escape(symbol)}\s*\(",
-            rf"\bdef\s+{re.escape(symbol)}\s*\(",
-            rf"\basync\s+def\s+{re.escape(symbol)}\s*\(",
-            rf"\bfunction\s+{re.escape(symbol)}\s*\(",
-            rf"\bexport\s+(?:async\s+)?function\s+{re.escape(symbol)}\s*\(",
-            rf"\b{re.escape(symbol)}\s*:\s*function\b",
-        ]
-        if any(re.search(pattern, header) for pattern in patterns):
-            hits += 1
-    for pattern in _implementation_definition_declaration_patterns(query):
-        if re.search(pattern, header):
-            hits += 1
-    return hits
+    return _count_definition_patterns(header, query)
+
 
 
 def implementation_export_hit(content: str | None, file_path: str | None, meta: dict) -> int:
