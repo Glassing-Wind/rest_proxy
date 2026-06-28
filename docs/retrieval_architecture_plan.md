@@ -204,8 +204,8 @@ than when this plan was first written.
 - code retrieval now has a reusable core in `memory/code_retrieval.py`
 - implementation retrieval policy has been split into focused `memory/`
   modules for metadata, surfaces, query parsing, intent, semantic metadata,
-  scoring primitives, role/node rank policy, enrichment, duplicate handling,
-  telemetry, and contracts
+  scoring primitives, workflow-specific scoring, role/node rank policy,
+  enrichment, duplicate handling, telemetry, and contracts
 
 ### Current Retrieval Module Ownership
 
@@ -224,7 +224,10 @@ than when this plan was first written.
 - `memory/retrieval_intent.py`: implementation query classification, inferred
   filename hints, generated-surface acceptance, and intent weight policy.
 - `memory/retrieval_scoring.py`: path/symbol/API/dispatcher/routing scoring
-  primitives and penalties.
+  primitives and penalties, plus compatibility exports for scoring callers.
+- `memory/retrieval_scoring_workflows.py`: dispatcher, command, provider,
+  routing, request-handler, controller, server-infra, and view-body scoring
+  policy.
 - `memory/retrieval_rank_policy.py`: implementation result role classification
   plus role and node-type ranking policy.
 - `memory/retrieval_enrichment.py`: implementation result enrichment, rank-score
