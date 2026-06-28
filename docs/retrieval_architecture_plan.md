@@ -204,8 +204,8 @@ than when this plan was first written.
 - code retrieval now has a reusable core in `memory/code_retrieval.py`
 - implementation retrieval policy has been split into focused `memory/`
   modules for metadata, surfaces, query parsing, intent, semantic metadata,
-  scoring primitives, role/node rank policy, duplicate handling, telemetry, and
-  contracts
+  scoring primitives, role/node rank policy, enrichment, duplicate handling,
+  telemetry, and contracts
 
 ### Current Retrieval Module Ownership
 
@@ -227,12 +227,14 @@ than when this plan was first written.
   primitives and penalties.
 - `memory/retrieval_rank_policy.py`: implementation result role classification
   plus role and node-type ranking policy.
+- `memory/retrieval_enrichment.py`: implementation result enrichment, rank-score
+  component assembly, ranking traces, and per-file dedupe.
 - `memory/retrieval_duplicates.py`: near-duplicate analysis, collapse, and
   diversity reranking runtime.
 - `memory/retrieval_telemetry.py`: duplicate, dispatcher, and routing telemetry
   contracts.
-- `memory/retrieval_policy.py`: compatibility facade plus the remaining
-  implementation-result enrichment, ranking trace, and per-file dedupe glue.
+- `memory/retrieval_policy.py`: compatibility facade for historical
+  `semantic_helpers` callers plus duplicate contract wrappers.
 
 ### What `rest_proxy` Now Mostly Does
 
@@ -271,9 +273,9 @@ These are not obviously wrong to keep higher:
   confined to smaller admin/debug surfaces and legacy records
 - some query families may still need richer lower-level metadata if real usage
   finds another repeated weak spot
-- `memory/retrieval_policy.py` is now a facade, but still owns enrichment and
-  ranking-trace glue; continue splitting it only where a clean ownership
-  boundary exists
+- `memory/retrieval_policy.py` is now a small facade; continue splitting only
+  when another clean ownership boundary emerges instead of moving logic for its
+  own sake
 
 
 ## What To Do Next
@@ -555,8 +557,9 @@ These tests should be treated as release gates for retrieval changes.
 1. Keep MCP wrappers thin: new search behavior should enter through
    `memory/docs_retrieval.py`, `memory/code_retrieval.py`, or a focused
    `memory/retrieval_*` module.
-2. Continue reducing `memory/retrieval_policy.py` only when the next extracted
-   unit has a clear product boundary and preserves the compatibility facade.
+2. Keep `memory/retrieval_policy.py` stable as a compatibility facade unless
+   another extracted unit has a clear product boundary and preserves existing
+   callers.
 3. Use live workflow misses to decide whether a weakness belongs in
    `ts-pack` metadata, retrieval scoring, retrieval intent, or presentation.
 4. Keep standard-gate coverage aligned with promoted tool behavior and avoid
