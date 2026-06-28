@@ -17,6 +17,7 @@ echo "[ci] Running Ruff on the gated Python surface..."
 "$PYTHON_BIN" -m ruff check \
   memory/skeleton_extractor.py \
   memory/code_retrieval.py \
+  memory/code_retrieval_clone.py \
   memory/code_retrieval_loaders.py \
   memory/store_embeddings.py \
   test_docs_chunking.py \
