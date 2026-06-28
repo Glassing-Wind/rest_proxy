@@ -237,7 +237,8 @@ than when this plan was first written.
   penalties, usage-surface bonuses, and compatibility exports for intent
   callers.
 - `memory/retrieval_scoring.py`: path/symbol/API/dispatcher/routing scoring
-  primitives and penalties, plus compatibility exports for scoring callers.
+  primitives and penalties, plus compatibility exports for scoring callers; shared
+  `_count_definition_patterns` helper keeps regex matching consistent.
 - `memory/retrieval_scoring_workflows.py`: dispatcher, command, provider,
   routing, request-handler, controller, server-infra, and view-body scoring
   policy.
