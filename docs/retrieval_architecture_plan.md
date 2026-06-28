@@ -214,6 +214,9 @@ than when this plan was first written.
   filtering, and docs ranking.
 - `memory/code_retrieval.py`: code retrieval orchestration across semantic,
   exact, fallback, path-hint, crate, and final ranking stages.
+- `memory/code_retrieval_loaders.py`: database read helpers for code retrieval
+  rescue rows, path-hint rows, Cargo crate metadata, and Neo4j read
+  transaction policy.
 - `memory/retrieval_metadata.py`: shared metadata coercion, filtering, cargo
   scope handling, and result rendering helpers.
 - `memory/retrieval_surfaces.py`: docs/support/generated/usage-heavy surface
