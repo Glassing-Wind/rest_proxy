@@ -15,44 +15,33 @@ from memory import retrieval_metadata
 from memory import retrieval_policy as sem_helpers
 
 
-async def _execute_graph_read(session, cypher: str, op: str, **params):
-    return await retrieval_loaders.execute_graph_read(session, cypher, op, **params)
-
-
-async def _load_cargo_crate_rows(driver, neo4j_db: str, project_ids: list[str]) -> dict[str, list[dict]]:
-    return await retrieval_loaders.load_cargo_crate_rows(driver, neo4j_db, project_ids)
-
-
-async def _load_rescue_rows(
-    conn,
+def _enrich_rescue_rows(
+    rows: list[dict],
     *,
-    pid: str,
-    file_paths: list[str],
-    member_exprs: list[str] | None = None,
-) -> list[dict]:
-    return await retrieval_loaders.load_rescue_rows(
-        conn,
-        pid=pid,
-        file_paths=file_paths,
-        member_exprs=member_exprs,
-    )
-
-
-async def _load_path_hint_rows(
-    conn,
-    *,
-    pid: str,
-    path_hints: list[str],
-    identifier_exprs: list[str] | None = None,
-    max_files: int = 12,
-) -> list[dict]:
-    return await retrieval_loaders.load_path_hint_rows(
-        conn,
-        pid=pid,
-        path_hints=path_hints,
-        identifier_exprs=identifier_exprs,
-        max_files=max_files,
-    )
+    query: str,
+    query_class: str,
+    base_bonus: float,
+    path_hints: list[str] | None = None,
+) -> None:
+    """In-place: attach metadata scores and implementation enrichment to rescue rows."""
+    for r in rows:
+        r_meta = retrieval_metadata.coerce_meta(r)
+        r["_meta"] = r_meta
+        r["meta_score"] = retrieval_metadata.meta_score(r_meta)
+        # For path-hint rows the bonus depends on whether an exact identifier hit was found.
+        if path_hints is not None:
+            exact_id_hit = int(r.get("implementation_exact_identifier_text_hit", 0) or 0)
+            effective_bonus = 0.14 if exact_id_hit > 0 else base_bonus
+        else:
+            effective_bonus = base_bonus
+        sem_helpers.enrich_implementation_result(
+            r,
+            query=query,
+            query_class=query_class,
+            base_score=float(r.get("rrf", 0.0) or 0.0),
+            meta_boost=0.0,
+            base_bonus=effective_bonus,
+        )
 
 
 async def search_codebase_core(
@@ -211,48 +200,26 @@ async def search_codebase_core(
                 for pid in pid_to_name:
                     async with memory_store._pg_pool.connection() as conn:
                         await conn.execute("BEGIN")
-                        exact_rows = await _load_rescue_rows(
+                        exact_rows = await retrieval_loaders.load_rescue_rows(
                             conn,
                             pid=pid,
                             file_paths=explicit_runtime_entrypoints,
                             member_exprs=member_exprs,
                         )
-                    for r in exact_rows:
-                        r_meta = retrieval_metadata.coerce_meta(r)
-                        r["_meta"] = r_meta
-                        r["meta_score"] = retrieval_metadata.meta_score(r_meta)
-                        sem_helpers.enrich_implementation_result(
-                            r,
-                            query=query,
-                            query_class=impl_query_class,
-                            base_score=float(r.get("rrf", 0.0) or 0.0),
-                            meta_boost=0.0,
-                            base_bonus=0.22,
-                        )
+                    _enrich_rescue_rows(exact_rows, query=query, query_class=impl_query_class, base_bonus=0.22)
                     rescue_results.extend(exact_rows)
             if path_hints:
                 for pid in pid_to_name:
                     async with memory_store._pg_pool.connection() as conn:
                         await conn.execute("BEGIN")
-                        rescue_rows = await _load_path_hint_rows(
+                        rescue_rows = await retrieval_loaders.load_path_hint_rows(
                             conn,
                             pid=pid,
                             path_hints=path_hints,
                             identifier_exprs=exact_identifiers,
                             max_files=min(max(fallback_max, 8), 16),
                         )
-                    for r in rescue_rows:
-                        r_meta = retrieval_metadata.coerce_meta(r)
-                        r["_meta"] = r_meta
-                        r["meta_score"] = retrieval_metadata.meta_score(r_meta)
-                        sem_helpers.enrich_implementation_result(
-                            r,
-                            query=query,
-                            query_class=impl_query_class,
-                            base_score=float(r.get("rrf", 0.0) or 0.0),
-                            meta_boost=0.0,
-                            base_bonus=0.14 if int(r.get("implementation_exact_identifier_text_hit", 0) or 0) > 0 else 0.025,
-                        )
+                    _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.025, path_hints=path_hints)
                     rescue_results.extend(rescue_rows)
             if rescue_results:
                 all_results = rescue_results
@@ -280,14 +247,6 @@ async def search_codebase_core(
             "*Tests*",
         ]
         exclude_paths = list(dict.fromkeys(exclude_paths))
-
-    if exclude_tests:
-        exclude_paths = (exclude_paths or []) + [
-            "*test*",
-            "*tests*",
-            "*Test*",
-            "*Tests*",
-        ]
 
     if impl_intent:
         exclude_paths = (exclude_paths or []) + sem_helpers.implementation_noise_exclude_patterns(query)
@@ -352,7 +311,7 @@ async def search_codebase_core(
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()
-            cargo_rows_by_pid = await _load_cargo_crate_rows(
+            cargo_rows_by_pid = await retrieval_loaders.load_cargo_crate_rows(
                 driver, graph_bootstrap._NEO4J_DB, list(pid_to_name.keys())
             )
         except Exception:
@@ -488,48 +447,26 @@ async def search_codebase_core(
             for pid in pid_to_name:
                 async with memory_store._pg_pool.connection() as conn:
                     await conn.execute("BEGIN")
-                    exact_rows = await _load_rescue_rows(
+                    exact_rows = await retrieval_loaders.load_rescue_rows(
                         conn,
                         pid=pid,
                         file_paths=explicit_runtime_entrypoints,
                         member_exprs=member_exprs,
                     )
-                for r in exact_rows:
-                    r_meta = retrieval_metadata.coerce_meta(r)
-                    r["_meta"] = r_meta
-                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
-                    sem_helpers.enrich_implementation_result(
-                        r,
-                        query=query,
-                        query_class=impl_query_class,
-                        base_score=float(r.get("rrf", 0.0) or 0.0),
-                        meta_boost=0.0,
-                        base_bonus=0.22,
-                    )
+                _enrich_rescue_rows(exact_rows, query=query, query_class=impl_query_class, base_bonus=0.22)
                 rescue_results.extend(exact_rows)
         if not has_path_hint_hit:
             for pid in pid_to_name:
                 async with memory_store._pg_pool.connection() as conn:
                     await conn.execute("BEGIN")
-                    rescue_rows = await _load_path_hint_rows(
+                    rescue_rows = await retrieval_loaders.load_path_hint_rows(
                         conn,
                         pid=pid,
                         path_hints=path_hints,
                         identifier_exprs=exact_identifiers,
                         max_files=min(max(fallback_max, 8), 16),
                     )
-                for r in rescue_rows:
-                    r_meta = retrieval_metadata.coerce_meta(r)
-                    r["_meta"] = r_meta
-                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
-                    sem_helpers.enrich_implementation_result(
-                        r,
-                        query=query,
-                        query_class=impl_query_class,
-                        base_score=float(r.get("rrf", 0.0) or 0.0),
-                        meta_boost=0.0,
-                        base_bonus=0.14 if int(r.get("implementation_exact_identifier_text_hit", 0) or 0) > 0 else 0.025,
-                    )
+                _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.025, path_hints=path_hints)
                 rescue_results.extend(rescue_rows)
         if rescue_results:
             existing_keys = {
@@ -563,24 +500,13 @@ async def search_codebase_core(
                     continue
                 async with memory_store._pg_pool.connection() as conn:
                     await conn.execute("BEGIN")
-                    rescue_rows = await _load_rescue_rows(
+                    rescue_rows = await retrieval_loaders.load_rescue_rows(
                         conn,
                         pid=pid,
                         file_paths=matches,
                         member_exprs=member_exprs,
                     )
-                for r in rescue_rows:
-                    r_meta = retrieval_metadata.coerce_meta(r)
-                    r["_meta"] = r_meta
-                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
-                    sem_helpers.enrich_implementation_result(
-                        r,
-                        query=query,
-                        query_class=impl_query_class,
-                        base_score=float(r.get("rrf", 0.0) or 0.0),
-                        meta_boost=0.0,
-                        base_bonus=0.02,
-                    )
+                _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.02)
                 rescue_results.extend(rescue_rows)
             if rescue_results:
                 existing_keys = {
@@ -615,24 +541,13 @@ async def search_codebase_core(
                     continue
                 async with memory_store._pg_pool.connection() as conn:
                     await conn.execute("BEGIN")
-                    rescue_rows = await _load_rescue_rows(
+                    rescue_rows = await retrieval_loaders.load_rescue_rows(
                         conn,
                         pid=pid,
                         file_paths=matches,
                         member_exprs=member_exprs,
                     )
-                for r in rescue_rows:
-                    r_meta = retrieval_metadata.coerce_meta(r)
-                    r["_meta"] = r_meta
-                    r["meta_score"] = retrieval_metadata.meta_score(r_meta)
-                    sem_helpers.enrich_implementation_result(
-                        r,
-                        query=query,
-                        query_class=impl_query_class,
-                        base_score=float(r.get("rrf", 0.0) or 0.0),
-                        meta_boost=0.0,
-                        base_bonus=0.03,
-                    )
+                _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.03)
                 rescue_results.extend(rescue_rows)
             if rescue_results:
                 existing_keys = {

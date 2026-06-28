@@ -765,8 +765,8 @@ class SearchCodebaseToolTests(unittest.TestCase):
             },
         ):
             with mock.patch.object(
-                cr,
-                "_load_path_hint_rows",
+                cr.retrieval_loaders,
+                "load_path_hint_rows",
                 mock.AsyncMock(return_value=rescue_rows),
             ):
                 output = asyncio.run(
