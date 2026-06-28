@@ -87,6 +87,102 @@
       "avoid_as_primary": [
         "query_graph"
       ]
+    },
+    {
+      "id": "documentation_lookup",
+      "intent": "Answer a question from already indexed library or project documentation.",
+      "preferred_tools": [
+        "search_documentation"
+      ],
+      "acceptable_fallbacks": [
+        "research_documentation",
+        "list_documentation_sources"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "documentation_inventory",
+      "intent": "Inspect which documentation topics and sources are indexed before searching them.",
+      "preferred_tools": [
+        "list_documentation_sources"
+      ],
+      "acceptable_fallbacks": [
+        "search_documentation"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "memory_capture",
+      "intent": "Persist a durable repo fact, decision, or instruction for future sessions.",
+      "preferred_tools": [
+        "add_memory"
+      ],
+      "acceptable_fallbacks": [
+        "list_memories"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "memory_review",
+      "intent": "Review durable repo memories before continuing work.",
+      "preferred_tools": [
+        "list_memories"
+      ],
+      "acceptable_fallbacks": [
+        "search_memory"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "changed_code_review",
+      "intent": "Review changed code before committing.",
+      "preferred_tools": [
+        "git_summary",
+        "get_changed_symbols"
+      ],
+      "acceptable_fallbacks": [
+        "lint_project_subset",
+        "get_test_coverage_for"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "coverage_lookup",
+      "intent": "Find tests likely to cover a changed source file.",
+      "preferred_tools": [
+        "get_test_coverage_for"
+      ],
+      "acceptable_fallbacks": [
+        "grep_codebase",
+        "search_codebase"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
+      "id": "retrieval_ranking_debug",
+      "intent": "Explain why code search ranked a result or diagnose duplicate result pressure.",
+      "preferred_tools": [
+        "trace_code_ranking",
+        "analyze_duplicate_results"
+      ],
+      "acceptable_fallbacks": [
+        "rerank_retrieval_results"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
     }
   ]
 }

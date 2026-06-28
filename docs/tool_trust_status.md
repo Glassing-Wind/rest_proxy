@@ -204,6 +204,10 @@ Latest workflow finding closed:
 - `get_mcp_tool_catalog` now also recognizes common action phrasing for support
   workflows, including jump/go-to-definition, ranking-debug, duplicate search
   results, and pre-commit changed-code review prompts
+- companion workflows are now part of the canonical tool-choice contract:
+  documentation lookup/inventory, memory capture/review, changed-code review,
+  coverage lookup, and retrieval-ranking debug all have preferred first-tool
+  goldens instead of living only in ad hoc catalog assertions
 - flow-oriented catalog routing now distinguishes full-stack UI/API/service/DB
   wording from backend request-to-database wording
 - route/controller/handler catalog wording now routes framework-neutral and

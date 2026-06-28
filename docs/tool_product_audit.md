@@ -187,6 +187,13 @@ natural wording such as "jump to definition", "why did search rank this result",
 the exact support/dev surfaces even when the tool names remain implementation
 shaped.
 
+Common companion workflows are now covered by the same tool-choice contract:
+indexed documentation lookup starts with `search_documentation`, documentation
+inventory starts with `list_documentation_sources`, memory capture/review starts
+with `add_memory`/`list_memories`, changed-code review starts with
+`git_summary` and `get_changed_symbols`, and retrieval-ranking debug starts with
+`trace_code_ranking` before lower-level duplicate/rerank helpers.
+
 Flow-tool routing is similarly explicit: full-stack UI/API/service/DB wording
 routes to the app-flow summary, while backend request-to-database wording routes
 to the backend flow summary. A positive `rental` workflow now protects concrete

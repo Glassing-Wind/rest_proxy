@@ -74,6 +74,8 @@ def _install_runtime_stubs() -> None:
 def _build_tool_registry() -> FakeMCP:
     _install_mcp_stub()
     _install_runtime_stubs()
+    from tools.brain import documentation as documentation_tools
+    from tools.brain import memory as memory_tools
     from tools.brain import tool_catalog
     from tools.brain.code_intel import core as code_intel_core
     from tools.brain.graph import tools as graph_tools
@@ -91,6 +93,8 @@ def _build_tool_registry() -> FakeMCP:
         graph_query_tools.register(mcp)
         semantic_tools.register(mcp)
         search_tools.register(mcp)
+        documentation_tools.register(mcp)
+        memory_tools.register(mcp)
         dev_tools.register(mcp)
         indexing_tools.register(mcp)
     return mcp
@@ -144,6 +148,10 @@ class ToolChoiceRegistryTests(unittest.TestCase):
         docs_output = render_tool_catalog(intent="learn library docs", limit=10)
         self.assertIn("search_documentation", docs_output)
         self.assertIn("research_documentation", docs_output)
+        self.assertLess(
+            docs_output.find("`search_documentation`"),
+            docs_output.find("`research_documentation`"),
+        )
 
         memory_output = render_tool_catalog(intent="remember repo fact", limit=10)
         self.assertIn("add_memory", memory_output)
@@ -157,6 +165,15 @@ class ToolChoiceRegistryTests(unittest.TestCase):
 
         coverage_output = render_tool_catalog(intent="test coverage", limit=10)
         self.assertIn("get_test_coverage_for", coverage_output)
+
+        docs_inventory_output = render_tool_catalog(
+            intent="which docs are indexed", limit=5
+        )
+        self.assertIn("list_documentation_sources", docs_inventory_output)
+        self.assertLess(
+            docs_inventory_output.find("`list_documentation_sources`"),
+            docs_inventory_output.find("`search_documentation`"),
+        )
 
     def test_tool_catalog_renderer_handles_product_shape_intents(self):
         from tools.brain.tool_catalog import render_tool_catalog

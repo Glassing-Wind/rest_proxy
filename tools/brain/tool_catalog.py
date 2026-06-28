@@ -16,6 +16,7 @@ class ToolCatalogEntry:
     workflow: str
     reach_for_when: str
     prefer_after: tuple[str, ...] = ()
+    rank_bias: int = 0
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
@@ -254,7 +255,10 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
         "Search the web, select documentation sources, crawl them, and index the result.",
     ),
     "research_documentation": ToolCatalogEntry(
-        "docs", "documentation", "Find candidate external docs before indexing them."
+        "docs",
+        "documentation",
+        "Find candidate external docs before indexing them.",
+        rank_bias=-10,
     ),
     "resolve_graph_project": ToolCatalogEntry(
         "primary",
@@ -276,6 +280,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
         "docs",
         "documentation",
         "Search indexed docs with hybrid vector and full-text retrieval.",
+        rank_bias=-20,
     ),
     "search_memory": ToolCatalogEntry(
         "memory",
@@ -367,6 +372,7 @@ _INTENT_STOP_WORDS = {
     "about",
     "an",
     "and",
+    "are",
     "before",
     "did",
     "does",
@@ -401,6 +407,14 @@ _INTENT_STOP_WORDS = {
     "which",
     "why",
 }
+
+
+def _intent_rank_adjustment(name: str, tokens: list[str]) -> int:
+    token_set = set(tokens)
+    if name == "list_documentation_sources" and "documentation" in token_set:
+        if token_set & {"indexed", "source", "sources", "coverage"}:
+            return -100
+    return 0
 
 
 def _intent_tokens(intent: str) -> list[str]:
@@ -440,6 +454,7 @@ def render_tool_catalog(
     """Render catalog entries as compact MCP-facing guidance."""
 
     max_rows = max(1, min(int(limit or 25), 80))
+    tokens = _intent_tokens(intent)
     rows = []
     for name, entry in TOOL_CATALOG.items():
         if not include_admin and entry.tier == "admin":
@@ -447,7 +462,13 @@ def render_tool_catalog(
         if _matches_intent(name, entry, intent):
             rows.append((name, entry))
     rows.sort(
-        key=lambda item: (_TIER_ORDER.get(item[1].tier, 99), item[1].workflow, item[0])
+        key=lambda item: (
+            _intent_rank_adjustment(item[0], tokens),
+            _TIER_ORDER.get(item[1].tier, 99),
+            item[1].rank_bias,
+            item[1].workflow,
+            item[0],
+        )
     )
 
     if not rows:

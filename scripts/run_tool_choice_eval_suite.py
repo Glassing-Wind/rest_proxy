@@ -12,7 +12,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from tool_choice_eval import evaluate_tool_choice
+from tool_choice_eval import evaluate_tool_choice  # noqa: E402
 
 
 CANONICAL_CASES = [
@@ -22,6 +22,13 @@ CANONICAL_CASES = [
     ("code_search_general", ["search_codebase", "find_references"], "healthy"),
     ("definition_disambiguation", ["find_definitions", "search_codebase"], "healthy"),
     ("graph_suspect_result", ["trace_graph_provenance", "get_symbol_context"], "healthy"),
+    ("documentation_lookup", ["search_documentation"], "healthy"),
+    ("documentation_inventory", ["list_documentation_sources"], "healthy"),
+    ("memory_capture", ["add_memory"], "healthy"),
+    ("memory_review", ["list_memories"], "healthy"),
+    ("changed_code_review", ["git_summary", "get_changed_symbols"], "healthy"),
+    ("coverage_lookup", ["get_test_coverage_for"], "healthy"),
+    ("retrieval_ranking_debug", ["trace_code_ranking"], "healthy"),
 ]
 
 
