@@ -1,0 +1,298 @@
+{
+  "workflows": [
+    {
+      "id": "rest_proxy_preferred_investigation_stack",
+      "description": "MCP-only pass for the preferred indexed-repo investigation stack.",
+      "workspace_name": "rest_proxy",
+      "workspace_id": "/Users/michaelmarler/Projects/rest_proxy",
+      "steps": [
+        {
+          "name": "Catalog repo-onboarding choice",
+          "tool": "get_mcp_tool_catalog",
+          "tool_choice_case": "repo_onboarding",
+          "params": {
+            "intent": "indexed repo start",
+            "limit": 8
+          },
+          "required_substrings": [
+            "MCP tool catalog for `indexed repo start`:",
+            "`get_indexing_health`"
+          ],
+          "forbidden_substrings": [
+            "`query_graph`",
+            "`get_code_importance`",
+            "`get_code_communities`"
+          ]
+        },
+        {
+          "name": "Check index trust boundary",
+          "tool": "get_indexing_health",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Indexing Health Audit:",
+            "**Sync Status**:",
+            "**Run Alignment**:"
+          ],
+          "trust_checks": [
+            {
+              "kind": "contains_any",
+              "label": "index sync status is healthy",
+              "values": [
+                "**Sync Status**: ✅ Healthy",
+                "**Sync Status**: Healthy"
+              ]
+            },
+            {
+              "kind": "contains_any",
+              "label": "index run alignment is aligned",
+              "values": [
+                "**Run Alignment**:        ✅ Aligned",
+                "**Run Alignment**: ✅ Aligned",
+                "**Run Alignment**: Aligned"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Orient on project structure",
+          "tool": "get_project_overview",
+          "tool_choice_case": "repo_onboarding",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview:",
+            "## Key Files"
+          ],
+          "forbidden_substrings": [
+            "Error generating project overview"
+          ]
+        },
+        {
+          "name": "Search for the implementation surface",
+          "tool": "search_codebase",
+          "tool_choice_case": "code_search_general",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "query": "MCP transport tool call implementation",
+            "k": 5,
+            "include_metadata": true,
+            "fallback": "none"
+          },
+          "required_substrings": [
+            "scripts/check_mcp_tool_parity.py",
+            "_mcp_call"
+          ],
+          "forbidden_substrings": [
+            "LM Studio server is unavailable",
+            "Error searching codebase"
+          ]
+        },
+        {
+          "name": "Deep-dive the selected symbol",
+          "tool": "get_symbol_context",
+          "tool_choice_case": "symbol_deep_dive",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "_mcp_call",
+            "file_path": "scripts/check_mcp_tool_parity.py",
+            "include_source_preview": true,
+            "source_preview_lines": 80
+          },
+          "required_substrings": [
+            "_mcp_call",
+            "scripts/check_mcp_tool_parity.py",
+            "tools/call"
+          ],
+          "forbidden_substrings": [
+            "Symbol '_mcp_call' not found",
+            "Error getting symbol context"
+          ]
+        },
+        {
+          "name": "Trace the execution path",
+          "tool": "get_call_chain",
+          "tool_choice_case": "execution_path",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "_mcp_call",
+            "file_path": "scripts/check_mcp_tool_parity.py",
+            "direction": "down",
+            "depth": 2
+          },
+          "required_substrings": [
+            "_mcp_call"
+          ],
+          "forbidden_substrings": [
+            "not found",
+            "Error getting call chain"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pydantic_ai_provider_investigation_stack",
+      "description": "MCP-only pass for Python package provider-wiring investigation.",
+      "workspace_name": "pydantic-ai",
+      "workspace_id": "/Users/michaelmarler/Projects/pydantic-ai",
+      "steps": [
+        {
+          "name": "Catalog repo-onboarding choice",
+          "tool": "get_mcp_tool_catalog",
+          "tool_choice_case": "repo_onboarding",
+          "params": {
+            "intent": "indexed repo start",
+            "limit": 8
+          },
+          "required_substrings": [
+            "MCP tool catalog for `indexed repo start`:",
+            "`get_indexing_health`"
+          ],
+          "forbidden_substrings": [
+            "`query_graph`",
+            "`get_code_importance`",
+            "`get_code_communities`"
+          ]
+        },
+        {
+          "name": "Check index trust boundary",
+          "tool": "get_indexing_health",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Indexing Health Audit:",
+            "**Sync Status**:",
+            "**Run Alignment**:"
+          ],
+          "trust_checks": [
+            {
+              "kind": "contains_any",
+              "label": "index sync status is healthy",
+              "values": [
+                "**Sync Status**: ✅ Healthy",
+                "**Sync Status**: Healthy"
+              ]
+            },
+            {
+              "kind": "contains_any",
+              "label": "index run alignment is aligned",
+              "values": [
+                "**Run Alignment**:        ✅ Aligned",
+                "**Run Alignment**: ✅ Aligned",
+                "**Run Alignment**: Aligned"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Orient on project structure",
+          "tool": "get_project_overview",
+          "tool_choice_case": "repo_onboarding",
+          "params": {
+            "workspace_id": "$workspace_id"
+          },
+          "required_substrings": [
+            "# Project Overview:",
+            "## Key Files"
+          ],
+          "forbidden_substrings": [
+            "Error generating project overview"
+          ]
+        },
+        {
+          "name": "Catalog code-search choice",
+          "tool": "get_mcp_tool_catalog",
+          "tool_choice_case": "code_search_general",
+          "params": {
+            "intent": "code search",
+            "limit": 8
+          },
+          "required_substrings": [
+            "MCP tool catalog for `code search`:",
+            "`search_codebase`"
+          ],
+          "forbidden_substrings": [
+            "`query_graph`"
+          ]
+        },
+        {
+          "name": "Find provider wiring entrypoint",
+          "tool": "search_codebase",
+          "tool_choice_case": "code_search_general",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "query": "how does OpenAI provider wiring work",
+            "k": 5,
+            "include_metadata": false,
+            "dedupe_files": true,
+            "fallback": "none"
+          },
+          "required_substrings": [
+            "--- pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+            "infer_provider_class"
+          ],
+          "forbidden_substrings": [
+            "LM Studio server is unavailable",
+            "Error searching codebase"
+          ]
+        },
+        {
+          "name": "Catalog symbol deep-dive choice",
+          "tool": "get_mcp_tool_catalog",
+          "tool_choice_case": "symbol_deep_dive",
+          "params": {
+            "intent": "symbol deep dive",
+            "limit": 8
+          },
+          "required_substrings": [
+            "MCP tool catalog for `symbol deep dive`:",
+            "`get_symbol_context`"
+          ],
+          "forbidden_substrings": [
+            "`query_graph`"
+          ]
+        },
+        {
+          "name": "Inspect provider inference symbol",
+          "tool": "get_symbol_context",
+          "tool_choice_case": "symbol_deep_dive",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "symbol_name": "infer_provider_class",
+            "include_source_preview": true,
+            "file_path": "pydantic_ai_slim/pydantic_ai/providers/__init__.py"
+          },
+          "required_substrings": [
+            "## `infer_provider_class` (Function)",
+            "infer_model_profile",
+            "normalize_gateway_provider"
+          ],
+          "forbidden_substrings": [
+            "Symbol 'infer_provider_class' not found",
+            "Error getting symbol context"
+          ]
+        },
+        {
+          "name": "Inspect models directory context",
+          "tool": "get_directory_snapshot",
+          "params": {
+            "workspace_id": "$workspace_id",
+            "directory_path": "pydantic_ai_slim/pydantic_ai/models",
+            "limit": 8
+          },
+          "required_substrings": [
+            "# Directory Snapshot: `pydantic_ai_slim/pydantic_ai/models/`",
+            "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+            "pydantic_ai_slim/pydantic_ai/exceptions.py"
+          ],
+          "forbidden_substrings": [
+            "Error building directory snapshot"
+          ]
+        }
+      ]
+    }
+  ]
+}

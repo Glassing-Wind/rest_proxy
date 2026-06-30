@@ -255,6 +255,13 @@ Latest workflow finding closed:
   well as live graph golden cases with `--case-id`, so small operator workflow
   passes no longer fail when they mix catalog/support checks with repo-backed
   graph cases
+- an executable MCP-only investigation pass now exercises the preferred
+  indexed-repo stack through the live transport:
+  `scripts/run_mcp_investigation_pass.py --workflow-id rest_proxy_preferred_investigation_stack`
+  follows the current tool-choice goldens from catalog selection through
+  health, overview, semantic search, symbol context, and call-chain inspection,
+  then reports the first `FIRST TRUST HESITATION` instead of burying the weak
+  point in a broad gate failure
 
 Current likely targets:
 

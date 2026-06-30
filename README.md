@@ -254,6 +254,22 @@ Use this when you want the quickest answer to:
 - did a ranking change break a real investigation workflow?
 - did direct tool behavior drift from actual MCP transport behavior?
 
+For a concrete MCP-only workflow pass over the preferred indexed-repo
+investigation stack, run:
+
+```bash
+/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python \
+  /Users/michaelmarler/Projects/rest_proxy/scripts/run_mcp_investigation_pass.py \
+  --workflow-id rest_proxy_preferred_investigation_stack
+```
+
+This uses the live MCP transport only. It checks the catalog recommendation,
+index health, project overview, semantic search, symbol context, and call-chain
+flow against
+[`benchmarks/mcp_investigation_workflows.json`](/Users/michaelmarler/Projects/rest_proxy/benchmarks/mcp_investigation_workflows.json).
+If the pass stops, it prints `FIRST TRUST HESITATION` with the workflow, step,
+tool, and first missing or suspicious evidence.
+
 ## Live Graph Regressions
 
 For a narrow live retrieval/tool-eval pass against the current indexed benchmark
