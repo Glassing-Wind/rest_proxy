@@ -363,10 +363,41 @@ def _is_apple_support_path(file_path: str | None) -> bool:
 def _directory_snapshot_signal_rank(signal: str | None) -> int:
     return {
         "symbol_call": 0,
+        "symbol_overlap": 0,
         "file_graph": 1,
         "semantic": 2,
         "import": 3,
     }.get(str(signal or "").strip().lower(), 4)
+
+
+def _directory_snapshot_module_tie_rank(
+    path: str | None,
+    directory_path: str | None,
+    *,
+    path_key: str,
+) -> int:
+    """Prefer foundational source modules over helper modules when other signals tie."""
+    if path_key != "dependency":
+        return 0
+    directory_norm = (directory_path or "").replace("\\", "/").strip("/")
+    path_norm = (path or "").replace("\\", "/").strip("/")
+    if not directory_norm or not path_norm:
+        return 0
+    dir_parts = directory_norm.split("/")
+    path_parts = path_norm.split("/")
+    if len(dir_parts) < 2 or len(path_parts) < 2:
+        return 0
+    if dir_parts[0].lower() != "sources" or path_parts[0].lower() != "sources":
+        return 0
+    source_module = dir_parts[1].lower()
+    target_module = path_parts[1].lower()
+    if target_module == source_module:
+        return 0
+    if "core" in target_module:
+        return 0
+    if target_module.startswith("_") or "helper" in target_module:
+        return 2
+    return 1
 
 
 def _is_code_directory_context(directory_path: str | None) -> bool:
@@ -397,7 +428,7 @@ def _rank_directory_snapshot_rows(
     directory_path: str | None = None,
     file_roles_by_path: dict[str, set[str]] | None = None,
 ) -> list[dict]:
-    ranked: list[tuple[int, int, int, str, dict]] = []
+    ranked: list[tuple[int, int, int, int, str, dict]] = []
     seen: set[str] = set()
     for row in rows or []:
         path = str(row.get(path_key) or "").strip()
@@ -410,12 +441,17 @@ def _rank_directory_snapshot_rows(
                 + _directory_snapshot_context_penalty(path, directory_path),
                 _directory_snapshot_signal_rank(row.get("signal")),
                 -int(row.get(count_key) or 0),
+                _directory_snapshot_module_tie_rank(
+                    path,
+                    directory_path,
+                    path_key=path_key,
+                ),
                 path,
                 row,
             )
         )
     ranked.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
-    return [item[4] for item in ranked[: max(1, limit)]]
+    return [item[5] for item in ranked[: max(1, limit)]]
 
 
 def _directory_snapshot_display_rows(
@@ -1150,6 +1186,11 @@ def _best_directory_snapshot_row(
             + _directory_snapshot_context_penalty(row.get(path_key), directory_path),
             _directory_snapshot_signal_rank(row.get("signal")),
             -int(row.get(count_key) or 0),
+            _directory_snapshot_module_tie_rank(
+                row.get(path_key),
+                directory_path,
+                path_key=path_key,
+            ),
             str(row.get(path_key) or ""),
         ),
     )
@@ -1515,7 +1556,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             OPTIONAL MATCH (f)-[:__CONTAINS__]->(s)
             WHERE {filters}
             WITH f.filepath AS fp, count(s) AS sym_count, collect(s.name)[..3] AS samples
-            ORDER BY sym_count DESC
+            ORDER BY sym_count DESC, fp ASC
             RETURN fp, sym_count, samples
             LIMIT $limit
         """).format(filters=_SYMBOL_FILTER_CYPHER),
@@ -1531,7 +1572,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             WHERE inner.filepath STARTS WITH $dir
               AND NOT ext.filepath STARTS WITH $dir
             RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
-            ORDER BY n_imports DESC
+            ORDER BY n_imports DESC, caller ASC
             LIMIT $limit
         """),
             p=project_id,
@@ -1546,7 +1587,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
             WHERE inner.filepath STARTS WITH $dir
               AND NOT ext.filepath STARTS WITH $dir
             RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
-            ORDER BY n_usages DESC
+            ORDER BY n_usages DESC, dependency ASC
             LIMIT $limit
         """),
             p=project_id,
@@ -1564,7 +1605,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 WHERE inner.filepath STARTS WITH $dir
                   AND NOT ext.filepath STARTS WITH $dir
                 RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
-                ORDER BY n_imports DESC
+                ORDER BY n_imports DESC, caller ASC
                 LIMIT $limit
             """),
                 p=project_id,
@@ -1584,7 +1625,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 WHERE inner.filepath STARTS WITH $dir
                   AND NOT ext.filepath STARTS WITH $dir
                 RETURN ext.filepath AS caller, count(DISTINCT inner) AS n_imports
-                ORDER BY n_imports DESC
+                ORDER BY n_imports DESC, caller ASC
                 LIMIT $limit
                 """),
                 p=project_id,
@@ -1607,7 +1648,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 WHERE inner.filepath STARTS WITH $dir
                   AND NOT ext.filepath STARTS WITH $dir
                 RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
-                ORDER BY n_usages DESC
+                ORDER BY n_usages DESC, dependency ASC
                 LIMIT $limit
             """),
                 p=project_id,
@@ -1626,7 +1667,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                 WHERE inner.filepath STARTS WITH $dir
                   AND NOT ext.filepath STARTS WITH $dir
                 RETURN ext.filepath AS dependency, count(DISTINCT inner) AS n_usages
-                ORDER BY n_usages DESC
+                ORDER BY n_usages DESC, dependency ASC
                 LIMIT $limit
                 """),
                 p=project_id,
@@ -1695,7 +1736,8 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
               AND s.name IS NOT NULL
               AND __FILTERS__
             RETURN ext.filepath AS filepath, s.name AS symbol
-            LIMIT 400
+            ORDER BY ext.filepath ASC, s.name ASC
+            LIMIT 2000
         """).replace("__FILTERS__", _SYMBOL_FILTER_CYPHER),
             p=project_id,
             dir=dir_prefix,
@@ -1728,7 +1770,8 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
         if str(rec.get("name") or "").strip()
     }
 
-    if (not r_inbound or not r_outbound) and project_path:
+    has_swift_snapshot_files = any((rec.get("fp") or "").endswith(".swift") for rec in (r_files or []))
+    if (not r_inbound or not r_outbound or has_swift_snapshot_files) and project_path:
         memory_store, _, _, _, _ = get_memory_modules()
         await memory_store.open_pool()
         async with memory_store._pg_pool.connection() as conn:
@@ -1755,7 +1798,7 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                         if not _is_low_signal_semantic_path(fp)
                     ]
 
-                if not r_outbound and any((rec.get("fp") or "").endswith(".swift") for rec in (r_files or [])):
+                if has_swift_snapshot_files:
                     top_local_files = [rec.get("fp") for rec in (r_files or [])[: min(limit, 4)] if rec.get("fp")]
                     external_symbol_map: dict[str, set[str]] = {}
                     for rec in external_symbol_rows or []:
@@ -1787,10 +1830,16 @@ async def get_directory_snapshot_impl(*, driver, neo4j_db: str, workspace_id: st
                         if overlap:
                             scored.append((len(overlap), fp))
                     scored.sort(key=lambda item: (-item[0], item[1]))
-                    r_outbound = [
-                        {"dependency": fp, "n_usages": score, "signal": "semantic"}
+                    semantic_outbound = [
+                        {"dependency": fp, "n_usages": score, "signal": "symbol_overlap"}
                         for score, fp in scored[:limit]
                     ]
+                    r_outbound = _merge_directory_snapshot_rows(
+                        r_outbound,
+                        semantic_outbound,
+                        path_key="dependency",
+                        count_key="n_usages",
+                    )
 
     memory_store, _, _, _, _ = get_memory_modules()
     await memory_store.open_pool()

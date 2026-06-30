@@ -1059,6 +1059,33 @@ class GraphToolsTests(unittest.TestCase):
         self.assertEqual(ranked[0]["caller"], "FrameCreator/Views/ContentView.swift")
         self.assertEqual(ranked[0]["signal"], "symbol_call")
 
+    def test_directory_snapshot_prefers_core_source_dependency_when_usage_ties(self):
+        ranked = self.module.graph_overview._rank_directory_snapshot_rows(
+            [
+                {
+                    "dependency": "Sources/NIOConcurrencyHelpers/NIOLockedValueBox.swift",
+                    "n_usages": 1,
+                    "signal": "symbol_call",
+                },
+                {
+                    "dependency": "Sources/NIOCore/AsyncAwaitSupport.swift",
+                    "n_usages": 1,
+                    "signal": "symbol_overlap",
+                },
+                {
+                    "dependency": "Sources/_NIODataStructures/_TinyArray.swift",
+                    "n_usages": 1,
+                    "signal": "symbol_call",
+                },
+            ],
+            path_key="dependency",
+            count_key="n_usages",
+            limit=3,
+            directory_path="Sources/NIOPosix",
+        )
+
+        self.assertEqual(ranked[0]["dependency"], "Sources/NIOCore/AsyncAwaitSupport.swift")
+
     def test_load_graph_file_roles_ignores_missing_graph_property(self):
         async def fake_execute_read(session, query, **kwargs):
             return [

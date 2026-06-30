@@ -11,4 +11,7 @@ def __getattr__(name: str):
     if name == "search_codebase_core":
         from memory import code_retrieval as cr
         return getattr(cr, name)
+    if name == "trace_symbol_cross_project_core":
+        from memory import cross_project_trace as cpt
+        return getattr(cpt, name)
     return getattr(_store_core, name)
