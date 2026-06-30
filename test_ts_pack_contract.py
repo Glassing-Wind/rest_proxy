@@ -6,6 +6,21 @@ from pathlib import Path
 import tree_sitter_language_pack as ts_pack
 
 
+def _ensure_language_available(test_case: unittest.TestCase, language: str) -> None:
+    """Hydrate parser assets the same way the indexer does before parsing."""
+    try:
+        if ts_pack.has_language(language):
+            return
+        ts_pack.download([language])
+    except Exception as exc:
+        test_case.fail(f"tree_sitter_language_pack.download({language!r}) failed: {exc}")
+
+    test_case.assertTrue(
+        ts_pack.has_language(language),
+        f"tree_sitter_language_pack could not hydrate required language {language!r}",
+    )
+
+
 class TsPackContractTests(unittest.TestCase):
     def test_required_symbols_exist(self):
         required = [
@@ -36,7 +51,7 @@ class TsPackContractTests(unittest.TestCase):
 
             self.assertEqual(ts_pack.detect_language_from_extension("py"), "python")
             self.assertEqual(ts_pack.detect_language(str(sample_path)), "python")
-            self.assertTrue(ts_pack.has_language("python"))
+            _ensure_language_available(self, "python")
             self.assertIn("python", ts_pack.available_languages())
             self.assertIsNotNone(ts_pack.get_parser("python"))
 
