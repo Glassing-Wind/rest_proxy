@@ -183,6 +183,10 @@ This is the preferred path for “where did this edge come from?” investigatio
 
 - Swift-heavy repos still need special validation at the tool layer, not only at indexing time.
 - `get_call_chain(..., direction="up")` may need semantic caller fallback for SwiftUI/component composition because those relationships are not always emitted as CALLS edges.
+- Swift protocol conformers should come from `IMPLEMENTS_TYPE` graph edges
+  after rebuilding with the current pinned ts-pack fork. If `EventLoop`-style
+  protocol conformers fall back to source snippets, first suspect stale
+  producer/index data rather than adding a tool-layer rescue.
 - `find_references` and `get_related_files` should prefer grouped cross-file Swift source hits and suppress low-signal markdown/session paths.
 - After Swift semantic metadata changes in the producer, do a full `rebuild` on affected repos before judging tool quality.
 

@@ -165,6 +165,22 @@ Current remaining goals:
 
 Latest workflow finding closed:
 
+- Swift protocol call-chain trust now depends on producer-owned graph facts
+  instead of tool-layer compensation for the validated `swift-nio` case. The
+  pinned ts-pack fork now classifies attributed Swift `extension` declarations
+  as `Extension` nodes, preserves their `extended_type` and inherited protocol
+  list, and fixes the active Swift resource-reference query shape. A rebuild
+  and reindex of the Swift-heavy benchmark workspaces moved
+  `NIOAsyncTestingEventLoop -> EventLoop` and `SelectableEventLoop ->
+  EventLoop` onto real `IMPLEMENTS_TYPE` edges targeting the `Protocol`
+  `Sources/NIOCore/EventLoop.swift`; `get_call_chain(EventLoop,
+  direction="up")` now returns those conformers from graph data rather than the
+  source-backed fallback.
+- the MCP-only preferred indexed-repo investigation workflow completed without
+  trust hesitations after the Swift producer fix:
+  `scripts/run_mcp_investigation_pass.py --workflow-id rest_proxy_preferred_investigation_stack`
+  trusted the full health -> overview -> search -> symbol -> call-chain stack
+  through the live transport.
 - retrieval policy ownership is now split across focused `memory/retrieval_*`
   modules for duplicate handling, surfaces, query parsing, semantic metadata,
   query intent classification, rank-intent policy, scoring primitives,

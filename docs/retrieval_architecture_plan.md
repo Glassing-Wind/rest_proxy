@@ -198,6 +198,10 @@ than when this plan was first written.
 - focused dispatcher-anchor metadata and contract capabilities now come from
   `ts-pack`
 - routing/request-handler semantic roles now come from `ts-pack`
+- Swift attributed extension classification, inherited protocol metadata, and
+  resource-reference query extraction now come from the pinned `ts-pack` fork;
+  Swift protocol call-chain conformers should be graph-owned when the repo has
+  been rebuilt with the current native extension.
 - semantic chunk identity and several indexing invariants were fixed below the
   MCP layer instead of being papered over in retrieval logic
 - docs retrieval now has a reusable core in `memory/docs_retrieval.py`
