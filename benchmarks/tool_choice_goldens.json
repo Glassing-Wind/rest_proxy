@@ -95,6 +95,21 @@
       ]
     },
     {
+      "id": "cross_project_symbol_trace",
+      "intent": "Trace a symbol from the repo where it is defined to usages in another indexed repo.",
+      "catalog_intent": "cross project symbol trace",
+      "preferred_tools": [
+        "trace_symbol_cross_project"
+      ],
+      "acceptable_fallbacks": [
+        "search_codebase",
+        "find_references"
+      ],
+      "avoid_as_primary": [
+        "query_graph"
+      ]
+    },
+    {
       "id": "documentation_lookup",
       "intent": "Answer a question from already indexed library or project documentation.",
       "catalog_intent": "library docs",

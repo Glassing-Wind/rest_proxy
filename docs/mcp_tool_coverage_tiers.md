@@ -73,7 +73,7 @@ repo or investigation path justifies stronger coverage.
 | `query_graph` | unit/script, live |
 | `get_symbol_imports_overview` | unit/script, live, mcp parity, workflow |
 | `visualize_subgraph` | unit/script, live, mcp parity, workflow |
-| `trace_symbol_cross_project` | unit/script, live, mcp parity |
+| `trace_symbol_cross_project` | unit/script, live, mcp parity, tool-choice, workflow |
 
 Current promoted Tier 2 trust set:
 
@@ -89,6 +89,12 @@ Current promoted Tier 2 trust set:
 - `get_symbol_imports_overview`
 - `visualize_subgraph`
 - `trace_symbol_cross_project`
+
+`trace_symbol_cross_project` is protected by the
+`indexed_dependency_boundary_stack` MCP-only workflow, which traces
+`detect_language` from `tree-sitter-language-pack` into `rest_proxy` and checks
+that implementation-side consumer evidence is surfaced before support/test
+noise.
 
 Still intentionally unpromoted:
 

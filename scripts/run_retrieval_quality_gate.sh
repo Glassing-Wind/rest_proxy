@@ -24,6 +24,9 @@ echo "[retrieval-quality-gate] running MCP protocol lifecycle checks..."
 echo "[retrieval-quality-gate] running tool-choice eval suite..."
 "$PYTHON_BIN" "$ROOT_DIR/scripts/run_tool_choice_eval_suite.py"
 
+echo "[retrieval-quality-gate] running MCP investigation workflows..."
+"$PYTHON_BIN" "$ROOT_DIR/scripts/run_mcp_investigation_pass.py"
+
 echo "[retrieval-quality-gate] running live graph regressions..."
 "$ROOT_DIR/scripts/run_live_graph_regressions.sh" "$@"
 

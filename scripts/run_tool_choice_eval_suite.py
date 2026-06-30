@@ -22,6 +22,7 @@ CANONICAL_CASES = [
     ("code_search_general", ["search_codebase", "find_references"], "healthy"),
     ("definition_disambiguation", ["find_definitions", "search_codebase"], "healthy"),
     ("graph_suspect_result", ["trace_graph_provenance", "get_symbol_context"], "healthy"),
+    ("cross_project_symbol_trace", ["trace_symbol_cross_project"], "healthy"),
     ("documentation_lookup", ["search_documentation"], "healthy"),
     ("documentation_inventory", ["list_documentation_sources"], "healthy"),
     ("memory_capture", ["add_memory"], "healthy"),

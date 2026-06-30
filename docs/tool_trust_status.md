@@ -278,6 +278,11 @@ Latest workflow finding closed:
   health, overview, semantic search, symbol context, and call-chain inspection,
   then reports the first `FIRST TRUST HESITATION` instead of burying the weak
   point in a broad gate failure
+- the MCP-only investigation suite now also includes
+  `indexed_dependency_boundary_stack`, which protects cross-project ts-pack API
+  tracing through `trace_symbol_cross_project` and Swift NIOPosix directory
+  orientation through `get_directory_snapshot`; the full suite currently
+  exercises 19 live MCP tool calls without trust hesitations
 
 Current likely targets:
 

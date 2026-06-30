@@ -193,6 +193,8 @@ inventory starts with `list_documentation_sources`, memory capture/review starts
 with `add_memory`/`list_memories`, changed-code review starts with
 `git_summary` and `get_changed_symbols`, and retrieval-ranking debug starts with
 `trace_code_ranking` before lower-level duplicate/rerank helpers.
+Cross-project symbol tracing is now also explicitly positioned:
+cross-repo symbol usage questions start with `trace_symbol_cross_project`.
 The canonical eval suite now also scores the actual `get_mcp_tool_catalog`
 rendered output for each golden workflow, so catalog phrasing and the preferred
 workflow baseline cannot drift independently.
