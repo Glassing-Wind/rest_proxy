@@ -115,9 +115,19 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                 "skipped": False,
                 "workspaces": ["/tmp/repo"],
             },
+            "mcp_investigation_workflows": {
+                "ok": True,
+                "skipped": False,
+                "workflows": ["indexed_dependency_boundary_stack"],
+                "trusted_tool_calls": 5,
+            },
         }
         summary = mod.build_enterprise_summary(payload)
         self.assertTrue(summary["live_graph_ok"])
+        self.assertTrue(summary["mcp_investigation_ok"])
+        self.assertFalse(summary["mcp_investigation_skipped"])
+        self.assertEqual(summary["mcp_investigation_workflows"], ["indexed_dependency_boundary_stack"])
+        self.assertEqual(summary["mcp_investigation_trusted_tool_calls"], 5)
         self.assertEqual(summary["best_retrieval_config"]["name"], "group_representatives")
         self.assertEqual(summary["retrieval_query_class_counts"], {"usage_lookup": 2})
         self.assertEqual(
@@ -322,11 +332,13 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
                 },
                 "retrieval_alerts": {"baseline": ["ndcg_regressed"]},
                 "retrieval_regressions": [{"case_id": "x", "config": "baseline", "alerts": ["ndcg_regressed"]}],
+                "mcp_investigation_ok": False,
             }
         }
         trend = mod.build_trend_summary(previous_payload, current_payload)
         self.assertEqual(trend["overall_status"], "regressed")
         self.assertIn("live_graph_failed", trend["attention_needed"])
+        self.assertIn("mcp_investigation_failed", trend["attention_needed"])
         self.assertIn("retrieval_alerts_present", trend["attention_needed"])
         self.assertIn("retrieval_regressions_present", trend["attention_needed"])
         self.assertIn("mrr_regressed", trend["attention_needed"])
@@ -356,6 +368,29 @@ class EnterpriseEvalSummaryTests(unittest.TestCase):
         self.assertTrue(result["fallback_validated"])
         self.assertEqual(run_mock.call_count, 3)
         self.assertEqual(result["attempts"][-1]["mode"], "direct_stdio_fallback")
+
+    def test_run_mcp_investigation_workflows_parses_summary(self):
+        mod = _load_module()
+
+        proc = mock.Mock(
+            returncode=0,
+            stdout=(
+                "MCP investigation pass completed without trust hesitations.\n"
+                "- workflows checked: indexed_dependency_boundary_stack, rest_proxy_preferred_investigation_stack\n"
+                "- MCP tool calls trusted: 11\n"
+            ),
+            stderr="",
+        )
+        with mock.patch.object(mod.subprocess, "run", return_value=proc) as run_mock:
+            result = mod.run_mcp_investigation_workflows("python", ["indexed_dependency_boundary_stack"])
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            result["workflows"],
+            ["indexed_dependency_boundary_stack", "rest_proxy_preferred_investigation_stack"],
+        )
+        self.assertEqual(result["trusted_tool_calls"], 11)
+        self.assertIn("--workflow-id", run_mock.call_args.args[0])
 
 
 if __name__ == "__main__":

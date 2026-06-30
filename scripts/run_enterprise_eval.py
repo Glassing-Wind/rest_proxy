@@ -127,6 +127,32 @@ def run_live_graph_goldens(workspaces: list[str], python_bin: str) -> dict:
     }
 
 
+def run_mcp_investigation_workflows(python_bin: str, workflow_ids: list[str] | None = None) -> dict:
+    cmd = [python_bin, str(ROOT / "scripts" / "run_mcp_investigation_pass.py")]
+    for workflow_id in workflow_ids or []:
+        cmd.extend(["--workflow-id", workflow_id])
+    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    workflows_checked: list[str] = []
+    trusted_calls = 0
+    for line in (proc.stdout or "").splitlines():
+        if line.startswith("- workflows checked:"):
+            raw = line.split(":", 1)[1]
+            workflows_checked = [item.strip() for item in raw.split(",") if item.strip()]
+        elif line.startswith("- MCP tool calls trusted:"):
+            try:
+                trusted_calls = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                trusted_calls = 0
+    return {
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "stdout": proc.stdout,
+        "stderr": proc.stderr,
+        "workflows": workflows_checked,
+        "trusted_tool_calls": trusted_calls,
+    }
+
+
 def _best_retrieval_config(summary: dict) -> dict:
     best_name = ""
     best_metrics: dict = {}
@@ -152,6 +178,7 @@ def build_enterprise_summary(payload: dict) -> dict:
     dispatcher_telemetry = payload.get("dispatcher_telemetry_eval") or {}
     routing_telemetry = payload.get("routing_telemetry_eval") or {}
     live_graph = payload.get("live_graph_goldens") or {}
+    mcp_investigation = payload.get("mcp_investigation_workflows") or {}
     retrieval_summary = retrieval.get("summary") or {}
     dispatcher_summary = dispatcher.get("summary") or {}
     dispatcher_telemetry_summary = dispatcher_telemetry.get("summary") or {}
@@ -198,6 +225,14 @@ def build_enterprise_summary(payload: dict) -> dict:
         "live_graph_ok": bool(live_graph.get("ok", False)) if not live_graph.get("skipped") else True,
         "live_graph_skipped": bool(live_graph.get("skipped", False)),
         "live_graph_workspaces": list(live_graph.get("workspaces") or []),
+        "mcp_investigation_ok": (
+            bool(mcp_investigation.get("ok", False))
+            if not mcp_investigation.get("skipped")
+            else True
+        ),
+        "mcp_investigation_skipped": bool(mcp_investigation.get("skipped", False)),
+        "mcp_investigation_workflows": list(mcp_investigation.get("workflows") or []),
+        "mcp_investigation_trusted_tool_calls": int(mcp_investigation.get("trusted_tool_calls", 0) or 0),
         "best_retrieval_config": best,
         "retrieval_query_class_counts": retrieval.get("query_class_counts") or {},
         "retrieval_alerts": retrieval.get("alerts") or {},
@@ -253,6 +288,9 @@ def _classify_enterprise_trend(previous_summary: dict, current_summary: dict, me
 
     if current_summary and not current_summary.get("live_graph_ok", True):
         hard_failures.append("live_graph_failed")
+
+    if current_summary and not current_summary.get("mcp_investigation_ok", True):
+        hard_failures.append("mcp_investigation_failed")
 
     if current_summary.get("retrieval_alerts"):
         hard_failures.append("retrieval_alerts_present")
@@ -384,6 +422,17 @@ def main() -> int:
         help="Skip live graph goldens and run only retrieval eval.",
     )
     parser.add_argument(
+        "--include-mcp-investigation",
+        action="store_true",
+        help="Run MCP investigation workflows and include their status in artifacts.",
+    )
+    parser.add_argument(
+        "--mcp-workflow-id",
+        action="append",
+        default=[],
+        help="MCP investigation workflow id to run when --include-mcp-investigation is set. Repeatable.",
+    )
+    parser.add_argument(
         "--artifact-dir",
         default=str(DEFAULT_ARTIFACT_DIR),
         help="Directory to write latest and historical enterprise eval JSON artifacts.",
@@ -427,12 +476,18 @@ def main() -> int:
         if args.skip_graph
         else run_live_graph_goldens(args.workspaces, args.python_bin)
     )
+    mcp_investigation = (
+        run_mcp_investigation_workflows(args.python_bin, args.mcp_workflow_id)
+        if args.include_mcp_investigation
+        else {"skipped": True, "reason": "not_requested"}
+    )
     payload = {
         "retrieval_eval": retrieval,
         "dispatcher_eval": dispatcher,
         "dispatcher_telemetry_eval": dispatcher_telemetry,
         "routing_telemetry_eval": routing_telemetry,
         "live_graph_goldens": graph,
+        "mcp_investigation_workflows": mcp_investigation,
     }
     payload["enterprise_summary"] = build_enterprise_summary(payload)
     payload["artifacts"] = write_enterprise_artifacts(payload, args.artifact_dir)
@@ -440,7 +495,12 @@ def main() -> int:
 
     retrieval_ok = True
     graph_ok = bool(graph.get("ok", False)) if not graph.get("skipped") else True
-    return 0 if retrieval_ok and graph_ok else 1
+    mcp_ok = (
+        bool(mcp_investigation.get("ok", False))
+        if not mcp_investigation.get("skipped")
+        else True
+    )
+    return 0 if retrieval_ok and graph_ok and mcp_ok else 1
 
 
 if __name__ == "__main__":

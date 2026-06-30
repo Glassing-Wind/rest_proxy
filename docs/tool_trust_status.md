@@ -283,6 +283,10 @@ Latest workflow finding closed:
   tracing through `trace_symbol_cross_project` and Swift NIOPosix directory
   orientation through `get_directory_snapshot`; the full suite currently
   exercises 19 live MCP tool calls without trust hesitations
+- enterprise eval artifacts can include the same MCP investigation signal with
+  `scripts/run_enterprise_eval.py --include-mcp-investigation`, so broader
+  trend summaries report whether live MCP workflows passed alongside retrieval,
+  dispatcher, routing, and live-graph signals
 
 Current likely targets:
 

@@ -120,6 +120,13 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
                     },
                 },
                 "retrieval_query_class_counts": {"usage_lookup": 2, "implementation_search": 3},
+                "mcp_investigation_ok": True,
+                "mcp_investigation_skipped": False,
+                "mcp_investigation_workflows": [
+                    "indexed_dependency_boundary_stack",
+                    "rest_proxy_preferred_investigation_stack",
+                ],
+                "mcp_investigation_trusted_tool_calls": 11,
             },
             "trend_summary": {
                 "overall_status": "warning",
@@ -130,6 +137,8 @@ class EnterpriseEvalSummaryRenderTests(unittest.TestCase):
         }
         text = mod.render_summary(payload)
         self.assertIn("Overall status: `warning`", text)
+        self.assertIn("MCP investigation ok: `True`", text)
+        self.assertIn("MCP workflows trusted: `2` workflow(s), `11` tool call(s)", text)
         self.assertIn("Attention needed: `best_config_changed`", text)
         self.assertIn("`group_representatives`", text)
         self.assertIn("| `mrr` | 0.9500 | 0.0100 | `improved` |", text)

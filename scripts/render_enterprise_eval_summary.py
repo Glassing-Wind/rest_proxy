@@ -30,18 +30,25 @@ def render_summary(payload: dict) -> str:
     routing_telemetry_recent = enterprise.get("routing_telemetry_recent_summary") or {}
     attention = list(trend.get("attention_needed") or [])
     query_counts = enterprise.get("retrieval_query_class_counts") or {}
+    mcp_workflows = list(enterprise.get("mcp_investigation_workflows") or [])
 
     lines: list[str] = []
     lines.append("## Enterprise Eval")
     lines.append("")
     lines.append(f"- Overall status: `{trend.get('overall_status', 'unknown')}`")
     lines.append(f"- Live graph ok: `{enterprise.get('live_graph_ok')}`")
+    lines.append(f"- MCP investigation ok: `{enterprise.get('mcp_investigation_ok')}`")
     lines.append(f"- Best retrieval config: `{best.get('name', '') or 'unknown'}`")
     if attention:
         joined = ", ".join(f"`{item}`" for item in attention)
         lines.append(f"- Attention needed: {joined}")
     else:
         lines.append("- Attention needed: none")
+    if not enterprise.get("mcp_investigation_skipped", True):
+        lines.append(
+            f"- MCP workflows trusted: `{len(mcp_workflows)}` workflow(s), "
+            f"`{enterprise.get('mcp_investigation_trusted_tool_calls', 0)}` tool call(s)"
+        )
     lines.append("")
     lines.append("### Key Metrics")
     lines.append("")
