@@ -114,10 +114,11 @@ curl http://127.0.0.1:1234/v1/models
 
 ### Benchmarking and tuning on Apple Silicon
 
-Run:
+Run with the configured project runtime:
 
 ```bash
-python /Users/michaelmarler/Projects/rest_proxy/scripts/benchmark_lmstudio_embeddings.py
+/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python \
+  /Users/michaelmarler/Projects/rest_proxy/scripts/benchmark_lmstudio_embeddings.py
 ```
 
 Recommended first-pass tuning for a MacBook Pro M3-class machine:
@@ -320,7 +321,8 @@ To run a narrower subset or pass extra flags directly, invoke the harness:
 For broader retrieval trend artifacts, run:
 
 ```bash
-python /Users/michaelmarler/Projects/rest_proxy/scripts/run_enterprise_eval.py --skip-graph
+/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python \
+  /Users/michaelmarler/Projects/rest_proxy/scripts/run_enterprise_eval.py --skip-graph
 ```
 
 Use this when you want:
@@ -356,7 +358,7 @@ cannot connect to the shared HTTP daemon.
 To start the stdio server directly:
 
 ```bash
-python mcp_server.py
+/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python mcp_server.py
 ```
 
 To use the supervisor wrapper:
@@ -481,12 +483,23 @@ To cut a release:
 
 ## 📁 Architecture
 
-- `proxy.py`: Core FastAPI proxy logic.
-- `mcp_server.py`: MCP protocol implementation and tool definitions.
-- `graph_indexer.py`: Neo4j structural analysis logic.
-- `vector_indexer.py`: Postgres semantic indexing logic.
-- `memory_store.py`: Centralized persistence layer (Redis, Postgres, Neo4j).
-- `memory_retrieval.py`: Embedding generation and search logic.
+- `proxy/`: FastAPI proxy package, request handlers, model routing, filtering,
+  and optional memory injection/persistence orchestration.
+- `brain_server.py`: Shared Streamable HTTP MCP daemon used for normal MCP
+  operation at `/mcp`.
+- `mcp_server.py`: Thin STDIO MCP fallback and CLI entry point for local
+  indexing/bootstrap operations.
+- `tools/brain/`: Registered MCP tool families for code search, graph
+  inspection, documentation, memory, code intelligence, and tool catalog
+  guidance.
+- `tools/hands/`: Operational tools for indexing, project watching, and
+  developer workflows.
+- `scripts/index_workspace.py`: Structural and semantic indexing pipeline.
+- `graphrag_core/`: Shared GraphRAG configuration, Neo4j helpers, ts-pack
+  parser facts, indexing manifests, and watcher state.
+- `memory/`: Durable memory, docs/code retrieval cores, semantic retrieval
+  policy, duplicate/ranking support, graph persistence helpers, and
+  compatibility facades.
 
 ## Neo4j GenAI Plugin Notes
 
