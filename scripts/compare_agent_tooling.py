@@ -71,6 +71,11 @@ def compare_results(
         raise ValueError("--native must contain condition=native and --mcp condition=mcp")
     if native["repository"] != mcp["repository"]:
         raise ValueError("result repository values do not match")
+    if native.get("revision") != mcp.get("revision"):
+        raise ValueError("result revisions do not match")
+    elapsed_comparable = native.get("elapsed_measurement") == mcp.get("elapsed_measurement")
+    if not cases_payload.get("cases"):
+        raise ValueError("benchmark cases must not be empty")
 
     native_runs = _runs_by_id(native)
     mcp_runs = _runs_by_id(mcp)
@@ -95,6 +100,10 @@ def compare_results(
             ),
             "setup_seconds": payload["setup_seconds"],
             "index_state": payload["index_state"],
+            "token_measurement": payload.get("token_measurement", "unspecified"),
+            "elapsed_measurement": payload.get("elapsed_measurement", "unspecified"),
+            "measurement_notes": payload.get("measurement_notes", ""),
+            "native_fallback_calls": sum(run.get("native_fallback_calls", 0) for run in ordered),
         }
         for metric in METRICS:
             values = [float(run[metric]) for run in ordered]
@@ -115,7 +124,10 @@ def compare_results(
                 "mcp_correct": mcp_run["correct"],
                 "native_evidence_coverage": _evidence_coverage(native_run, expected_by_id[case_id]),
                 "mcp_evidence_coverage": _evidence_coverage(mcp_run, expected_by_id[case_id]),
-                "elapsed_seconds_delta": mcp_run["elapsed_seconds"] - native_run["elapsed_seconds"],
+                "elapsed_seconds_delta": (
+                    mcp_run["elapsed_seconds"] - native_run["elapsed_seconds"]
+                    if elapsed_comparable else None
+                ),
                 "tool_calls_delta": mcp_run["tool_calls"] - native_run["tool_calls"],
                 "total_tokens_delta": (
                     mcp_run["input_tokens"]
@@ -129,6 +141,8 @@ def compare_results(
     return {
         "schema_version": 1,
         "repository": native["repository"],
+        "revision": native.get("revision"),
+        "elapsed_comparable": elapsed_comparable,
         "case_count": len(case_ids),
         "native": native_summary,
         "mcp": mcp_summary,
@@ -146,19 +160,43 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "| Metric | Native | MCP |",
         "|---|---:|---:|",
-        f"| Correct | {native['correct_rate']:.1%} | {mcp['correct_rate']:.1%} |",
+        f"| Recorded correct (see grading notes) | {native['correct_rate']:.1%} | {mcp['correct_rate']:.1%} |",
         f"| Evidence coverage | {native['evidence_coverage']:.1%} | {mcp['evidence_coverage']:.1%} |",
-        f"| Mean elapsed seconds | {native['mean_elapsed_seconds']:.2f} | {mcp['mean_elapsed_seconds']:.2f} |",
+        f"| Mean recorded seconds ({'same method' if report['elapsed_comparable'] else 'NOT comparable'}) | "
+        f"{native['mean_elapsed_seconds']:.2f} | {mcp['mean_elapsed_seconds']:.2f} |",
         f"| Mean tool calls | {native['mean_tool_calls']:.2f} | {mcp['mean_tool_calls']:.2f} |",
         f"| Mean files opened | {native['mean_files_opened']:.2f} | {mcp['mean_files_opened']:.2f} |",
-        f"| Total tokens | {native['total_input_tokens'] + native['total_output_tokens']:.0f} | "
+        f"| Recorded tokens (see measurement method) | {native['total_input_tokens'] + native['total_output_tokens']:.0f} | "
         f"{mcp['total_input_tokens'] + mcp['total_output_tokens']:.0f} |",
         f"| Unsupported claims | {native['total_unsupported_claims']:.0f} | "
         f"{mcp['total_unsupported_claims']:.0f} |",
         f"| Setup/index seconds | {native['setup_seconds']:.2f} | {mcp['setup_seconds']:.2f} |",
         "",
         f"MCP index state: `{mcp['index_state']}`. Setup/index time is excluded from per-case elapsed time.",
+        "",
+        f"Token measurement: native `{native['token_measurement']}`, MCP `{mcp['token_measurement']}`. "
+        "Estimated or unspecified values do not establish model token savings.",
+        f"MCP native fallback calls: {mcp['native_fallback_calls']}.",
+        f"Elapsed measurement: native `{native['elapsed_measurement']}`, MCP `{mcp['elapsed_measurement']}`; "
+        "tool latency excludes agent reasoning. Differing methods suppress timing deltas.",
+        "",
+        f"Native measurement notes: {native['measurement_notes'] or 'Not supplied.'}",
+        f"MCP measurement notes: {mcp['measurement_notes'] or 'Not supplied.'}",
+        "",
+        "Evidence coverage is keyword overlap, not independent verification of correctness.",
+        "",
+        "| Case | Native correct | MCP correct | Native evidence | MCP evidence | Seconds delta (MCP − native) | Calls delta | Tokens delta |",
+        "|---|---|---|---:|---:|---:|---:|---:|",
     ]
+    for case in report["paired_cases"]:
+        elapsed_delta = case["elapsed_seconds_delta"]
+        elapsed_text = "N/A" if elapsed_delta is None else f"{elapsed_delta:+.2f}"
+        lines.append(
+            f"| {case['case_id']} | {case['native_correct']} | {case['mcp_correct']} | "
+            f"{case['native_evidence_coverage']:.0%} | {case['mcp_evidence_coverage']:.0%} | "
+            f"{elapsed_text} | {case['tool_calls_delta']:+d} | "
+            f"{case['total_tokens_delta']:+d} |"
+        )
     return "\n".join(lines)
 
 

@@ -10,6 +10,10 @@
     "repository": {"type": "string", "minLength": 1},
     "index_state": {"enum": ["not_applicable", "fresh", "warm", "stale", "partial"]},
     "setup_seconds": {"type": "number", "minimum": 0},
+    "revision": {"type": "string", "minLength": 1},
+    "token_measurement": {"enum": ["measured", "estimated"]},
+    "elapsed_measurement": {"enum": ["tool_latency", "end_to_end"]},
+    "measurement_notes": {"type": "string"},
     "runs": {
       "type": "array",
       "minItems": 1,
@@ -26,6 +30,7 @@
           "unsupported_claims": {"type": "integer", "minimum": 0},
           "elapsed_seconds": {"type": "number", "minimum": 0},
           "tool_calls": {"type": "integer", "minimum": 0},
+          "native_fallback_calls": {"type": "integer", "minimum": 0},
           "files_opened": {"type": "integer", "minimum": 0},
           "input_tokens": {"type": "integer", "minimum": 0},
           "output_tokens": {"type": "integer", "minimum": 0},

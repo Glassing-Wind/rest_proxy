@@ -70,3 +70,17 @@ fresh, stale, and partially indexed condition. Primary metrics are correctness,
 unsupported claims, elapsed time, tool calls, files opened, and input/output
 tokens. The comparison script fails when case sets differ or result records do
 not satisfy the schema.
+
+## Recorded agent-tooling pilot
+
+The September 6, 2026 pilot lives in `benchmarks/reports/2026-09-06/`.
+It records `revision`, `token_measurement`, `elapsed_measurement`, and
+`measurement_notes`, with per-case `native_fallback_calls` for MCP. Older schema-v1
+records remain readable; missing measurement metadata is reported as unspecified.
+The comparator rejects differing revisions and suppresses timing deltas when elapsed measurement methods differ.
+
+Per-case tool latency excludes reasoning, and estimated text tokens exclude repeated
+context, tool schemas, and internal model usage. Neither establishes end-to-end speed
+or model-token savings. Evidence coverage is substring overlap, not source validation.
+CI publishes the saved pilot as an artifact without enforcing performance thresholds.
+See `docs/next-session-roadmap.md` for the confirmatory-run protocol and open blockers.

@@ -8,6 +8,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  agent-tooling-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate and render recorded tooling pilot
+        run: |
+          pip install jsonschema==4.26.0
+          python scripts/compare_agent_tooling.py \
+            --native benchmarks/reports/2026-09-06/native-results.json \
+            --mcp benchmarks/reports/2026-09-06/mcp-results.json \
+            > benchmarks/reports/2026-09-06/scorecard.md
+          cat benchmarks/reports/2026-09-06/scorecard.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload tooling pilot evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-tooling-pilot
+          path: benchmarks/reports/2026-09-06/
+          if-no-files-found: error
+
   ts-pack-wheel:
     runs-on: ubuntu-latest
     steps:

@@ -23,3 +23,18 @@ New baseline entries require a short rationale in the pull request and should be
 time-bounded. VCS dependencies are excluded from registry advisory resolution;
 the pinned ts-pack revision is instead covered by its dedicated build and API
 contract checks.
+
+## September 6 review
+
+Secret scanning now uses the pinned Gitleaks CLI directly with release checksum
+verification and redacted output; it scans all fetched Git history. The wrapper
+Action required an organization license before it could scan. See the
+[Gitleaks project](https://github.com/gitleaks/gitleaks) and
+[Action licensing notice](https://github.com/gitleaks/gitleaks-action).
+
+The local scan found one historical Tavily-shaped credential at
+`04667ea6a080c8290926884d5d5ac79d74693fbb:session-ses_2b4d.md:768`.
+The user has not confirmed revocation. No exception was added and history was not
+rewritten. Rotate/revoke it before deciding how to handle the historical finding.
+The candidate dependency batch is documented under `security/batches/` and is not
+applied to the running environment.

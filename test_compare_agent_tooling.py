@@ -73,6 +73,43 @@ class AgentToolingComparisonTests(unittest.TestCase):
 
         mod._validate_result(_result("native", ["alpha"]), schema, "native")
 
+    def test_compare_rejects_different_revisions_and_empty_cases(self):
+        mod = _load_module()
+        native = _result("native", ["alpha"])
+        mcp = _result("mcp", ["alpha"])
+        native["revision"] = "abc"
+        with self.assertRaisesRegex(ValueError, "revisions"):
+            mod.compare_results(native, mcp, {"cases": [{"id": "alpha"}]})
+        mcp["revision"] = "abc"
+        with self.assertRaisesRegex(ValueError, "empty"):
+            mod.compare_results(native, mcp, {"cases": []})
+
+    def test_report_discloses_estimates_fallbacks_and_all_pairs(self):
+        mod = _load_module()
+        native = _result("native", ["alpha", "beta"])
+        mcp = _result("mcp", ["alpha", "beta"])
+        for payload in [native, mcp]:
+            payload["token_measurement"] = "estimated"
+            payload["measurement_notes"] = "Tool latency only; chars/4 tokens."
+        mcp["runs"][0]["native_fallback_calls"] = 2
+        report = mod.compare_results(native, mcp, {"cases": [{"id": "alpha"}, {"id": "beta"}]})
+        rendered = mod.render_markdown(report)
+        self.assertIn("do not establish model token savings", rendered)
+        self.assertIn("MCP native fallback calls: 2", rendered)
+        self.assertIn("| alpha |", rendered)
+        self.assertIn("| beta |", rendered)
+
+    def test_mixed_timing_methods_never_emit_a_speed_delta(self):
+        mod = _load_module()
+        native = _result("native", ["alpha"])
+        mcp = _result("mcp", ["alpha"])
+        native["elapsed_measurement"] = "end_to_end"
+        mcp["elapsed_measurement"] = "tool_latency"
+        report = mod.compare_results(native, mcp, {"cases": [{"id": "alpha"}]})
+        self.assertFalse(report["elapsed_comparable"])
+        self.assertIsNone(report["paired_cases"][0]["elapsed_seconds_delta"])
+        self.assertIn("N/A", mod.render_markdown(report))
+
     def test_cli_emits_markdown(self):
         mod = _load_module()
         with tempfile.TemporaryDirectory() as temp_dir:
