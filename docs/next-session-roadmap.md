@@ -77,3 +77,13 @@ A complete, honestly labeled 15-pair pilot and three source-backed priorities;
 reviewed CI fixes published to PR #1; a separate prepared dependency patch; and
 explicit unresolved items for credential revocation, green Security, confirmatory
 usage measurement, full PR review, and quiet-window graph cleanup.
+
+## Post-run operational finding
+
+The initial warm index did not stay fixed: automatic structural runs advanced while
+semantic updates failed. See `benchmarks/reports/2026-09-06/post-run-index-health.md`.
+PostgreSQL 17.9 is running from an installation path that no longer exists, and its
+text-search library cannot load. Restore the matching installation and coordinate
+any shared-database restart before reindexing. Investigate the separate native
+`SELECTchunk_id` staging error in pinned ts-pack. Confirmatory benchmarking and
+shadow cleanup must wait for stable indexing; no cleanup was performed.

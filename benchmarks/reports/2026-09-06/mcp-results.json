@@ -6,7 +6,7 @@
   "index_state": "warm",
   "setup_seconds": 7.233,
   "token_measurement": "estimated",
-  "measurement_notes": "Fresh condition-level subagent context, no other condition answers/results read. Cases interleaved/batched within one context using expected_evidence file hints. elapsed_seconds is summed instrumented tool duration, not end-to-end per-case task latency; do not compare as speed advantage. Token estimates ceil((prompt + tool arguments + canonical tool text chars)/4) and ceil(answer chars/4), excluding system/history/reasoning/caching/wrapper duplication. Not actual telemetry. Setup excludes initial skill/tool discovery and AGENTS/case/schema read, timed from post-schema setup marker through health; no indexing performed. See mcp-measurement-notes.md and mcp-evidence-log.json.",
+  "measurement_notes": "Fresh condition-level subagent context, no other condition answers/results read. Cases interleaved/batched within one context using expected_evidence file hints. elapsed_seconds is summed instrumented tool duration, not end-to-end per-case task latency; do not compare as speed advantage. Token estimates ceil((prompt + tool arguments + canonical tool text chars)/4) and ceil(answer chars/4), excluding system/history/reasoning/caching/wrapper duplication. Not actual telemetry. Setup excludes initial skill/tool discovery and AGENTS/case/schema read, timed from post-schema setup marker through health; no indexing performed. See mcp-measurement-notes.md and mcp-evidence-log.json. Post-run audit found automatic structural reindexing and failed semantic updates; warm is the initial state only, not a stable condition. See post-run-index-health.md. This invalidates controlled-index attribution.",
   "runs": [
     {
       "case_id": "http_mcp_startup",

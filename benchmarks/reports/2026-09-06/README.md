@@ -18,6 +18,11 @@ condition captures complete setup overhead or a cold indexing cost. The native a
 hit its usage limit after saving all 15 records and its transcript; these saved records
 were recovered and schema-validated without substituting new answers.
 
+A post-run audit also established that the index was not held fixed: structural runs
+advanced during the session while semantic updates failed. The initial warm label
+is a startup observation only. This further prevents attributing differences solely
+to the tool condition. See `post-run-index-health.md`.
+
 ## Artifacts and review
 
 - `native-results.json`, `mcp-results.json`: complete schema-valid original answers.
