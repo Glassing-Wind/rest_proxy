@@ -1,6 +1,5 @@
 """memory/store_search.py — vector search helpers."""
 
-import json
 from typing import Any, Dict, List
 
 import graph_bootstrap

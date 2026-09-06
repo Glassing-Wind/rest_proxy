@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent repository tooling benchmark result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "condition", "repository", "index_state", "setup_seconds", "runs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "condition": {"enum": ["native", "mcp"]},
+    "repository": {"type": "string", "minLength": 1},
+    "index_state": {"enum": ["not_applicable", "fresh", "warm", "stale", "partial"]},
+    "setup_seconds": {"type": "number", "minimum": 0},
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case_id", "correct", "unsupported_claims", "elapsed_seconds",
+          "tool_calls", "files_opened", "input_tokens", "output_tokens", "evidence"
+        ],
+        "properties": {
+          "case_id": {"type": "string", "minLength": 1},
+          "correct": {"type": "boolean"},
+          "unsupported_claims": {"type": "integer", "minimum": 0},
+          "elapsed_seconds": {"type": "number", "minimum": 0},
+          "tool_calls": {"type": "integer", "minimum": 0},
+          "files_opened": {"type": "integer", "minimum": 0},
+          "input_tokens": {"type": "integer", "minimum": 0},
+          "output_tokens": {"type": "integer", "minimum": 0},
+          "evidence": {"type": "array", "items": {"type": "string"}},
+          "answer": {"type": "string"},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

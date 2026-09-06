@@ -278,6 +278,7 @@ def register(mcp: FastMCP) -> None:
                     database=graph_bootstrap._NEO4J_DB
                 ) as session:
                     res = await _execute_read(
+                        session,
                         """
                         MATCH (src:File {project_id: $pid})
                         WHERE src.filepath ENDS WITH $fp
@@ -810,7 +811,7 @@ def register(mcp: FastMCP) -> None:
                             lines += ["", doc.strip()]
                         return "\n".join(lines)
                     return f"Symbol `{symbol_name}` not found in `{os.path.basename(file_path)}`."
-            except Exception as e:
+            except Exception:
                 pass  # fall through to ts_pack
 
         # Fallback: ts_pack structural extraction
@@ -841,7 +842,6 @@ def register(mcp: FastMCP) -> None:
             import tree_sitter_language_pack as ts_pack
 
             project_path = get_workspace_path(workspace_id)
-            orig_file_path = file_path
             if not os.path.isabs(file_path):
                 file_path = os.path.join(project_path, file_path)
 
@@ -870,14 +870,6 @@ def register(mcp: FastMCP) -> None:
             if not node:
                 try:
                     import graph_bootstrap
-
-                    project_root = None
-                    cur = os.path.abspath(os.path.dirname(file_path))
-                    while cur and cur != os.path.dirname(cur):
-                        if os.path.isdir(os.path.join(cur, ".git")):
-                            project_root = cur
-                            break
-                        cur = os.path.dirname(cur)
 
                     if project_path:
                         rel_path = os.path.relpath(file_path, project_path)
@@ -1068,7 +1060,7 @@ def register(mcp: FastMCP) -> None:
                 if pattern.search(line):
                     hits.append(f"  L{i:4d}: {line.rstrip()}")
                 if len(hits) >= 60:
-                    hits.append(f"  … (truncated at 60 matches)")
+                    hits.append("  … (truncated at 60 matches)")
                     break
 
             if not hits:

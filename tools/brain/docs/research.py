@@ -2,7 +2,6 @@
 
 import json
 import os
-import sys
 import threading
 import subprocess
 from pathlib import Path
@@ -126,7 +125,8 @@ def register(mcp: FastMCP) -> None:
             max_urls: Maximum number of URLs to index (default 5, max 10).
         """
         try:
-            import time, uuid
+            import time
+            import uuid
 
             max_urls = min(int(max_urls), 10)
 

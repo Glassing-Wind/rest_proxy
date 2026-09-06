@@ -42,7 +42,7 @@ if [[ -d "$WHEEL_DIR" ]]; then
   shopt -u nullglob
   if (( ${#wheels[@]} > 0 )); then
     echo "[ci-deps] Installing ts-pack wheel artifact: ${wheels[0]}"
-    pip install --no-deps "${wheels[0]}"
+    "$PYTHON_BIN" -m pip install --no-deps "${wheels[0]}"
   elif [[ "$REQUIRE_WHEEL" == "1" || "$REQUIRE_WHEEL" == "true" || "$REQUIRE_WHEEL" == "yes" ]]; then
     echo "[ci-deps] ERROR: ts-pack wheel artifact required but not found in $WHEEL_DIR" >&2
     exit 1
@@ -53,4 +53,4 @@ elif [[ "$REQUIRE_WHEEL" == "1" || "$REQUIRE_WHEEL" == "true" || "$REQUIRE_WHEEL
 fi
 
 echo "[ci-deps] Installing remaining Python dependencies from $FILTERED_REQ"
-pip install -r "$FILTERED_REQ"
+"$PYTHON_BIN" -m pip install -r "$FILTERED_REQ"

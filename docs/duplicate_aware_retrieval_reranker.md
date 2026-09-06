@@ -12,8 +12,8 @@ This is a product-behavior document, not just an implementation note.
 
 It should be read alongside:
 
-- [retrieval_suppression_policy.md](/Users/michaelmarler/Projects/rest_proxy/docs/retrieval_suppression_policy.md)
-- [retrieval_architecture_plan.md](/Users/michaelmarler/Projects/rest_proxy/docs/retrieval_architecture_plan.md)
+- [Retrieval suppression policy](retrieval_suppression_policy.md)
+- [Retrieval architecture](retrieval_architecture.md)
 
 
 ## What This System Is For
@@ -231,7 +231,7 @@ The current system is materially better than a naive dedupe pass.
 - trace/debug output exists
 - telemetry exists
 - goldens already exist in:
-  - [retrieval_duplicate_goldens.json](/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json)
+  - [retrieval duplicate goldens](../benchmarks/retrieval_duplicate_goldens.json)
 - `search_codebase` now has definition-oriented rescue and post-dedupe final ranking
 - implementation-intent ranking is now separated from duplicate suppression
 

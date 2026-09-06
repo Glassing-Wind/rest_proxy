@@ -63,6 +63,16 @@ class MemoryModeTests(unittest.TestCase):
         self.assertTrue(cfg._MEMORY_INJECT_ENABLED)
         self.assertTrue(cfg._MEMORY_EMBEDDINGS_ENABLED)
 
+    def test_hybrid_mode_remains_a_compatibility_alias_for_full(self):
+        cfg = _load_config({"LM_PROXY_MEMORY_MODE": "hybrid"})
+
+        self.assertEqual(cfg._MEMORY_MODE, "full")
+        self.assertTrue(cfg._MEMORY_MODE_ENABLED)
+        self.assertTrue(cfg._MEMORY_PERSIST_ENABLED)
+        self.assertTrue(cfg._MEMORY_REDIS_ENABLED)
+        self.assertTrue(cfg._MEMORY_INJECT_ENABLED)
+        self.assertTrue(cfg._MEMORY_EMBEDDINGS_ENABLED)
+
     def test_memory_disabled_overrides_mode(self):
         cfg = _load_config(
             {

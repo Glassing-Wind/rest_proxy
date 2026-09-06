@@ -13,39 +13,13 @@ if [[ -z "$PYTHON_BIN" ]]; then
   PYTHON_BIN="$(command -v python || command -v python3)"
 fi
 
-echo "[ci] Running Ruff on the gated Python surface..."
+echo "[ci] Running Ruff across production Python and operational scripts..."
 "$PYTHON_BIN" -m ruff check \
-  memory/skeleton_extractor.py \
-  memory/code_retrieval.py \
-  memory/code_retrieval_clone.py \
-  memory/code_retrieval_loaders.py \
-  memory/code_retrieval_postprocess.py \
-  memory/store_embeddings.py \
-  test_docs_chunking.py \
-  test_index_workspace.py \
-  test_semantic_helpers.py \
-  test_store_embeddings.py \
-  test_ts_pack_contract.py \
-  test_ts_pack_facts.py \
-  memory/retrieval_contracts.py \
-  memory/retrieval_duplicates.py \
-  memory/retrieval_enrichment.py \
-  memory/retrieval_intent.py \
-  memory/retrieval_intent_queries.py \
-  memory/retrieval_metadata.py \
-  memory/retrieval_query.py \
-  memory/retrieval_rank_policy.py \
-  memory/retrieval_scoring.py \
-  memory/retrieval_scoring_workflows.py \
-  memory/retrieval_semantics.py \
-  memory/retrieval_surfaces.py \
-  scripts/check_mcp_tool_parity.py \
-  test_mcp_tool_parity_selection.py \
-  tools/brain/docs/chunking.py \
-  memory/retrieval_policy.py \
-  memory/retrieval_fallbacks.py \
-  memory/retrieval_telemetry.py \
-  tools/brain/search/semantic_helpers.py
+  proxy memory graphrag_core local_embeddings tools scripts \
+  _helpers.py _index_cli.py _jobs.py _mcp.py _runtime.py \
+  _semantic_contract.py _tool_fingerprint.py brain_server.py \
+  embedding_service.py graph_bootstrap.py mcp_server.py \
+  runtime_logging.py tool_choice_eval.py
 
 echo "[ci] Running GraphRAG regression suite..."
 ./scripts/check_graph_pipeline.sh
@@ -81,6 +55,7 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_job_state_persistence.py
 "$PYTHON_BIN" test_memory_mode.py
 "$PYTHON_BIN" test_mcp_tool_parity_selection.py
+"$PYTHON_BIN" test_compare_agent_tooling.py
 "$PYTHON_BIN" test_search_graph_query.py
 "$PYTHON_BIN" test_search_codebase_tool.py
 "$PYTHON_BIN" test_search_summary_tools.py

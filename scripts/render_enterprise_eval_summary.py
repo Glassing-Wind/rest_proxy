@@ -23,11 +23,9 @@ def render_summary(payload: dict) -> str:
     dispatcher_telemetry = enterprise.get("dispatcher_telemetry_summary") or {}
     dispatcher_telemetry_current = enterprise.get("dispatcher_telemetry_current_summary") or dispatcher_telemetry
     dispatcher_telemetry_current_scope = str(enterprise.get("dispatcher_telemetry_current_scope") or "historical")
-    dispatcher_telemetry_recent = enterprise.get("dispatcher_telemetry_recent_summary") or {}
     routing_telemetry = enterprise.get("routing_telemetry_summary") or {}
     routing_telemetry_current = enterprise.get("routing_telemetry_current_summary") or routing_telemetry
     routing_telemetry_current_scope = str(enterprise.get("routing_telemetry_current_scope") or "historical")
-    routing_telemetry_recent = enterprise.get("routing_telemetry_recent_summary") or {}
     attention = list(trend.get("attention_needed") or [])
     query_counts = enterprise.get("retrieval_query_class_counts") or {}
     mcp_workflows = list(enterprise.get("mcp_investigation_workflows") or [])

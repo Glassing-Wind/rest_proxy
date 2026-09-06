@@ -890,6 +890,11 @@ def _parse_repo_linked_dependencies(project_path: str) -> list[dict[str, str]]:
         r"git\+(?P<url>[^@#\s]+(?:\.git)?)(?:@(?P<rev>[^#\s]+))?"
         r"#egg=(?P<egg>[A-Za-z0-9_.-]+)(?:&subdirectory=(?P<subdir>[^\s]+))?"
     )
+    pep508_git_re = re.compile(
+        r"^(?P<name>[A-Za-z0-9_.-]+)\s*@\s*git\+"
+        r"(?P<url>[^@#\s]+(?:\.git)?)(?:@(?P<rev>[^#\s]+))?"
+        r"(?:#(?:[^\s]*&)?subdirectory=(?P<subdir>[^&\s]+))?"
+    )
 
     try:
         with open(req_path, "r", encoding="utf-8", errors="replace") as fh:
@@ -898,12 +903,16 @@ def _parse_repo_linked_dependencies(project_path: str) -> list[dict[str, str]]:
                 if not line or line.startswith("#"):
                     continue
                 match = git_re.search(line)
+                package_group = "egg"
+                if not match:
+                    match = pep508_git_re.search(line)
+                    package_group = "name"
                 if not match:
                     continue
                 url = match.group("url") or ""
                 deps.append(
                     {
-                        "package": match.group("egg") or "",
+                        "package": match.group(package_group) or "",
                         "repo_name": _repo_name_from_url(url),
                         "repo_url": url,
                         "rev": match.group("rev") or "",

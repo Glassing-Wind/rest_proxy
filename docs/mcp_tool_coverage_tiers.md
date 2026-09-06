@@ -5,7 +5,7 @@ kind of coverage each tool has today.
 
 For the current trust goal, current repo position, and the remaining
 workflow-driven hardening work, see
-[docs/tool_trust_status.md](/Users/michaelmarler/Projects/rest_proxy/docs/tool_trust_status.md).
+[Tool trust status](tool_trust_status.md).
 
 Coverage types:
 

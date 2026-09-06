@@ -1,5 +1,10 @@
 # Retrieval Architecture Plan
 
+> **Archived planning record.** This document preserves the detailed extraction
+> plan and completed phases. For current ownership and change guidance, use
+> [Retrieval Architecture](retrieval_architecture.md). For the dated readiness
+> snapshot, use [Tool Trust Status](tool_trust_status.md).
+
 ## Goal
 
 Make retrieval first-in-class and keep it there.

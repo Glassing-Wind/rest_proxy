@@ -38,6 +38,20 @@ jobs:
           expected="${{ steps.version.outputs.version }}"
           actual="$(tr -d '[:space:]' < VERSION)"
           test "$expected" = "$actual"
+          python - <<'PY'
+          import os
+          import tomllib
+
+          expected = os.environ["EXPECTED_VERSION"]
+          with open("pyproject.toml", "rb") as handle:
+              configured = tomllib.load(handle)["project"]["version"]
+          if configured != expected:
+              raise SystemExit(
+                  f"pyproject.toml version {configured!r} does not match release {expected!r}"
+              )
+          PY
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
 
       - name: Verify changelog contains release entry
         shell: bash

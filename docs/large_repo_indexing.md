@@ -107,7 +107,7 @@ Current guard:
 
 Example file that required this:
 
-- [`/Users/michaelmarler/Projects/swift/test/Parse/structure_overflow_paren_exprs.swift`](/Users/michaelmarler/Projects/swift/test/Parse/structure_overflow_paren_exprs.swift)
+- Swift's `test/Parse/structure_overflow_paren_exprs.swift` pathological parser fixture
 
 Behavior:
 

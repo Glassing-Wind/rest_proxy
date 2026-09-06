@@ -8,8 +8,13 @@ WHEEL_DIR="${1:-.runtime/wheels}"
 mkdir -p "$WHEEL_DIR"
 rm -f "$WHEEL_DIR"/tree_sitter_language_pack-*.whl
 
+PYTHON_BIN="${LM_PROXY_PYTHON:-${LM_PROXY_INDEX_PYTHON:-}}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v python3 || command -v python)"
+fi
+
 TS_PACK_SPEC="$(
-  python - <<'PY'
+  "$PYTHON_BIN" - <<'PY'
 from pathlib import Path
 
 for raw in Path("requirements-ci.txt").read_text(encoding="utf-8").splitlines():
@@ -28,4 +33,4 @@ PY
 )"
 
 echo "[ci-wheel] Building pinned ts-pack wheel from: $TS_PACK_SPEC"
-pip wheel --wheel-dir "$WHEEL_DIR" "$TS_PACK_SPEC"
+"$PYTHON_BIN" -m pip wheel --wheel-dir "$WHEEL_DIR" "$TS_PACK_SPEC"

@@ -3,9 +3,9 @@
 This directory is the stable pointer for the current enterprise-readiness plan.
 The canonical status and backlog live in:
 
-- [docs/tool_trust_status.md](/Users/michaelmarler/Projects/rest_proxy/docs/tool_trust_status.md)
-- [docs/retrieval_architecture_plan.md](/Users/michaelmarler/Projects/rest_proxy/docs/retrieval_architecture_plan.md)
-- [docs/mcp_tool_coverage_tiers.md](/Users/michaelmarler/Projects/rest_proxy/docs/mcp_tool_coverage_tiers.md)
+- [Tool trust status](../../docs/tool_trust_status.md)
+- [Retrieval architecture](../../docs/retrieval_architecture.md)
+- [MCP tool coverage tiers](../../docs/mcp_tool_coverage_tiers.md)
 
 Current product contract:
 

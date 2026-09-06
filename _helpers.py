@@ -155,7 +155,6 @@ def get_project_id(workspace_id: str) -> str:
     # 2. Traditional path-based hashing.
     #    (For local 'Hands' agents and backward compatibility).
     import hashlib
-    import os
 
     # Normalize: strip trailing slash, resolve absolute
     path = _canonical_workspace_path(workspace_id)

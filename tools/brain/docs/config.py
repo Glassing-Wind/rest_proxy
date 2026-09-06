@@ -34,7 +34,6 @@ DEFAULT_TOPIC_SEED_URLS = {
     ]
 }
 
-from memory.docs_retrieval import TOPIC_FAMILIES
 
 # Host-specific crawling profiles. These exist to capture the selector-driven
 # extraction patterns recommended by the Crawlee docs for JS-heavy sites.

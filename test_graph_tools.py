@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -1195,6 +1196,33 @@ class GraphToolsTests(unittest.TestCase):
         self.assertIn("## Inspect First", output)
         self.assertIn("`repoanalyzer` from `RepoAnalyzer`", output)
         self.assertIn("indexed sibling repo", output)
+
+    def test_repo_dependency_parser_accepts_pep508_git_reference(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            requirements_path = Path(temp_dir) / "requirements.txt"
+            requirements_path.write_text(
+                "tree_sitter_language_pack @ "
+                "git+https://github.com/Zmaroo/tree-sitter-language-pack.git@abc123"
+                "#subdirectory=crates/ts-pack-python\n",
+                encoding="utf-8",
+            )
+
+            dependencies = self.module.graph_overview._parse_repo_linked_dependencies(
+                temp_dir
+            )
+
+        self.assertEqual(
+            dependencies,
+            [
+                {
+                    "package": "tree_sitter_language_pack",
+                    "repo_name": "tree-sitter-language-pack",
+                    "repo_url": "https://github.com/Zmaroo/tree-sitter-language-pack.git",
+                    "rev": "abc123",
+                    "subdirectory": "crates/ts-pack-python",
+                }
+            ],
+        )
 
     def test_project_overview_includes_apple_build_context(self):
         async def fake_execute_read(session, query, **kwargs):

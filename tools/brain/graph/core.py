@@ -3,7 +3,7 @@
 import os
 import asyncio
 from mcp.server.fastmcp import FastMCP
-from _helpers import get_memory_modules, get_project_id
+from _helpers import get_memory_modules
 from graphrag_core import neo4j as neo4j_utils
 
 _GRAPH_WRITE_CONCURRENCY = max(
@@ -32,7 +32,13 @@ _SYMBOL_LABELS = [
     "AssociatedType",
 ]
 _SYMBOL_KINDS = _SYMBOL_LABELS + ["Macro"]
-_SYMBOL_FILTER_CYPHER = "(" + " OR ".join([f"s:{l}" for l in _SYMBOL_LABELS]) + " OR s.kind IN " + str(_SYMBOL_KINDS) + ")"
+_SYMBOL_FILTER_CYPHER = (
+    "("
+    + " OR ".join([f"s:{label}" for label in _SYMBOL_LABELS])
+    + " OR s.kind IN "
+    + str(_SYMBOL_KINDS)
+    + ")"
+)
 
 
 

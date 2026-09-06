@@ -319,6 +319,34 @@ class DevToolsTests(unittest.TestCase):
         self.assertIn("tests/test_workspace_registry.py", output)
         self.assertIn("semantic test-chunk match (3)", output)
 
+    def test_get_test_coverage_for_executes_graph_lookup_with_open_session(self):
+        memory_store = FakeMemoryStore([])
+        module = load_module(memory_store)
+        mcp = FakeMCP()
+        module.register(mcp)
+        driver = FakeRowsGraphDriver(
+            [{"tf": "tests/test_workspace_registry.py", "tf2": None}]
+        )
+
+        async def fake_require_driver():
+            return driver
+
+        module._graph_bootstrap_mod.require_driver = fake_require_driver
+        with mock.patch(
+            "subprocess.run", return_value=types.SimpleNamespace(stdout="")
+        ), mock.patch.dict(
+            sys.modules, {"graph_bootstrap": module._graph_bootstrap_mod}
+        ):
+            output = asyncio.run(
+                mcp.tools["get_test_coverage_for"](
+                    "/tmp/repo", "src/workspace_registry.py"
+                )
+            )
+
+        self.assertIn("tests/test_workspace_registry.py", output)
+        self.assertIn("imports this file", output)
+        self.assertTrue(driver.session_obj.tx.calls)
+
     def test_get_test_coverage_for_skips_test_path_semantic_hit_when_roles_present_empty(self):
         memory_store = FakeMemoryStore(
             [("tests/test_workspace_registry.py", {"file_roles": []})]

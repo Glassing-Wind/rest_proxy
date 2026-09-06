@@ -1,7 +1,6 @@
 """tools/search/graph_query.py — raw Neo4j queries and definitions lookup."""
 
 import json
-import os
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_project_id, get_workspace_path

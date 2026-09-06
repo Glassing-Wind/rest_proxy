@@ -46,15 +46,15 @@ POST /v1/chat/completions
 
 | Variable | Default | Description |
 |---|---|---|
-| `LM_PROXY_MEMORY_ENABLED` | `0` | Master switch – set to `1` to allow proxy memory features |
-| `LM_PROXY_MEMORY_MODE` | `stateless` | `stateless/off` disables automatic rolling memory, `assist` enables bounded recent-turn + summary help for smaller/local models, `full` also enables broader retrieval features |
+| `LM_PROXY_MEMORY_ENABLED` | `1` | Master capability switch; automatic behavior still requires a non-off memory mode |
+| `LM_PROXY_MEMORY_MODE` | `stateless` | `stateless/off` disables automatic memory, `assist` enables bounded recent-turn and summary help, and `full` enables broader retrieval; `hybrid` is a compatibility alias for `full` |
 | `LM_PROXY_NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt connection URI |
 | `LM_PROXY_NEO4J_USER` | `neo4j` | Neo4j username |
 | `LM_PROXY_NEO4J_PASSWORD` | - | Neo4j password |
-| `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `0` | Enable Neo4j durable persistence |
-| `LM_PROXY_MEMORY_ENABLE_REDIS` | `0` | Enable Redis hot session state |
+| `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `1` | Allow durable persistence when the selected mode enables it |
+| `LM_PROXY_MEMORY_ENABLE_REDIS` | `1` | Allow Redis hot session state when the selected mode enables it |
 | `LM_PROXY_MEMORY_ENABLE_EMBEDDINGS` | `0` | Enable embedding + pgvector retrieval |
-| `LM_PROXY_MEMORY_ENABLE_RETRIEVAL` | `0` | Enable vector similarity retrieval |
+| `LM_PROXY_MEMORY_ENABLE_RETRIEVAL` | `1` | Enable retrieval when embeddings and the selected mode allow it |
 | `LM_PROXY_PG_DSN` | _(empty)_ | Postgres connection string (psycopg v3 format) |
 | `LM_PROXY_REDIS_URL` | `redis://localhost:6379/0` | Redis URL |
 | `LM_PROXY_MEMORY_SESSION_NAMESPACE` | `lmproxy` | Redis key namespace |

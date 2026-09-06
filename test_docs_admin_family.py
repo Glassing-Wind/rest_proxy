@@ -117,7 +117,12 @@ def load_module():
     config_spec.loader.exec_module(config_mod)
 
     memory_pkg = types.ModuleType("memory")
+    memory_pkg.__path__ = []
     memory_store_mod = types.ModuleType("memory.store")
+    docs_retrieval_mod = types.ModuleType("memory.docs_retrieval")
+    docs_retrieval_mod.topic_family_patterns = lambda topic: (
+        ["neo4j", "neo4j-%"] if topic == "neo4j" else [topic]
+    )
 
     async def _open_pool():
         return None
@@ -134,6 +139,7 @@ def load_module():
         "tools.brain.docs.config": config_mod,
         "memory": memory_pkg,
         "memory.store": memory_store_mod,
+        "memory.docs_retrieval": docs_retrieval_mod,
     }
     with mock.patch.dict(sys.modules, stub_modules):
         spec.loader.exec_module(module)

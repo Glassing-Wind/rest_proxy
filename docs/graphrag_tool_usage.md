@@ -6,7 +6,7 @@ Use it to onboard new agents to the current GraphRAG tool surface and normal wor
 
 See also:
 
-- [`/Users/michaelmarler/Projects/rest_proxy/docs/tool_product_audit.md`](/Users/michaelmarler/Projects/rest_proxy/docs/tool_product_audit.md)
+- [Tool product audit](tool_product_audit.md)
   - product audit of which tools are actually first-class vs fallback/debug/admin surfaces
 
 ## Recommended Workflow
