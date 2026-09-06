@@ -4,13 +4,39 @@ This is the plain Markdown replacement for the removed `get_graph_usage_guide` M
 
 Use it to onboard new agents to the current GraphRAG tool surface and normal workflow.
 
-## Recommended Workflow
+See also:
+
+- [Tool product audit](tool_product_audit.md)
+  - product audit of which tools are actually first-class vs fallback/debug/admin surfaces
+
+## Choose the evidence tool first
+
+- Known file or module settings: `describe_file(project_path, file_path,
+  include_source=True, start_line=1, max_lines=80)`. This reads current local source,
+  returns numbered complete lines and a SHA256 of the snapshot, and needs no index.
+  Follow `Next start_line` for more; verify the hash stays the same across pages.
+- Known symbol: use `get_symbol_context` to locate it, then `extract_function_body`
+  for its body or the source view for surrounding module code.
+- Unknown implementation location: use `search_codebase` to discover candidates,
+  then read current source for claims. Avoid restricting to a facade file before
+  establishing where implementation lives.
+- New repository orientation: use `get_project_overview`. Check index health before
+  requesting new indexing. An existing healthy index does not need rebuilding.
+
+`list_tool_catalog` recognizes concrete source filenames in an intent and directs
+those requests to `describe_file`. Semantic ranking itself is unchanged.
+
+## Index setup when needed
 
 1. `index_workspace(workspace_id)`
    - Starts indexing and returns a `job_id`.
    - Normal path: wait for `DONE`, then the project should be graph-ready.
 2. `get_index_status(job_id)`
    - Polls `RUNNING`, `DONE`, or `FAILED` and returns recent logs.
+   - If the ID is wrong or stale, the response lists active jobs with status,
+     elapsed time, and project path.
+   - In strict multi-session mode, jobs from other sessions are hidden unless
+     an admin intentionally uses `cancel_index_job(job_id, force=true)`.
 3. `get_indexing_health(workspace_id, audit=true)`
    - Checks indexing freshness and parsing fidelity.
 4. `get_project_overview(workspace_id)`
@@ -22,6 +48,21 @@ Use it to onboard new agents to the current GraphRAG tool surface and normal wor
    - `get_code_communities(workspace_id)`
    - `search_codebase([workspace_id], query, ...)`
    - `get_symbol_context(workspace_id, symbol_name)`
+
+## Preferred First-Class Tools
+
+If multiple tools could answer the question, prefer these first:
+
+- `get_project_overview`
+- `search_codebase`
+- `get_symbol_context`
+- `get_call_chain`
+- `find_references`
+- `describe_file`
+- `get_indexing_health`
+- `trace_graph_provenance`
+
+These are the tools that should normally beat raw grep, raw Cypher, or manual graph inspection.
 
 ## Core Graph Tools
 
@@ -39,19 +80,19 @@ Use it to onboard new agents to the current GraphRAG tool surface and normal wor
 - `get_related_files(project_path, file_path)`
   - Structural neighbors and likely blast radius.
   - For Rust workspaces, prefers same-crate and directly connected crate files.
-- `get_topology_summary(project_path)`
-  - Compact topology overview.
-  - Prefers non-test files first.
-- `get_heuristic_flow_summary(project_path)`
-  - Higher-level inferred paths.
-  - For Rust library workspaces, falls back to Cargo crate dependency paths when needed.
 
 ## Flow Tools
 
 - `get_app_flow_summary(workspace_id, ...)`
   - UI -> API -> Service -> DB paths.
-  - Best for JS/TS or mixed app repos.
+  - Best for full-stack JS/TS or mixed web repos where those layers should exist.
+  - Empty results diagnose missing source/edge coverage and route to `get_flow_summary(mode='auto')`.
 - `get_backend_flow_summary(workspace_id, ...)`
+  - Returns connected API/service/database paths when attribution is concrete.
+  - Falls back to route-handler inventory with an explicit partial-coverage
+    warning instead of binding file-level service edges to individual routes.
+  - Empty results include measured route/service/database graph coverage and a
+    next action.
   - API -> Service -> DB paths.
   - Supports `crate_contains` for Rust workspaces.
   - For non-app Rust library repos, may return guidance instead of pretending a backend path exists.
@@ -59,6 +100,11 @@ Use it to onboard new agents to the current GraphRAG tool surface and normal wor
   - Apple source -> resource -> target -> scheme -> workspace paths.
 - `get_flow_summary(workspace_id, mode='auto' | 'ui' | 'backend' | 'apple' | 'cli', ...)`
   - Convenience entrypoint that picks the most relevant flow view.
+
+## Internal Fallbacks
+
+Some fallback summaries still exist internally inside the graph layer, especially
+behind `get_flow_summary(...)`, but they are not preferred standalone user-facing tools.
 
 ## Search and Symbol Tools
 
@@ -127,13 +173,50 @@ Use `add_memory(...)` proactively when you discover:
 - Deterministic graph build now happens during `index_workspace`.
 - Separate graph rebuild tools were intentionally removed.
 - `IMPLICIT_IMPORTS_SYMBOL` is heuristic and experimental, not part of the default graph contract.
+- Semantic chunk metadata is producer-owned by `tree-sitter-language-pack`.
+  - `rest_proxy` validates the shared semantic chunk contract during indexing.
+  - Missing required producer fields should fail indexing loudly instead of being backfilled in Python.
+  - If producer metadata changes without changing chunk text, do a full `rebuild` for affected repos; incremental indexing can keep old semantic rows because chunk ids stay stable.
 - For custom Codex desktop Streamable HTTP MCP config, a minimal hand-edited `~/.codex/config.toml` entry is more reliable than the current UI save flow when the UI hits null-serialization bugs.
+
+## Debugging Bad Graph Edges
+
+If a call edge or file-graph link looks wrong, debug the producer stages first.
+
+Use optional one-off env vars when reindexing:
+
+- `TS_PACK_DEBUG_PROVENANCE_SYMBOL`
+- `TS_PACK_DEBUG_PROVENANCE_FILE`
+
+These emit `[ts-pack-provenance] ...` lines from:
+
+- parse-stage call extraction
+- exact call resolution
+- finalize-stage `CALLS_FILE` / `FILE_GRAPH_LINK` materialization
+
+This is the preferred path for “where did this edge come from?” investigations. These flags are temporary debug inputs and should not be added to `.env` by default.
+
+## Swift Notes
+
+- Swift-heavy repos still need special validation at the tool layer, not only at indexing time.
+- `get_call_chain(..., direction="up")` may need semantic caller fallback for SwiftUI/component composition because those relationships are not always emitted as CALLS edges.
+- Swift protocol conformers should come from `IMPLEMENTS_TYPE` graph edges
+  after rebuilding with the current pinned ts-pack fork. If `EventLoop`-style
+  protocol conformers fall back to source snippets, first suspect stale
+  producer/index data rather than adding a tool-layer rescue.
+- `find_references` and `get_related_files` should prefer grouped cross-file Swift source hits and suppress low-signal markdown/session paths.
+- After Swift semantic metadata changes in the producer, do a full `rebuild` on affected repos before judging tool quality.
 
 ## Repo-Specific Notes For `rest_proxy`
 
 - `graphrag-brain` is exposed through FastMCP Streamable HTTP in:
   - `/_mcp.py`
   - `/brain_server.py`
+- Supported shared-client mode today:
+  - shared HTTP daemon at `http://127.0.0.1:8001/mcp`
+  - manual watcher activation with `watch_project(path)` / `unwatch_project(path)`
+  - explicit roots-capable client sync with no-argument `watch_project()`
+  - no automatic workspace inference by default
 - Streamable HTTP is now stateful so stale `Mcp-Session-Id` values fail with `404` after a restart.
 - Normal debugging path for MCP availability:
   1. check `http://127.0.0.1:8001/health`
@@ -144,3 +227,6 @@ Use `add_memory(...)` proactively when you discover:
   2. confirm `x-graphrag-boot-id` changed after restart
   3. confirm `x-graphrag-tool-fingerprint` matches the expected tool set
   4. if `x-graphrag-session-known: 0` or `/health` shows `"known_session": false`, reconnect the MCP client or start a fresh conversation
+- Protocol smoke/regression scripts:
+  1. `python scripts/check_mcp_protocol.py`
+  2. `./scripts/check_mcp_stale_session_restart.sh`

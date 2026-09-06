@@ -3,10 +3,12 @@ import importlib.util
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/utility.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "graph" / "utility.py"
 
 
 class FakeSession:
@@ -132,6 +134,98 @@ class GraphUtilityTests(unittest.TestCase):
             )
         self.assertLess(output.find("src/api/routes.ts"), output.find("tests/services.test.ts"))
 
+    def test_topology_summary_skips_test_path_fallback_when_file_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [
+                    {"fp": "tests/services.test.ts", "file_roles": [], "inbound": 0, "outbound": 11},
+                    {"fp": "src/api/routes.ts", "file_roles": None, "inbound": 2, "outbound": 34},
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                )
+            )
+        self.assertLess(output.find("tests/services.test.ts"), output.find("src/api/routes.ts"))
+
+    def test_topology_summary_demotes_docs_surface_when_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [
+                    {"fp": "docs/architecture.md", "file_roles": ["docs_surface"], "inbound": 0, "outbound": 11},
+                    {"fp": "src/api/routes.ts", "file_roles": [], "inbound": 2, "outbound": 34},
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                )
+            )
+        self.assertLess(output.find("src/api/routes.ts"), output.find("docs/architecture.md"))
+
+    def test_topology_summary_legacy_docs_path_fallback_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [
+                    {"fp": "docs/architecture.md", "file_roles": None, "inbound": 0, "outbound": 11},
+                    {"fp": "src/api/routes.ts", "file_roles": None, "inbound": 2, "outbound": 34},
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                )
+            )
+        self.assertLess(output.find("src/api/routes.ts"), output.find("docs/architecture.md"))
+
+    def test_topology_summary_legacy_benchmark_path_fallback_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_topology_summary":
+                return [
+                    {"fp": "benchmarks/routes_benchmark.ts", "file_roles": None, "inbound": 0, "outbound": 11},
+                    {"fp": "src/api/routes.ts", "file_roles": None, "inbound": 2, "outbound": 34},
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_topology_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                )
+            )
+        self.assertLess(output.find("src/api/routes.ts"), output.find("benchmarks/routes_benchmark.ts"))
+
     def test_heuristic_flow_summary_includes_cargo_crate_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -203,6 +297,72 @@ class GraphUtilityTests(unittest.TestCase):
         self.assertIn("Cargo crate dependencies", output)
         self.assertIn("Crate: ts-pack-index", output)
         self.assertIn("ts-pack-index -> tree-sitter-language-pack", output)
+
+    def test_heuristic_flow_summary_uses_file_roles_before_test_path_fallback(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_heuristic_flow_summary":
+                self.assertNotIn("CONTAINS 'test'", query)
+                self.assertNotIn("CONTAINS 'spec'", query)
+                return [
+                    {
+                        "ui": "tests/ui.test.tsx",
+                        "ui_roles": [],
+                        "api": "src/api/routes.ts",
+                        "api_roles": None,
+                        "svc": "src/service/core.ts",
+                        "svc_roles": None,
+                        "model": None,
+                        "model_roles": None,
+                    }
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_heuristic_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                    as_table=False,
+                )
+            )
+        self.assertIn("tests/ui.test.tsx -> src/api/routes.ts -> src/service/core.ts", output)
+
+    def test_heuristic_flow_summary_legacy_test_path_fallback_still_applies_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_heuristic_flow_summary":
+                return [
+                    {
+                        "ui": "tests/ui.test.tsx",
+                        "ui_roles": None,
+                        "api": "src/api/routes.ts",
+                        "api_roles": None,
+                        "svc": "src/service/core.ts",
+                        "svc_roles": None,
+                        "model": None,
+                        "model_roles": None,
+                    }
+                ]
+            if op == "utility_cargo_schema_labels":
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_heuristic_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/repo",
+                    limit=10,
+                    as_table=False,
+                )
+            )
+        self.assertEqual(output, "No heuristic paths found.")
 
 
 if __name__ == "__main__":

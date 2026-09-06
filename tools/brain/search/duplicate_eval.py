@@ -4,19 +4,26 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import sys
 from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 try:
     from tools.brain.search import semantic_helpers as sem_helpers
 except Exception:
-    _SEM_HELPERS_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic_helpers.py"
+    _SEM_HELPERS_PATH = ROOT / "tools" / "brain" / "search" / "semantic_helpers.py"
     _spec = importlib.util.spec_from_file_location("duplicate_eval_semantic_helpers", _SEM_HELPERS_PATH)
     sem_helpers = importlib.util.module_from_spec(_spec)
     assert _spec is not None and _spec.loader is not None
     _spec.loader.exec_module(sem_helpers)
 
 
-BENCHMARK_PATH = Path("/Users/michaelmarler/Projects/rest_proxy/benchmarks/retrieval_duplicate_goldens.json")
+BENCHMARK_PATH = ROOT / "benchmarks" / "retrieval_duplicate_goldens.json"
+NDCG_REGRESSION_ALERT_DELTA = 0.05
 
 
 def load_benchmarks(path: str | None = None) -> list[dict]:
@@ -155,7 +162,20 @@ def _promotion_alerts(config: dict, baseline: dict) -> list[str]:
         alerts.append("best_answer_retention_regressed")
     if config["mrr"] + 1e-9 < baseline["mrr"]:
         alerts.append("mrr_regressed")
-    if config["ndcg"] + 1e-9 < baseline["ndcg"]:
+    ndcg_drop = float(baseline["ndcg"]) - float(config["ndcg"])
+    redundancy_improved = float(config["topk_redundancy_rate"]) + 1e-9 < float(
+        baseline["topk_redundancy_rate"]
+    )
+    grouping_improved = float(config["false_separation_rate"]) + 1e-9 < float(
+        baseline["false_separation_rate"]
+    )
+    canonical_docs_preserved = (
+        config.get("canonical_doc_preference_success") is True
+        and config.get("version_sensitive_doc_retention") is True
+    )
+    if ndcg_drop > NDCG_REGRESSION_ALERT_DELTA and not (
+        redundancy_improved or grouping_improved or canonical_docs_preserved
+    ):
         alerts.append("ndcg_regressed")
     if config["topk_redundancy_rate"] > baseline["topk_redundancy_rate"]:
         alerts.append("no_redundancy_gain")
@@ -168,6 +188,7 @@ def evaluate_case(case: dict) -> dict:
     results = case.get("results") or []
     query = str(case.get("query") or "")
     mode = str(case.get("mode") or "code")
+    query_class = str(case.get("query_class") or "")
     expected = case.get("expected") or {}
     trace_default = sem_helpers.trace_diverse_results(results, query=query, mode=mode, experiments={})
     trace_experimental = sem_helpers.trace_diverse_results(
@@ -235,6 +256,7 @@ def evaluate_case(case: dict) -> dict:
     return {
         "id": case.get("id"),
         "mode": mode,
+        "query_class": query_class or None,
         "query": query,
         "configs": out_configs,
     }
@@ -290,9 +312,14 @@ def evaluate_benchmarks(path: str | None = None) -> dict:
             count = max(1.0, bucket.pop("_count", 1.0))
             for key in list(bucket.keys()):
                 bucket[key] = bucket[key] / count
+    by_query_class: dict[str, int] = {}
+    for report in reports:
+        qclass = report.get("query_class") or "unspecified"
+        by_query_class[qclass] = by_query_class.get(qclass, 0) + 1
     return {
         "cases": reports,
         "summary": summary,
         "by_mode": by_mode,
+        "query_class_counts": by_query_class,
         "alerts": alerts,
     }

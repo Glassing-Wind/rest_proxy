@@ -156,7 +156,6 @@ async def debug_state() -> Any:
     return JSONResponse(
         {
             "entries": len(STATE),
-            "state_file": str(STATE_FILE),
             "sample_keys": sample_keys,
             "state_file": str(STATE_FILE),
         }

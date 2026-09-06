@@ -1,10 +1,17 @@
 """memory/store_search.py — vector search helpers."""
 
-import json
 from typing import Any, Dict, List
 
 import graph_bootstrap
 from memory import store_core
+
+
+def _is_missing_vector_index_error(exc: Exception) -> bool:
+    text = str(exc)
+    return (
+        "No such vector schema index" in text
+        or "There is no such vector schema index" in text
+    )
 
 
 async def search_similar_memory(
@@ -71,6 +78,13 @@ async def search_similar_memory(
         return results
 
     except Exception as exc:
+        if _is_missing_vector_index_error(exc):
+            store_core._debug(
+                "graph_search_similar_skipped",
+                session_id=session_id,
+                reason="memory_embeddings_vector_missing",
+            )
+            return []
         store_core._debug(
             "graph_search_similar_error", session_id=session_id, error=str(exc)
         )

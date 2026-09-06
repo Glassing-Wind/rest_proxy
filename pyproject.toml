@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rest-proxy"
+version = "0.1.0"
+dynamic = ["dependencies"]
+description = "FastAPI inference proxy and indexed GraphRAG tooling for AI coding agents"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+
+[project.optional-dependencies]
+dev = ["ruff==0.15.7"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools]
+py-modules = [
+  "_helpers",
+  "_index_cli",
+  "_jobs",
+  "_mcp",
+  "_runtime",
+  "_semantic_contract",
+  "_tool_fingerprint",
+  "brain_server",
+  "embedding_service",
+  "graph_bootstrap",
+  "mcp_server",
+  "runtime_logging",
+  "tool_choice_eval",
+]
+
+[tool.setuptools.packages.find]
+include = ["graphrag_core*", "local_embeddings*", "memory*", "proxy*", "tools*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [".runtime", "tmp"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# These executable entry points deliberately adjust process state or sys.path
+# before importing the rest of the application.
+"proxy/app.py" = ["E402"]
+"scripts/benchmark_lmstudio_embeddings.py" = ["E402"]
+"scripts/evaluate_tool_choice.py" = ["E402"]
+"scripts/index_workspace.py" = ["E402"]
+"scripts/run_enterprise_eval.py" = ["E402"]
+"scripts/run_struct_index.py" = ["E402"]
+"tools/brain/docs/indexer.py" = ["E402"]
+"tools/brain/search/dispatcher_eval.py" = ["E402"]

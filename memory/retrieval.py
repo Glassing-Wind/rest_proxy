@@ -1,4 +1,4 @@
-"""memory_retrieval.py – Embedding provider interface and memory assembly for the proxy.
+"""Embedding provider interface and memory assembly for the proxy.
 
 Responsibilities:
   1. Embedding provider abstraction (LM Studio/OpenAI endpoint or no-op stub).

@@ -1,0 +1,695 @@
+"""memory/code_retrieval.py — core codebase search retrieval and ranking policy."""
+
+from __future__ import annotations
+
+import os
+import asyncio
+from typing import Any
+
+from _helpers import get_project_id, WorkspaceRegistry, get_workspace_path
+from memory import retrieval_fallbacks as search_fallbacks
+from memory import code_retrieval_clone as retrieval_clone
+from memory import code_retrieval_loaders as retrieval_loaders
+from memory import code_retrieval_postprocess as retrieval_postprocess
+from memory import retrieval_metadata
+from memory import retrieval_policy as sem_helpers
+
+
+def _enrich_rescue_rows(
+    rows: list[dict],
+    *,
+    query: str,
+    query_class: str,
+    base_bonus: float,
+    path_hints: list[str] | None = None,
+) -> None:
+    """In-place: attach metadata scores and implementation enrichment to rescue rows."""
+    for r in rows:
+        r_meta = retrieval_metadata.coerce_meta(r)
+        r["_meta"] = r_meta
+        r["meta_score"] = retrieval_metadata.meta_score(r_meta)
+        # For path-hint rows the bonus depends on whether an exact identifier hit was found.
+        if path_hints is not None:
+            exact_id_hit = int(r.get("implementation_exact_identifier_text_hit", 0) or 0)
+            effective_bonus = 0.14 if exact_id_hit > 0 else base_bonus
+        else:
+            effective_bonus = base_bonus
+        sem_helpers.enrich_implementation_result(
+            r,
+            query=query,
+            query_class=query_class,
+            base_score=float(r.get("rrf", 0.0) or 0.0),
+            meta_boost=0.0,
+            base_bonus=effective_bonus,
+        )
+
+
+async def search_codebase_core(
+    workspace_ids: list[str],
+    query: str,
+    query_vector: list[float],
+    k: int = 5,
+    include_metadata: bool = False,
+    dedupe_files: bool = True,
+    include_debug: bool = False,
+    max_per_file: int = 0,
+    max_per_dir: int = 2,
+    meta_boost: float = 0.005,
+    mode: str = "precise",
+    fallback: str = "none",
+    fallback_ratio: float = 0.4,
+    fallback_max: int = 12,
+    fallback_glob: str = "",
+    exclude_tests: bool = True,
+    languages: list[str] | None = None,
+    min_imports: int = 0,
+    min_symbols: int = 0,
+    require_diagnostics: bool = False,
+    require_context: bool = False,
+    crate_contains: str | None = None,
+    include_paths: list[str] | None = None,
+    exclude_paths: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Perform core hybrid semantic + full-text search on codebase_embeddings table.
+    Handles precise/broad search modes, path-hint definition rescue, filtering by scope,
+    winnowing duplicate-aware reranking, and exact fallback grep.
+    """
+    import memory.store as memory_store
+    await memory_store.open_pool()
+
+    pid_to_name: dict[str, str] = {}
+    pid_to_path: dict[str, str] = {}
+    pids = []
+    for w_id in workspace_ids:
+        pid = WorkspaceRegistry.resolve_id(w_id) or get_project_id(w_id)
+        path = get_workspace_path(w_id)
+        pids.append(pid)
+        pid_to_name[pid] = (path or w_id).rstrip("/").split("/")[-1]
+        pid_to_path[pid] = path
+
+    multi = len(workspace_ids) > 1
+
+    impl_intent = sem_helpers.implementation_query_intent(query)
+    impl_query_class = sem_helpers.implementation_query_class(query)
+    exact_identifiers = sorted(sem_helpers.implementation_query_exact_identifiers(query))
+    member_exprs = sorted(sem_helpers.implementation_query_member_exprs(query))
+    path_hints = sem_helpers.implementation_query_path_hints(query)
+    inferred_filename_hints = sem_helpers.implementation_inferred_filename_hints(query)
+    if inferred_filename_hints:
+        path_hints = sorted(set(path_hints) | set(inferred_filename_hints))
+    explicit_runtime_entrypoints = sem_helpers.implementation_expected_runtime_entrypoint_paths(
+        query
+    )
+
+    vec_str = "[" + ",".join(str(v) for v in query_vector) + "]"
+    fetch = min(k * 10, 150)
+
+    async def _search_project(pid: str) -> list[dict]:
+        async with memory_store._pg_pool.connection() as conn:
+            await conn.execute("BEGIN")
+            async with conn.cursor() as cur:
+                await cur.execute("SET LOCAL hnsw.ef_search = 100")
+                await cur.execute("SET LOCAL hnsw.iterative_scan = relaxed_order")
+                await cur.execute(
+                    """\
+                    WITH semantic AS (
+                        SELECT file_path, chunk_index, content, project_id, metadata,
+                               ROW_NUMBER() OVER (
+                                   ORDER BY embedding <=> %(vec)s::vector
+                               ) AS sem_rank
+                        FROM codebase_embeddings
+                        WHERE project_id = %(pid)s
+                          AND (
+                              NOT %(impl_intent)s
+                              OR (
+                                  lower(file_path) NOT LIKE 'node-types/%%'
+                                  AND lower(file_path) NOT LIKE '%%/node-types/%%'
+                                  AND lower(file_path) NOT LIKE 'grammars/%%'
+                                  AND lower(file_path) NOT LIKE '%%/grammars/%%'
+                                  AND lower(file_path) NOT LIKE '%%-grammar.json'
+                                  AND lower(file_path) NOT LIKE '%%_grammar.json'
+                                  AND lower(file_path) NOT LIKE '%%/grammar.json'
+                              )
+                          )
+                        LIMIT %(fetch)s
+                    ),
+                    keyword AS (
+                        SELECT file_path, chunk_index,
+                               ROW_NUMBER() OVER (
+                                   ORDER BY ts_rank(search_vec,
+                                       websearch_to_tsquery('english', %(qt)s)) DESC
+                               ) AS kw_rank
+                        FROM codebase_embeddings
+                        WHERE project_id = %(pid)s
+                          AND search_vec @@ websearch_to_tsquery('english', %(qt)s)
+                          AND (
+                              NOT %(impl_intent)s
+                              OR (
+                                  lower(file_path) NOT LIKE 'node-types/%%'
+                                  AND lower(file_path) NOT LIKE '%%/node-types/%%'
+                                  AND lower(file_path) NOT LIKE 'grammars/%%'
+                                  AND lower(file_path) NOT LIKE '%%/grammars/%%'
+                                  AND lower(file_path) NOT LIKE '%%-grammar.json'
+                                  AND lower(file_path) NOT LIKE '%%_grammar.json'
+                                  AND lower(file_path) NOT LIKE '%%/grammar.json'
+                              )
+                          )
+                        LIMIT %(fetch)s
+                    )
+                    SELECT s.file_path, s.chunk_index, s.content, s.project_id, s.metadata,
+                           (2.0/(60+s.sem_rank)
+                            + COALESCE(1.0/(60+k.kw_rank), 0.0)) AS rrf
+                    FROM semantic s
+                    LEFT JOIN keyword k
+                      ON s.file_path = k.file_path
+                      AND s.chunk_index = k.chunk_index
+                    ORDER BY rrf DESC
+                    LIMIT %(fetch)s
+                """,
+                    {
+                        "vec": vec_str,
+                        "pid": pid,
+                        "qt": query,
+                        "fetch": fetch,
+                        "impl_intent": impl_intent,
+                    },
+                )
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "file_path": r[0],
+                        "chunk_index": r[1],
+                        "content": r[2],
+                        "project_id": r[3],
+                        "metadata": r[4],
+                        "rrf": r[5],
+                    }
+                    for r in rows
+                ]
+
+    all_results: list[dict] = []
+    batch = await asyncio.gather(*[_search_project(pid) for pid in pid_to_name])
+    for chunk in batch:
+        all_results.extend(chunk)
+
+    if not all_results:
+        if impl_intent and (path_hints or explicit_runtime_entrypoints):
+            rescue_results: list[dict] = []
+            if explicit_runtime_entrypoints:
+                for pid in pid_to_name:
+                    async with memory_store._pg_pool.connection() as conn:
+                        await conn.execute("BEGIN")
+                        exact_rows = await retrieval_loaders.load_rescue_rows(
+                            conn,
+                            pid=pid,
+                            file_paths=explicit_runtime_entrypoints,
+                            member_exprs=member_exprs,
+                        )
+                    _enrich_rescue_rows(exact_rows, query=query, query_class=impl_query_class, base_bonus=0.22)
+                    rescue_results.extend(exact_rows)
+            if path_hints:
+                for pid in pid_to_name:
+                    async with memory_store._pg_pool.connection() as conn:
+                        await conn.execute("BEGIN")
+                        rescue_rows = await retrieval_loaders.load_path_hint_rows(
+                            conn,
+                            pid=pid,
+                            path_hints=path_hints,
+                            identifier_exprs=exact_identifiers,
+                            max_files=min(max(fallback_max, 8), 16),
+                        )
+                    _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.025, path_hints=path_hints)
+                    rescue_results.extend(rescue_rows)
+            if rescue_results:
+                all_results = rescue_results
+                all_results.sort(key=sem_helpers.implementation_rank_tuple)
+
+    if not all_results:
+        return {
+            "results": [],
+            "all_results": [],
+            "pid_to_name": pid_to_name,
+            "pid_to_path": pid_to_path,
+            "multi": multi,
+            "duplicate_trace": None,
+            "fallback_lines": [],
+        }
+
+    if mode not in {"precise", "broad"}:
+        mode = "precise"
+
+    if exclude_tests:
+        exclude_paths = (exclude_paths or []) + [
+            "*test*",
+            "*tests*",
+            "*Test*",
+            "*Tests*",
+        ]
+        exclude_paths = list(dict.fromkeys(exclude_paths))
+
+    if impl_intent:
+        exclude_paths = (exclude_paths or []) + sem_helpers.implementation_noise_exclude_patterns(query)
+
+    if (
+        impl_intent
+        and sem_helpers.implementation_query_prefers_provider_wiring(query)
+        and not include_paths
+    ):
+        provider_tokens = sorted(sem_helpers.implementation_provider_query_tokens(query))
+        if provider_tokens:
+            include_paths = [
+                "providers/__init__.py",
+                "*/providers/__init__.py",
+            ]
+            for token in provider_tokens:
+                include_paths.extend(
+                    [
+                        f"providers/{token}.py",
+                        f"*/providers/{token}.py",
+                    ]
+                )
+        else:
+            include_paths = ["providers/*", "*/providers/*"]
+    if mode == "broad":
+        if max_per_dir == 2:
+            max_per_dir = 4
+        if meta_boost == 0.005:
+            meta_boost = 0.0
+        if fallback == "none":
+            fallback = "grep"
+        if max_per_file == 0:
+            max_per_file = 2
+
+    if impl_intent and sem_helpers.implementation_query_relaxes_dir_cap(query):
+        max_per_dir = 0
+
+    filters_active = any(
+        [
+            languages,
+            min_imports > 0,
+            min_symbols > 0,
+            require_diagnostics,
+            require_context,
+            crate_contains,
+            include_paths,
+            exclude_paths,
+        ]
+    )
+    clone_dedup = os.getenv("LM_PROXY_CLONE_DEDUP", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if filters_active or clone_dedup or meta_boost > 0:
+        include_metadata = True
+
+    cargo_rows_by_pid: dict[str, list[dict]] = {}
+    if all_results and (crate_contains or include_metadata):
+        try:
+            import graph_bootstrap
+
+            driver = await graph_bootstrap.require_driver()
+            cargo_rows_by_pid = await retrieval_loaders.load_cargo_crate_rows(
+                driver, graph_bootstrap._NEO4J_DB, list(pid_to_name.keys())
+            )
+        except Exception:
+            cargo_rows_by_pid = {}
+        if cargo_rows_by_pid:
+            grouped: dict[str, list[dict]] = {}
+            for result in all_results:
+                pid = result.get("project_id")
+                if pid:
+                    grouped.setdefault(pid, []).append(result)
+            for pid, rows in grouped.items():
+                retrieval_metadata.attach_cargo_crate_meta(rows, cargo_rows_by_pid.get(pid) or [])
+
+    if include_metadata:
+        for r in all_results:
+            r_meta = retrieval_metadata.coerce_meta(r)
+            r["_meta"] = r_meta
+            r["meta_score"] = retrieval_metadata.meta_score(r_meta)
+        if filters_active:
+            all_results = [
+                r
+                for r in all_results
+                if retrieval_metadata.passes_filters(
+                    r.get("_meta", {}),
+                    languages=languages,
+                    min_imports=min_imports,
+                    min_symbols=min_symbols,
+                    require_diagnostics=require_diagnostics,
+                    require_context=require_context,
+                )
+                and retrieval_metadata.path_allowed(
+                    r.get("file_path", ""),
+                    include_paths=include_paths,
+                    exclude_paths=exclude_paths,
+                )
+            ]
+        if crate_contains:
+            all_results = retrieval_metadata.filter_by_cargo_crate(all_results, crate_contains)
+        for r in all_results:
+            base_score = r.get("rrf", 0.0)
+            try:
+                base_score = float(base_score)
+            except (TypeError, ValueError):
+                base_score = 0.0
+            if impl_intent:
+                sem_helpers.enrich_implementation_result(
+                    r,
+                    query=query,
+                    query_class=impl_query_class,
+                    base_score=base_score,
+                    meta_boost=meta_boost,
+                )
+            else:
+                sem_helpers.apply_result_surface_flags(r)
+                is_doc_like = r["doc_like"]
+                is_low_signal_parser_data = r["low_signal_parser_data"]
+                is_low_signal_binding_surface = r["low_signal_binding_surface"]
+                doc_penalty = 0.05 if is_doc_like else 0.0
+                parser_data_penalty = 0.08 if is_low_signal_parser_data else 0.0
+                binding_surface_penalty = 0.06 if is_low_signal_binding_surface else 0.0
+                r["doc_like"] = is_doc_like
+                r["low_signal_parser_data"] = is_low_signal_parser_data
+                r["low_signal_binding_surface"] = is_low_signal_binding_surface
+                r["rank_score"] = (
+                    base_score
+                    + (r.get("meta_score", 0) * meta_boost if meta_boost > 0 else 0.0)
+                    - doc_penalty
+                    - parser_data_penalty
+                    - binding_surface_penalty
+                )
+        all_results.sort(key=sem_helpers.implementation_rank_tuple)
+    else:
+        if impl_intent:
+            for r in all_results:
+                sem_helpers.apply_result_surface_flags(r)
+            all_results.sort(key=sem_helpers.implementation_rank_tuple)
+        else:
+            all_results.sort(key=lambda r: r["rrf"], reverse=True)
+
+    if impl_intent:
+        code_results = [
+            r
+            for r in all_results
+            if not r.get("doc_like")
+            and not r.get("low_signal_parser_data")
+            and not r.get("low_signal_binding_surface")
+        ]
+        parser_results = [
+            r for r in all_results if r.get("low_signal_parser_data") and not r.get("doc_like")
+        ]
+        binding_results = [
+            r
+            for r in all_results
+            if r.get("low_signal_binding_surface") and not r.get("doc_like")
+        ]
+        doc_results = [r for r in all_results if r.get("doc_like")]
+        if code_results:
+            all_results = code_results
+        elif parser_results:
+            all_results = parser_results
+        elif binding_results:
+            all_results = binding_results
+        else:
+            all_results = doc_results
+
+    if impl_intent:
+        non_parser_candidates = [
+            r for r in all_results if not r.get("low_signal_parser_data")
+        ]
+        if non_parser_candidates:
+            all_results = non_parser_candidates
+
+    if impl_intent and path_hints and all_results:
+        top_probe = all_results[: min(5, len(all_results))]
+        has_definition_hit = any(
+            int(r.get("implementation_definition_hit", 0) or 0) > 0
+            or int(r.get("implementation_api_entrypoint_hit", 0) or 0) > 0
+            for r in top_probe
+        )
+        has_path_hint_hit = any(
+            sem_helpers.implementation_path_hint_hit(
+                r.get("file_path"),
+                path_hints=path_hints,
+            )
+            > 0
+            for r in top_probe
+        )
+        has_runtime_entrypoint_hit = any(
+            int(r.get("implementation_runtime_main_entrypoint_hit", 0) or 0) > 0 for r in top_probe
+        )
+        rescue_results: list[dict] = []
+        if explicit_runtime_entrypoints and not has_runtime_entrypoint_hit:
+            for pid in pid_to_name:
+                async with memory_store._pg_pool.connection() as conn:
+                    await conn.execute("BEGIN")
+                    exact_rows = await retrieval_loaders.load_rescue_rows(
+                        conn,
+                        pid=pid,
+                        file_paths=explicit_runtime_entrypoints,
+                        member_exprs=member_exprs,
+                    )
+                _enrich_rescue_rows(exact_rows, query=query, query_class=impl_query_class, base_bonus=0.22)
+                rescue_results.extend(exact_rows)
+        if not has_path_hint_hit:
+            for pid in pid_to_name:
+                async with memory_store._pg_pool.connection() as conn:
+                    await conn.execute("BEGIN")
+                    rescue_rows = await retrieval_loaders.load_path_hint_rows(
+                        conn,
+                        pid=pid,
+                        path_hints=path_hints,
+                        identifier_exprs=exact_identifiers,
+                        max_files=min(max(fallback_max, 8), 16),
+                    )
+                _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.025, path_hints=path_hints)
+                rescue_results.extend(rescue_rows)
+        if rescue_results:
+            existing_keys = {
+                (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                for r in all_results
+            }
+            for r in rescue_results:
+                key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                if key not in existing_keys:
+                    all_results.append(r)
+            all_results.sort(key=sem_helpers.implementation_rank_tuple)
+            top_probe = all_results[: min(5, len(all_results))]
+            has_definition_hit = any(
+                int(r.get("implementation_definition_hit", 0) or 0) > 0
+                or int(r.get("implementation_api_entrypoint_hit", 0) or 0) > 0
+                for r in top_probe
+            )
+        if sem_helpers.query_class_prefers_definitions(impl_query_class) and not has_definition_hit:
+            rescue_results: list[dict] = []
+            for pid, proj_name in pid_to_name.items():
+                proj_root = pid_to_path.get(pid)
+                if not proj_root:
+                    continue
+                matches, _dbg = await search_fallbacks.run_definition_fallback_grep(
+                    proj_root,
+                    query,
+                    fallback_glob,
+                    min(fallback_max, 8),
+                )
+                if not matches:
+                    continue
+                async with memory_store._pg_pool.connection() as conn:
+                    await conn.execute("BEGIN")
+                    rescue_rows = await retrieval_loaders.load_rescue_rows(
+                        conn,
+                        pid=pid,
+                        file_paths=matches,
+                        member_exprs=member_exprs,
+                    )
+                _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.02)
+                rescue_results.extend(rescue_rows)
+            if rescue_results:
+                existing_keys = {
+                    (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                    for r in all_results
+                }
+                for r in rescue_results:
+                    key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                    if key not in existing_keys:
+                        all_results.append(r)
+                all_results.sort(key=sem_helpers.implementation_rank_tuple)
+
+    if impl_intent and sem_helpers.query_class_prefers_usage(impl_query_class) and all_results:
+        top_probe = all_results[: min(5, len(all_results))]
+        has_usage_site_member_hit = any(
+            sem_helpers.implementation_exact_member_usage_site_hit(r)
+            for r in top_probe
+        )
+        if member_exprs and not has_usage_site_member_hit:
+            rescue_results: list[dict] = []
+            for pid, proj_name in pid_to_name.items():
+                proj_root = pid_to_path.get(pid)
+                if not proj_root:
+                    continue
+                matches, _dbg = await search_fallbacks.run_member_usage_fallback_grep(
+                    proj_root,
+                    member_exprs,
+                    fallback_glob,
+                    min(max(fallback_max, 32), 64),
+                )
+                if not matches:
+                    continue
+                async with memory_store._pg_pool.connection() as conn:
+                    await conn.execute("BEGIN")
+                    rescue_rows = await retrieval_loaders.load_rescue_rows(
+                        conn,
+                        pid=pid,
+                        file_paths=matches,
+                        member_exprs=member_exprs,
+                    )
+                _enrich_rescue_rows(rescue_rows, query=query, query_class=impl_query_class, base_bonus=0.03)
+                rescue_results.extend(rescue_rows)
+            if rescue_results:
+                existing_keys = {
+                    (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                    for r in all_results
+                }
+                for r in rescue_results:
+                    key = (r.get("project_id"), r.get("file_path"), r.get("chunk_index"))
+                    if key not in existing_keys:
+                        all_results.append(r)
+                all_results.sort(key=sem_helpers.implementation_rank_tuple)
+        exact_member_hits = [
+            r for r in all_results if int(r.get("implementation_exact_member_usage_hit", 0) or 0) > 0
+        ]
+        if member_exprs and exact_member_hits:
+            exact_usage_site_hits = [
+                r for r in exact_member_hits if sem_helpers.implementation_exact_member_usage_site_hit(r)
+            ]
+            exact_non_site_hits = [
+                r for r in exact_member_hits if not sem_helpers.implementation_exact_member_usage_site_hit(r)
+            ]
+            prefer_tests = sem_helpers.usage_query_prefers_test_results(query)
+            prefer_examples = sem_helpers.usage_query_prefers_example_results(query)
+            if not prefer_tests:
+                example_hits = []
+                test_hits = []
+                other_hits = []
+                for r in exact_usage_site_hits:
+                    chunk_role = sem_helpers.implementation_chunk_role(
+                        retrieval_metadata.coerce_meta(r),
+                        r.get("file_path"),
+                    )
+                    if chunk_role == "example_usage":
+                        example_hits.append(r)
+                    elif chunk_role == "test_usage":
+                        test_hits.append(r)
+                    else:
+                        other_hits.append(r)
+                example_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                other_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                test_hits.sort(key=sem_helpers.implementation_rank_tuple)
+                if prefer_examples:
+                    exact_usage_site_hits = example_hits + test_hits + other_hits
+                else:
+                    exact_usage_site_hits = example_hits + other_hits + test_hits
+            else:
+                exact_usage_site_hits.sort(key=sem_helpers.implementation_rank_tuple)
+            exact_non_site_hits.sort(key=sem_helpers.implementation_rank_tuple)
+            non_exact_hits = [
+                r
+                for r in all_results
+                if int(r.get("implementation_exact_member_usage_hit", 0) or 0) <= 0
+            ]
+            non_exact_hits.sort(key=sem_helpers.implementation_rank_tuple)
+            all_results = exact_usage_site_hits + exact_non_site_hits + non_exact_hits
+
+    if include_metadata and all_results and (include_paths or exclude_paths):
+        all_results = [
+            r
+            for r in all_results
+            if retrieval_metadata.path_allowed(
+                r.get("file_path", ""),
+                include_paths=include_paths,
+                exclude_paths=exclude_paths,
+            )
+        ]
+
+    if clone_dedup:
+        all_results = await retrieval_clone.apply_clone_dedup(
+            all_results,
+            pids=pids,
+            include_debug=include_debug,
+        )
+
+    (
+        all_results,
+        duplicate_trace,
+        duplicate_trace_enabled,
+        duplicate_telemetry_enabled,
+    ) = await retrieval_postprocess.postprocess_code_results(
+        all_results,
+        query=query,
+        impl_intent=impl_intent,
+        impl_query_class=impl_query_class,
+        dedupe_files=dedupe_files,
+        include_debug=include_debug,
+        path_hints=path_hints,
+    )
+
+    all_results = retrieval_metadata.cap_per_file(all_results, max_per_file)
+    all_results = retrieval_metadata.cap_per_dir(all_results, max_per_dir)
+    top = all_results[:k]
+
+    fallback_lines: list[str] = []
+    debug_tokens: list[str] = []
+    rg_hint = os.getenv("LM_PROXY_RG_PATH") or "(auto)"
+
+    if fallback == "grep" and top:
+        unique_files = len(
+            {r.get("file_path") for r in top if r.get("file_path")}
+        )
+        ratio = unique_files / max(1, len(top))
+        if unique_files <= 1 or ratio <= fallback_ratio:
+            debug_tokens = (
+                search_fallbacks.extract_fallback_tokens(query)
+                if include_debug
+                else []
+            )
+            for pid, proj_name in pid_to_name.items():
+                proj_root = pid_to_path.get(pid)
+                if not proj_root:
+                    continue
+                matches, dbg = await search_fallbacks.run_fallback_grep(
+                    proj_root,
+                    query,
+                    fallback_glob,
+                    fallback_max,
+                )
+                if include_debug and dbg:
+                    dbg_info = ", ".join(
+                        f"{k}={v}" for k, v in dbg.items() if v is not None
+                    )
+                    if dbg_info:
+                        fallback_lines.append(f"- [debug] {dbg_info}")
+                if not matches:
+                    continue
+                for fp in matches:
+                    label = f"[{proj_name}] {fp}" if multi else fp
+                    fallback_lines.append(label)
+
+    return {
+        "results": top,
+        "all_results": all_results,
+        "pid_to_name": pid_to_name,
+        "pid_to_path": pid_to_path,
+        "multi": multi,
+        "include_metadata": include_metadata,
+        "duplicate_trace": duplicate_trace,
+        "duplicate_trace_enabled": duplicate_trace_enabled,
+        "duplicate_telemetry_enabled": duplicate_telemetry_enabled,
+        "fallback_lines": fallback_lines,
+        "fallback_tokens": debug_tokens,
+        "fallback_glob": fallback_glob,
+        "fallback_rg_hint": rg_hint,
+    }

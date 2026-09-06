@@ -1,0 +1,102 @@
+{
+  "cases": [
+    {
+      "id": "dispatcher_ranking_promotes_canonical_models_init",
+      "query": "where is model inference selected",
+      "expected": {
+        "file_path": "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        "declared_symbol": "infer_model"
+      },
+      "semantic_candidates": [
+        {
+          "file_path": "pydantic_ai_slim/pydantic_ai/embeddings/__init__.py",
+          "project_id": "bench",
+          "chunk_index": 0,
+          "rrf": 0.92,
+          "content": "from .base import EmbeddingsModel\n__all__ = ('EmbeddingsModel',)\n",
+          "metadata": {
+            "declared_symbols": ["EmbeddingsModel"],
+            "file_symbols": ["EmbeddingsModel"],
+            "node_types": ["module"],
+            "file_roles": ["library_facade_surface", "dispatcher_surface", "model_dispatcher_surface"]
+          }
+        },
+        {
+          "file_path": "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+          "project_id": "bench",
+          "chunk_index": 1,
+          "rrf": 0.61,
+          "content": "// Semantic role: canonical model inference selection dispatcher\ndef infer_model(model: Model | KnownModelName) -> Model:\n    return model\n",
+          "metadata": {
+            "declared_symbols": ["infer_model"],
+            "file_symbols": ["infer_model"],
+            "declared_symbol_roles": {
+              "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
+            },
+            "focused_dispatcher_anchor_contract_version": 1,
+            "semantic_contract_capabilities": ["focused_dispatcher_anchor_v1"],
+            "chunk_role": "canonical_dispatcher_definition",
+            "node_types": ["function_definition"],
+            "file_roles": ["dispatcher_surface", "model_dispatcher_surface", "library_facade_surface"]
+          }
+        },
+        {
+          "file_path": "pydantic_ai_slim/pydantic_ai/profiles/deepseek.py",
+          "project_id": "bench",
+          "chunk_index": 2,
+          "rrf": 0.58,
+          "content": "def infer_model_profile(name: str) -> str:\n    return name\n",
+          "metadata": {
+            "declared_symbols": ["infer_model_profile"],
+            "file_symbols": ["infer_model_profile"],
+            "chunk_role": "profile_definition",
+            "node_types": ["function_definition"],
+            "file_roles": ["profile_surface"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "dispatcher_final_promotion_surfaces_canonical_candidate",
+      "query": "where is model inference selected",
+      "expected": {
+        "file_path": "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+        "declared_symbol": "infer_model"
+      },
+      "semantic_candidates": [
+        {
+          "file_path": "pydantic_ai_slim/pydantic_ai/models/huggingface.py",
+          "project_id": "bench",
+          "chunk_index": 0,
+          "rrf": 0.89,
+          "content": "class HuggingFaceModelSettings: ...\ndef _map_api_errors(): ...\n",
+          "metadata": {
+            "declared_symbols": ["HuggingFaceModelSettings", "_map_api_errors"],
+            "file_symbols": ["HuggingFaceModelSettings", "_map_api_errors"],
+            "node_types": ["class_definition", "function_definition"],
+            "file_roles": ["model_dispatcher_surface"]
+          }
+        },
+        {
+          "file_path": "pydantic_ai_slim/pydantic_ai/models/__init__.py",
+          "project_id": "bench",
+          "chunk_index": 1,
+          "rrf": 0.61,
+          "content": "// Semantic role: canonical model inference selection dispatcher\n// Query intent: where model inference is selected; canonical model selection entrypoint\n// Dispatcher symbol: infer_model\n// Purpose: selects the concrete model implementation and provider from a model name\ndef infer_model(model: Model | KnownModelName) -> Model:\n    return model\n",
+          "metadata": {
+            "declared_symbols": ["infer_model"],
+            "file_symbols": ["infer_model"],
+            "declared_symbol_roles": {
+              "infer_model": ["canonical_dispatcher", "dispatcher", "model_selector"]
+            },
+            "focused_dispatcher_anchor_contract_version": 1,
+            "semantic_contract_capabilities": ["focused_dispatcher_anchor_v1"],
+            "chunk_role": "canonical_dispatcher_definition",
+            "node_types": ["function_definition"],
+            "file_roles": ["dispatcher_surface", "model_dispatcher_surface", "library_facade_surface"]
+          }
+        }
+      ]
+    }
+  ]
+}

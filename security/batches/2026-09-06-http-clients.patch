@@ -1,0 +1,96 @@
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,6 +1,6 @@
+ aiofiles==25.1.0
+ aiohappyeyeballs==2.6.1
+-aiohttp==3.13.4
++aiohttp==3.14.3
+ aiosignal==1.4.0
+ aiosqlite==0.22.1
+ alphashape==1.3.1
+@@ -123,7 +123,7 @@
+ pyOpenSSL==26.0.0
+ python-dateutil==2.9.0.post0
+ python-dotenv==1.2.2
+-python-multipart==0.0.26
++python-multipart==0.0.31
+ python-slugify==8.0.4
+ pytz==2026.1.post1
+ PyYAML==6.0.3
+@@ -175,7 +175,7 @@
+ tzdata==2025.3
+ tzlocal==5.3.1
+ unclecode-litellm==1.81.13
+-urllib3==2.6.3
++urllib3==2.7.0
+ uvicorn==0.41.0
+ w3lib==2.4.1
+ wcwidth==0.6.0
+--- a/requirements-ci.txt
++++ b/requirements-ci.txt
+@@ -1,6 +1,6 @@
+ aiofiles==25.1.0
+ aiohappyeyeballs==2.6.1
+-aiohttp==3.13.4
++aiohttp==3.14.3
+ aiosignal==1.4.0
+ aiosqlite==0.22.1
+ alphashape==1.3.1
+@@ -110,7 +110,7 @@
+ pyOpenSSL==26.0.0
+ python-dateutil==2.9.0.post0
+ python-dotenv==1.2.2
+-python-multipart==0.0.26
++python-multipart==0.0.31
+ python-slugify==8.0.4
+ pytz==2026.1.post1
+ PyYAML==6.0.3
+@@ -156,7 +156,7 @@
+ tzdata==2025.3
+ tzlocal==5.3.1
+ unclecode-litellm==1.81.13
+-urllib3==2.6.3
++urllib3==2.7.0
+ uvicorn==0.41.0
+ w3lib==2.4.1
+ wcwidth==0.6.0
+--- a/security/pip-audit-baseline.txt
++++ b/security/pip-audit-baseline.txt
+@@ -1,20 +1,6 @@
+ # Reviewed 2026-09-05. These are the advisories present before dependency
+ # auditing became blocking. New advisory IDs fail CI. Remove an ID as soon as
+ # its owning package is upgraded; see docs/security.md.
+-PYSEC-2026-2104
+-PYSEC-2026-2105
+-PYSEC-2026-2106
+-PYSEC-2026-2107
+-PYSEC-2026-2108
+-PYSEC-2026-2109
+-PYSEC-2026-2110
+-PYSEC-2026-2111
+-PYSEC-2026-2112
+-PYSEC-2026-2113
+-PYSEC-2026-237
+-PYSEC-2026-3545
+-PYSEC-2026-3546
+-PYSEC-2026-3547
+ PYSEC-2026-2132
+ PYSEC-2026-2430
+ GHSA-537c-gmf6-5ccf
+@@ -75,10 +61,6 @@
+ PYSEC-2026-177
+ PYSEC-2026-178
+ PYSEC-2026-179
+-PYSEC-2026-3036
+-PYSEC-2026-3037
+-PYSEC-2026-3039
+-PYSEC-2026-3040
+ PYSEC-2026-3071
+ PYSEC-2026-3072
+ PYSEC-2026-161
+@@ -92,5 +74,3 @@
+ PYSEC-2026-2288
+ PYSEC-2026-2289
+ PYSEC-2026-2290
+-PYSEC-2026-141
+-PYSEC-2026-142

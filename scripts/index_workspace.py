@@ -12,22 +12,52 @@ Usage:
 import os
 import sys
 import asyncio
+import inspect
 import json
 import time
 import threading
+import uuid
 from collections import Counter
 from typing import List, Dict, Tuple
-from dotenv import load_dotenv
 
 # Import memory/embedding modules AFTER env vars are set
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(REPO_ROOT, ".env"))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
+
+from _runtime import resolve_python_runtime
+from _semantic_contract import SEMANTIC_CONTRACT_VERSION
+
+
+def _ensure_runtime_dependencies() -> None:
+    try:
+        import dotenv  # noqa: F401
+        import neo4j  # noqa: F401
+    except ModuleNotFoundError:
+        if os.environ.get("LM_PROXY_RUNTIME_REEXECED") == "1":
+            raise
+        runtime = resolve_python_runtime()
+        preferred = str(runtime.get("python") or "")
+        if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+            raise
+        os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
+        os.execv(preferred, [preferred, __file__, *sys.argv[1:]])
+
+
+_ensure_runtime_dependencies()
+
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
+
+# This worker's only job is codebase semantic indexing. Keep the proxy-level
+# default conservative, but make direct indexing writes explicit in this process.
+os.environ.setdefault("LM_PROXY_MEMORY_ENABLE_EMBEDDINGS", "1")
 
 import memory.store as memory_store
 import memory.bootstrap as memory_bootstrap
 from embedding_service import get_embedding_service
+from local_embeddings import get_lmstudio_provider
 # AST-chunk size: target upper bound for native ts_pack chunks.
 CHUNK_MAX_BYTES = 4_000  # bytes — passed through to ts_pack helpers
 # Overlap between adjacent AST chunks (bytes). Keep small to avoid duplication.
@@ -40,43 +70,27 @@ OVERLAP_LINES = 10  # overlap between windows
 MANIFEST_BATCH = 50  # files per interleaved cycle
 MAX_FILE_BYTES = 1_000_000  # skip source files > 1 MB
 CHUNK_CONCURRENCY = max(1, int(os.getenv("LM_PROXY_CHUNK_CONCURRENCY", "64")))
+USE_NATIVE_SEMANTIC_DRIVER = os.getenv("LM_PROXY_NATIVE_SEMANTIC_DRIVER", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+DEFER_NEO4J_EMBED_LINKS = os.getenv("LM_PROXY_DEFER_NEO4J_EMBED_LINKS", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+DEFER_NEO4J_LINK_BATCH_SIZE = max(
+    1, int(os.getenv("LM_PROXY_DEFER_NEO4J_LINK_BATCH_SIZE", "4096"))
+)
 TS_PACK_AUTO_DOWNLOAD = os.getenv("LM_PROXY_TS_PACK_AUTO_DOWNLOAD", "1") == "1"
 TS_PACK_CACHE_DIR = os.getenv("LM_PROXY_TS_PACK_CACHE_DIR")
 
 _TS_PACK_INIT_DONE = False
 _TS_PACK_INIT_LOCK = threading.Lock()
-
-# Extensions that always use the line-window fallback (no AST structure).
-_FALLBACK_EXTS = {
-    "yaml",
-    "yml",
-    "toml",
-    "json",
-    "pbxproj",
-    "xcscheme",
-    "xcworkspacedata",
-    "plist",
-    "md",
-    "txt",
-    "sh",
-    "bash",
-    "zsh",
-    "fish",
-    "sql",
-    "graphql",
-    "tf",
-    "hcl",
-    "r",
-    "jl",
-}
-
-# Dotfiles that should still be chunked with the line-window fallback.
-_FALLBACK_FILENAMES = {
-    ".env",
-    ".env.example",
-    ".gitignore",
-    ".indexignore",
-}
+_LAST_INDEX_PROJECT_OK = True
 
 # Minimal extraction patterns for languages where queries are stable.
 # Extractions: keep small and stable (query syntax varies by grammar).
@@ -122,6 +136,32 @@ _EXTRACTIONS_BY_LANG = {
         },
     },
 }
+
+def _semantic_chunk_required_fields(ts_pack) -> set[str]:
+    fields = getattr(ts_pack, "REQUIRED_SEMANTIC_CHUNK_FIELDS", None)
+    if not fields:
+        raise ValueError("ts_pack semantic contract export missing REQUIRED_SEMANTIC_CHUNK_FIELDS")
+    return {str(field) for field in fields}
+
+
+def _validate_semantic_chunk_contract(chunks: List[Dict], file_path: str, ts_pack) -> None:
+    if not chunks:
+        return
+    required_fields = _semantic_chunk_required_fields(ts_pack)
+    for index, chunk in enumerate(chunks):
+        metadata = chunk.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError(
+                f"ts_pack semantic chunk contract violation for {file_path} chunk {index}: missing metadata"
+            )
+        missing = sorted(required_fields - set(metadata.keys()))
+        if missing:
+            raise ValueError(
+                f"ts_pack semantic chunk contract violation for {file_path} chunk {index}: "
+                f"missing fields {', '.join(missing)}"
+            )
+        metadata.setdefault("file_roles", [])
+        metadata["semantic_contract_version"] = SEMANTIC_CONTRACT_VERSION
 
 
 def _skip_diagnostic_files_enabled() -> bool:
@@ -171,7 +211,8 @@ def _preflight_ts_pack(manifest: List[Dict]) -> None:
     detected: set[str] = set()
     for entry in manifest:
         ext = (entry.get("ext") or "").lower().lstrip(".")
-        if not ext or ext in _FALLBACK_EXTS:
+        rel_path = entry.get("rel_path") or entry.get("abs_path") or ""
+        if getattr(ts_pack, "should_use_line_window_fallback", None) and ts_pack.should_use_line_window_fallback(rel_path):
             continue
         lang = None
         try:
@@ -265,14 +306,17 @@ def _read_and_chunk(
             return False
 
     ext = abs_path.rsplit(".", 1)[-1].lower() if "." in abs_path else ""
+    fallback_allowed = False
+    if getattr(ts_pack, "should_use_line_window_fallback", None):
+        try:
+            fallback_allowed = bool(ts_pack.should_use_line_window_fallback(rel_path))
+        except Exception:
+            fallback_allowed = False
 
     # Use ts_pack.detect_language for language detection — covers 156 languages.
     # Prefer extension-based detection when available to avoid mis-detection.
     lang: str | None = None
-    if (
-        ext not in _FALLBACK_EXTS
-        and os.path.basename(abs_path) not in _FALLBACK_FILENAMES
-    ):
+    if not fallback_allowed:
         if ext == "svg":
             lang = "xml"
         else:
@@ -288,12 +332,9 @@ def _read_and_chunk(
         parser_missing = True
         lang = None
 
-    # Nothing to do: unknown file type and not a line-window fallback extension.
-    if (
-        lang is None
-        and ext not in _FALLBACK_EXTS
-        and os.path.basename(abs_path) not in _FALLBACK_FILENAMES
-    ):
+    # Runtime outcome, not manifest policy: the file reached the semantic worker
+    # but we still could not determine a supported language or fallback path.
+    if lang is None and not fallback_allowed:
         reason = "missing_parser" if parser_missing else "unknown_language"
         return [], reason
 
@@ -303,78 +344,99 @@ def _read_and_chunk(
     except OSError:
         return [], "read_error"
 
+    # Runtime safety outcome, not manifest policy.
     if len(source) > MAX_FILE_BYTES:
         return [], "too_large"
+    # Runtime file-content outcome, not manifest policy.
     if not source.strip():
         return [], "empty"
 
     chunks: List[Dict] = []
     file_meta: dict = {}
 
-    # ── Swift: declaration-boundary chunker (avoids sub-expression atomization)
-    if lang == "swift":
+    if getattr(ts_pack, "build_indexing_chunks", None):
         try:
-            payload = ts_pack.build_semantic_payload(
+            payload = ts_pack.build_indexing_chunks(
                 source,
-                "swift",
                 rel_path,
                 project_id,
+                language=lang,
                 chunk_id_version=CHUNK_ID_VERSION,
                 chunk_max_size=CHUNK_MAX_BYTES,
                 chunk_overlap=CHUNK_OVERLAP_BYTES,
-            )
-            file_meta = payload.get("file_meta") or {}
-            if _should_skip_diagnostic_file(file_meta):
-                return [], "diagnostics"
-        except Exception:
-            file_meta = {}
-
-        swift_chunks = ts_pack.build_swift_chunks(
-            source,
-            rel_path,
-            project_id,
-            file_meta=file_meta,
-            chunk_id_version=CHUNK_ID_VERSION,
-            chunk_max_size=CHUNK_MAX_BYTES,
-            chunk_lines=CHUNK_LINES,
-            overlap_lines=OVERLAP_LINES,
-        )
-        if swift_chunks:
-            return swift_chunks, None
-        # fall through to ts_pack / line-window if structure[] was empty
-
-    # ── Native ts_pack chunking ───────────────────────────────────────────────
-    if lang and lang != "swift":
-        try:
-            payload = ts_pack.build_semantic_payload(
-                source,
-                lang,
-                rel_path,
-                project_id,
-                chunk_id_version=CHUNK_ID_VERSION,
-                chunk_max_size=CHUNK_MAX_BYTES,
-                chunk_overlap=CHUNK_OVERLAP_BYTES,
+                chunk_lines=CHUNK_LINES,
+                overlap_lines=OVERLAP_LINES,
             )
             file_meta = payload.get("file_meta") or {}
             if _should_skip_diagnostic_file(file_meta):
                 return [], "diagnostics"
             chunks = payload.get("chunks") or []
         except Exception:
-            pass  # Fall through to line-window below
+            chunks = []
+            file_meta = {}
+    else:
+        # Compatibility fallback while editable installs/tests catch up to the
+        # producer-owned helper surface.
+        def _build_semantic_payload_compat(source_text: str, language_name: str) -> dict:
+            payload_kwargs = {
+                "chunk_id_version": CHUNK_ID_VERSION,
+                "chunk_max_size": CHUNK_MAX_BYTES,
+            }
+            payload_sig = inspect.signature(ts_pack.build_semantic_payload)
+            if "chunk_overlap" in payload_sig.parameters:
+                payload_kwargs["chunk_overlap"] = CHUNK_OVERLAP_BYTES
+            elif "_chunk_overlap" in payload_sig.parameters:
+                payload_kwargs["_chunk_overlap"] = CHUNK_OVERLAP_BYTES
+            return ts_pack.build_semantic_payload(
+                source_text,
+                language_name,
+                rel_path,
+                project_id,
+                **payload_kwargs,
+            )
 
-    # ── Line-window fallback (unsupported lang or empty result) ──────────────
-    if not chunks:
-        chunks = ts_pack.build_line_window_chunks(
-            source,
-            rel_path,
-            project_id,
-            language=lang,
-            file_meta=file_meta,
-            chunk_id_version=CHUNK_ID_VERSION,
-            chunk_lines=CHUNK_LINES,
-            overlap_lines=OVERLAP_LINES,
-        )
+        if lang == "swift":
+            try:
+                payload = _build_semantic_payload_compat(source, "swift")
+                file_meta = payload.get("file_meta") or {}
+                if _should_skip_diagnostic_file(file_meta):
+                    return [], "diagnostics"
+            except Exception:
+                file_meta = {}
 
+            chunks = ts_pack.build_swift_chunks(
+                source,
+                rel_path,
+                project_id,
+                file_meta=file_meta,
+                chunk_id_version=CHUNK_ID_VERSION,
+                chunk_max_size=CHUNK_MAX_BYTES,
+                chunk_lines=CHUNK_LINES,
+                overlap_lines=OVERLAP_LINES,
+            )
+        elif lang:
+            try:
+                payload = _build_semantic_payload_compat(source, lang)
+                file_meta = payload.get("file_meta") or {}
+                if _should_skip_diagnostic_file(file_meta):
+                    return [], "diagnostics"
+                chunks = payload.get("chunks") or []
+            except Exception:
+                chunks = []
+
+        if not chunks:
+            chunks = ts_pack.build_line_window_chunks(
+                source,
+                rel_path,
+                project_id,
+                language=lang,
+                file_meta=file_meta,
+                chunk_id_version=CHUNK_ID_VERSION,
+                chunk_lines=CHUNK_LINES,
+                overlap_lines=OVERLAP_LINES,
+            )
+
+    _validate_semantic_chunk_contract(chunks, rel_path, ts_pack)
     return chunks, None
 
 
@@ -385,6 +447,37 @@ async def chunk_file(
     return await asyncio.to_thread(_read_and_chunk, abs_path, rel_path, project_id)
 
 
+def _chunk_manifest_native(manifest: List[Dict], project_id: str) -> List[Tuple[List[Dict], str | None]]:
+    import tree_sitter_language_pack as ts_pack
+
+    native_manifest = getattr(ts_pack, "process_semantic_manifest_entries", None)
+    if native_manifest is None:
+        raise RuntimeError("ts_pack native manifest chunk processor unavailable")
+
+    payload = native_manifest(
+        manifest,
+        project_id,
+        max_file_bytes=MAX_FILE_BYTES,
+        chunk_id_version=CHUNK_ID_VERSION,
+        chunk_max_size=CHUNK_MAX_BYTES,
+        chunk_overlap=CHUNK_OVERLAP_BYTES,
+        chunk_lines=CHUNK_LINES,
+        overlap_lines=OVERLAP_LINES,
+        skip_diagnostic_files=_skip_diagnostic_files_enabled(),
+    )
+    all_results: List[Tuple[List[Dict], str | None]] = []
+    for entry, item in zip(manifest, payload or []):
+        chunks = item.get("chunks") or []
+        reason = item.get("reason")
+        _validate_semantic_chunk_contract(chunks, entry.get("rel_path") or "", ts_pack)
+        all_results.append((chunks, reason))
+    if len(all_results) != len(manifest):
+        raise ValueError(
+            f"ts_pack native manifest processor returned {len(all_results)} result(s) for {len(manifest)} file(s)"
+        )
+    return all_results
+
+
 # ── Main indexing coroutine ───────────────────────────────────────────────────
 
 
@@ -393,7 +486,10 @@ async def _embed_buffer(buffer: list, embedding_svc) -> list:
     if not buffer:
         return buffer
     texts = [it["text"] for it in buffer]
-    vectors = await embedding_svc.embed_batch_async(texts)
+    vectors = await embedding_svc.embed_batch_async(
+        texts,
+        batch_size=embedding_svc.effective_batch_size,
+    )
     for k, vec in enumerate(vectors):
         buffer[k]["vector"] = vec
     return buffer
@@ -403,15 +499,23 @@ async def _write_buffer(
     buffer: list,
     target_dir: str,
     project_id: str,
+    *,
+    defer_link_refs: bool = False,
+    deferred_ref_ids: list[str] | None = None,
 ) -> int:
     """Write a pre-embedded buffer to Postgres. Returns chunk count written."""
     if not buffer:
         return 0
+    if defer_link_refs and deferred_ref_ids is not None:
+        deferred_ref_ids.extend(
+            item.get("ref_id") for item in buffer if item.get("ref_id")
+        )
     return await memory_store.insert_embeddings_batch(
         session_id=project_id,
         project_id=project_id,
         batch=buffer,
         project_path=target_dir,
+        link_refs=not defer_link_refs,
     )
 
 
@@ -469,6 +573,277 @@ def _report_chunking_results(
     return all_chunks, parsed_files, skipped_files
 
 
+def _semantic_run_id(project_id: str) -> str:
+    return f"{project_id}:semantic:{uuid.uuid4().hex[:12]}"
+
+
+def _get_latest_successful_struct_run_id(project_id: str) -> str | None:
+    try:
+        import neo4j
+    except Exception:
+        return None
+
+    neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
+    neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
+    neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            record = session.run(
+                """
+                MATCH (sr:IndexRun {project_id:$pid, phase:'struct'})
+                WHERE sr.status = 'done'
+                RETURN sr.id AS run_id
+                ORDER BY coalesce(sr.finished_at, sr.started_at, 0) DESC, sr.id DESC
+                LIMIT 1
+                """,
+                pid=project_id,
+            ).single()
+            return record["run_id"] if record and record["run_id"] else None
+    except Exception:
+        return None
+    finally:
+        driver.close()
+
+
+def _set_semantic_run_status(
+    project_id: str,
+    run_id: str,
+    status: str,
+    *,
+    struct_run_id: str | None = None,
+    error: str | None = None,
+) -> None:
+    try:
+        import neo4j
+    except Exception:
+        return
+
+    neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
+    neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
+    neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            session.run(
+                """
+                MERGE (p:Project {id:$pid})
+                SET p.project_id = $pid,
+                    p.semantic_index_status = $status,
+                    p.semantic_index_run_id = $run_id,
+                    p.semantic_index_finished_at = timestamp()
+                FOREACH (_ IN CASE WHEN $struct_run_id IS NULL THEN [] ELSE [1] END |
+                    SET p.semantic_target_struct_run_id = $struct_run_id
+                )
+                FOREACH (_ IN CASE WHEN $status = 'done' THEN [1] ELSE [] END |
+                    SET p.semantic_active_run_id = $run_id,
+                        p.semantic_last_successful_run_id = $run_id,
+                        p.semantic_last_successful_finished_at = timestamp(),
+                        p.semantic_active_struct_run_id = coalesce($struct_run_id, p.semantic_active_struct_run_id)
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [1] ELSE [] END |
+                    REMOVE p.semantic_index_error
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [] ELSE [1] END |
+                    SET p.semantic_index_error = $error
+                )
+                MERGE (r:IndexRun {id:$run_id})
+                SET r.project_id = $pid,
+                    r.phase = 'semantic',
+                    r.status = $status,
+                    r.finished_at = timestamp()
+                FOREACH (_ IN CASE WHEN $struct_run_id IS NULL THEN [] ELSE [1] END |
+                    SET r.target_struct_run_id = $struct_run_id
+                )
+                FOREACH (_ IN CASE WHEN $status = 'done' THEN [1] ELSE [] END |
+                    SET r.promoted_at = timestamp()
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [1] ELSE [] END |
+                    REMOVE r.error
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [] ELSE [1] END |
+                    SET r.error = $error
+                )
+                """,
+                pid=project_id,
+                run_id=run_id,
+                status=status,
+                struct_run_id=struct_run_id,
+                error=(error[:2000] if error else None),
+            ).consume()
+    except Exception:
+        return
+    finally:
+        driver.close()
+
+
+async def _promote_semantic_file_roles_to_graph(
+    project_id: str,
+    manifest_paths: List[str],
+) -> None:
+    if not manifest_paths:
+        return
+    file_roles_rows: list[tuple[str, list[str]]] = []
+    query = """
+        SELECT
+          file_path,
+          bool_or(
+            jsonb_typeof(metadata->'file_roles') = 'array'
+            AND coalesce((metadata->>'semantic_contract_version')::int, 0) = %s
+          ) AS has_file_roles,
+          array_agg(DISTINCT role) FILTER (WHERE role IS NOT NULL) AS roles
+        FROM codebase_embeddings
+        LEFT JOIN LATERAL jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(metadata->'file_roles') = 'array'
+            THEN metadata->'file_roles'
+            ELSE '[]'::jsonb
+          END
+        ) AS role ON TRUE
+        WHERE project_id = %s
+          AND file_path = ANY(%s)
+        GROUP BY file_path
+    """
+    if memory_store._pg_pool_available():
+        async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
+            if not hasattr(conn, "cursor"):
+                return
+            async with conn.cursor() as cur:
+                await cur.execute(query, (SEMANTIC_CONTRACT_VERSION, project_id, manifest_paths))
+                file_roles_rows = await cur.fetchall()
+    else:
+        pg_dsn = os.getenv("LM_PROXY_PG_DSN", "").strip()
+        if not pg_dsn:
+            print(
+                "[lm-proxy:indexer] WARN: semantic file role graph promotion skipped: no PG DSN",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        try:
+            import psycopg
+        except Exception as exc:
+            print(
+                f"[lm-proxy:indexer] WARN: semantic file role graph promotion skipped: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        async with await psycopg.AsyncConnection.connect(pg_dsn) as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(query, (SEMANTIC_CONTRACT_VERSION, project_id, manifest_paths))
+                file_roles_rows = await cur.fetchall()
+
+    role_map = {
+        str(file_path or "").strip(): sorted(
+            {
+                str(role).strip()
+                for role in (roles or [])
+                if str(role).strip()
+            }
+        )
+        for file_path, has_file_roles, roles in file_roles_rows
+        if str(file_path or "").strip() and has_file_roles
+    }
+    batch = [
+        {"filepath": path, "roles": role_map[path]}
+        for path in manifest_paths
+        if path and path in role_map
+    ]
+    if not batch:
+        return
+    try:
+        import neo4j
+    except Exception:
+        return
+
+    neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
+    neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
+    neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            matched = session.run(
+                """
+                UNWIND $batch AS item
+                MATCH (f:File {project_id:$pid, filepath:item.filepath})
+                SET f.semantic_file_roles = item.roles,
+                    f.semantic_contract_version = $semantic_contract_version
+                RETURN count(f) AS matched
+                """,
+                pid=project_id,
+                batch=batch,
+                semantic_contract_version=SEMANTIC_CONTRACT_VERSION,
+            ).single()
+            matched_count = int((matched or {}).get("matched") or 0)
+            non_empty_count = sum(1 for item in batch if item["roles"])
+            print(
+                "[lm-proxy:indexer] Semantic file role graph promotion — "
+                f"matched={matched_count} files={len(batch)} non_empty={non_empty_count}",
+                file=sys.stderr,
+                flush=True,
+            )
+    except Exception as exc:
+        print(
+            f"[lm-proxy:indexer] WARN: semantic file role graph promotion failed: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+    finally:
+        driver.close()
+
+
+async def _refresh_semantic_chunk_metadata(
+    conn,
+    project_id: str,
+    all_chunks: List[List[Dict]],
+    *,
+    batch_size: int = 1000,
+) -> int:
+    """Refresh stale chunk metadata without re-embedding unchanged content."""
+    payload_by_id: dict[str, dict] = {}
+    for file_chunks in all_chunks:
+        for chunk in file_chunks:
+            chunk_id = str(chunk.get("ref_id") or chunk.get("chunk_id") or "").strip()
+            metadata = chunk.get("metadata")
+            if not chunk_id or not isinstance(metadata, dict):
+                continue
+            payload_by_id[chunk_id] = metadata
+    if not payload_by_id or not hasattr(conn, "cursor"):
+        return 0
+
+    items = list(payload_by_id.items())
+    refreshed = 0
+    query = """
+        UPDATE codebase_embeddings AS existing
+        SET metadata = payload.metadata
+        FROM jsonb_to_recordset(%s::jsonb)
+             AS payload(chunk_id text, metadata jsonb)
+        WHERE existing.project_id = %s
+          AND existing.chunk_id = payload.chunk_id
+          AND existing.metadata IS DISTINCT FROM payload.metadata
+        RETURNING existing.chunk_id
+    """
+    async with conn.cursor() as cur:
+        for start in range(0, len(items), max(1, batch_size)):
+            batch = [
+                {"chunk_id": chunk_id, "metadata": metadata}
+                for chunk_id, metadata in items[start : start + max(1, batch_size)]
+            ]
+            await cur.execute(
+                query,
+                (
+                    json.dumps(batch, ensure_ascii=False, sort_keys=True),
+                    project_id,
+                ),
+            )
+            refreshed += len(await cur.fetchall())
+    return refreshed
+
+
 async def index_project(
     target_dir: str,
     project_id: str,
@@ -492,7 +867,17 @@ async def index_project(
 
     Returns total new chunks written.
     """
+    global _LAST_INDEX_PROJECT_OK
+    _LAST_INDEX_PROJECT_OK = True
     t0 = time.time()
+    semantic_run_id = _semantic_run_id(project_id)
+    struct_run_id = _get_latest_successful_struct_run_id(project_id)
+    _set_semantic_run_status(
+        project_id,
+        semantic_run_id,
+        "in_progress",
+        struct_run_id=struct_run_id,
+    )
     await memory_bootstrap.bootstrap_schema()
     await memory_store.open_pool()
 
@@ -502,55 +887,122 @@ async def index_project(
             "[lm-proxy:indexer] ERROR: PG pool unavailable — semantic indexing skipped",
             file=sys.stderr,
         )
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "failed",
+            struct_run_id=struct_run_id,
+            error="pg_pool_unavailable",
+        )
+        _LAST_INDEX_PROJECT_OK = False
         return 0
 
     embedding_svc = get_embedding_service()
 
-    bs = embedding_svc.effective_batch_size
+    embed_bs = embedding_svc.effective_batch_size
+    write_bs = max(embed_bs, int(os.getenv("LM_PROXY_PG_WRITE_BATCH_SIZE", str(max(embed_bs, 1024)))))
     total_files = len(manifest)
     print(
         f"[lm-proxy:indexer] Semantic phase — {total_files} files "
-        f"(device={embedding_svc._device}, embed_batch={bs}, chunk_concurrency={CHUNK_CONCURRENCY})",
+        f"(device={embedding_svc._device}, embed_batch={embed_bs}, write_batch={write_bs}, "
+        f"chunk_concurrency={CHUNK_CONCURRENCY})",
         file=sys.stderr,
         flush=True,
     )
 
     _preflight_ts_pack(manifest)
+    deferred_ref_ids: list[str] = []
+    ingest_stats = {
+        "embed_calls": 0,
+        "embed_chunks": 0,
+        "embed_seconds": 0.0,
+        "write_calls": 0,
+        "write_chunks": 0,
+        "write_seconds": 0.0,
+        "deferred_link_seconds": 0.0,
+        "deferred_link_count": 0,
+    }
 
-    # ── Parallel chunking (I/O-bound reads) ─────────────────────────────────
-    # Bound concurrent file reads/parses so large manifests do not exhaust the
-    # file descriptor limit on hosts with lower per-process limits.
-    chunk_sem = asyncio.Semaphore(CHUNK_CONCURRENCY)
+    import tree_sitter_language_pack as ts_pack
 
-    async def _chunk_manifest_entry(entry: Dict) -> Tuple[List[Dict], str | None]:
-        async with chunk_sem:
-            return await chunk_file(
-                entry["abs_path"], entry["rel_path"], project_id
-            )
-
+    native_manifest_processor = getattr(ts_pack, "process_semantic_manifest_entries", None)
     t_chunk = time.time()
-    all_results: List[Tuple[List[Dict], str | None]] = await asyncio.gather(
-        *[_chunk_manifest_entry(e) for e in manifest]
-    )
+    if native_manifest_processor is not None:
+        print(
+            "[lm-proxy:indexer] Semantic chunking — native ts-pack manifest path",
+            file=sys.stderr,
+            flush=True,
+        )
+        try:
+            all_results = await asyncio.to_thread(_chunk_manifest_native, manifest, project_id)
+        except Exception as exc:
+            print(
+                f"[lm-proxy:indexer] Native manifest chunking failed ({exc}) — falling back",
+                file=sys.stderr,
+                flush=True,
+            )
+            native_manifest_processor = None
+    if native_manifest_processor is None:
+        # ── Parallel chunking (I/O-bound reads) ─────────────────────────────
+        # Bound concurrent file reads/parses so large manifests do not exhaust the
+        # file descriptor limit on hosts with lower per-process limits.
+        chunk_sem = asyncio.Semaphore(CHUNK_CONCURRENCY)
+
+        async def _chunk_manifest_entry(entry: Dict) -> Tuple[List[Dict], str | None]:
+            async with chunk_sem:
+                return await chunk_file(
+                    entry["abs_path"], entry["rel_path"], project_id
+                )
+
+        all_results = await asyncio.gather(
+            *[_chunk_manifest_entry(e) for e in manifest]
+        )
     all_chunks, parsed_files, skipped_files = _report_chunking_results(
         manifest, all_results, time.time() - t_chunk
     )
 
-    import tree_sitter_language_pack as ts_pack
     manifest_paths = [entry.get("rel_path") or "" for entry in manifest]
+    driver_error: str | None = None
     try:
         async with memory_store._pg_pool.connection() as conn:  # type: ignore[union-attr]
             from embedding_service import _CONCURRENCY as CONCURRENCY
 
             async def _embed(batch):
-                return await _embed_buffer(batch, embedding_svc)
+                started = time.perf_counter()
+                result = await _embed_buffer(batch, embedding_svc)
+                ingest_stats["embed_calls"] += 1
+                ingest_stats["embed_chunks"] += len(batch)
+                ingest_stats["embed_seconds"] += time.perf_counter() - started
+                return result
 
             async def _write(batch):
-                return await _write_buffer(batch, target_dir, project_id)
+                started = time.perf_counter()
+                written = await _write_buffer(
+                    batch,
+                    target_dir,
+                    project_id,
+                    defer_link_refs=DEFER_NEO4J_EMBED_LINKS,
+                    deferred_ref_ids=deferred_ref_ids,
+                )
+                ingest_stats["write_calls"] += 1
+                ingest_stats["write_chunks"] += int(written or 0)
+                ingest_stats["write_seconds"] += time.perf_counter() - started
+                return written
 
             async def _progress(event: dict) -> None:
                 phase = event.get("phase")
-                if phase == "embed_start":
+                if phase == "prepare_done":
+                    print(
+                        f"[lm-proxy:indexer] Semantic prepare — "
+                        f"{event.get('prepare_seconds', 0.0):.2f}s "
+                        f"(existing={event.get('existing_count', 0)} "
+                        f"orphans={event.get('orphan_pruned', 0)} "
+                        f"pruned={event.get('pruned_total', 0)} "
+                        f"new={event.get('total_new', 0)})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                elif phase == "embed_start":
                     print(
                         f"[lm-proxy:indexer] Embedding round {event['round_index'] + 1}/{event['rounds']} "
                         f"— {event['batch_count']} concurrent batches — "
@@ -560,29 +1012,116 @@ async def index_project(
                     )
                 elif phase == "round_done":
                     print(
-                        f"[lm-proxy:indexer]   wrote {event.get('round_written', 0)} chunks",
+                        f"[lm-proxy:indexer]   wrote {event.get('round_written', 0)} chunks "
+                        f"(embed={event.get('embed_seconds', 0.0):.2f}s "
+                        f"write={event.get('write_seconds', 0.0):.2f}s "
+                        f"round={event.get('round_seconds', 0.0):.2f}s)",
                         file=sys.stderr,
                         flush=True,
                     )
 
-            index_result = await ts_pack.execute_semantic_index_driver(
-                conn,
-                project_id,
-                manifest_paths,
-                all_chunks,
-                rebuild=rebuild,
-                batch_size=bs,
-                concurrency=CONCURRENCY,
-                embed_batch_fn=_embed,
-                write_batch_fn=_write,
-                progress_fn=_progress,
+            native_driver = getattr(ts_pack, "execute_semantic_index_driver_native", None)
+            pg_dsn = os.getenv("LM_PROXY_PG_DSN", "").strip()
+            fake_embeddings = os.getenv("LM_PROXY_FAKE_EMBEDDINGS", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            lmstudio_provider = None
+            if (
+                USE_NATIVE_SEMANTIC_DRIVER
+                and not fake_embeddings
+                and native_driver is not None
+                and pg_dsn
+            ):
+                try:
+                    lmstudio_provider = get_lmstudio_provider()
+                except Exception:
+                    lmstudio_provider = None
+            if (
+                USE_NATIVE_SEMANTIC_DRIVER
+                and not fake_embeddings
+                and native_driver is not None
+                and pg_dsn
+                and lmstudio_provider is not None
+            ):
+                print(
+                    "[lm-proxy:indexer] Semantic driver — native Rust LM Studio + Postgres path",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                index_result = await native_driver(
+                    project_id,
+                    manifest_paths,
+                    all_chunks,
+                    pg_dsn,
+                    lmstudio_provider.config.base_url,
+                    lmstudio_provider.config.embed_model,
+                    rebuild=rebuild,
+                    # Keep round planning tied to embed_bs so native execution
+                    # preserves the intended LM Studio fan-out.
+                    batch_size=embed_bs,
+                    concurrency=CONCURRENCY,
+                    write_batch_size=write_bs,
+                    timeout_s=lmstudio_provider.config.embed_timeout_s,
+                    progress_fn=_progress,
+                )
+                native_stats = index_result.get("ingest_stats") or {}
+                for key in (
+                    "embed_calls",
+                    "embed_chunks",
+                    "embed_seconds",
+                    "write_calls",
+                    "write_chunks",
+                    "write_seconds",
+                ):
+                    if key in native_stats:
+                        ingest_stats[key] = native_stats[key]
+                if DEFER_NEO4J_EMBED_LINKS:
+                    deferred_ref_ids.extend(index_result.get("written_ref_ids") or [])
+            else:
+                index_result = await ts_pack.execute_semantic_index_driver(
+                    conn,
+                    project_id,
+                    manifest_paths,
+                    all_chunks,
+                    rebuild=rebuild,
+                    # This batch_size shapes semantic round sub-batches before they
+                    # reach embed_batch_fn. Keep it aligned to embed_bs so we do not
+                    # multiply LM Studio fan-out (sub-batches * provider concurrency).
+                    batch_size=embed_bs,
+                    concurrency=CONCURRENCY,
+                    embed_batch_fn=_embed,
+                    write_batch_fn=_write,
+                    progress_fn=_progress,
+                )
+            metadata_refreshed = await _refresh_semantic_chunk_metadata(
+                conn, project_id, all_chunks
             )
+            if metadata_refreshed:
+                print(
+                    "[lm-proxy:indexer] Refreshed semantic metadata for "
+                    f"{metadata_refreshed} unchanged chunk(s) to contract "
+                    f"v{SEMANTIC_CONTRACT_VERSION}",
+                    file=sys.stderr,
+                    flush=True,
+                )
     except Exception as exc:
+        driver_error = str(exc)
         print(
             f"[lm-proxy:indexer] WARN: semantic index driver failed: {exc}",
             file=sys.stderr,
             flush=True,
         )
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "failed",
+            struct_run_id=struct_run_id,
+            error=str(exc),
+        )
+        _LAST_INDEX_PROJECT_OK = False
         index_result = {
             "new_chunks": [],
             "skipped_chunks": 0,
@@ -593,6 +1132,9 @@ async def index_project(
             "written": 0,
             "rounds": 0,
         }
+
+    if driver_error is not None:
+        return 0
 
     if rebuild and index_result.get("wiped"):
         print(
@@ -609,9 +1151,15 @@ async def index_project(
         )
     if cleanup_only:
         print("[lm-proxy:indexer] Cleanup only requested — done.", file=sys.stderr)
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "done",
+            struct_run_id=struct_run_id,
+        )
         return 0
 
-    existing_count = len(index_result.get("existing_ids") or set())
+    existing_count = int(index_result.get("existing_count") or len(index_result.get("existing_ids") or set()))
     print(
         f"[lm-proxy:indexer] {existing_count} chunks already indexed — skipping unchanged",
         file=sys.stderr,
@@ -627,6 +1175,26 @@ async def index_project(
 
     skipped = int(index_result.get("skipped_chunks") or 0)
     total_indexed = int(index_result.get("written") or 0)
+    expected_new = int(index_result.get("new_chunk_count") or len(index_result.get("new_chunks") or []))
+
+    if DEFER_NEO4J_EMBED_LINKS and deferred_ref_ids:
+        started = time.perf_counter()
+        linked = await memory_store.link_embedding_refs(
+            project_id,
+            project_id,
+            deferred_ref_ids,
+            batch_size=DEFER_NEO4J_LINK_BATCH_SIZE,
+        )
+        ingest_stats["deferred_link_seconds"] += time.perf_counter() - started
+        ingest_stats["deferred_link_count"] = linked
+        if linked:
+            print(
+                f"[lm-proxy:indexer] Linked {linked} embedding refs in deferred Neo4j pass",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    await _promote_semantic_file_roles_to_graph(project_id, manifest_paths)
 
     elapsed = time.time() - t0
     print(
@@ -635,6 +1203,40 @@ async def index_project(
         f"(parsed={parsed_files} skipped_files={skipped_files})",
         file=sys.stderr,
         flush=True,
+    )
+    print(
+        f"[lm-proxy:indexer] Ingest timing — "
+        f"embed={ingest_stats['embed_seconds']:.2f}s/{ingest_stats['embed_calls']} calls/{ingest_stats['embed_chunks']} chunks, "
+        f"pg_write={ingest_stats['write_seconds']:.2f}s/{ingest_stats['write_calls']} calls/{ingest_stats['write_chunks']} chunks, "
+        f"neo4j_link={ingest_stats['deferred_link_seconds']:.2f}s/{ingest_stats['deferred_link_count']} refs",
+        file=sys.stderr,
+        flush=True,
+    )
+    if total_indexed != expected_new:
+        error = (
+            "semantic_partial_completion: "
+            f"wrote={total_indexed} expected_new={expected_new} "
+            f"skipped={skipped} parsed_files={parsed_files} skipped_files={skipped_files}"
+        )
+        print(
+            f"[lm-proxy:indexer] ERROR: {error}",
+            file=sys.stderr,
+            flush=True,
+        )
+        _set_semantic_run_status(
+            project_id,
+            semantic_run_id,
+            "failed",
+            struct_run_id=struct_run_id,
+            error=error,
+        )
+        _LAST_INDEX_PROJECT_OK = False
+        return total_indexed
+    _set_semantic_run_status(
+        project_id,
+        semantic_run_id,
+        "done",
+        struct_run_id=struct_run_id,
     )
     return total_indexed
 
@@ -679,7 +1281,7 @@ if __name__ == "__main__":
         flush=True,
     )
 
-    asyncio.run(
+    indexed = asyncio.run(
         index_project(
             args.target,
             args.project_id,
@@ -688,3 +1290,4 @@ if __name__ == "__main__":
             cleanup_only=args.cleanup_only,
         )
     )
+    sys.exit(0 if _LAST_INDEX_PROJECT_OK else 1)

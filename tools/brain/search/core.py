@@ -36,4 +36,10 @@ def register(mcp: FastMCP) -> None:
     search_semantic.register(mcp)
     search_cross_project.register(mcp)
     search_duplication.register(mcp)
-    search_graph_query.register(mcp)
+    include_admin = os.getenv("LM_PROXY_ENABLE_ADMIN_TOOLS", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    search_graph_query.register(mcp, include_admin=include_admin)

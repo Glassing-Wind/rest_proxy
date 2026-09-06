@@ -2,11 +2,13 @@ import importlib.util
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-HELPERS_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/duplication_helpers.py"
-REPORT_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/duplication_report.py"
+REPO_ROOT = Path(__file__).resolve().parent
+HELPERS_PATH = REPO_ROOT / "tools" / "brain" / "search" / "duplication_helpers.py"
+REPORT_PATH = REPO_ROOT / "tools" / "brain" / "search" / "duplication_report.py"
 
 
 def load_report_module():
@@ -91,6 +93,81 @@ class DuplicationReportTests(unittest.TestCase):
         self.assertIn("Potential duplicate symbol names", output)
         self.assertIn("buildRouter", output)
         self.assertIn("src/a.ts", output)
+
+    def test_append_winnow_pairs_uses_substantive_preview_after_file_header(self):
+        lines = []
+        self.module.append_winnow_pairs(
+            lines,
+            title="Cross-file",
+            pairs=[
+                (
+                    {"file_path": "src/a.ts", "content": "// File: src/a.ts\nfunction a() {}", "metadata": {"start_line": 1}},
+                    {"file_path": "src/b.ts", "content": "// File: src/b.ts\nfunction b() {}", "metadata": {"start_line": 1}},
+                    1.0,
+                    1.0,
+                )
+            ],
+            max_pairs=5,
+            same_file_allowed=lambda *args, **kwargs: True,
+        )
+        output = "\n".join(lines)
+        self.assertIn("Cross-file (1)", output)
+        self.assertIn("src/a.ts:1 ↔ src/b.ts:1", output)
+        self.assertIn("A: function a() {}", output)
+        self.assertIn("B: function b() {}", output)
+
+    def test_append_refactor_candidates_formats_reasoned_output(self):
+        lines = []
+        self.module.append_refactor_candidates(
+            lines,
+            title="High-confidence refactor candidates",
+            candidates=[
+                {
+                    "row_a": {
+                        "file_path": "src/a.ts",
+                        "content": "function normalizeClientName() {}",
+                        "metadata": {"start_line": 10},
+                    },
+                    "row_b": {
+                        "file_path": "src/b.ts",
+                        "content": "function normalizeClientName() {}",
+                        "metadata": {"start_line": 22},
+                    },
+                    "candidate_score": 0.91,
+                    "score": 0.96,
+                    "struct_score": 1.0,
+                    "reasons": [
+                        "same declaration",
+                        "shared identifiers (normalizeclientname)",
+                    ],
+                    "preview_a": "function normalizeClientName() {}",
+                    "preview_b": "function normalizeClientName() {}",
+                }
+            ],
+            max_pairs=5,
+        )
+        output = "\n".join(lines)
+        self.assertIn("High-confidence refactor candidates (1)", output)
+        self.assertIn("Why act: same declaration; shared identifiers", output)
+        self.assertIn("candidate=0.91", output)
+
+    def test_append_refactor_candidates_reports_displayed_region_count(self):
+        candidate = {
+            "row_a": {"file_path": "src/a.ts", "content": "function one() {}"},
+            "row_b": {"file_path": "src/b.ts", "content": "function one() {}"},
+            "candidate_score": 0.9,
+            "score": 0.9,
+            "struct_score": 1.0,
+            "reasons": ["same declaration"],
+        }
+        lines = []
+        self.module.append_refactor_candidates(
+            lines,
+            title="High-confidence refactor candidates",
+            candidates=[candidate, candidate, candidate],
+            max_pairs=2,
+        )
+        self.assertIn("showing 2 of 3 regions", "\n".join(lines))
 
 
 if __name__ == "__main__":

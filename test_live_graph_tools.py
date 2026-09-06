@@ -18,10 +18,34 @@ import time
 from dataclasses import dataclass
 import types
 
+from dotenv import load_dotenv
+
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+GRAPH_GOLDENS_PATH = os.path.join(REPO_ROOT, "benchmarks", "live_graph_goldens.json")
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
+
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
+
+from _runtime import resolve_python_runtime  # noqa: E402
+
+
+def _ensure_runtime_dependencies() -> None:
+    try:
+        import neo4j  # noqa: F401
+    except ModuleNotFoundError:
+        if os.environ.get("LM_PROXY_RUNTIME_REEXECED") == "1":
+            raise
+        runtime = resolve_python_runtime()
+        preferred = str(runtime.get("python") or "")
+        if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+            raise
+        os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
+        os.execv(preferred, [preferred, __file__, *sys.argv[1:]])
+
+
+_ensure_runtime_dependencies()
 
 
 class FakeMCP:
@@ -43,6 +67,7 @@ def _install_mcp_stub() -> None:
     server_pkg = types.ModuleType("mcp.server")
     fastmcp_mod = types.ModuleType("mcp.server.fastmcp")
     fastmcp_mod.FastMCP = FakeMCP
+    fastmcp_mod.Context = type("Context", (), {})
     sys.modules["mcp"] = mcp_pkg
     sys.modules["mcp.server"] = server_pkg
     sys.modules["mcp.server.fastmcp"] = fastmcp_mod
@@ -54,25 +79,93 @@ class ToolRun:
     output: str
 
 
+@dataclass
+class LiveGraphOptions:
+    case_ids: set[str]
+    regressions_only: bool
+    fail_fast: bool
+    verbose_progress: bool
+
+
 def _workspace_basename(workspace_id: str) -> str:
     return os.path.basename(os.path.abspath(workspace_id.rstrip("/")))
 
 
+def _resolve_golden_params(value, workspace_id: str):
+    if value == "$workspace_id":
+        return workspace_id
+    if isinstance(value, list):
+        return [_resolve_golden_params(item, workspace_id) for item in value]
+    if isinstance(value, dict):
+        return {key: _resolve_golden_params(item, workspace_id) for key, item in value.items()}
+    return value
+
+
+async def _invoke_tool(mcp: FakeMCP, tool_name: str, workspace_id: str, params: dict) -> str:
+    if tool_name in {"get_symbol_context", "get_call_chain"}:
+        return await mcp.tools[tool_name](workspace_id, **params)
+    return await mcp.tools[tool_name](**params)
+
+
+def _validate_output(case_id: str, label: str, output: str, case: dict) -> None:
+    _require_non_error(label, output)
+    for expected in case.get("required_substrings") or []:
+        if expected not in output:
+            raise RuntimeError(
+                f"Graph golden regression '{case_id}': expected '{expected}' in {label} output."
+            )
+    for forbidden in case.get("forbidden_substrings") or []:
+        if forbidden in output:
+            raise RuntimeError(
+                f"Graph golden regression '{case_id}': unexpected '{forbidden}' in {label} output."
+            )
+
+
 def _build_tool_registry() -> FakeMCP:
     _install_mcp_stub()
+    from tools.brain import documentation as documentation_tools
+    from tools.brain import memory as memory_tools
     from tools.brain.code_intel import core as code_intel_core
     from tools.brain.graph import tools as graph_tools
     from tools.brain.search import graph_query as graph_query_tools
+    from tools.brain.search import cross_project as cross_project_tools
+    from tools.brain.search import semantic as semantic_tools
     from tools.brain.search import tools as search_tools
     from tools.hands import dev as dev_tools
 
     mcp = FakeMCP()
+    memory_tools.register(mcp)
+    documentation_tools.register(mcp)
     code_intel_core.register(mcp)
     graph_tools.register(mcp)
-    graph_query_tools.register(mcp)
+    graph_query_tools.register(mcp, include_admin=True)
+    cross_project_tools.register(mcp)
+    semantic_tools.register(mcp)
     search_tools.register(mcp)
     dev_tools.register(mcp)
     return mcp
+
+
+def _assert_health_healthy(workspace_id: str, output: str) -> None:
+    if not output or output.startswith("Error "):
+        raise RuntimeError(f"get_indexing_health failed:\n{output}")
+    if "**Sync Status**: ❌ Out of Sync" in output:
+        raise RuntimeError(
+            f"Index health is out of sync for {workspace_id}.\n{output}"
+        )
+    if "**Run Alignment**:        ⚠️ Not aligned" in output:
+        raise RuntimeError(
+            f"Index health is not aligned for {workspace_id}.\n{output}"
+        )
+
+
+async def _run_health_check(workspace_id: str) -> ToolRun:
+    _install_mcp_stub()
+    from tools.hands import indexing as hands_indexing
+
+    output = await hands_indexing.get_indexing_health(workspace_id)
+    _assert_health_healthy(workspace_id, output)
+    return ToolRun("get_indexing_health", output)
 
 
 def _extract_job_id(index_output: str) -> str:
@@ -180,6 +273,8 @@ async def _pick_live_type_symbol(mcp: FakeMCP, workspace_id: str) -> tuple[str, 
         """,
         workspace_id=workspace_id,
     )
+    if raw == "No results found.":
+        return None
     rows = json.loads(raw)
     if not rows:
         return None
@@ -228,68 +323,81 @@ def _require_non_error(name: str, output: str) -> None:
 
 
 async def _run_known_regressions(mcp: FakeMCP, workspace_id: str) -> list[ToolRun]:
+    return await _run_known_regressions_with_options(
+        mcp,
+        workspace_id,
+        LiveGraphOptions(case_ids=set(), regressions_only=False, fail_fast=False, verbose_progress=False),
+    )
+
+
+async def _run_known_regressions_with_options(
+    mcp: FakeMCP,
+    workspace_id: str,
+    options: LiveGraphOptions,
+) -> list[ToolRun]:
     runs: list[ToolRun] = []
     workspace_name = _workspace_basename(workspace_id)
-
-    if workspace_name == "rental":
-        type_output = await mcp.tools["get_symbol_context"](
-            workspace_id, "RouteContext", include_source_preview=False
-        )
-        _require_non_error("get_symbol_context(RouteContext)", type_output)
-        if "RouteContext" not in type_output or "src/api/routes/context.ts" not in type_output:
-            raise RuntimeError(
-                "RouteContext regression: expected rental route context type alias to resolve "
-                "through get_symbol_context."
-            )
-        runs.append(ToolRun("regression:rental_route_context", type_output))
-
-    if workspace_name == "opencode":
-        summary_output = await mcp.tools["get_symbol_exports_summary"](
-            project_path=workspace_id,
-            limit=20,
-            include_paths=[
-                "packages/sdk/js/src/client.ts",
-                "packages/sdk/js/src/v2/client.ts",
-            ],
-            symbol_prefix="Opencode",
-        )
-        _require_non_error("get_symbol_exports_summary(opencode alias)", summary_output)
-        if "OpencodeClientConfig -> Config" not in summary_output:
-            raise RuntimeError(
-                "Alias export regression: expected OpencodeClientConfig -> Config in filtered export summary."
-            )
-        runs.append(ToolRun("regression:opencode_alias_export", summary_output))
-
-    if workspace_name == "ts-export-alias-demo":
-        summary_output = await mcp.tools["get_symbol_exports_summary"](
-            project_path=workspace_id,
-            limit=20,
-        )
-        _require_non_error("get_symbol_exports_summary(ts-export-alias-demo)", summary_output)
-        if "PublicConfig -> Config" not in summary_output:
-            raise RuntimeError(
-                "Alias demo regression: expected PublicConfig -> Config in export summary."
-            )
-        runs.append(ToolRun("regression:ts_export_alias_demo", summary_output))
-
-    if workspace_name == "ts-namespace-export-demo":
-        summary_output = await mcp.tools["get_symbol_exports_summary"](
-            project_path=workspace_id,
-            limit=20,
-        )
-        _require_non_error("get_symbol_exports_summary(ts-namespace-export-demo)", summary_output)
-        for expected in ("routes.* -> buildRouter", "routes.* -> RouteConfig"):
-            if expected not in summary_output:
-                raise RuntimeError(
-                    f"Namespace export regression: expected '{expected}' in export summary."
+    if not os.path.exists(GRAPH_GOLDENS_PATH):
+        return runs
+    with open(GRAPH_GOLDENS_PATH, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    for case in payload.get("cases") or []:
+        if case.get("workspace_name") != workspace_name:
+            continue
+        case_id = str(case.get("id") or "").strip()
+        if options.case_ids and case_id not in options.case_ids:
+            continue
+        steps = case.get("steps")
+        if isinstance(steps, list):
+            if options.verbose_progress:
+                print(f"[live-graph] regression workflow={case_id} steps={len(steps)}")
+            rendered_steps: list[str] = []
+            for index, step in enumerate(steps, start=1):
+                tool_name = step.get("tool")
+                if not tool_name or tool_name not in mcp.tools:
+                    raise RuntimeError(
+                        f"Graph golden workflow '{case_id}' references unknown tool '{tool_name}'."
+                    )
+                params = _resolve_golden_params(dict(step.get("params") or {}), workspace_id)
+                output = await _invoke_tool(mcp, tool_name, workspace_id, params)
+                step_label = f"{tool_name}({case_id} step {index})"
+                _validate_output(case_id, step_label, output, step)
+                rendered_steps.append(
+                    f"### Step {index}: {step.get('name') or tool_name}\n{output.strip()}"
                 )
-        runs.append(ToolRun("regression:ts_namespace_export_demo", summary_output))
+            combined_output = "\n\n".join(rendered_steps)
+            for expected in case.get("required_substrings") or []:
+                if expected not in combined_output:
+                    raise RuntimeError(
+                        f"Graph golden workflow '{case_id}': expected '{expected}' in combined output."
+                    )
+            for forbidden in case.get("forbidden_substrings") or []:
+                if forbidden in combined_output:
+                    raise RuntimeError(
+                        f"Graph golden workflow '{case_id}': unexpected '{forbidden}' in combined output."
+                    )
+            runs.append(ToolRun(f"workflow:{case_id}", combined_output))
+            continue
+
+        tool_name = case.get("tool")
+        if not tool_name or tool_name not in mcp.tools:
+            raise RuntimeError(f"Graph golden '{case.get('id')}' references unknown tool '{tool_name}'.")
+        if options.verbose_progress:
+            print(f"[live-graph] regression case={case_id} tool={tool_name}")
+        params = _resolve_golden_params(dict(case.get("params") or {}), workspace_id)
+        output = await _invoke_tool(mcp, tool_name, workspace_id, params)
+        _validate_output(case_id, f"{tool_name}({case.get('id')})", output, case)
+        runs.append(ToolRun(f"regression:{case.get('id')}", output))
 
     return runs
 
 
-async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
+async def _run_live_checks(workspace_id: str, options: LiveGraphOptions) -> list[ToolRun]:
     mcp = _build_tool_registry()
+    health_run = await _run_health_check(workspace_id)
+
+    if options.regressions_only:
+        return [health_run, *await _run_known_regressions_with_options(mcp, workspace_id, options)]
 
     resolve_output = await mcp.tools["resolve_graph_project"](workspace_id)
     _require_non_error("resolve_graph_project", resolve_output)
@@ -300,7 +408,7 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
     symbol_name, symbol_file = await _pick_live_symbol(mcp, workspace_id)
 
     symbol_output = await mcp.tools["get_symbol_context"](
-        workspace_id, symbol_name, include_source_preview=False
+        workspace_id, symbol_name, include_source_preview=False, file_path=symbol_file or None
     )
     _require_non_error("get_symbol_context", symbol_output)
     if symbol_name not in symbol_output:
@@ -318,7 +426,7 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
     if type_symbol:
         type_name, type_file = type_symbol
         type_output = await mcp.tools["get_symbol_context"](
-            workspace_id, type_name, include_source_preview=False
+            workspace_id, type_name, include_source_preview=False, file_path=type_file or None
         )
         _require_non_error("get_symbol_context(type)", type_output)
         if type_name not in type_output:
@@ -399,9 +507,10 @@ async def _run_live_checks(workspace_id: str) -> list[ToolRun]:
             )
         apple_runs.append(ToolRun("get_flow_summary(mode=apple)", apple_summary_output))
 
-    regression_runs = await _run_known_regressions(mcp, workspace_id)
+    regression_runs = await _run_known_regressions_with_options(mcp, workspace_id, options)
 
     return [
+        health_run,
         ToolRun("resolve_graph_project", resolve_output),
         ToolRun("get_project_overview", overview_output),
         ToolRun(
@@ -432,10 +541,38 @@ async def _main() -> int:
         choices=["incremental", "rebuild", "cleanup"],
         help="Index mode to use when --reindex is set",
     )
+    parser.add_argument(
+        "--case-id",
+        action="append",
+        default=[],
+        help="Run only the specified graph golden case id(s). Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--regressions-only",
+        action="store_true",
+        help="Skip generic live smoke checks and run only graph golden regressions.",
+    )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Stop after the first workspace failure.",
+    )
+    parser.add_argument(
+        "--verbose-progress",
+        action="store_true",
+        help="Print progress before each graph golden case runs.",
+    )
     args = parser.parse_args()
 
     if not args.workspace_ids:
         raise RuntimeError("workspace_id is required")
+
+    options = LiveGraphOptions(
+        case_ids={case_id.strip() for case_id in args.case_id if case_id.strip()},
+        regressions_only=bool(args.regressions_only),
+        fail_fast=bool(args.fail_fast),
+        verbose_progress=bool(args.verbose_progress),
+    )
 
     failures: list[tuple[str, str]] = []
     for workspace_id in args.workspace_ids:
@@ -446,7 +583,7 @@ async def _main() -> int:
                 result = await _ensure_indexed(workspace_id, args.mode)
                 print(result)
 
-            runs = await _run_live_checks(workspace_id)
+            runs = await _run_live_checks(workspace_id, options)
             for run in runs:
                 print(f"\n=== {run.name} ===")
                 print(run.output.strip())
@@ -454,6 +591,8 @@ async def _main() -> int:
             failures.append((workspace_id, str(exc)))
             print(f"\n[live-graph] FAILED: {workspace_id}")
             print(str(exc).strip())
+            if options.fail_fast:
+                break
         print()
 
     if failures:

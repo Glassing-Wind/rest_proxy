@@ -1,18 +1,26 @@
 """tools/search/graph_query.py — raw Neo4j queries and definitions lookup."""
 
 import json
-import os
 from mcp.server.fastmcp import FastMCP
 
 from _helpers import get_project_id, get_workspace_path
 from tools.brain.search import core as search_core
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
+
+    def _normalize_file_roles(raw_roles) -> set[str] | None:
+        if isinstance(raw_roles, (list, tuple, set)):
+            return {str(role).strip().lower() for role in raw_roles if str(role).strip()}
+        return None
 
     def _project_display_allowed(project_id: str | None, project_path: str | None) -> bool:
         pid = (project_id or "").strip()
         path = (project_path or "").strip()
+        # Structural indexing stages replacements in these namespaces. A path
+        # on a staging Project must not make it visible as a real definition.
+        if "::shadow::" in pid:
+            return False
         if path:
             return True
         if not pid:
@@ -29,7 +37,18 @@ def register(mcp: FastMCP) -> None:
             return False
         return True
 
-    def _definition_path_penalty(file_path: str | None) -> int:
+    def _definition_path_penalty(file_path: str | None, raw_roles=None) -> int:
+        roles = _normalize_file_roles(raw_roles)
+        if roles is not None:
+            if {"generated_surface", "binding_surface"} & roles:
+                return 4
+            if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+                return 3
+            if "implementation_surface" in roles:
+                return 0
+            if {"docs_surface", "support_surface"} & roles:
+                return 2
+            return 0
         norm = (file_path or "").replace("\\", "/").lower()
         if not norm:
             return 5
@@ -59,9 +78,13 @@ def register(mcp: FastMCP) -> None:
                 "/storybook/",
                 "/fixtures/",
                 "/examples/",
+                "/benchmark/",
+                "/benchmarks/",
             )
         ):
             return 3
+        if "/docs/" in norm or norm.startswith("docs/"):
+            return 2
         if any(token in norm for token in ("/src/", "src/", "/packages/", "packages/")):
             return 0
         return 2
@@ -82,54 +105,57 @@ def register(mcp: FastMCP) -> None:
             "EnumCase": 6,
         }.get(kind or "", 7)
 
-    @mcp.tool()
-    async def query_graph(
-        cypher_query: str,
-        workspace_id: str = "",
-        project_id: str = "",
-    ) -> str:
-        """
-        Execute a raw Cypher query on the Neo4j structural graph.
-        Useful for complex relationship analysis.
+    if include_admin:
+        @mcp.tool()
+        async def query_graph(
+            cypher_query: str,
+            workspace_id: str = "",
+            project_id: str = "",
+        ) -> str:
+            """
+            Execute a raw Cypher query on the Neo4j structural graph.
+            Useful for complex relationship analysis.
 
-        Args:
-            cypher_query: The Cypher query string.
-            workspace_id: Optional logical workspace ID or local project path.
-                When provided, the tool also binds `project_id`, `pid`,
-                `workspace_id`, `workspace_path`, and `project_path` params.
-            project_id: Optional explicit graph project ID. Overrides the
-                derived ID when both are provided.
-        """
-        try:
-            import graph_bootstrap
+            Admin/debug surface only; normal workflows should prefer higher-level tools.
 
-            driver = await graph_bootstrap.require_driver()
-            if not driver:
-                return "Error: Could not connect to Neo4j."
+            Args:
+                cypher_query: The Cypher query string.
+                workspace_id: Optional logical workspace ID or local project path.
+                    When provided, the tool also binds `project_id`, `pid`,
+                    `workspace_id`, `workspace_path`, and `project_path` params.
+                project_id: Optional explicit graph project ID. Overrides the
+                    derived ID when both are provided.
+            """
+            try:
+                import graph_bootstrap
 
-            resolved_workspace_path = ""
-            if workspace_id:
-                resolved_workspace_path = get_workspace_path(workspace_id)
-            resolved_project_id = project_id or (get_project_id(workspace_id) if workspace_id else "")
-            params: dict[str, str] = {}
-            if workspace_id:
-                params["workspace_id"] = workspace_id
-            if resolved_workspace_path:
-                params["workspace_path"] = resolved_workspace_path
-                params["project_path"] = resolved_workspace_path
-            if resolved_project_id:
-                params["project_id"] = resolved_project_id
-                params["pid"] = resolved_project_id
+                driver = await graph_bootstrap.require_driver()
+                if not driver:
+                    return "Error: Could not connect to Neo4j."
 
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                data = await search_core._execute_read(
-                    session, cypher_query, op="query_graph", **params
-                )
-            if not data:
-                return "No results found."
-            return json.dumps(data, indent=2)
-        except Exception as e:
-            return f"Error querying graph: {str(e)}"
+                resolved_workspace_path = ""
+                if workspace_id:
+                    resolved_workspace_path = get_workspace_path(workspace_id)
+                resolved_project_id = project_id or (get_project_id(workspace_id) if workspace_id else "")
+                params: dict[str, str] = {}
+                if workspace_id:
+                    params["workspace_id"] = workspace_id
+                if resolved_workspace_path:
+                    params["workspace_path"] = resolved_workspace_path
+                    params["project_path"] = resolved_workspace_path
+                if resolved_project_id:
+                    params["project_id"] = resolved_project_id
+                    params["pid"] = resolved_project_id
+
+                async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                    data = await search_core._execute_read(
+                        session, cypher_query, op="query_graph", **params
+                    )
+                if not data:
+                    return "No results found."
+                return json.dumps(data, indent=2)
+            except Exception as e:
+                return f"Error querying graph: {str(e)}"
 
     @mcp.tool()
     async def resolve_graph_project(workspace_id: str) -> str:
@@ -154,7 +180,7 @@ def register(mcp: FastMCP) -> None:
     async def find_definitions(symbol_name: str) -> str:
         """
         Search for the definition of a class, function, or struct across ALL indexed projects.
-        Ideal for cross-project dependency discovery.
+        Best used as an exact-name fallback or cross-project disambiguation tool.
 
         Args:
             symbol_name: Name of the symbol to find.
@@ -170,10 +196,13 @@ def register(mcp: FastMCP) -> None:
                 OR n:Method OR n:Protocol OR n:Interface OR n:Extension
                 OR n:TypeAlias OR n:AssociatedType OR n:EnumCase
             ) AND n.name = $name
+              AND NOT coalesce(n.project_id, '') CONTAINS '::shadow::'
             OPTIONAL MATCH (p:Project {id: n.project_id})
+            OPTIONAL MATCH (f:File {project_id: n.project_id, filepath: n.filepath})
             RETURN n.project_id AS project_id, p.project_path AS project_path,
                    n.filepath AS file, n.start_line AS line,
-                   head([label IN labels(n) WHERE label <> 'Node']) AS type
+                   head([label IN labels(n) WHERE label <> 'Node']) AS type,
+                   f.semantic_file_roles AS file_roles
             """
             async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
                 records = await search_core._execute_read(
@@ -189,15 +218,37 @@ def register(mcp: FastMCP) -> None:
                 ]
                 filtered.sort(
                     key=lambda record: (
-                        _definition_path_penalty(record.get("file")),
+                        _definition_path_penalty(record.get("file"), record.get("file_roles")),
                         _definition_kind_rank(record.get("type")),
                         len(record.get("project_path") or record.get("project_id") or ""),
                         len(record.get("file") or ""),
                         record.get("line") or 0,
                     )
                 )
-                output = [f"Found {symbol_name} in the following locations:"]
-                for record in filtered:
+                output = [
+                    f"Definition matches for `{symbol_name}` (fallback exact-name lookup):",
+                    "Prefer `get_symbol_context`, `list_symbol_matches`, or `search_codebase` when you need richer navigation.",
+                    "",
+                ]
+                if filtered:
+                    best_candidates = filtered[:3]
+                    remaining_candidates = filtered[3:]
+                    output.append("Best candidate definitions:")
+                    for record in best_candidates:
+                        loc = record["file"] or "unknown"
+                        line = record["line"]
+                        loc_str = f"{loc}:{line}" if line is not None else loc
+                        project_display = record["project_path"] or record["project_id"]
+                        output.append(
+                            f"- [{record['type']}] Project: {project_display}, File: {loc_str}"
+                        )
+                    if remaining_candidates:
+                        output.append("")
+                        output.append("Other exact-name matches:")
+                else:
+                    best_candidates = []
+                    remaining_candidates = []
+                for record in remaining_candidates:
                     loc = record["file"] or "unknown"
                     line = record["line"]
                     loc_str = f"{loc}:{line}" if line is not None else loc
@@ -205,7 +256,7 @@ def register(mcp: FastMCP) -> None:
                     output.append(
                         f"- [{record['type']}] Project: {project_display}, File: {loc_str}"
                     )
-            if len(output) == 1:
+            if len(filtered) == 0:
                 return f"Symbol '{symbol_name}' not found in any indexed project."
             return "\n".join(output)
         except Exception as e:

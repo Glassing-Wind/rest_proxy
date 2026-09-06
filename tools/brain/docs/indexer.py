@@ -14,11 +14,11 @@ CLI:
 """
 
 import sys
-import os
 from pathlib import Path
 
-# sentence_transformers must own the process Metal/BLAS context first
-from sentence_transformers import SentenceTransformer  # noqa: E402
+# sentence_transformers must own the process Metal/BLAS context first.
+# Importing the package is intentionally retained for its runtime initialization.
+from sentence_transformers import SentenceTransformer as _SentenceTransformer  # noqa: E402,F401
 
 import asyncio
 import json

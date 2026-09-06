@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import graph_bootstrap
@@ -451,6 +450,8 @@ async def insert_embeddings_batch(
     project_id: str,
     batch: List[Dict[str, Any]],
     project_path: Optional[str] = None,
+    *,
+    link_refs: bool = True,
 ) -> int:
     from memory import store_embeddings
 
@@ -459,6 +460,24 @@ async def insert_embeddings_batch(
         project_id,
         batch,
         project_path=project_path,
+        link_refs=link_refs,
+    )
+
+
+async def link_embedding_refs(
+    session_id: str,
+    project_id: str,
+    ref_ids: List[str],
+    *,
+    batch_size: int = 1024,
+) -> int:
+    from memory import store_embeddings
+
+    return await store_embeddings.link_embedding_refs(
+        session_id,
+        project_id,
+        ref_ids,
+        batch_size=batch_size,
     )
 
 
@@ -583,7 +602,12 @@ async def get_global_instructions() -> List[str]:
 
 
 async def add_durable_memory(
-    session_id: str, text: str, is_global: bool = False
+    session_id: str,
+    text: str,
+    is_global: bool = False,
+    tags: list[str] | None = None,
+    category: str | None = None,
+    importance: int = 3,
 ) -> bool:
     from memory import store_durable
 
@@ -591,16 +615,25 @@ async def add_durable_memory(
         session_id,
         text,
         is_global=is_global,
+        tags=tags,
+        category=category,
+        importance=importance,
     )
 
 
 async def list_durable_memories(
     session_id: str,
     include_global: bool = False,
+    tags: list[str] | None = None,
+    category: str | None = None,
+    min_importance: int = 1,
 ) -> list[dict]:
     from memory import store_durable
 
     return await store_durable.list_durable_memories(
         session_id,
         include_global=include_global,
+        tags=tags,
+        category=category,
+        min_importance=min_importance,
     )

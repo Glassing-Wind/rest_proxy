@@ -40,6 +40,46 @@ def register(mcp: FastMCP) -> None:
             return parts[0] + "/"
         return ""
 
+    def _file_roles_present(raw_roles) -> bool:
+        return isinstance(raw_roles, list)
+
+    def _normalize_file_roles(raw_roles) -> set[str]:
+        if not _file_roles_present(raw_roles):
+            return set()
+        return {
+            str(role).strip().lower()
+            for role in raw_roles
+            if isinstance(role, str) and str(role).strip()
+        }
+
+    def _is_legacy_test_like_path(file_path: str | None) -> bool:
+        normalized = (file_path or "").replace("\\", "/").lower()
+        if not normalized:
+            return False
+        return (
+            "/test/" in normalized
+            or normalized.startswith("test/")
+            or "/tests/" in normalized
+            or normalized.startswith("tests/")
+            or "/spec/" in normalized
+            or normalized.startswith("spec/")
+            or "/__tests__/" in normalized
+            or normalized.startswith("__tests__/")
+            or ".test." in normalized
+            or ".spec." in normalized
+            or normalized.endswith("_test.py")
+            or normalized.endswith("_test.go")
+            or normalized.endswith("_spec.rb")
+        )
+
+    def _is_semantic_test_surface(file_path: str | None, raw_roles) -> bool:
+        roles = _normalize_file_roles(raw_roles)
+        if {"test_surface", "example_surface", "benchmark_surface"} & roles:
+            return True
+        if _file_roles_present(raw_roles):
+            return False
+        return _is_legacy_test_like_path(file_path)
+
     async def _execute_read(session, cypher: str, op: str | None = None, **params):
         metadata = dict(_TX_METADATA_BASE)
         op_value = op or "read"
@@ -238,6 +278,7 @@ def register(mcp: FastMCP) -> None:
                     database=graph_bootstrap._NEO4J_DB
                 ) as session:
                     res = await _execute_read(
+                        session,
                         """
                         MATCH (src:File {project_id: $pid})
                         WHERE src.filepath ENDS WITH $fp
@@ -353,15 +394,14 @@ def register(mcp: FastMCP) -> None:
                         async with conn.cursor() as cur:
                             ors = " OR ".join(["content ILIKE %s"] * len(semantic_terms))
                             sql = (
-                                "SELECT file_path, count(*) AS hits "
+                                "SELECT file_path, metadata "
                                 "FROM codebase_embeddings "
                                 "WHERE project_id = %s "
                                 "  AND file_path <> %s "
                                 "  AND (file_path ILIKE %s OR file_path ILIKE %s OR file_path ILIKE %s) "
                                 f"  AND ({ors}) "
-                                "GROUP BY file_path "
-                                "ORDER BY hits DESC, file_path "
-                                "LIMIT 10"
+                                "ORDER BY file_path "
+                                "LIMIT 200"
                             )
                             params = [
                                 project_id,
@@ -371,10 +411,31 @@ def register(mcp: FastMCP) -> None:
                                 "%__tests__%",
                             ] + [f"%{term}%" for term in semantic_terms]
                             await cur.execute(sql, params)
-                            for hit_file, hits in await cur.fetchall():
+                            semantic_hits: dict[str, dict[str, object]] = {}
+                            for row in await cur.fetchall():
+                                if not row:
+                                    continue
+                                hit_file = row[0]
+                                metadata = row[1] if len(row) > 1 else None
+                                raw_roles = None
+                                if isinstance(metadata, dict):
+                                    raw_roles = metadata.get("file_roles")
+                                entry = semantic_hits.setdefault(
+                                    hit_file,
+                                    {"hits": 0, "file_roles": None},
+                                )
+                                entry["hits"] = int(entry["hits"]) + 1
+                                if _file_roles_present(raw_roles) and entry["file_roles"] is None:
+                                    entry["file_roles"] = raw_roles
+                            for hit_file, entry in semantic_hits.items():
+                                if not _is_semantic_test_surface(
+                                    hit_file,
+                                    entry.get("file_roles"),
+                                ):
+                                    continue
                                 results.setdefault(
                                     hit_file,
-                                    f"semantic test-chunk match ({hits})",
+                                    f"semantic test-chunk match ({entry['hits']})",
                                 )
                 except Exception:
                     pass
@@ -441,7 +502,8 @@ def register(mcp: FastMCP) -> None:
         """
         project_path = get_workspace_path(workspace_id)
         try:
-            import subprocess, re
+            import re
+            import subprocess
 
             def _extract_changed_symbol(line: str) -> str | None:
                 patterns = [
@@ -482,6 +544,32 @@ def register(mcp: FastMCP) -> None:
                 return f"No changes vs `{since}`. Working tree is clean."
 
             file_re = re.compile(r"^diff --git a/.+ b/(.+)$")
+            source_extensions = {
+                ".c",
+                ".cc",
+                ".cpp",
+                ".cs",
+                ".cxx",
+                ".go",
+                ".h",
+                ".hpp",
+                ".java",
+                ".js",
+                ".jsx",
+                ".kt",
+                ".kts",
+                ".m",
+                ".mm",
+                ".php",
+                ".py",
+                ".pyi",
+                ".rb",
+                ".rs",
+                ".scala",
+                ".swift",
+                ".ts",
+                ".tsx",
+            }
             current_file = ""
             changed: dict[str, set] = {}
             all_files: set[str] = set()
@@ -496,22 +584,34 @@ def register(mcp: FastMCP) -> None:
                 if symbol and current_file:
                     changed.setdefault(current_file, set()).add(symbol)
 
-            unnamed = all_files - set(changed)
+            files_without_symbols = all_files - set(changed)
+            source_without_symbols = {
+                fp
+                for fp in files_without_symbols
+                if os.path.splitext(fp)[1].lower() in source_extensions
+            }
+            non_code_files = files_without_symbols - source_without_symbols
             out = [f"## Changed symbols vs `{since}`\n"]
             if changed:
                 for fp in sorted(changed):
                     syms = ", ".join(f"`{s}`" for s in sorted(changed[fp]))
                     out.append(f"**{fp}** — {syms}")
-            if unnamed:
-                out.append("\n**Files changed (file-level only):**")
-                for fp in sorted(unnamed):
+            if source_without_symbols:
+                out.append("\n**Changed source files without detected symbol definitions:**")
+                for fp in sorted(source_without_symbols):
+                    out.append(f"  - {fp}")
+            if non_code_files:
+                out.append("\n**Changed non-code/support files:**")
+                for fp in sorted(non_code_files):
                     out.append(f"  - {fp}")
             return "\n".join(out)
         except Exception as e:
             return f"Error diffing symbols: {str(e)}"
 
     @mcp.tool()
-    async def lint_project_subset(workspace_id: str, relative_paths: List[str]) -> str:
+    async def lint_project_subset(
+        workspace_id: str, relative_paths: List[str], fix: bool = False
+    ) -> str:
         """
         Run best-available linter on a set of files within a workspace.
         Supports Swift (swiftlint) and Python (pylint/ruff).
@@ -519,10 +619,9 @@ def register(mcp: FastMCP) -> None:
         Args:
             workspace_id:   The logical workspace ID or absolute path to the project root.
             relative_paths: List of relative paths to files to lint.
+            fix: Apply supported safe linter fixes before reporting remaining issues.
         """
         import subprocess
-        import shutil
-        import sys
 
         project_path = get_workspace_path(workspace_id)
         results = []
@@ -538,8 +637,9 @@ def register(mcp: FastMCP) -> None:
 
             if f.endswith(".swift"):
                 if swiftlint:
+                    cmd = [swiftlint, "--fix", f] if fix else [swiftlint, "lint", f]
                     res = subprocess.run(
-                        [swiftlint, "lint", f], capture_output=True, text=True
+                        cmd, capture_output=True, text=True
                     )
                     results.append(
                         f"--- SwiftLint: {rel_f} ---\n{res.stdout or 'No issues found.'}"
@@ -550,13 +650,19 @@ def register(mcp: FastMCP) -> None:
                 linter = ruff or pylint
                 if linter:
                     cmd = (
-                        [linter, "check", f]
+                        [linter, "check", *(["--fix"] if fix else []), f]
                         if "ruff" in linter
                         else [linter, "--errors-only", f]
                     )
                     res = subprocess.run(cmd, capture_output=True, text=True)
+                    fix_note = (
+                        " (fixes applied where available)"
+                        if fix and "ruff" in linter
+                        else ""
+                    )
                     results.append(
-                        f"--- Python Linter ({os.path.basename(linter)}): {rel_f} ---\n{res.stdout or 'No issues found.'}"
+                        f"--- Python Linter ({os.path.basename(linter)}){fix_note}: {rel_f} ---\n"
+                        f"{res.stdout or 'No issues found.'}"
                     )
                 else:
                     results.append(
@@ -585,7 +691,6 @@ def register(mcp: FastMCP) -> None:
         import subprocess
         import json
         import shutil
-        import sys
 
         project_path = get_workspace_path(workspace_id)
         project_id = get_project_id(workspace_id)
@@ -706,7 +811,7 @@ def register(mcp: FastMCP) -> None:
                             lines += ["", doc.strip()]
                         return "\n".join(lines)
                     return f"Symbol `{symbol_name}` not found in `{os.path.basename(file_path)}`."
-            except Exception as e:
+            except Exception:
                 pass  # fall through to ts_pack
 
         # Fallback: ts_pack structural extraction
@@ -737,7 +842,6 @@ def register(mcp: FastMCP) -> None:
             import tree_sitter_language_pack as ts_pack
 
             project_path = get_workspace_path(workspace_id)
-            orig_file_path = file_path
             if not os.path.isabs(file_path):
                 file_path = os.path.join(project_path, file_path)
 
@@ -767,14 +871,6 @@ def register(mcp: FastMCP) -> None:
                 try:
                     import graph_bootstrap
 
-                    project_root = None
-                    cur = os.path.abspath(os.path.dirname(file_path))
-                    while cur and cur != os.path.dirname(cur):
-                        if os.path.isdir(os.path.join(cur, ".git")):
-                            project_root = cur
-                            break
-                        cur = os.path.dirname(cur)
-
                     if project_path:
                         rel_path = os.path.relpath(file_path, project_path)
                         project_id = get_project_id(workspace_id)
@@ -783,6 +879,7 @@ def register(mcp: FastMCP) -> None:
                             database=graph_bootstrap._NEO4J_DB
                         ) as session:
                             records = await _execute_read(
+                                session,
                                 """
                                 MATCH (f:File {project_id:$pid, filepath:$fp})-[:CONTAINS]->(s)
                                 WHERE s.name = $name
@@ -878,7 +975,28 @@ def register(mcp: FastMCP) -> None:
 
             MAX_MEMBERS = 100
             children = cls_node.get("children") or []
-            
+            source_lines = code.splitlines()
+
+            def _decorator_labels(child: dict, start_line: int) -> list[str]:
+                labels: list[str] = []
+                for value in child.get("decorators") or child.get("attributes") or []:
+                    if isinstance(value, str):
+                        label = value
+                    elif isinstance(value, dict):
+                        label = value.get("text") or value.get("name") or ""
+                    else:
+                        label = ""
+                    label = str(label).strip()
+                    if label:
+                        if lang == "python" and not label.startswith("@"):
+                            label = f"@{label}"
+                        labels.append(label)
+                index = start_line - 2
+                while index >= 0 and source_lines[index].lstrip().startswith("@"):
+                    labels.insert(0, source_lines[index].strip())
+                    index -= 1
+                return list(dict.fromkeys(labels))
+
             for child in children[:MAX_MEMBERS]:
                 child_kind = child.get("kind") or ""
                 if child_kind in (
@@ -895,7 +1013,11 @@ def register(mcp: FastMCP) -> None:
                     name = child.get("name") or "?"
                     cspan = child.get("span") or {}
                     csl = (cspan.get("start_line") or 0) + 1
-                    out.append(f"  {name}  (L{csl})")
+                    decorators = _decorator_labels(child, csl)
+                    out.extend(f"  {label}" for label in decorators)
+                    marker = "property" if child_kind == "Property" else child_kind.lower()
+                    signature = child.get("signature") or name
+                    out.append(f"  {signature}  [{marker}, L{csl}]")
 
             if len(children) > MAX_MEMBERS:
                 out.append(f"  ... (and {len(children) - MAX_MEMBERS} more members truncated)")
@@ -938,7 +1060,7 @@ def register(mcp: FastMCP) -> None:
                 if pattern.search(line):
                     hits.append(f"  L{i:4d}: {line.rstrip()}")
                 if len(hits) >= 60:
-                    hits.append(f"  … (truncated at 60 matches)")
+                    hits.append("  … (truncated at 60 matches)")
                     break
 
             if not hits:

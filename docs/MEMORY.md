@@ -1,19 +1,26 @@
 # Memory-Aware Agent Gateway
 
-This document describes the memory layer added to the LM Studio proxy (`proxy.py`). All features are **optional** and gated by environment variables. If any dependency (Postgres, Redis) is unavailable, the proxy continues to work normally. Memory errors are logged but never break the response path.
+This document describes the optional memory and retrieval layer used by the
+FastAPI proxy package (`proxy/`) and GraphRAG MCP tools. All features are
+gated by environment variables. If an optional dependency such as Postgres,
+Redis, Neo4j, or pgvector is unavailable, request handling continues with safe
+fallbacks. Memory errors are logged but do not break the response path.
 
 ---
 
 ## Architecture
 
 ```
-proxy.py  (unchanged routes)
+proxy/  (FastAPI routes and request handlers)
 │
-├── memory_types.py      – Dataclasses: ConversationTurn, MemorySummary, ToolOutput, etc.
-├── memory_summary.py    – Summarization (LLM or deterministic) + tool-output compaction
-├── memory_store.py      – Redis hot-state + Postgres durable storage
-├── memory_retrieval.py  – Embedding provider interface + memory assembly
-└── memory_bootstrap.py  – Neo4j GraphRAG initialization (run at startup)
+├── memory/types.py                 – Dataclasses and structured memory records
+├── memory/summary.py               – Rolling summaries and tool-output compaction
+├── memory/store*.py                – Redis/Postgres/Neo4j storage helpers
+├── memory/retrieval.py             – Prompt memory assembly
+├── memory/docs_retrieval.py        – Documentation retrieval core
+├── memory/code_retrieval*.py       – Code retrieval orchestration and loaders
+├── memory/retrieval_*.py           – Ranking, surface, duplicate, and policy helpers
+└── memory/bootstrap.py             – Durable schema/bootstrap helpers
 ```
 
 ### Data Flow
@@ -39,15 +46,15 @@ POST /v1/chat/completions
 
 | Variable | Default | Description |
 |---|---|---|
-| `LM_PROXY_MEMORY_ENABLED` | `0` | Master switch – set to `1` to allow proxy memory features |
-| `LM_PROXY_MEMORY_MODE` | `stateless` | `stateless/off` disables automatic rolling memory, `assist` enables bounded recent-turn + summary help for smaller/local models, `full` also enables broader retrieval features |
-| `LM_PROXY_NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt connection URI |
+| `LM_PROXY_MEMORY_ENABLED` | `1` | Master capability switch; automatic behavior still requires a non-off memory mode |
+| `LM_PROXY_MEMORY_MODE` | `stateless` | `stateless/off` disables automatic memory, `assist` enables bounded recent-turn and summary help, and `full` enables broader retrieval; `hybrid` is a compatibility alias for `full` |
+| `LM_PROXY_NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt connection URI |
 | `LM_PROXY_NEO4J_USER` | `neo4j` | Neo4j username |
 | `LM_PROXY_NEO4J_PASSWORD` | - | Neo4j password |
-| `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `0` | Enable Neo4j durable persistence |
-| `LM_PROXY_MEMORY_ENABLE_REDIS` | `0` | Enable Redis hot session state |
+| `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `1` | Allow durable persistence when the selected mode enables it |
+| `LM_PROXY_MEMORY_ENABLE_REDIS` | `1` | Allow Redis hot session state when the selected mode enables it |
 | `LM_PROXY_MEMORY_ENABLE_EMBEDDINGS` | `0` | Enable embedding + pgvector retrieval |
-| `LM_PROXY_MEMORY_ENABLE_RETRIEVAL` | `0` | Enable vector similarity retrieval |
+| `LM_PROXY_MEMORY_ENABLE_RETRIEVAL` | `1` | Enable retrieval when embeddings and the selected mode allow it |
 | `LM_PROXY_PG_DSN` | _(empty)_ | Postgres connection string (psycopg v3 format) |
 | `LM_PROXY_REDIS_URL` | `redis://localhost:6379/0` | Redis URL |
 | `LM_PROXY_MEMORY_SESSION_NAMESPACE` | `lmproxy` | Redis key namespace |
@@ -65,7 +72,8 @@ POST /v1/chat/completions
 
 ## Postgres Schema
 
-Five tables are created idempotently on startup via `memory_bootstrap.py`:
+Durable tables are created idempotently by `memory/bootstrap.py` and the
+storage helpers when the corresponding feature flags are enabled:
 
 | Table | Purpose |
 |---|---|
@@ -128,7 +136,7 @@ Derived deterministically per request:
 
 ## Structured Working Memory (Future)
 
-`memory_types._empty_working_memory()` defines the JSON schema stored in Redis:
+`memory/types.py` defines the structured working-memory shape stored in Redis:
 
 ```json
 {
@@ -142,13 +150,16 @@ Derived deterministically per request:
 }
 ```
 
-Clients can write this state via `memory_store.set_session_state()`. The assembly helper in `memory_retrieval.assemble_memory()` renders it into compact text for future prompt injection.
+Clients can write this state through the memory store helpers. The assembly
+helper in `memory/retrieval.py` renders it into compact text for prompt
+injection when memory mode enables it.
 
 ---
 
 ## Memory Assembly (Prompt Augmentation)
 
-`memory_retrieval.assemble_memory(session_id, query_text)` returns an `AssembledMemory` object with:
+`memory.retrieval.assemble_memory(session_id, query_text)` returns an
+`AssembledMemory` object with:
 - `rolling_summary` – concise session history
 - `working_memory` – structured state dict
 - `recent_turns` – last N turns from Redis
@@ -181,7 +192,7 @@ pip install -r requirements.txt
 # 3. Create Postgres DB (if not already done)
 createdb lm_proxy_memory
 
-# 4. Start proxy (schema bootstrap runs automatically at startup)
+# 4. Start proxy (schema bootstrap runs automatically when enabled)
 uvicorn proxy:app --host 0.0.0.0 --port 8000
 
 # Optional: enable debug logging to see memory events
@@ -216,6 +227,7 @@ The existing proxy-side `filter_messages_for_proxy()` already truncates tool mes
 
 - No automatic working memory updates from assistant content (requires future extraction logic).
 - Rolling summary checkpointed to Postgres on every turn (minor write amplification).
-- Prompt injection of assembled memory is not wired by default (assembly exists, injection is a one-liner future addition).
-- Single Postgres connection per process; adequate for proxy loads; add `psycopg_pool` for high concurrency.
+- Automatic prompt memory is mode-driven; `stateless` remains the safe default.
+- The storage layer uses pooled connections where configured, and falls back
+  cleanly when persistence is disabled or unavailable.
 - HNSW index requires pgvector ≥ 0.5; falls back to ivfflat (or no index) on older versions.

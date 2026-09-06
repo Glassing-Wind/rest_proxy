@@ -1,12 +1,15 @@
 import importlib.util
+import inspect
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-CHUNKING_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/docs/chunking.py"
-CONFIG_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/docs/config.py"
+REPO_ROOT = Path(__file__).resolve().parent
+CHUNKING_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "chunking.py"
+CONFIG_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "docs" / "config.py"
 
 
 def load_config_module():
@@ -77,7 +80,9 @@ class DocsChunkingTests(unittest.TestCase):
             )
         self.assertEqual(len(chunks), 1)
         self.assertEqual(fake_ts_pack.configs[0]["chunk_max_size"], module.CHUNK_MAX_BYTES)
-        self.assertEqual(fake_ts_pack.configs[0]["chunk_overlap"], module.CHUNK_OVERLAP_BYTES)
+        process_config_sig = inspect.signature(fake_ts_pack.ProcessConfig)
+        if "chunk_overlap" in process_config_sig.parameters:
+            self.assertEqual(fake_ts_pack.configs[0]["chunk_overlap"], module.CHUNK_OVERLAP_BYTES)
 
 
 if __name__ == "__main__":

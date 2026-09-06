@@ -17,28 +17,30 @@
 # - Optional: create .env from .env.example if present and set credentials.
 # - Python version:      3.11+ recommended (match production runtime).
 # - Dev loop:            run one service at a time; both are standalone.
-# - Quick sanity check:  python3 -m py_compile proxy.py
+# - Quick sanity check:  python -m py_compile proxy/app.py mcp_server.py brain_server.py
 #
 # Run the MCP server (tooling / indexing)
-# - Start MCP server:    python3 mcp_server.py
-# - Index a workspace:   python3 mcp_server.py index_workspace /abs/path/to/project
+# - Start MCP server:    python mcp_server.py
+# - Index a workspace:   python mcp_server.py index_workspace /abs/path/to/project
+#   The CLI waits for completion and exits nonzero on failure; the MCP tool
+#   returns a job ID immediately for asynchronous status polling.
 #
 # Run the HTTP proxy
 # - Uvicorn entry:       uvicorn proxy:app --host 0.0.0.0 --port 8000
-# - Alt entry:           python3 proxy.py   (only if you add __main__ in future)
+# - Package entry:       proxy/__init__.py exposes proxy.app:app
 #
 # Lint (optional; no enforced config in repo)
 # - Ruff:                ruff check .
-# - Pylint:              pylint proxy.py   (or a file list)
+# - Pylint:              pylint proxy tools memory graphrag_core
 # - Lint subset (tool):  tools/dev.py exposes lint_project_subset for MCP use.
 #
 # Tests (script-style, not a formal test framework)
-# - Run a single script: python3 test_neo4j.py
-# - Run a single script: python3 test_tool_stream_client.py
-# - Run a single script: python3 test_native_index.py
-# - Run a single script: python3 verify_streaming.py
-# - Pattern for one test: python3 test_<name>.py  (scripts live at repo root)
-# - Single test example: python3 test_native_index.py
+# - Run a single script: python test_neo4j.py
+# - Run a single script: python test_tool_stream_client.py
+# - Run a single script: python test_native_index.py
+# - Run a single script: python verify_streaming.py
+# - Pattern for one test: python test_<name>.py  (scripts live at repo root)
+# - Single test example: python test_native_index.py
 #
 # Notes on tests
 # - These test_*.py files are executable scripts; they are not wired to pytest.
@@ -75,7 +77,7 @@
 # - Prefer Python 3.11 typing (X | Y) when already used in file.
 # - Use List/Dict/Optional for consistency with existing files.
 # - Add type hints for public functions and core helpers.
-# - Use dataclasses for structured records (see memory_types.py).
+# - Use dataclasses for structured records (see memory/types.py).
 # - Favor Optional[...] over implicit None when signatures are public.
 #
 # Naming Conventions
@@ -109,7 +111,7 @@
 # - Preserve request/response schemas; avoid breaking compatibility.
 
 # Environment & Configuration
-# - Load .env at process start (see proxy.py and mcp_server.py).
+# - Load .env at process start (see proxy/config.py and mcp_server.py).
 # - Treat all integrations as optional; check flags before using.
 # - Keep defaults safe; make enabling behavior explicit via env vars.
 # - Avoid adding new required env vars; provide sensible fallbacks.
@@ -119,14 +121,15 @@
 #   TS_PACK_DEBUG_LAUNCH=1 for per-file launch resolution debug logs.
 
 # Structure & File Layout
-# - Core proxy:            proxy.py
-# - MCP server entry:      mcp_server.py
-# - Memory layer:          memory_store.py, memory_summary.py,
-#                          memory_retrieval.py, memory_types.py
-# - Indexing tools:        tools/indexing.py, scripts/index_workspace.py
-# - Helper utilities:      _helpers.py, _jobs.py
-# - Tool registry:         tools/__init__.py
-# - Developer tooling:     tools/dev.py
+# - Core proxy:            proxy/ package, exposed as proxy:app
+# - HTTP MCP daemon:       brain_server.py
+# - STDIO MCP entry:       mcp_server.py
+# - Memory/retrieval:      memory/ package
+# - GraphRAG core:         graphrag_core/ package
+# - Brain MCP tools:       tools/brain/ package
+# - Hands/admin tools:     tools/hands/ package
+# - Indexing pipeline:     scripts/index_workspace.py
+# - Helper utilities:      _helpers.py, _jobs.py, _mcp.py
 #
 # Specific Patterns to Follow
 # - Use feature flags near module top with clear names and defaults.
@@ -136,7 +139,7 @@
 # - Prefer stable ordering in lists/dicts returned by tools.
 
 # Testing Patterns
-# - Script tests should be runnable via python3 test_*.py.
+# - Script tests should be runnable via python test_*.py.
 # - Keep test scripts self-contained and explicit about env expectations.
 # - If adding pytest later, keep scripts compatible or add separate tests/.
 # - For new tests, document required env vars at top of file.
