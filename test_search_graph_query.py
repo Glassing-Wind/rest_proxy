@@ -141,6 +141,32 @@ class GraphQueryTests(unittest.TestCase):
         self.assertIn("packages/sdk/js/src/v2/gen/types.gen.ts:1", lines[2])
         self.assertNotIn("profilequery123", output)
 
+    def test_find_definitions_excludes_shadow_projects_even_with_project_paths(self):
+        rows = [
+            {"project_id": pid, "project_path": path, "file": file,
+             "line": 10, "type": "Function", "file_roles": ["implementation_surface"]}
+            for pid, path, file in [
+                ("repo", "/workspace/repo", "src/main.py"),
+                ("nested", "/workspace/repo/nested", "main.py"),
+                ("repo::shadow::run1", None, "shadow_without_path.py"),
+                ("repo::shadow::run2", "/workspace/repo", "shadow_with_path.py"),
+            ]
+        ]
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.search_core, "_execute_read", return_value=rows):
+                output = asyncio.run(self.mcp.tools["find_definitions"]("main"))
+        self.assertIn("src/main.py:10", output)
+        self.assertIn("Project: /workspace/repo/nested", output)
+        self.assertNotIn("shadow", output)
+        self.assertEqual(sum(line.startswith("- [") for line in output.splitlines()), 2)
+
+    def test_find_definitions_with_only_shadow_matches_returns_not_found(self):
+        rows = [{"project_id": "repo::shadow::run", "project_path": "/workspace/repo"}]
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.search_core, "_execute_read", return_value=rows):
+                output = asyncio.run(self.mcp.tools["find_definitions"]("main"))
+        self.assertEqual(output, "Symbol 'main' not found in any indexed project.")
+
     def test_find_definitions_skips_test_path_penalty_when_file_roles_are_present(self):
         rows = [
             {

@@ -87,3 +87,33 @@ text-search library cannot load. Restore the matching installation and coordinat
 any shared-database restart before reindexing. Investigate the separate native
 `SELECTchunk_id` staging error in pinned ts-pack. Confirmatory benchmarking and
 shadow cleanup must wait for stable indexing; no cleanup was performed.
+
+## Recovery and first benchmark-backed fix completed
+
+PostgreSQL 17.11 was installed and started through Homebrew. The TimescaleDB,
+pg_cron, pgvector and text-search libraries were present; database connections,
+full-text queries and vector operations passed. PostgreSQL is now marked as
+installed on request. A subsequent rest_proxy incremental index job `9290d4a5`
+completed both phases successfully; the earlier PostgreSQL/SQL errors did not recur.
+The health tool reports 297/297 structural and semantic files and healthy alignment.
+
+The first product fix excludes `::shadow::` project namespaces from exact-name
+`find_definitions` results in both the database query and output filtering. This
+addresses three repeated pilot cases while preserving legitimate nested projects.
+Eight focused graph-query tests passed, and all three affected lookups were replayed
+against the live graph before cleanup. The full retrieval-quality gate passed,
+including protocol lifecycle, tool-choice, investigation workflows, live graph
+regressions and MCP parity.
+
+After the gate, the rest_proxy watcher was temporarily unpinned. The brain reported
+no active jobs; a host worker check was empty. A new dry run and direct namespace
+inspection confirmed only `6f8dead37cb2::shadow::6f8dead37cb2:41619:1788546631249999872`.
+Cleanup removed 4,478 nodes and 1,031 relationships, leaving zero shadow residue.
+The original watcher pin was restored, and a final health check was healthy.
+
+Next: implement citation-ready bounded source output and replay tool-selection
+failures; then rerun a properly instrumented paired benchmark on an isolated index.
+The prepared dependency patch still needs isolated runtime validation before applying.
+The historical credential remains unrevoked/unconfirmed and keeps Security blocking;
+do not merge or add an exception. The original pilot artifacts remain historical
+observations of the pre-fix, unstable-index condition.

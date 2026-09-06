@@ -17,6 +17,10 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
     def _project_display_allowed(project_id: str | None, project_path: str | None) -> bool:
         pid = (project_id or "").strip()
         path = (project_path or "").strip()
+        # Structural indexing stages replacements in these namespaces. A path
+        # on a staging Project must not make it visible as a real definition.
+        if "::shadow::" in pid:
+            return False
         if path:
             return True
         if not pid:
@@ -192,6 +196,7 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
                 OR n:Method OR n:Protocol OR n:Interface OR n:Extension
                 OR n:TypeAlias OR n:AssociatedType OR n:EnumCase
             ) AND n.name = $name
+              AND NOT coalesce(n.project_id, '') CONTAINS '::shadow::'
             OPTIONAL MATCH (p:Project {id: n.project_id})
             OPTIONAL MATCH (f:File {project_id: n.project_id, filepath: n.filepath})
             RETURN n.project_id AS project_id, p.project_path AS project_path,
