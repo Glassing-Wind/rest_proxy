@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import os
 
 from _helpers import get_memory_modules
@@ -66,13 +68,59 @@ def format_file_purpose(
     return f"Purpose: `{file_path}` is {'; '.join(parts)}."
 
 
+def read_source_excerpt(abs_path: str, start_line: int, max_lines: int, max_chars: int) -> str:
+    """Return complete numbered lines from one bounded, hashed local-file snapshot."""
+    if start_line < 1 or not 1 <= max_lines <= 200 or not 256 <= max_chars <= 20000:
+        return "Invalid source bounds: start_line >= 1, max_lines 1..200, max_chars 256..20000."
+    try:
+        with open(abs_path, "rb") as stream:
+            raw = stream.read(16 * 1024 * 1024 + 1)
+        if len(raw) > 16 * 1024 * 1024:
+            return "Source unavailable: file exceeds the 16 MiB snapshot limit."
+        if b"\x00" in raw:
+            return "Source unavailable: binary file."
+        text = raw.decode("utf-8")
+        source = text.split("\n") if text else []
+        if source and source[-1] == "":
+            source.pop()
+        source = [line.removesuffix("\r") for line in source]
+    except (OSError, UnicodeError) as exc:
+        return f"Source unavailable: {type(exc).__name__}."
+    header = [f"Source: {os.path.abspath(abs_path)}", f"SHA256: {hashlib.sha256(raw).hexdigest()}",
+              "Origin: current local file (not indexed content)", f"Total lines: {len(source)}"]
+    if start_line > len(source):
+        return "\n".join(header + ["No lines at requested start_line."])
+    excerpt = []
+    used = 0
+    next_line = start_line
+    for number in range(start_line, min(len(source) + 1, start_line + max_lines)):
+        line = f"{number}: {source[number - 1]}"
+        if used + len(line) + 1 > max_chars:
+            break
+        excerpt.append(line)
+        used += len(line) + 1
+        next_line = number + 1
+    if excerpt:
+        header.append(f"Lines: {start_line}-{next_line - 1}")
+    else:
+        header.append("Requested line exceeds max_chars; increase the budget or use a native file reader.")
+    footer = [f"Next start_line: {next_line}"] if next_line <= len(source) else ["End of file."]
+    return "\n".join(header + excerpt + footer)
+
+
 async def describe_file_impl(
     *,
     project_path: str,
     file_path: str,
     execute_read,
+    include_source: bool = False,
+    start_line: int = 1,
+    max_lines: int = 80,
+    max_chars: int = 12000,
 ) -> str:
     abs_path, display_path = resolve_describe_paths(project_path, file_path)
+    if include_source:
+        return await asyncio.to_thread(read_source_excerpt, abs_path, start_line, max_lines, max_chars)
     lines = [f"=== {display_path} ==="]
     symbol_names: list[str] = []
 

@@ -117,3 +117,31 @@ The prepared dependency patch still needs isolated runtime validation before app
 The historical credential remains unrevoked/unconfirmed and keeps Security blocking;
 do not merge or add an exception. The original pilot artifacts remain historical
 observations of the pre-fix, unstable-index condition.
+
+
+## Citation output and selection follow-up
+
+Added `describe_file(..., include_source=True)` for bounded current-file source,
+complete numbered lines, a SHA256 snapshot hash, and explicit continuation. It
+bypasses the index and includes module settings. The default outline is unchanged.
+Catalog requests containing a concrete source filename now select `describe_file`;
+the usage guide distinguishes known-file evidence from semantic discovery.
+
+The source replay in `benchmarks/reports/2026-09-06/source-replay.json` covers the
+primary evidence file for each of the 15 pilot cases. All 15 MCP excerpts match
+native source and content hashes. It measures client operation wall time and UTF-8
+bytes, with MCP session setup separate and alternating condition order. This is a
+known-file tool replay, not a clean agent benchmark: it cannot establish answer
+accuracy, discovery performance, or model token savings. Original pilot results
+remain unchanged. Reproduce with `python scripts/replay_source_evidence.py --output
+/path/to/source-replay.json`.
+
+A confirmatory agent experiment remains pending: require isolated stable index,
+identical prompts without evidence hints, consistent end-to-end timing, actual
+model usage telemetry and independent grading. Do not promote replay timings to
+agent performance claims. The prepared security batch and historical credential
+revocation remain open as recorded above.
+
+Validation: 98 focused tests, the full local CI checks, and the complete live
+retrieval-quality gate passed after incremental index job `355542cd` completed
+both phases for 300 files. Staged changes passed redacted secret scanning.

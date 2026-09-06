@@ -9,7 +9,24 @@ See also:
 - [Tool product audit](tool_product_audit.md)
   - product audit of which tools are actually first-class vs fallback/debug/admin surfaces
 
-## Recommended Workflow
+## Choose the evidence tool first
+
+- Known file or module settings: `describe_file(project_path, file_path,
+  include_source=True, start_line=1, max_lines=80)`. This reads current local source,
+  returns numbered complete lines and a SHA256 of the snapshot, and needs no index.
+  Follow `Next start_line` for more; verify the hash stays the same across pages.
+- Known symbol: use `get_symbol_context` to locate it, then `extract_function_body`
+  for its body or the source view for surrounding module code.
+- Unknown implementation location: use `search_codebase` to discover candidates,
+  then read current source for claims. Avoid restricting to a facade file before
+  establishing where implementation lives.
+- New repository orientation: use `get_project_overview`. Check index health before
+  requesting new indexing. An existing healthy index does not need rebuilding.
+
+`list_tool_catalog` recognizes concrete source filenames in an intent and directs
+those requests to `describe_file`. Semantic ranking itself is unchanged.
+
+## Index setup when needed
 
 1. `index_workspace(workspace_id)`
    - Starts indexing and returns a `job_id`.

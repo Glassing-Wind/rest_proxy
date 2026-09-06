@@ -57,6 +57,8 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_mcp_tool_parity_selection.py
 "$PYTHON_BIN" test_compare_agent_tooling.py
 "$PYTHON_BIN" test_search_graph_query.py
+"$PYTHON_BIN" test_file_source_excerpt.py
+"$PYTHON_BIN" test_tool_choice_registry.py
 "$PYTHON_BIN" test_search_codebase_tool.py
 "$PYTHON_BIN" test_search_summary_tools.py
 "$PYTHON_BIN" test_store_embeddings.py

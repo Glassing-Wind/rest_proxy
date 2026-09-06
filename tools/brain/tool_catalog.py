@@ -53,7 +53,8 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "describe_file": ToolCatalogEntry(
         "primary",
         "code investigation",
-        "Understand one file's purpose, role metadata, and symbol surface without reading it manually.",
+        "Read exact source, module settings, configuration, numbered lines and citation hash for a known file "
+        "with include_source=True; otherwise understand its purpose and symbol surface.",
     ),
     "download_documentation": ToolCatalogEntry(
         "docs",
@@ -432,6 +433,15 @@ def _intent_tokens(intent: str) -> list[str]:
 
 
 def _matches_intent(name: str, entry: ToolCatalogEntry, intent: str) -> bool:
+    # A concrete source path is stronger evidence than semantic keyword overlap.
+    # Keep this narrow: documentation URLs must still use documentation tools.
+    if "http://" not in intent.lower() and "https://" not in intent.lower():
+        known_file = re.search(
+            r"(?:^|[\s`\"'(])/?(?:[\w.@-]+/)*[\w.-]+\.(?:py|js|ts|tsx|jsx|swift|rs|go|java|toml|yaml|yml|json|md|txt)(?=$|[\s`\"'):?,])",
+            intent, re.IGNORECASE,
+        )
+        if known_file:
+            return name == "describe_file"
     tokens = _intent_tokens(intent)
     if not tokens:
         return True

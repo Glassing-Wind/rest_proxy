@@ -3152,9 +3152,17 @@ def register(mcp: FastMCP) -> None:
         return await references.find_references_impl(workspace_id, symbol_name)
 
     @mcp.tool()
-    async def describe_file(project_path: str, file_path: str) -> str:
+    async def describe_file(
+        project_path: str, file_path: str, include_source: bool = False,
+        start_line: int = 1, max_lines: int = 80, max_chars: int = 12000,
+    ) -> str:
         """
-        Generate a structural and semantic description of a single file.
+        Read a known file with include_source=True for exact numbered current source
+        and a SHA256 citation hash, including module settings. No index is needed.
+        Source mode returns complete lines bounded by max_lines (1..200) and
+        max_chars (256..20000, excluding metadata). Follow Next start_line to continue.
+        Files over 16 MiB and non-UTF-8 files are rejected.
+        Otherwise generate a structural and semantic description of a single file.
         Returns its symbol list (functions, classes, structs) and a preview
         of its most representative semantic chunk. Much faster than reading the
         raw file for orientation.
@@ -3174,6 +3182,8 @@ def register(mcp: FastMCP) -> None:
             project_path=project_path,
             file_path=file_path,
             execute_read=_execute_read,
+            include_source=include_source, start_line=start_line,
+            max_lines=max_lines, max_chars=max_chars,
         )
 
     @mcp.tool()
