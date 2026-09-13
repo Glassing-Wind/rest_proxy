@@ -34,7 +34,15 @@ Action required an organization license before it could scan. See the
 
 The local scan found one historical Tavily-shaped credential at
 `04667ea6a080c8290926884d5d5ac79d74693fbb:session-ses_2b4d.md:768`.
-The user has not confirmed revocation. No exception was added and history was not
-rewritten. Rotate/revoke it before deciding how to handle the historical finding.
+The owner confirmed deletion of this Tavily key on 2026-09-13. This records the
+owner's confirmation; no provider-side verification or request using the old key
+was performed. The file is absent from the current tree, but remains in history.
+
+`.gitleaksignore` now acknowledges only this exact commit/file/rule/line fingerprint
+as a revoked historical finding. No key value, path-wide exclusion, rule exclusion,
+or history rewrite is included. The full-history scan remains enabled, and the same
+location in a new commit remains subject to scanning. Gitleaks documents this
+[fingerprint mechanism](https://github.com/gitleaks/gitleaks#gitleaksignore).
+Do not reuse this exception for any active or unconfirmed credential.
 The candidate dependency batch is documented under `security/batches/` and is not
 applied to the running environment.

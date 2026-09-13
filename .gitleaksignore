@@ -1,0 +1,3 @@
+# Revoked historical Tavily key. Owner confirmed deletion on 2026-09-13.
+# Exact commit/file/rule/line only; new commits remain scanned. See docs/security.md.
+04667ea6a080c8290926884d5d5ac79d74693fbb:session-ses_2b4d.md:generic-api-key:768

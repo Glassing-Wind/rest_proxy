@@ -145,3 +145,14 @@ revocation remain open as recorded above.
 Validation: 98 focused tests, the full local CI checks, and the complete live
 retrieval-quality gate passed after incremental index job `355542cd` completed
 both phases for 300 files. Staged changes passed redacted secret scanning.
+
+
+## September 13 credential resolution
+
+The owner confirmed deletion of the exposed Tavily key. Recorded that confirmation
+in `docs/security.md` and added one commit-specific Gitleaks fingerprint for the
+revoked historical occurrence. Earlier entries describing revocation as unconfirmed
+are historical status, superseded by this update. No history rewrite or broad
+scanner exclusion was made. Remaining merge requirements still include current
+remote checks and review of the accumulated branch; deletion alone does not grant
+merge approval or complete the pending agent benchmark/security dependency batch.
