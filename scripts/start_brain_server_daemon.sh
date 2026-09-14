@@ -44,7 +44,7 @@ nohup "$START_SCRIPT" >>"$LOG_FILE" 2>&1 &
 launcher_pid=$!
 pid=""
 
-for _ in {1..20}; do
+for _ in {1..120}; do
   if listener_pid="$(brain_server_find_listener_pid)"; then
     pid="$listener_pid"
     break
@@ -53,7 +53,7 @@ for _ in {1..20}; do
   if ! kill -0 "$launcher_pid" 2>/dev/null; then
     break
   fi
-  sleep 0.25
+  sleep 0.5
 done
 
 if [[ -z "$pid" ]]; then

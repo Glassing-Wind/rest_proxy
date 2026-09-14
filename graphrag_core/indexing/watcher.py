@@ -6,17 +6,23 @@ import asyncio
 import json
 import os
 import sys
-from typing import Dict
+from pathlib import Path
+from typing import Any, Dict
 
+from graphrag_core.app_state import (
+    get_active_sessions_path,
+    get_indexed_projects_path,
+    get_legacy_indexed_projects_path,
+    get_pinned_watches_path,
+)
 from graphrag_core.config import load_env
+from graphrag_core.indexing.manifest import build_manifest
 
 load_env()
 
-CONFIG_DIR = os.path.expanduser("~/.gemini/antigravity/rest_proxy_config")
-WATCHED_CONFIG_PATH = os.path.join(CONFIG_DIR, "watched_projects.json")
-INDEXED_CONFIG_PATH = os.path.join(CONFIG_DIR, "indexed_projects.json")
-WATCHED_PATHS: Dict[str, Dict[str, float]] = {}  # project_path -> {file_path: mtime}
-WATCH_INTERVAL = 30  # seconds between polls
+WATCHED_PATHS: Dict[str, Dict[str, float]] = {}
+PINNED_WATCHES: set[str] = set()
+WATCH_INTERVAL = 30
 WATCHER_ENABLED = os.getenv("LM_PROXY_WATCHER_ENABLED", "0").strip().lower() in {
     "1",
     "true",
@@ -24,7 +30,7 @@ WATCHER_ENABLED = os.getenv("LM_PROXY_WATCHER_ENABLED", "0").strip().lower() in 
     "on",
 }
 AUTO_WATCH_SESSION_WORKSPACE = os.getenv(
-    "LM_PROXY_AUTO_WATCH_SESSION_WORKSPACE", "1"
+    "LM_PROXY_AUTO_WATCH_SESSION_WORKSPACE", "0"
 ).strip().lower() in {
     "1",
     "true",
@@ -34,6 +40,53 @@ AUTO_WATCH_SESSION_WORKSPACE = os.getenv(
 
 _WATCHER_TASK: asyncio.Task | None = None
 _WATCHER_INDEX_FN = None
+
+
+def _read_json(path: Path) -> Any:
+    with path.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _write_json(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+
+
+def _get_pinned_watches_path() -> Path:
+    return get_pinned_watches_path()
+
+
+def _get_active_sessions_path() -> Path:
+    return get_active_sessions_path()
+
+
+def _get_indexed_projects_path() -> Path:
+    return get_indexed_projects_path()
+
+
+def _legacy_indexed_projects_path() -> Path:
+    return get_legacy_indexed_projects_path()
+
+
+def _save_pinned_watches() -> None:
+    try:
+        _write_json(_get_pinned_watches_path(), sorted(PINNED_WATCHES))
+    except Exception as e:
+        print(f"[lm-proxy:watcher] Failed to save pinned watches: {e}", file=sys.stderr)
+
+
+def _effective_watch_roots() -> list[str]:
+    return sorted(PINNED_WATCHES)
+
+
+def _sync_runtime_watch_roots() -> None:
+    effective = set(_effective_watch_roots())
+    for root in list(WATCHED_PATHS.keys()):
+        if root not in effective:
+            del WATCHED_PATHS[root]
+    for root in effective:
+        WATCHED_PATHS.setdefault(root, {})
 
 
 def is_enabled() -> bool:
@@ -59,80 +112,64 @@ def set_index_fn(index_fn) -> None:
 
 
 def is_watched(abs_path: str) -> bool:
-    return abs_path in WATCHED_PATHS
+    abs_path = os.path.abspath(abs_path)
+    return abs_path in _effective_watch_roots()
 
 
 def add_watch(abs_path: str) -> bool:
-    if abs_path in WATCHED_PATHS:
+    abs_path = os.path.abspath(abs_path)
+    if abs_path in PINNED_WATCHES:
         return False
-    WATCHED_PATHS[abs_path] = {}
-    _save_watched_config()
+    PINNED_WATCHES.add(abs_path)
+    _save_pinned_watches()
+    _sync_runtime_watch_roots()
     return True
 
 
 def maybe_auto_watch(abs_path: str, *, reason: str = "session") -> bool:
     """
-    Opportunistically add a workspace root to the watched set.
+    Reserved for future client-specific auto-watch integrations.
 
-    This is a no-op unless the watcher loop is enabled and auto-watch is on.
+    Default shipped behavior is manual-only, so this is a no-op unless
+    explicit auto-watch is enabled.
     """
     if not WATCHER_ENABLED or not AUTO_WATCH_SESSION_WORKSPACE:
         return False
-    if not abs_path or not os.path.isdir(abs_path):
-        return False
-    abs_path = os.path.abspath(abs_path)
-    if abs_path in WATCHED_PATHS:
-        return False
-    WATCHED_PATHS[abs_path] = {}
-    _save_watched_config()
-    print(
-        f"[lm-proxy:watcher] Auto-watching project: {abs_path} (reason={reason})",
-        file=sys.stderr,
-    )
-    return True
+    return False
 
 
 def remove_watch(abs_path: str) -> bool:
-    if abs_path not in WATCHED_PATHS:
+    abs_path = os.path.abspath(abs_path)
+    if abs_path not in PINNED_WATCHES:
         return False
-    del WATCHED_PATHS[abs_path]
-    _save_watched_config()
+    PINNED_WATCHES.remove(abs_path)
+    _save_pinned_watches()
+    _sync_runtime_watch_roots()
     return True
 
 
-def _save_watched_config() -> None:
-    """Save the list of watched project paths to a local JSON config."""
-    try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(WATCHED_CONFIG_PATH, "w") as f:
-            json.dump(list(WATCHED_PATHS.keys()), f)
-    except Exception as e:
-        print(f"[lm-proxy:watcher] Failed to save config: {e}", file=sys.stderr)
-
-
 def load_indexed_projects() -> dict[str, dict[str, object]]:
-    try:
-        if os.path.exists(INDEXED_CONFIG_PATH):
-            with open(INDEXED_CONFIG_PATH) as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                return data
-    except Exception:
-        return {}
+    paths = [_get_indexed_projects_path(), _legacy_indexed_projects_path()]
+    for path in paths:
+        try:
+            if path.exists():
+                data = _read_json(path)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            continue
     return {}
 
 
 def save_indexed_projects(data: dict[str, dict[str, object]]) -> None:
     try:
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(INDEXED_CONFIG_PATH, "w") as f:
-            json.dump(data, f)
+        _write_json(_get_indexed_projects_path(), data)
     except Exception as e:
         print(f"[lm-proxy:indexing] Failed to save index map: {e}", file=sys.stderr)
 
 
 async def load_watched_config() -> None:
-    """Load the list of watched project paths from the config on startup."""
+    """Load pinned watches and active session leases on startup."""
     if not WATCHER_ENABLED:
         print(
             "[lm-proxy:watcher] Disabled via LM_PROXY_WATCHER_ENABLED=0.",
@@ -140,16 +177,19 @@ async def load_watched_config() -> None:
         )
         return
     try:
-        if os.path.exists(WATCHED_CONFIG_PATH):
-            with open(WATCHED_CONFIG_PATH) as f:
-                paths = json.load(f)
-            for p in paths:
-                if os.path.exists(p):
-                    WATCHED_PATHS[os.path.abspath(p)] = {}
-            print(
-                f"[lm-proxy:watcher] Restored {len(WATCHED_PATHS)} watched projects.",
-                file=sys.stderr,
-            )
+        pinned_path = _get_pinned_watches_path()
+        if pinned_path.exists():
+            paths = _read_json(pinned_path)
+            if isinstance(paths, list):
+                for project_path in paths:
+                    if isinstance(project_path, str) and os.path.isdir(project_path):
+                        PINNED_WATCHES.add(os.path.abspath(project_path))
+        _sync_runtime_watch_roots()
+        print(
+            "[lm-proxy:watcher] Restored "
+            f"{len(PINNED_WATCHES)} pinned watches.",
+            file=sys.stderr,
+        )
     except Exception as e:
         print(f"[lm-proxy:watcher] Failed to load config: {e}", file=sys.stderr)
 
@@ -180,55 +220,21 @@ async def _poll_watcher(index_fn) -> None:
     """Background loop to check for file changes in watched projects."""
     while True:
         try:
+            _sync_runtime_watch_roots()
             for project_path, last_mtimes in list(WATCHED_PATHS.items()):
                 changed = False
                 current_mtimes = {}
-                for root, _, files in os.walk(project_path):
-                    if any(
-                        x in root
-                        for x in [
-                            ".git",
-                            "node_modules",
-                            "__pycache__",
-                            "build",
-                            "dist",
-                        ]
-                    ):
+                for entry in build_manifest(project_path):
+                    fpath = str(entry.get("abs_path") or "")
+                    if not fpath:
                         continue
-                    for f in files:
-                        if not f.endswith(
-                            (
-                                ".py",
-                                ".swift",
-                                ".js",
-                                ".ts",
-                                ".jsx",
-                                ".tsx",
-                                ".md",
-                                ".rs",
-                                ".go",
-                                ".cpp",
-                                ".c",
-                                ".h",
-                                ".java",
-                                ".rb",
-                                ".php",
-                                ".cs",
-                                ".json",
-                                ".toml",
-                                ".yaml",
-                                ".yml",
-                            )
-                        ):
-                            continue
-                        fpath = os.path.join(root, f)
-                        try:
-                            mtime = os.path.getmtime(fpath)
-                            current_mtimes[fpath] = mtime
-                            if fpath not in last_mtimes or mtime > last_mtimes[fpath]:
-                                changed = True
-                        except (OSError, FileNotFoundError):
-                            continue
+                    try:
+                        mtime = os.path.getmtime(fpath)
+                        current_mtimes[fpath] = mtime
+                        if fpath not in last_mtimes or mtime > last_mtimes[fpath]:
+                            changed = True
+                    except (OSError, FileNotFoundError):
+                        continue
                 if not changed and len(current_mtimes) != len(last_mtimes):
                     changed = True
                 WATCHED_PATHS[project_path] = current_mtimes

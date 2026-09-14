@@ -1,4 +1,4 @@
-"""memory_bootstrap.py – Initialize Postgres (pgvector) and Neo4j for the memory layer.
+"""Initialize Postgres, pgvector, and Neo4j support for the memory layer.
 
 Schema:
   Postgres: conversation_turns, memory_embeddings, codebase_embeddings, tool_outputs, etc.

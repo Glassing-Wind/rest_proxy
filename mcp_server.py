@@ -6,10 +6,9 @@ It is primarily used for local development and legacy environment support.
 """
 
 import asyncio
-import hashlib
-import json
 import sys
 from _mcp import mcp
+from _tool_fingerprint import compute_tool_fingerprint
 
 # --- MCP Protocol Guard ---
 # Redirect sys.stdout → stderr so third-party prints can't corrupt the JSON-RPC stream.
@@ -19,16 +18,12 @@ sys.stdout = sys.stderr
 
 
 def _compute_tool_fingerprint() -> str:
-    """Return a short hash of the registered tool names.
+    """Return a short hash of the registered tool names and source files.
 
-    Used to detect whether a tool_list_changed broadcast from another agent
-    actually represents a different tool set from the one we booted with.
+    Used to identify the exact tool set exposed by this server process.
     """
-    try:
-        tool_names = sorted(t.name for t in mcp._tool_manager.list_tools())
-    except Exception:
-        tool_names = []
-    return hashlib.sha256(json.dumps(tool_names).encode()).hexdigest()[:12]
+    fingerprint, _ = compute_tool_fingerprint(mcp)
+    return fingerprint
 
 
 # Computed once at import time for health and startup logs.
@@ -54,28 +49,6 @@ async def main() -> None:
     try:
         # Restore stdout for the actual MCP communication
         sys.stdout = _REAL_STDOUT
-        
-        # Signal the client to reload tools after startup.
-        async def _notify_client_on_start() -> None:
-            await asyncio.sleep(1.0)
-
-            # 1. Notify our own IDE immediately via the JSON-RPC pipe.
-            msg = {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
-            print(json.dumps(msg), flush=True)
-
-            tool_count = 0
-            try:
-                tool_count = len(list(mcp._tool_manager.list_tools()))
-            except Exception:
-                pass
-            print(
-                f"[lm-proxy] Sent tool_list_changed to IDE. "
-                f"tools={tool_count} fingerprint={BOOT_FINGERPRINT}",
-                file=sys.stderr,
-            )
-
-        asyncio.create_task(_notify_client_on_start())
-
         await mcp.run_stdio_async()
     finally:
         await _idx.stop_watcher()
@@ -93,11 +66,16 @@ if __name__ == "__main__":
     parser.add_argument("command", nargs="?", choices=["index_workspace", "bootstrap"])
     parser.add_argument("path", nargs="?", help="Project path for indexing")
     args = parser.parse_args()
-    if args.command == "index_workspace" and args.path:
+    if args.command == "index_workspace":
+        if not args.path:
+            parser.error("index_workspace requires an absolute project path")
+
         async def _run_index() -> None:
-            from tools.hands.indexing import index_workspace
-            result = await index_workspace(args.path)
-            print(result)
+            from _index_cli import run_index_workspace_cli
+
+            exit_code = await run_index_workspace_cli(args.path)
+            if exit_code:
+                raise SystemExit(exit_code)
 
         asyncio.run(_run_index())
     elif args.command == "bootstrap":

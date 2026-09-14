@@ -1,8 +1,8 @@
 """tools/docs/research.py — documentation research tools."""
 
+import asyncio
 import json
 import os
-import sys
 import threading
 import subprocess
 from pathlib import Path
@@ -14,20 +14,27 @@ from _runtime import resolve_python_runtime
 from tools.brain.docs.config import DEFAULT_TOPIC_SEED_URLS, score_documentation_url
 
 
-async def _tavily_search(query: str, max_results: int = 10) -> list:
-    """
-    Search via Tavily API (async-native, no threading workaround needed).
-    Returns a list of dicts with 'url', 'title', 'content' keys.
-    Falls back to an empty list if TAVILY_API_KEY is not set.
-    """
-    api_key = os.environ.get("TAVILY_API_KEY", "")
-    if not api_key:
-        return []
-    from tavily import AsyncTavilyClient
+async def _web_search(query: str, max_results: int = 10) -> list[dict[str, str]]:
+    """Discover public URLs with the installed key-free search client off the event loop."""
+    def search() -> list[dict[str, str]]:
+        from ddgs import DDGS
 
-    client = AsyncTavilyClient(api_key=api_key)
-    resp = await client.search(query, max_results=max_results, include_domains=[])
-    return resp.get("results", [])
+        with DDGS(timeout=10) as client:
+            rows = client.text(query, max_results=max_results, backend="duckduckgo,bing,brave")
+        hits = []
+        seen = set()
+        for row in rows or []:
+            url = row.get("href", "")
+            parsed = urlparse(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc or url in seen:
+                continue
+            seen.add(url)
+            hits.append({"url": url, "title": row.get("title", ""), "content": row.get("body", "")})
+            if len(hits) >= max_results:
+                break
+        return hits
+
+    return await asyncio.to_thread(search)
 
 
 def register(mcp: FastMCP) -> None:
@@ -35,7 +42,8 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def research_documentation(topic: str, query: str) -> str:
         """
-        Search the web for external documentation relevant to a topic/query.
+        Search the web using the installed ddgs client (no API key).
+        Returns external documentation relevant to a topic/query.
         Returns candidate URLs with titles and snippets for the agent to review.
         Call download_documentation() with chosen URLs to crawl and index them.
 
@@ -57,15 +65,15 @@ def register(mcp: FastMCP) -> None:
             import httpx
 
             search_query = f"{topic} {query}"
-            hits = await _tavily_search(search_query, max_results=10)
+            hits = await _web_search(search_query, max_results=10)
             if not hits:
-                hits = await _tavily_search(
+                hits = await _web_search(
                     f"{topic} {query} documentation", max_results=10
                 )
 
             if not hits:
                 return (
-                    f"No results found for: {topic} — {query}  (Is TAVILY_API_KEY set?)"
+                    f"No results found for: {topic} — {query}  Supply known URLs to download_documentation() to crawl directly."
                 )
 
             lines = [f"Documentation search: '{topic}' — '{query}'", ""]
@@ -75,8 +83,7 @@ def register(mcp: FastMCP) -> None:
                 url = hit.get("url", "")
                 title = hit.get("title", "")
                 body = (hit.get("content") or "")[:120].replace("\n", " ")
-                score = hit.get("score", 0)
-                lines += [f"• {title}  [{score:.2f}]", f"  {url}", f"  {body}…", ""]
+                lines += [f"• {title}", f"  {url}", f"  {body}…", ""]
 
                 domain = urlparse(url).netloc
                 if domain not in seen_domains:
@@ -100,7 +107,8 @@ def register(mcp: FastMCP) -> None:
             lines.append("to crawl, extract, and index any of the above URLs.")
             return "\n".join(lines)
         except Exception as e:
-            return f"Error during research: {e}"
+            return (f"Documentation discovery unavailable ({type(e).__name__}). "
+                    "Supply known URLs to download_documentation() to crawl directly.")
 
     @mcp.tool()
     async def research_and_index(topic: str, query: str, max_urls: int = 5) -> str:
@@ -126,21 +134,22 @@ def register(mcp: FastMCP) -> None:
             max_urls: Maximum number of URLs to index (default 5, max 10).
         """
         try:
-            import time, uuid
+            import time
+            import uuid
 
             max_urls = min(int(max_urls), 10)
 
             # ── 1. Web search ─────────────────────────────────────────────────
             search_query = f"{topic} {query}"
-            hits = await _tavily_search(search_query, max_results=20)
+            hits = await _web_search(search_query, max_results=20)
             if not hits:
-                hits = await _tavily_search(
+                hits = await _web_search(
                     f"{topic} {query} documentation", max_results=20
                 )
 
             if not hits:
                 return (
-                    f"No results found for: {topic} — {query}  (Is TAVILY_API_KEY set?)"
+                    f"No results found for: {topic} — {query}  Supply known URLs to download_documentation() to crawl directly."
                 )
 
             # ── 2. Filter + rank URLs ─────────────────────────────────────────
@@ -250,4 +259,5 @@ def register(mcp: FastMCP) -> None:
                 f"Use search_documentation(query, topic='{topic}') once done."
             )
         except Exception as e:
-            return f"Error in research_and_index: {e}"
+            return (f"Research/indexing failed ({type(e).__name__}). "
+                    "Supply known URLs to download_documentation() to crawl directly.")

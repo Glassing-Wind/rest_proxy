@@ -1,12 +1,9 @@
 """proxy/handlers_responses.py — responses API forwarding."""
 
 import asyncio
-import json
-import time
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from proxy.config import OPENAI_BASE, ENABLE_DEBUG_LOGGING

@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+from graphrag_core.app_state import (
+    get_legacy_sessions_registry_path,
+    get_legacy_shared_env_path,
+    get_sessions_registry_path,
+    get_shared_env_path,
+)
 
 
 def get_repo_root() -> Path:
@@ -30,19 +36,19 @@ def resolve_workspace_context(path: Optional[str] = None) -> str:
     v_pid = os.getenv("VSCODE_PID")
     v_ipc = os.getenv("VSCODE_IPC_HOOK")
     
-    registry_path = os.path.expanduser("~/.gemini/antigravity/sessions.json")
-    if os.path.exists(registry_path):
-        try:
-            with open(registry_path, "r") as f:
-                registry = json.load(f)
-                # Try IPC hook FIRST (Most stable and unique per window/instance)
-                if v_ipc and v_ipc in registry:
-                    return registry[v_ipc]
-                # Try PID as fallback
-                if v_pid and v_pid in registry:
-                    return registry[v_pid]
-        except Exception:
-            pass
+    for registry_path in (get_sessions_registry_path(), get_legacy_sessions_registry_path()):
+        if registry_path.exists():
+            try:
+                with registry_path.open("r", encoding="utf-8") as f:
+                    registry = json.load(f)
+                    # Try IPC hook FIRST (Most stable and unique per window/instance)
+                    if v_ipc and v_ipc in registry:
+                        return registry[v_ipc]
+                    # Try PID as fallback
+                    if v_pid and v_pid in registry:
+                        return registry[v_pid]
+            except Exception:
+                pass
 
     if not path or path == "/":
         path = os.getcwd()
@@ -87,11 +93,12 @@ def load_env(workspace_path: Optional[str] = None) -> None:
         load_dotenv(os.path.join(workspace_path, ".env"), override=True)
     
     # 4. Shared infrastructure overrides
-    global_env = os.path.expanduser("~/.gemini/antigravity/.env")
-    if os.path.exists(global_env):
+    for global_env in (get_shared_env_path(), get_legacy_shared_env_path()):
+        if not global_env.exists():
+            continue
         # Load a temporary copy so only explicitly shared settings leak across workspaces.
         import dotenv
-        global_vars = dotenv.dotenv_values(global_env)
+        global_vars = dotenv.dotenv_values(str(global_env))
 
         shared_vars = {
             "LM_PROXY_REDIS_URL",
@@ -99,4 +106,5 @@ def load_env(workspace_path: Optional[str] = None) -> None:
         for key in shared_vars:
             if key in global_vars:
                 os.environ[key] = global_vars[key]
+        break
     

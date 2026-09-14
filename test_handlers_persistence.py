@@ -3,11 +3,13 @@ import importlib.util
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-RESPONSES_PATH = "/Users/michaelmarler/Projects/rest_proxy/proxy/handlers_responses.py"
-CHAT_PATH = "/Users/michaelmarler/Projects/rest_proxy/proxy/handlers_chat.py"
+REPO_ROOT = Path(__file__).resolve().parent
+RESPONSES_PATH = REPO_ROOT / "proxy" / "handlers_responses.py"
+CHAT_PATH = REPO_ROOT / "proxy" / "handlers_chat.py"
 
 
 class _FakeResponse:

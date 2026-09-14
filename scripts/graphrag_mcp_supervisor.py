@@ -20,13 +20,21 @@ import sys
 import time
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from graphrag_core.app_state import (  # noqa: E402
+    get_legacy_sessions_registry_path,
+    get_sessions_registry_path,
+)
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-ROOT            = Path(__file__).resolve().parents[1]
 RUNTIME_DIR     = ROOT / ".runtime"
-GLOBAL_DATA_DIR = Path("/Users/michaelmarler/.gemini/antigravity")
-SESSIONS_FILE   = GLOBAL_DATA_DIR / "sessions.json"
+SESSIONS_FILE   = get_sessions_registry_path()
+LEGACY_SESSIONS_FILE = get_legacy_sessions_registry_path()
 
 os.makedirs(RUNTIME_DIR, exist_ok=True)
 
@@ -105,9 +113,11 @@ def discover_workspace() -> str:
         _log("Discovery: No VSCODE_IPC_HOOK — using ROOT.")
         return str(ROOT)
 
-    if SESSIONS_FILE.exists():
+    for candidate in (SESSIONS_FILE, LEGACY_SESSIONS_FILE):
+        if not candidate.exists():
+            continue
         try:
-            with open(SESSIONS_FILE) as f:
+            with open(candidate) as f:
                 sessions = json.load(f)
             if ipc_hook in sessions:
                 entry = sessions[ipc_hook]
@@ -121,7 +131,7 @@ def discover_workspace() -> str:
             _log(f"Discovery: error reading sessions.json: {e}")
 
 
-    _log(f"Discovery: no match for IPC hook — using ROOT.")
+    _log("Discovery: no match for IPC hook — using ROOT.")
     return str(ROOT)
 
 

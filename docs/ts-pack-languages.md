@@ -110,7 +110,7 @@ tree-sitter-language-pack supports **248 languages**. All parsers are available 
 | Ninja | `ninja` | [tree-sitter-grammars/tree-sitter-ninja](https://github.com/tree-sitter-grammars/tree-sitter-ninja) |
 | Nix | `nix` | [cstrahan/tree-sitter-nix](https://github.com/cstrahan/tree-sitter-nix) |
 | NQC | `nqc` | [tree-sitter-grammars/tree-sitter-nqc](https://github.com/tree-sitter-grammars/tree-sitter-nqc) |
-| Objective-C | `objc` | [tree-sitter-grammars/tree-sitter-objc](https://github.com/tree-sitter-grammars/tree-sitter-objc) |
+| Objective-C / Objective-C++ | `objc` | [tree-sitter-grammars/tree-sitter-objc](https://github.com/tree-sitter-grammars/tree-sitter-objc) |
 | OCaml | `ocaml` | [tree-sitter/tree-sitter-ocaml](https://github.com/tree-sitter/tree-sitter-ocaml) |
 | OCaml Interface | `ocaml_interface` | [tree-sitter/tree-sitter-ocaml](https://github.com/tree-sitter/tree-sitter-ocaml) |
 | Odin | `odin` | [tree-sitter-grammars/tree-sitter-odin](https://github.com/tree-sitter-grammars/tree-sitter-odin) |
@@ -224,7 +224,8 @@ tree-sitter-language-pack supports **248 languages**. All parsers are available 
 
 ## Requesting a Language
 
-Missing a language? [Open an issue](https://github.com/kreuzberg-dev/tree-sitter-language-pack/issues/new) or see the [Contributing guide](contributing.md) to add it yourself. Adding a language requires:
+Missing a language? [Open an upstream issue](https://github.com/kreuzberg-dev/tree-sitter-language-pack/issues/new)
+or consult that repository's contribution documentation. Adding a language requires:
 
 1. A publicly available tree-sitter grammar.
 2. An entry in `sources/language_definitions.json`.

@@ -1,57 +1,116 @@
 """tools/search/semantic.py — semantic + keyword search tool."""
 
+import json
 import os
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_memory_modules, get_project_id
+from _helpers import get_memory_modules
+from memory import retrieval_contracts
+from memory import retrieval_duplicates
+from memory import retrieval_metadata
+from memory import retrieval_policy as sem_helpers
+from memory import retrieval_telemetry
 from proxy.logging import debug_log
-from tools.brain.search import core as search_core
-from tools.brain.search import semantic_helpers as sem_helpers
-
-
-async def _load_cargo_crate_rows(driver, neo4j_db: str, project_ids: list[str]) -> dict[str, list[dict]]:
-    if not driver or not project_ids:
-        return {}
-    project_ids = [pid for pid in project_ids if pid]
-    if not project_ids:
-        return {}
-    async with driver.session(database=neo4j_db) as session:
-        schema_rows = await search_core._execute_read(
-            session,
-            """
-            CALL db.labels() YIELD label
-            RETURN collect(label) AS labels
-            """,
-            op="search_codebase_cargo_schema_labels",
-        )
-        labels = set(schema_rows[0].get("labels") or []) if schema_rows else set()
-        if "CargoCrate" not in labels:
-            return {}
-        rows_by_pid: dict[str, list[dict]] = {}
-        for pid in project_ids:
-            rows = await search_core._execute_read(
-                session,
-                """
-                MATCH (c:CargoCrate {project_id:$p})-[:DEFINED_IN_FILE]->(mf:File {project_id:$p})
-                RETURN c.name AS crate,
-                       c.crate_name AS crate_name,
-                       mf.filepath AS manifest_path
-                ORDER BY size(mf.filepath) DESC, c.name
-                """,
-                p=pid,
-                op="search_codebase_cargo_crates",
-            )
-            if rows:
-                rows_by_pid[pid] = rows
-        return rows_by_pid
 
 
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
-    async def search_codebase(
-        workspace_ids: list,
+    async def rerank_retrieval_results(
         query: str,
+        results: list[dict],
+        mode: str = "code",
+        experiments: dict | None = None,
+        include_debug: bool = False,
+    ) -> str:
+        """
+        Rerank a caller-supplied ranked result list using rest_proxy duplicate-aware retrieval policy.
+
+        Args:
+            query: Retrieval query that produced the ranked candidates.
+            results: Ranked candidate list. Each item should include content plus file_path or source_url.
+            mode: Retrieval corpus mode: "code" or "docs".
+            experiments: Optional duplicate-policy overrides.
+            include_debug: Return the full forensic contract instead of the compact decision summary.
+        """
+        try:
+            mode_norm = (mode or "code").strip().lower()
+            if mode_norm not in {"code", "docs"}:
+                return json.dumps({"error": "Invalid mode. Use 'code' or 'docs'."}, indent=2)
+            if not isinstance(results, list):
+                return json.dumps({"error": "results must be a list of dict items."}, indent=2)
+            contract = retrieval_duplicates.rerank_retrieval_results_contract(
+                results,
+                query=query,
+                mode=mode_norm,
+                experiments=experiments,
+                include_debug=include_debug,
+            )
+            payload = contract if include_debug else retrieval_contracts.compact_rerank_contract(contract, results)
+            return json.dumps(payload, indent=2, sort_keys=True)
+        except Exception as e:
+            return json.dumps({"error": f"Error reranking retrieval results: {str(e)}"}, indent=2)
+
+    @mcp.tool()
+    async def analyze_duplicate_results(
+        query: str,
+        results: list[dict],
+        mode: str = "code",
+        include_debug: bool = False,
+    ) -> str:
+        """
+        Analyze duplicate structure for a ranked result list without reranking it.
+
+        Args:
+            query: Retrieval query that produced the ranked candidates.
+            results: Ranked candidate list. Each item should include content plus file_path or source_url.
+            mode: Retrieval corpus mode: "code" or "docs".
+            include_debug: Return full pair/group internals instead of the compact diagnosis.
+        """
+        try:
+            mode_norm = (mode or "code").strip().lower()
+            if mode_norm not in {"code", "docs"}:
+                return json.dumps({"error": "Invalid mode. Use 'code' or 'docs'."}, indent=2)
+            if not isinstance(results, list):
+                return json.dumps({"error": "results must be a list of dict items."}, indent=2)
+            contract = retrieval_duplicates.analyze_duplicate_results_contract(
+                results,
+                query=query,
+                mode=mode_norm,
+            )
+            payload = contract if include_debug else retrieval_contracts.compact_duplicate_analysis(contract, results)
+            return json.dumps(payload, indent=2, sort_keys=True)
+        except Exception as e:
+            return json.dumps({"error": f"Error analyzing duplicate results: {str(e)}"}, indent=2)
+
+    @mcp.tool()
+    async def trace_code_ranking(
+        query: str,
+        results: list[dict],
+        include_debug: bool = False,
+    ) -> str:
+        """
+        Build a code-ranking trace for implementation-intent queries.
+
+        Args:
+            query: Retrieval query to classify and trace.
+            results: Candidate rows with content, file_path, optional rrf/rank_score, and semantic metadata.
+            include_debug: Return every ranking component instead of only non-zero contributions.
+        """
+        try:
+            if not isinstance(results, list):
+                return json.dumps({"error": "results must be a list of dict items."}, indent=2)
+            trace = sem_helpers.build_implementation_ranking_trace(results, query)
+            payload = trace if include_debug else retrieval_contracts.compact_implementation_ranking_trace(trace)
+            return json.dumps(payload, indent=2, sort_keys=True)
+        except Exception as e:
+            return json.dumps({"error": f"Error tracing code ranking: {str(e)}"}, indent=2)
+
+    @mcp.tool()
+    async def search_codebase(
+        workspace_ids: list | None = None,
+        query: str | None = None,
+        workspace_id: str | None = None,
         k: int = 5,
         include_metadata: bool = False,
         dedupe_files: bool = True,
@@ -84,6 +143,7 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             workspace_ids: List of logical workspace IDs or absolute paths to search across.
+            workspace_id: Single logical workspace ID or absolute path for one-project search.
             query: Natural language or code snippet to search for.
             k: Total number of results to return (default 5).
             include_metadata: Show metadata lines in results (default False).
@@ -108,20 +168,24 @@ def register(mcp: FastMCP) -> None:
             exclude_paths: Optional list of glob patterns to exclude (file_path).
         """
         try:
-            import asyncio
-            import sys
             from embedding_service import get_embedding_service
-            from tools.brain.search import fallbacks as search_fallbacks
-            from _helpers import WorkspaceRegistry, get_workspace_path
 
             memory_store, _, _, _, _ = get_memory_modules()
 
-            if not workspace_ids:
+            if not isinstance(query, str) or not query.strip():
+                return "Error: provide a non-empty query."
+
+            normalized_workspace_ids: list = list(workspace_ids or [])
+            if workspace_id is not None:
+                normalized_workspace_ids.append(workspace_id)
+            if not normalized_workspace_ids:
                 return "Error: provide at least one workspace ID or path."
-
-            multi = len(workspace_ids) > 1
-
-            impl_intent = sem_helpers.implementation_query_intent(query)
+            deduped_workspace_ids: list = []
+            for value in normalized_workspace_ids:
+                if value in deduped_workspace_ids:
+                    continue
+                deduped_workspace_ids.append(value)
+            workspace_ids = deduped_workspace_ids
 
             svc = get_embedding_service()
             vecs = await svc.embed_batch_async([query])
@@ -129,491 +193,55 @@ def register(mcp: FastMCP) -> None:
             if not query_vector:
                 return "Error: Could not generate embedding for query."
 
-            vec_str = "[" + ",".join(str(v) for v in query_vector) + "]"
-            fetch = min(k * 10, 150)
+            res = await memory_store.search_codebase_core(
+                workspace_ids=workspace_ids,
+                query=query,
+                query_vector=query_vector,
+                k=k,
+                include_metadata=include_metadata,
+                dedupe_files=dedupe_files,
+                include_debug=include_debug,
+                max_per_file=max_per_file,
+                max_per_dir=max_per_dir,
+                meta_boost=meta_boost,
+                mode=mode,
+                fallback=fallback,
+                fallback_ratio=fallback_ratio,
+                fallback_max=fallback_max,
+                fallback_glob=fallback_glob,
+                exclude_tests=exclude_tests,
+                languages=languages,
+                min_imports=min_imports,
+                min_symbols=min_symbols,
+                require_diagnostics=require_diagnostics,
+                require_context=require_context,
+                crate_contains=crate_contains,
+                include_paths=include_paths,
+                exclude_paths=exclude_paths,
+            )
 
-            await memory_store.open_pool()
-
-            pid_to_name: dict[str, str] = {}
-            pid_to_path: dict[str, str] = {}
-            pids = []
-            for w_id in workspace_ids:
-                pid = WorkspaceRegistry.resolve_id(w_id) or get_project_id(w_id)
-                path = get_workspace_path(w_id)
-                pids.append(pid)
-                pid_to_name[pid] = (path or w_id).rstrip("/").split("/")[-1]
-                pid_to_path[pid] = path
-
-            async def _search_project(pid: str) -> list[dict]:
-                async with memory_store._pg_pool.connection() as conn:
-                    await conn.execute("BEGIN")
-                    async with conn.cursor() as cur:
-                        await cur.execute(
-                            "SET LOCAL hnsw.ef_search = 100"
-                        )  # resets when connection returns to pool
-                        await cur.execute(
-                            "SET LOCAL hnsw.iterative_scan = relaxed_order"
-                        )  # auto-expands past project_id filter
-                        await cur.execute(
-                            """\
-                            WITH semantic AS (
-                                SELECT file_path, chunk_index, content, project_id, metadata,
-                                       ROW_NUMBER() OVER (
-                                           ORDER BY embedding <=> %(vec)s::vector
-                                       ) AS sem_rank
-                                FROM codebase_embeddings
-                                WHERE project_id = %(pid)s
-                                  AND (
-                                      NOT %(impl_intent)s
-                                      OR (
-                                          lower(file_path) NOT LIKE 'node-types/%%'
-                                          AND lower(file_path) NOT LIKE '%%/node-types/%%'
-                                          AND lower(file_path) NOT LIKE 'grammars/%%'
-                                          AND lower(file_path) NOT LIKE '%%/grammars/%%'
-                                          AND lower(file_path) NOT LIKE '%%-grammar.json'
-                                          AND lower(file_path) NOT LIKE '%%_grammar.json'
-                                          AND lower(file_path) NOT LIKE '%%/grammar.json'
-                                      )
-                                  )
-                                LIMIT %(fetch)s
-                            ),
-                            keyword AS (
-                                SELECT file_path, chunk_index,
-                                       ROW_NUMBER() OVER (
-                                           ORDER BY ts_rank(search_vec,
-                                               websearch_to_tsquery('english', %(qt)s)) DESC
-                                       ) AS kw_rank
-                                FROM codebase_embeddings
-                                WHERE project_id = %(pid)s
-                                  AND search_vec @@ websearch_to_tsquery('english', %(qt)s)
-                                  AND (
-                                      NOT %(impl_intent)s
-                                      OR (
-                                          lower(file_path) NOT LIKE 'node-types/%%'
-                                          AND lower(file_path) NOT LIKE '%%/node-types/%%'
-                                          AND lower(file_path) NOT LIKE 'grammars/%%'
-                                          AND lower(file_path) NOT LIKE '%%/grammars/%%'
-                                          AND lower(file_path) NOT LIKE '%%-grammar.json'
-                                          AND lower(file_path) NOT LIKE '%%_grammar.json'
-                                          AND lower(file_path) NOT LIKE '%%/grammar.json'
-                                      )
-                                  )
-                                LIMIT %(fetch)s
-                            )
-                            SELECT s.file_path, s.chunk_index, s.content, s.project_id, s.metadata,
-                                   (2.0/(60+s.sem_rank)
-                                    + COALESCE(1.0/(60+k.kw_rank), 0.0)) AS rrf
-                            FROM semantic s
-                            LEFT JOIN keyword k
-                              ON s.file_path = k.file_path
-                              AND s.chunk_index = k.chunk_index
-                            ORDER BY rrf DESC
-                            LIMIT %(fetch)s
-                        """,
-                            {
-                                "vec": vec_str,
-                                "pid": pid,
-                                "qt": query,
-                                "fetch": fetch,
-                                "impl_intent": impl_intent,
-                            },
-                        )
-                        rows = await cur.fetchall()
-                        return [
-                            {
-                                "file_path": r[0],
-                                "chunk_index": r[1],
-                                "content": r[2],
-                                "project_id": r[3],
-                                "metadata": r[4],
-                                "rrf": r[5],
-                            }
-                            for r in rows
-                        ]
-
-            all_results: list[dict] = []
-            batch = await asyncio.gather(*[_search_project(pid) for pid in pid_to_name])
-            for chunk in batch:
-                all_results.extend(chunk)
-
-            if not all_results:
-                projects = ", ".join(f"'{n}'" for n in pid_to_name.values())
+            # Check if empty results were returned
+            if not res.get("all_results"):
+                projects = ", ".join(f"'{n}'" for n in res["pid_to_name"].values())
                 return f"No matching code found in {projects}.\nEnsure projects are indexed with index_workspace()."
 
-            if mode not in {"precise", "broad"}:
-                mode = "precise"
-
-            if exclude_tests:
-                exclude_paths = (exclude_paths or []) + [
-                    "*test*",
-                    "*tests*",
-                    "*Test*",
-                    "*Tests*",
-                ]
-                exclude_paths = list(dict.fromkeys(exclude_paths))
-
-            if exclude_tests:
-                exclude_paths = (exclude_paths or []) + [
-                    "*test*",
-                    "*tests*",
-                    "*Test*",
-                    "*Tests*",
-                ]
-
-            if mode == "broad":
-                if max_per_dir == 2:
-                    max_per_dir = 4
-                if meta_boost == 0.005:
-                    meta_boost = 0.0
-                if fallback == "none":
-                    fallback = "grep"
-                if max_per_file == 0:
-                    max_per_file = 2
-
-            filters_active = any(
-                [
-                    languages,
-                    min_imports > 0,
-                    min_symbols > 0,
-                    require_diagnostics,
-                    require_context,
-                    crate_contains,
-                    include_paths,
-                    exclude_paths,
-                ]
-            )
-            clone_dedup = os.getenv("LM_PROXY_CLONE_DEDUP", "0").strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
-            if filters_active or clone_dedup or meta_boost > 0:
-                include_metadata = True
-
-            cargo_rows_by_pid: dict[str, list[dict]] = {}
-            if all_results and (crate_contains or include_metadata):
-                try:
-                    import graph_bootstrap
-
-                    driver = await graph_bootstrap.require_driver()
-                    cargo_rows_by_pid = await _load_cargo_crate_rows(
-                        driver, graph_bootstrap._NEO4J_DB, list(pid_to_name.keys())
-                    )
-                except Exception:
-                    cargo_rows_by_pid = {}
-                if cargo_rows_by_pid:
-                    grouped: dict[str, list[dict]] = {}
-                    for result in all_results:
-                        pid = result.get("project_id")
-                        if pid:
-                            grouped.setdefault(pid, []).append(result)
-                    for pid, rows in grouped.items():
-                        sem_helpers.attach_cargo_crate_meta(rows, cargo_rows_by_pid.get(pid) or [])
-
-            if include_metadata:
-                for r in all_results:
-                    r_meta = sem_helpers.coerce_meta(r)
-                    r["_meta"] = r_meta
-                    r["meta_score"] = sem_helpers.meta_score(r_meta)
-                if filters_active:
-                    all_results = [
-                        r
-                        for r in all_results
-                        if sem_helpers.passes_filters(
-                            r.get("_meta", {}),
-                            languages=languages,
-                            min_imports=min_imports,
-                            min_symbols=min_symbols,
-                            require_diagnostics=require_diagnostics,
-                            require_context=require_context,
-                        )
-                        and sem_helpers.path_allowed(
-                            r.get("file_path", ""),
-                            include_paths=include_paths,
-                            exclude_paths=exclude_paths,
-                        )
-                    ]
-                if crate_contains:
-                    all_results = sem_helpers.filter_by_cargo_crate(all_results, crate_contains)
-                for r in all_results:
-                    base_score = r.get("rrf", 0.0)
-                    try:
-                        base_score = float(base_score)
-                    except (TypeError, ValueError):
-                        base_score = 0.0
-                    is_doc_like = sem_helpers.is_doc_like_path(r.get("file_path"))
-                    is_low_signal_parser_data = (
-                        impl_intent
-                        and sem_helpers.is_low_signal_parser_data_path(r.get("file_path"))
-                    )
-                    doc_penalty = 0.05 if impl_intent and is_doc_like else 0.0
-                    parser_data_penalty = 0.08 if is_low_signal_parser_data else 0.0
-                    r["doc_like"] = is_doc_like
-                    r["low_signal_parser_data"] = is_low_signal_parser_data
-                    if meta_boost > 0:
-                        r["rank_score"] = base_score + (
-                            r.get("meta_score", 0) * meta_boost
-                        ) - doc_penalty - parser_data_penalty
-                    else:
-                        r["rank_score"] = base_score - doc_penalty - parser_data_penalty
-                all_results.sort(key=sem_helpers.implementation_rank_tuple)
-            else:
-                if impl_intent:
-                    for r in all_results:
-                        r["doc_like"] = sem_helpers.is_doc_like_path(r.get("file_path"))
-                        r["low_signal_parser_data"] = sem_helpers.is_low_signal_parser_data_path(
-                            r.get("file_path")
-                        )
-                    all_results.sort(key=sem_helpers.implementation_rank_tuple)
-                else:
-                    all_results.sort(key=lambda r: r["rrf"], reverse=True)
-
-            if impl_intent:
-                code_results = [
-                    r
-                    for r in all_results
-                    if not r.get("doc_like") and not r.get("low_signal_parser_data")
-                ]
-                parser_results = [
-                    r for r in all_results if r.get("low_signal_parser_data") and not r.get("doc_like")
-                ]
-                doc_results = [r for r in all_results if r.get("doc_like")]
-                if code_results:
-                    all_results = code_results
-                elif parser_results:
-                    all_results = parser_results
-                else:
-                    all_results = doc_results
-
-            if impl_intent:
-                non_parser_candidates = [
-                    r for r in all_results if not sem_helpers.is_low_signal_parser_data_path(r.get("file_path"))
-                ]
-                if non_parser_candidates:
-                    all_results = non_parser_candidates
-
-            if clone_dedup:
-                try:
-                    import graph_bootstrap
-
-                    driver = await graph_bootstrap.require_driver()
-                    if driver:
-                        for r in all_results:
-                            meta = r.get("_meta")
-                            if not isinstance(meta, dict):
-                                meta = sem_helpers.coerce_meta(r)
-
-                        by_project: dict[str, list[dict]] = {}
-                        for idx, r in enumerate(all_results):
-                            fp = r.get("file_path")
-                            line = (r.get("_meta") or {}).get("start_line")
-                            pid = r.get("project_id")
-                            if not fp or not isinstance(line, int) or not pid:
-                                continue
-                            by_project.setdefault(pid, []).append(
-                                {"idx": idx, "fp": fp, "line": line}
-                            )
-
-                        clone_map: dict[int, str | None] = {}
-                        for pid, items in by_project.items():
-                            async with driver.session(
-                                database=graph_bootstrap._NEO4J_DB
-                            ) as session:
-                                records = await search_core._execute_read(
-                                    session,
-                                    """
-                                    UNWIND $items AS item
-                                    MATCH (f:File {project_id:$pid, filepath:item.fp})-[:CONTAINS]->(s)
-                                    WHERE (s:Function OR s:Method OR s:Class OR s:Struct)
-                                      AND s.start_line <= item.line AND s.end_line >= item.line
-                                    OPTIONAL MATCH (s)-[:MEMBER_OF_CLONE_GROUP]->(g:CloneGroup)
-                                    WITH item, s, g
-                                    ORDER BY (s.end_line - s.start_line) ASC
-                                    WITH item, collect(g.id)[0] AS gid
-                                    RETURN item.idx AS idx, gid
-                                    """,
-                                    items=items,
-                                    pid=pid,
-                                    op="clone_dedup_map",
-                                )
-                            for rec in records:
-                                clone_map[int(rec["idx"])] = rec.get("gid")
-
-                        file_group_map: dict[str, str] = {}
-                        file_group_source = (
-                            os.getenv("LM_PROXY_FILE_CLONE_SOURCE", "function")
-                            .strip()
-                            .lower()
-                        )
-                        if file_group_source not in {"chunk", "function", "hybrid"}:
-                            file_group_source = "function"
-
-                        for pid, items in by_project.items():
-                            async with driver.session(
-                                database=graph_bootstrap._NEO4J_DB
-                            ) as session:
-                                file_records = []
-                                if file_group_source == "chunk":
-                                    file_records = await search_core._execute_read(
-                                        session,
-                                        """
-                                        UNWIND $items AS item
-                                        MATCH (f:File {project_id:$pid, filepath:item.fp})
-                                        OPTIONAL MATCH (f)-[:MEMBER_OF_FILE_CLONE_GROUP]->(g:FileCloneGroup)
-                                        RETURN item.fp AS fp, collect(g.id)[0] AS gid
-                                        """,
-                                        items=items,
-                                        pid=pid,
-                                        op="clone_dedup_file_map",
-                                    )
-
-                                func_records = []
-                                if file_group_source in {"function", "hybrid"}:
-                                    func_records = await search_core._execute_read(
-                                        session,
-                                        """
-                                        UNWIND $items AS item
-                                        MATCH (f:File {project_id:$pid, filepath:item.fp})-[:CONTAINS]->(s)
-                                        WHERE (s:Function OR s:Method OR s:Class OR s:Struct)
-                                          AND s.start_line <= item.line AND s.end_line >= item.line
-                                        OPTIONAL MATCH (s)-[:MEMBER_OF_CLONE_GROUP]->(g:CloneGroup)
-                                        WITH item, collect(DISTINCT g.id) AS gids
-                                        RETURN item.fp AS fp, gids
-                                        """,
-                                        items=items,
-                                        pid=pid,
-                                        op="clone_dedup_file_map_function",
-                                    )
-
-                                func_group_map: dict[str, str] = {}
-                                for row in func_records:
-                                    fp = row.get("fp")
-                                    gids = [g for g in (row.get("gids") or []) if g]
-                                    if not fp or not gids:
-                                        continue
-                                    gids.sort()
-                                    import hashlib
-                                    gid = hashlib.md5(
-                                        "|".join(gids).encode()
-                                    ).hexdigest()[:12]
-                                    func_group_map[fp] = gid
-
-                                if func_group_map:
-                                    for fp, gid in func_group_map.items():
-                                        file_group_map[fp] = gid
-
-                                for row in file_records:
-                                    fp = row.get("fp")
-                                    gid = row.get("gid")
-                                    if fp and gid and fp not in file_group_map:
-                                        file_group_map[fp] = gid
-
-                        debug_clone = os.getenv(
-                            "LM_PROXY_CLONE_DEBUG", "0"
-                        ).strip().lower() in {
-                            "1",
-                            "true",
-                            "yes",
-                            "on",
-                        }
-
-                        debug_lines: list[str] = []
-                        if debug_clone:
-                            debug_lines.append(
-                                f"clone_dedup file_groups={len(file_group_map)}"
-                            )
-
-                        if file_group_map:
-                            seen_file_gids: set[str] = set()
-                            deduped_by_file: list[dict] = []
-                            for r in all_results:
-                                fp = r.get("file_path")
-                                file_gid = file_group_map.get(fp) if fp else None
-                                if debug_clone and fp:
-                                    debug_lines.append(
-                                        f"clone_dedup file={fp} gid={file_gid}"
-                                    )
-                                if file_gid:
-                                    if file_gid in seen_file_gids:
-                                        continue
-                                    seen_file_gids.add(file_gid)
-                                deduped_by_file.append(r)
-                            all_results = deduped_by_file
-
-                        seen_gids: set[str] = set()
-                        deduped: list[dict] = []
-                        for idx, r in enumerate(all_results):
-                            gid = clone_map.get(idx)
-                            if gid:
-                                if gid in seen_gids:
-                                    continue
-                                seen_gids.add(gid)
-                            deduped.append(r)
-                        all_results = deduped
-                        if debug_clone and debug_lines and include_debug:
-                            all_results.insert(
-                                0,
-                                {
-                                    "file_path": "[clone_dedup_debug]",
-                                    "content": "\n".join(debug_lines[:20]),
-                                    "rrf": 1.0,
-                                    "project_id": pid,
-                                },
-                            )
-                except Exception:
-                    pass
-
-            duplicate_trace_enabled = include_debug or os.getenv(
-                "LM_PROXY_DUPLICATE_TRACE", "0"
-            ).strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
-            duplicate_telemetry_enabled = sem_helpers.duplicate_telemetry_enabled()
-            duplicate_experiments = sem_helpers.duplicate_experiment_flags_from_env("code")
-            duplicate_trace: dict | None = None
-
-            if dedupe_files:
-                if duplicate_trace_enabled or duplicate_telemetry_enabled or any(duplicate_experiments.values()):
-                    duplicate_trace = sem_helpers.trace_diverse_results(
-                        all_results,
-                        query=query,
-                        mode="code",
-                        experiments=duplicate_experiments,
-                    )
-                    selection = duplicate_trace.get("selection", {}) if isinstance(duplicate_trace, dict) else {}
-                    keep_indices = selection.get("keep_indices") if isinstance(selection, dict) else None
-                    if isinstance(keep_indices, list):
-                        keep_set = {
-                            idx for idx in keep_indices if isinstance(idx, int) and 0 <= idx < len(all_results)
-                        }
-                        if keep_set:
-                            all_results = [all_results[idx] for idx in keep_indices if idx in keep_set]
-                all_results = sem_helpers.dedupe_files(all_results)
-
-            all_results = sem_helpers.cap_per_file(all_results, max_per_file)
-            all_results = sem_helpers.cap_per_dir(all_results, max_per_dir)
-            top = all_results[:k]
-
-            lines = sem_helpers.render_results(
-                all_results,
+            lines = retrieval_metadata.render_results(
+                res["all_results"],
                 query=query,
                 k=k,
-                multi=multi,
-                pid_to_name=pid_to_name,
-                include_metadata=include_metadata,
+                multi=res["multi"],
+                pid_to_name=res["pid_to_name"],
+                include_metadata=res["include_metadata"],
             )
 
-            if duplicate_trace and (include_debug or duplicate_trace_enabled):
-                lines.extend(sem_helpers.summarize_trace_for_debug(duplicate_trace))
+            duplicate_trace = res["duplicate_trace"]
+            if duplicate_trace and (include_debug or res["duplicate_trace_enabled"]):
+                lines.extend(retrieval_contracts.summarize_trace_for_debug(duplicate_trace))
                 lines.append("")
-            if duplicate_trace and duplicate_telemetry_enabled:
+            if duplicate_trace and res["duplicate_telemetry_enabled"]:
                 telemetry = duplicate_trace.get("telemetry") if isinstance(duplicate_trace, dict) else {}
                 if isinstance(telemetry, dict):
-                    sem_helpers.append_duplicate_telemetry_event(
+                    retrieval_telemetry.append_duplicate_telemetry_event(
                         duplicate_trace,
                         query=query,
                         tool="search_codebase",
@@ -640,55 +268,28 @@ def register(mcp: FastMCP) -> None:
                         experiments=duplicate_trace.get("experiments"),
                     )
 
-            if fallback == "grep" and top:
-                unique_files = len(
-                    {r.get("file_path") for r in top if r.get("file_path")}
-                )
-                ratio = unique_files / max(1, len(top))
-                if unique_files <= 1 or ratio <= fallback_ratio:
-                    fallback_lines: list[str] = []
-                    debug_tokens = (
-                        search_fallbacks.extract_fallback_tokens(query)
-                        if include_debug
-                        else []
+            fallback_lines = res["fallback_lines"]
+            if fallback == "grep" and res["results"]:
+                if include_debug:
+                    import sys
+                    token_text = (
+                        ", ".join(res["fallback_tokens"]) if res["fallback_tokens"] else "(none)"
                     )
-                    for pid, proj_name in pid_to_name.items():
-                        proj_root = pid_to_path.get(pid)
-                        if not proj_root:
-                            continue
-                        matches, dbg = await search_fallbacks.run_fallback_grep(
-                            proj_root,
-                            query,
-                            fallback_glob,
-                            fallback_max,
-                        )
-                        if include_debug and dbg:
-                            dbg_info = ", ".join(
-                                f"{k}={v}" for k, v in dbg.items() if v is not None
-                            )
-                            if dbg_info:
-                                fallback_lines.append(f"- [debug] {dbg_info}")
-                        if not matches:
-                            continue
-                        for fp in matches:
-                            label = f"[{proj_name}] {fp}" if multi else fp
-                            fallback_lines.append(f"- {label}")
-                    if include_debug:
-                        token_text = (
-                            ", ".join(debug_tokens) if debug_tokens else "(none)"
-                        )
-                        lines.append(f"Fallback grep tokens: {token_text}")
-                        if fallback_glob:
-                            lines.append(f"Fallback grep glob: {fallback_glob}")
-                        rg_hint = os.getenv("LM_PROXY_RG_PATH") or "(auto)"
-                        lines.append(f"Fallback grep rg path: {rg_hint}")
-                        lines.append(f"Debug sys.executable: {sys.executable}")
-                        lines.append(f"Debug PATH: {os.getenv('PATH', '')}")
-                    if fallback_lines:
-                        lines.append("Fallback (grep):")
-                        lines.extend(fallback_lines)
-                    if include_debug or fallback_lines:
-                        lines.append("")
+                    lines.append(f"Fallback grep tokens: {token_text}")
+                    if res["fallback_glob"]:
+                        lines.append(f"Fallback grep glob: {res['fallback_glob']}")
+                    lines.append(f"Fallback grep rg path: {res['fallback_rg_hint']}")
+                    lines.append(f"Debug sys.executable: {sys.executable}")
+                    lines.append(f"Debug PATH: {os.getenv('PATH', '')}")
+                if fallback_lines:
+                    lines.append("Fallback (grep):")
+                    for fp in fallback_lines:
+                        if fp.startswith("- "):
+                            lines.append(fp)
+                        else:
+                            lines.append(f"- {fp}")
+                if include_debug or fallback_lines:
+                    lines.append("")
 
             return "\n".join(lines)
         except Exception as e:

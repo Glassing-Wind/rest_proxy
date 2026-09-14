@@ -1,9 +1,17 @@
-"""tools/search/cross_project.py — cross-project symbol tracing."""
+"""tools/search/cross_project.py — MCP wrapper for cross-project symbol tracing."""
 
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_memory_modules, get_project_id
+from memory import cross_project_trace
 from tools.brain.search import core as search_core
+
+
+# Compatibility exports for focused helper tests and callers that imported the
+# old tool-layer helpers directly.
+_definition_rank = cross_project_trace._definition_rank
+_is_test_like_cross_project_hit = cross_project_trace._is_test_like_cross_project_hit
+_semantic_usage_rank = cross_project_trace._semantic_usage_rank
+_symbol_centered_preview = cross_project_trace._symbol_centered_preview
 
 
 def register(mcp: FastMCP) -> None:
@@ -25,244 +33,16 @@ def register(mcp: FastMCP) -> None:
         - Postgres semantic search (text occurrences in chunks)
 
         Args:
-            symbol_name:      Exact name of the symbol to trace (e.g. 'GenerateImageRequest').
+            symbol_name: Exact name of the symbol to trace (e.g. 'GenerateImageRequest').
             source_workspace: Logical workspace ID or absolute path where the symbol is defined.
             target_workspace: Logical workspace ID or absolute path that consumes/calls the symbol.
         """
         try:
-            import asyncio
-            from embedding_service import get_embedding_service
-            from _helpers import WorkspaceRegistry, get_workspace_path
-
-            memory_store, _, _, _, _ = get_memory_modules()
-
-            src_id = WorkspaceRegistry.resolve_id(source_workspace) or get_project_id(source_workspace)
-            tgt_id = WorkspaceRegistry.resolve_id(target_workspace) or get_project_id(target_workspace)
-            
-            src_path = get_workspace_path(source_workspace)
-            tgt_path = get_workspace_path(target_workspace)
-            
-            src_name = (src_path or source_workspace).rstrip("/").split("/")[-1]
-            tgt_name = (tgt_path or target_workspace).rstrip("/").split("/")[-1]
-
-            import graph_bootstrap
-
-            driver = await graph_bootstrap.require_driver()
-
-            # ── 1. Definition in source project ──────────────────────────────
-            definition: dict = {}
-            resolved_names: list[str] = [symbol_name]
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                records = await search_core._execute_read(
-                    session,
-                    """
-                    MATCH (s {name: $name, project_id: $pid})
-                    WHERE s:Function OR s:Class OR s:Struct OR s:Trait
-                       OR s:Enum OR s:Method OR s:Protocol
-                       OR s:Interface OR s:Extension OR s:TypeAlias OR s:AssociatedType
-                    OPTIONAL MATCH (s)<-[:CONTAINS]-(f:File)
-                    RETURN head([label IN labels(s) WHERE label <> 'Node']) AS kind,
-                           s.filepath    AS filepath,
-                           s.start_line  AS start_line,
-                           s.end_line    AS end_line,
-                           s.signature   AS signature
-                    LIMIT 1
-                """,
-                    name=symbol_name,
-                    pid=src_id,
-                    op="trace_symbol_definition",
-                )
-                if records:
-                    definition = dict(records[0])
-                else:
-                    alias_records = await search_core._execute_read(
-                        session,
-                        """
-                        MATCH (f:File {project_id: $pid})-[alias:EXPORTS_SYMBOL_AS]->(target)
-                        WHERE alias.name = $name
-                        OPTIONAL MATCH (f)-[:EXPORTS_SYMBOL]->(target)
-                        RETURN 'ExportAlias' AS kind,
-                               f.filepath AS filepath,
-                               alias.line AS start_line,
-                               alias.line AS end_line,
-                               coalesce(target.signature, target.name) AS signature,
-                               target.name AS target_name
-                        ORDER BY f.filepath ASC
-                        LIMIT 1
-                    """,
-                        name=symbol_name,
-                        pid=src_id,
-                        op="trace_symbol_alias_definition",
-                    )
-                    if alias_records:
-                        definition = dict(alias_records[0])
-                        target_name = definition.get("target_name")
-                        if isinstance(target_name, str) and target_name and target_name != symbol_name:
-                            resolved_names.append(target_name)
-
-            # ── 2. Call-graph usages in target project ────────────────────────
-            graph_usages: list[str] = []
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                records = await search_core._execute_read(
-                    session,
-                    """
-                    MATCH (target)
-                    WHERE target.name IN $names
-                      AND (target:Function OR target:Class OR target:Struct
-                       OR target:Method   OR target:Trait OR target:Protocol
-                       OR target:Interface OR target:Extension OR target:TypeAlias OR target:AssociatedType)
-                    MATCH (caller {project_id: $tpid})-[:CALLS|CALLS_INFERRED]->(target)
-                    RETURN DISTINCT
-                           caller.name      AS caller_name,
-                           caller.filepath  AS caller_file,
-                           caller.start_line AS caller_line,
-                           head([label IN labels(caller) WHERE label <> 'Node']) AS caller_kind
-                    ORDER BY caller.filepath, caller.start_line
-                    LIMIT 20
-                """,
-                    names=resolved_names,
-                    tpid=tgt_id,
-                    op="trace_symbol_graph_usages",
-                )
-                for rec in records:
-                    name = rec["caller_name"] or "(file scope)"
-                    fp = rec["caller_file"] or "?"
-                    line = f":{rec['caller_line']}" if rec["caller_line"] else ""
-                    graph_usages.append(
-                        f"  {name}{line}  [{rec['caller_kind'] or 'Node'}]  in {fp}"
-                    )
-
-            # ── 3. Semantic text hits in target project ───────────────────────
-            sem_usages: list[str] = []
-            await memory_store.open_pool()
-
-            svc = get_embedding_service()
-            semantic_query = " ".join(dict.fromkeys(resolved_names))
-            vecs = await svc.embed_batch_async([semantic_query])
-            query_vector = vecs[0]
-
-            async def _fetch_semantic():
-                vec_str = "[" + ",".join(str(v) for v in query_vector) + "]"
-                async with memory_store._pg_pool.connection() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute(
-                            """
-                            WITH sem AS (
-                                SELECT file_path, chunk_index, content,
-                                       ROW_NUMBER() OVER (
-                                           ORDER BY embedding <=> %(vec)s::vector
-                                       ) AS sem_rank
-                                FROM codebase_embeddings
-                                WHERE project_id = %(pid)s
-                                LIMIT 40
-                            ),
-                            kw AS (
-                                SELECT file_path, chunk_index,
-                                       ROW_NUMBER() OVER (
-                                           ORDER BY ts_rank(search_vec,
-                                               plainto_tsquery('english', %(qt)s)) DESC
-                                       ) AS kw_rank
-                                FROM codebase_embeddings
-                                WHERE project_id = %(pid)s
-                                  AND (
-                                    content ILIKE %(ilike)s
-                                    OR (%(ilike_alt)s <> '' AND content ILIKE %(ilike_alt)s)
-                                  )
-                                LIMIT 40
-                            )
-                            SELECT s.file_path, s.chunk_index, s.content,
-                                   (1.0/(60+s.sem_rank) + COALESCE(1.0/(60+k.kw_rank), 0.0)) AS rrf
-                            FROM sem s LEFT JOIN kw k
-                              ON s.file_path = k.file_path AND s.chunk_index = k.chunk_index
-                            WHERE (
-                                s.content ILIKE %(ilike)s
-                                OR (%(ilike_alt)s <> '' AND s.content ILIKE %(ilike_alt)s)
-                            )
-                            ORDER BY rrf DESC LIMIT 5
-                        """,
-                            {
-                                "vec": vec_str,
-                                "pid": tgt_id,
-                                "qt": semantic_query,
-                                "ilike": f"%{symbol_name}%",
-                                "ilike_alt": (
-                                    f"%{resolved_names[1]}%" if len(resolved_names) > 1 else ""
-                                ),
-                            },
-                        )
-                        return await cur.fetchall()
-
-            async def _fetch_src_preview():
-                if not definition.get("filepath"):
-                    return []
-                async with memory_store._pg_pool.connection() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute(
-                            """
-                            SELECT content FROM codebase_embeddings
-                            WHERE project_id = %s AND file_path = %s
-                            ORDER BY chunk_index LIMIT 2
-                        """,
-                            (src_id, definition["filepath"]),
-                        )
-                        return await cur.fetchall()
-
-            sem_rows, src_rows = await asyncio.gather(
-                _fetch_semantic(), _fetch_src_preview()
+            return await cross_project_trace.trace_symbol_cross_project_core(
+                symbol_name=symbol_name,
+                source_workspace=source_workspace,
+                target_workspace=target_workspace,
+                execute_read=search_core._execute_read,
             )
-
-            for fp, idx, content, rrf in sem_rows:
-                sem_usages.append(
-                    f"  [chunk {idx}]  {fp}  (score: {rrf:.4f})\n"
-                    f"    {content[:200].strip().replace(chr(10), ' ')}…"
-                )
-
-            # ── 4. Assemble output ────────────────────────────────────────────
-            lines = [
-                f"## Cross-project trace: `{symbol_name}`",
-                f"   {src_name}  →  {tgt_name}",
-                "",
-            ]
-
-            if definition:
-                lines += [
-                    f"### Definition  [{src_name}]",
-                    f"  Kind:      {definition.get('kind', '?')}",
-                    f"  File:      {definition.get('filepath', '?')}  "
-                    f"L{definition.get('start_line', '?')}–{definition.get('end_line', '?')}",
-                ]
-                if definition.get("signature"):
-                    lines.append(f"  Signature: {definition['signature']}")
-                if src_rows:
-                    preview = "\n".join(r[0][:400] for r in src_rows)
-                    lines += ["", f"```\n{preview.strip()}\n```"]
-            else:
-                lines.append(f"⚠️  `{symbol_name}` not found in Neo4j for [{src_name}].")
-                lines.append(
-                    "   (Symbol may be in an un-indexed file or a different casing.)"
-                )
-
-            lines += ["", f"### Usages  [{tgt_name}]"]
-
-            if graph_usages:
-                lines.append(f"**Call-graph hits** ({len(graph_usages)}):")
-                lines.extend(graph_usages)
-            else:
-                lines.append("  No direct call-graph edges found.")
-
-            if sem_usages:
-                lines += ["", f"**Semantic text hits** ({len(sem_usages)}):"]
-                lines.extend(sem_usages)
-            else:
-                lines.append("  No semantic text hits found.")
-
-            if not graph_usages and not sem_usages:
-                lines += [
-                    "",
-                    f"💡 `{symbol_name}` appears to be defined in [{src_name}] but not yet referenced in [{tgt_name}].",
-                    f"   Try `search_multi_project` with a broader semantic query.",
-                ]
-
-            return "\n".join(lines)
         except Exception as e:
             return f"Error tracing cross-project symbol: {str(e)}"

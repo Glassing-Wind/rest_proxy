@@ -1,4 +1,4 @@
-"""memory_types.py – Shared dataclasses and typed dicts for the memory layer."""
+"""Shared dataclasses and typed dicts for the memory layer."""
 
 from __future__ import annotations
 

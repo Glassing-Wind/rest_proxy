@@ -1,0 +1,68 @@
+{
+  "before": {
+    "advisory_rows": 116,
+    "vulnerable_packages": 19,
+    "batch_packages": [
+      {
+        "name": "aiohttp",
+        "version": "3.13.4",
+        "advisory_ids": [
+          "PYSEC-2026-2104",
+          "PYSEC-2026-2105",
+          "PYSEC-2026-2106",
+          "PYSEC-2026-2107",
+          "PYSEC-2026-2108",
+          "PYSEC-2026-2109",
+          "PYSEC-2026-2110",
+          "PYSEC-2026-2111",
+          "PYSEC-2026-2112",
+          "PYSEC-2026-2113",
+          "PYSEC-2026-237",
+          "PYSEC-2026-3545",
+          "PYSEC-2026-3546",
+          "PYSEC-2026-3547"
+        ]
+      },
+      {
+        "name": "urllib3",
+        "version": "2.6.3",
+        "advisory_ids": [
+          "PYSEC-2026-141",
+          "PYSEC-2026-142"
+        ]
+      },
+      {
+        "name": "python-multipart",
+        "version": "0.0.26",
+        "advisory_ids": [
+          "PYSEC-2026-3036",
+          "PYSEC-2026-3037",
+          "PYSEC-2026-3039",
+          "PYSEC-2026-3040"
+        ]
+      }
+    ]
+  },
+  "candidate": {
+    "advisory_rows": 95,
+    "vulnerable_packages": 16,
+    "batch_packages": [
+      {
+        "name": "aiohttp",
+        "version": "3.14.3",
+        "advisory_ids": []
+      },
+      {
+        "name": "urllib3",
+        "version": "2.7.0",
+        "advisory_ids": []
+      },
+      {
+        "name": "python-multipart",
+        "version": "0.0.31",
+        "advisory_ids": []
+      }
+    ]
+  },
+  "validation": "pip resolver dry run on Python 3.11/macOS; registry audit; VCS requirement excluded; no runtime tests or installed upgrades"
+}
