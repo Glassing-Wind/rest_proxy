@@ -177,3 +177,19 @@ security change; the earlier HTTP-client candidate patch remains unapplied.
 
 The complete retrieval-quality gate also passed after the Tavily removal, including
 protocol lifecycle, tool-choice, live graph regressions and MCP parity.
+
+
+## September 14 NLTK security batch
+
+Upgraded NLTK 3.9.4 to 3.10.3 in both requirement files and lmproxy after isolated
+candidate checks. The package audit changed from 53 advisory records to one;
+removed 27 resolved IDs from the baseline, preserving the still-reported
+PYSEC-2026-3740 (no published fix). Both previously blocking NLTK findings are
+resolved. Counts include advisory aliases and are not counts of distinct exploits.
+See `security/batches/2026-09-14-nltk-audit.json`.
+
+Added offline checks for shared-address-space rejection under default enforcement
+and text tokenization. An isolated candidate also passed Crawl4AI import/chunking.
+No corpus was downloaded and no unsafe NLTK model-loading API was exercised.
+This is one compatibility-tested dependency batch, not resolution of all baseline
+debt. The larger PR remains open pending remote checks and full branch review.
