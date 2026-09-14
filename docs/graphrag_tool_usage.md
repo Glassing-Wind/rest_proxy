@@ -230,3 +230,18 @@ This is the preferred path for “where did this edge come from?” investigatio
 - Protocol smoke/regression scripts:
   1. `python scripts/check_mcp_protocol.py`
   2. `./scripts/check_mcp_stale_session_restart.sh`
+
+
+## Documentation discovery without Tavily
+
+`research_documentation` and `research_and_index` use the installed
+`ddgs` package for public web discovery, without an API key. Search
+runs off the async event loop with a network timeout. This still contacts an
+external search engine; it is not an offline search index. The pinned client uses DuckDuckGo, Bing and Brave backends. Search-engine availability and rate
+limits can affect discovery. When no results are available, pass known source URLs
+to `download_documentation` directly.
+
+Crawlee and Trafilatura remain responsible for crawling and content extraction;
+`search_documentation` searches already-indexed documentation locally. Tavily is
+no longer a runtime dependency or configuration requirement. The historical
+revoked-key record remains in the security documentation for audit purposes.

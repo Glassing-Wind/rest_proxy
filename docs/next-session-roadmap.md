@@ -156,3 +156,24 @@ are historical status, superseded by this update. No history rewrite or broad
 scanner exclusion was made. Remaining merge requirements still include current
 remote checks and review of the accumulated branch; deletion alone does not grant
 merge approval or complete the pending agent benchmark/security dependency batch.
+
+
+## Tavily removal follow-up
+
+Removed Tavily from documentation discovery, both requirements manifests, and the
+example configuration. Replaced the obsolete duckduckgo_search client with
+`ddgs==9.16.0` and its compatible `primp==1.3.1` requirement. Both discovery tools
+use key-free web search off the event loop; Crawlee/Trafilatura still crawl and
+extract known URLs. The lmproxy environment has the replacement installed, the
+obsolete packages uninstalled, and its obsolete Tavily assignment removed.
+
+Three offline tests cover response normalization, deduplication, thread dispatch,
+empty/unavailable search, and fallback output. Local CI and pip check pass. A live
+MCP research_documentation call returned ten results including official Crawlee
+quick-start and introduction pages without Tavily. The audit currently blocks on
+NLTK 3.9.4 advisories PYSEC-2026-3955 and PYSEC-2026-3954, not the changed search
+packages. No baseline exceptions were added. Handle NLTK in a separate compatible
+security change; the earlier HTTP-client candidate patch remains unapplied.
+
+The complete retrieval-quality gate also passed after the Tavily removal, including
+protocol lifecycle, tool-choice, live graph regressions and MCP parity.
