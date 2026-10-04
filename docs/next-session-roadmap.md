@@ -4,8 +4,10 @@
 
 The [embedded transaction adapter](embedded-transaction-adapter.md) now passes
 native Python 3.14 rollback, cancellation, read-only and persistence checks.
-It remains experimental and is not wired into application storage. Query/schema
-replay and single-owner indexing are the next Priority 2 gates.
+Application bootstrap now selects Ladybug in embedded mode and supports explicit
+file-outline schema/query reads. Kuzu selection is retired; indexing workers
+refuse embedded mode until owned writes exist. The remaining query corpus,
+single-owner indexing, LanceDB and metadata integration are the next Priority 2 gates.
 
 Latest [reliable-indexing acceptance](../benchmarks/reports/2026-10-04/reliable-indexing.md)
 fixes fetch-method cross-call leakage and resolves the current rental golden to

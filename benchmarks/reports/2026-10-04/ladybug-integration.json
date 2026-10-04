@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-04",
+  "python": "3.14.4",
+  "ladybug": "0.21.2",
+  "platform": "Darwin/arm64",
+  "scope": "experimental graph selection, versioned file-outline schema and reads; indexing refused",
+  "verification": {
+    "native_test_methods": 4,
+    "bootstrap_checks": 10,
+    "file_description_checks": 3,
+    "semantic_index_checks": 23,
+    "indexing_health_checks": 23,
+    "full_local_ci": "passed",
+    "direct_structural_worker_embedded_exit": 2
+  },
+  "log_sha256": {
+    "ladybug-integration.log": "f3aab3d75cc425d804a1907979d908b36432a05ad7ade3760908e02483d1dbea",
+    "embedded-bootstrap.log": "4dbd76a0e9fe2619bceb93db8d4a95ddb34ed32784cb956638009ba33e14e4fe",
+    "embedded-semantic-guards.log": "a27d8cee0aed92bac1d450e1a8297b5b1f8420c89c254a58600bc59a0adc2d14",
+    "embedded-indexing-guards.log": "0579479cdeab643e357923dced3e71d78f81a41c29d278ce8bda8c07f2c71d35",
+    "embedded-integration-ci.log": "eb0ce2089d004c85e1d5a8450558db00433ca57eaa22b8c3107edb675b7fe4f5",
+    "embedded-struct-guard.log": "c95e2f0079761387c6fe0cb860503eccb9ffe6bd1b5751bed2f3aac3a0b7de6d"
+  },
+  "application_embedded_ready": false,
+  "remaining": [
+    "complete query/schema corpus",
+    "single owner across HTTP/STDIO/indexing",
+    "owned structural fact writes",
+    "LanceDB pipeline routing",
+    "durable metadata",
+    "coordinated publication/deletion",
+    "real-repository acceptance with external services disabled"
+  ],
+  "migration": "No Kuzu database migration; retired selector is rejected"
+}

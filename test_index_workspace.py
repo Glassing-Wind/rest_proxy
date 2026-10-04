@@ -544,6 +544,19 @@ class FakePool:
 
 
 class IndexWorkspaceTests(unittest.TestCase):
+    def test_embedded_mode_refuses_server_semantic_writes(self):
+        module = load_index_workspace_module()
+        with mock.patch.dict(os.environ, {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                mock.patch.object(module, '_get_latest_successful_struct_run_id',
+                                  side_effect=AssertionError('external graph forbidden')), \
+                mock.patch.object(module.memory_store, 'open_pool',
+                                  side_effect=AssertionError('external pool forbidden')), \
+                mock.patch('sys.stderr', new=io.StringIO()) as log:
+            result = asyncio.run(module.index_project('/missing', 'test', []))
+        self.assertEqual(result, 0)
+        self.assertFalse(module._LAST_INDEX_PROJECT_OK)
+        self.assertIn('Embedded indexing is not implemented', log.getvalue())
+
     def test_refresh_semantic_chunk_metadata_updates_stale_rows_without_embeddings(self):
         class FakeCursor:
             def __init__(self):

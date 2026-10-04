@@ -1,4 +1,4 @@
-"""Experimental Ladybug transactions; not yet wired into application storage.
+"""Experimental Ladybug graph transactions and application file-outline reads.
 
 One driver owns a Database object. Sessions use separate connections, with all
 operations serialized within this owner. Cross-process ownership and the full
@@ -124,12 +124,49 @@ class LadybugGraphDriver:
         import ladybug
 
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = db_path
         self._engine = ladybug
         self._database = ladybug.Database(db_path, buffer_pool_size=buffer_pool_size,
                                          max_num_threads=2)
         self._lock = asyncio.Lock()
         self._sessions = set()
         self._closed = False
+
+    async def initialize_schema(self) -> None:
+        from memory.embedded_schema import SCHEMA_COLUMNS, SCHEMA_STATEMENTS, SCHEMA_VERSION
+
+        async def initialize(tx):
+            for statement in SCHEMA_STATEMENTS:
+                await tx.run(statement)
+            for table, expected in SCHEMA_COLUMNS.items():
+                columns = await (await tx.run(f"CALL table_info('{table}') RETURN *")).data()
+                actual = {column['name']: column['type'] for column in columns}
+                if actual != expected or not any(
+                    column['name'] == 'id' and column['primary key'] for column in columns
+                ):
+                    raise RuntimeError(f'Incompatible Ladybug schema table: {table}')
+            rows = await (await tx.run(
+                "MATCH (s:EmbeddedSchema {id:'file_outline'}) RETURN s.version AS version"
+            )).data()
+            if rows and rows != [{'version': SCHEMA_VERSION}]:
+                raise RuntimeError('Unsupported Ladybug file-outline schema version')
+            if not rows:
+                await tx.run("CREATE (:EmbeddedSchema {id:'file_outline', version:$version})",
+                             version=SCHEMA_VERSION)
+
+        async with self.session() as session:
+            await session.execute_write(initialize)
+
+    async def describe_file_symbols(self, file_id: str) -> list[dict[str, Any]]:
+        from memory.embedded_schema import FILE_SYMBOL_QUERY
+
+        async def read(tx):
+            return await (await tx.run(FILE_SYMBOL_QUERY, fid=file_id)).data()
+
+        async with self.session() as session:
+            rows = await session.execute_read(read)
+        return sorted(rows, key=lambda row: (row['start'] is None, row['start'] or 0,
+                                            row['kind'], row['id']))
 
     def _require_open(self):
         if self._closed:

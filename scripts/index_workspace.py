@@ -868,6 +868,11 @@ async def index_project(
     Returns total new chunks written.
     """
     global _LAST_INDEX_PROJECT_OK
+    from memory.storage_config import embedded_graph_selected, EMBEDDED_INDEXING_UNAVAILABLE
+    if embedded_graph_selected():
+        _LAST_INDEX_PROJECT_OK = False
+        print(EMBEDDED_INDEXING_UNAVAILABLE, file=sys.stderr)
+        return 0
     _LAST_INDEX_PROJECT_OK = True
     t0 = time.time()
     semantic_run_id = _semantic_run_id(project_id)

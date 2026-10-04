@@ -281,21 +281,43 @@ def _index_signature(
 
 
 async def init_graph_db() -> None:
-    """Initialize Neo4j or embedded Kùzu driver and ensure basic schema constraints exist."""
+    """Initialize Neo4j or experimental Ladybug driver and ensure basic schema constraints exist."""
     global _driver, _last_init_error, _last_init_error_at
     async with _get_init_lock():
         backend = os.getenv("LM_PROXY_STORAGE_BACKEND", "").strip().lower()
         graph_backend = os.getenv("LM_PROXY_GRAPH_BACKEND", "").strip().lower()
-        if backend == "embedded" or graph_backend == "kuzu":
-            try:
-                from memory.embedded_kuzu import get_embedded_kuzu_driver
-                _driver = get_embedded_kuzu_driver()
-                _last_init_error = None
-                _debug("kuzu_embedded_connected", db_path=_driver.db_path)
+        if backend == "embedded" or graph_backend in {"ladybug", "kuzu"}:
+            if _driver is not None:
                 return
-            except Exception as exc:
-                _debug("kuzu_embedded_init_failed", error=str(exc))
+            created_driver = None
+            try:
+                if graph_backend == "kuzu":
+                    raise RuntimeError(
+                        "The Kuzu backend is retired. Select LM_PROXY_GRAPH_BACKEND=ladybug "
+                        "with a new LM_PROXY_LADYBUG_PATH; existing database migration is not supported."
+                    )
+                from memory.embedded_ladybug import LadybugGraphDriver
+                db_path = os.getenv("LM_PROXY_LADYBUG_PATH") or str(
+                    Path(__file__).resolve().parent / ".runtime" / "ladybug_graph.db"
+                )
+                created_driver = LadybugGraphDriver(db_path)
+                await created_driver.initialize_schema()
+                _driver = created_driver
+                _last_init_error = None
+                _last_init_error_at = 0.0
+                _debug("ladybug_experimental_connected", db_path=db_path)
+                return
+            except BaseException as exc:
+                if created_driver is not None:
+                    try:
+                        await created_driver.close()
+                    except Exception:
+                        pass
+                if not isinstance(exc, Exception):
+                    raise
+                _debug("ladybug_embedded_init_failed", error=type(exc).__name__)
                 _last_init_error = str(exc)
+                _last_init_error_at = time.monotonic()
                 _driver = None
                 return
 
@@ -442,6 +464,9 @@ async def require_driver():
         detail = ""
         if _last_init_error:
             detail = f" Last error: {_last_init_error}"
+        if (os.getenv("LM_PROXY_STORAGE_BACKEND", "").strip().lower() == "embedded"
+                or os.getenv("LM_PROXY_GRAPH_BACKEND", "").strip().lower() in {"ladybug", "kuzu"}):
+            raise RuntimeError(f"Experimental embedded graph unavailable.{detail}")
         raise RuntimeError(
             "Neo4j driver unavailable. Check that Neo4j is running and that "
             "LM_PROXY_NEO4J_URI / LM_PROXY_NEO4J_USER / LM_PROXY_NEO4J_PASSWORD / "

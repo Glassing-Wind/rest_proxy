@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Disposable compatibility probes; records failures without claiming backend parity."""
+"""Historical Kuzu compatibility probe; does not select the application backend."""
 from __future__ import annotations
 
 import argparse

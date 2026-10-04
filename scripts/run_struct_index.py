@@ -619,6 +619,10 @@ def main() -> int:
     )
     parser.add_argument("--neo4j-db", default=os.getenv("LM_PROXY_NEO4J_DB", "proxy"))
     args = parser.parse_args()
+    from memory.storage_config import embedded_graph_selected, EMBEDDED_INDEXING_UNAVAILABLE
+    if embedded_graph_selected():
+        print(EMBEDDED_INDEXING_UNAVAILABLE, file=sys.stderr)
+        return 2
 
     print(
         "[ts-pack:struct] NOTE: For aligned indexing, run the MCP tool "

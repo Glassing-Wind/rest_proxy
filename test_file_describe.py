@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 import sys
 import types
@@ -27,6 +28,27 @@ def load_module():
 
 
 class FileDescribeTests(unittest.TestCase):
+    def test_ladybug_outline_dispatch_avoids_server_query_and_semantic_pool(self):
+        module = load_module()
+        driver = types.SimpleNamespace(describe_file_symbols=mock.AsyncMock(return_value=[
+            {'kind': 'Function', 'name': 'indexed', 'start': 1, 'end': 2, 'sig': None},
+        ]))
+        bootstrap = types.SimpleNamespace(require_driver=mock.AsyncMock(return_value=driver))
+        helpers = types.ModuleType('_helpers')
+        helpers.get_project_id = lambda _: 'project'
+        helpers.normalize_neo4j_path = lambda path: path
+        module.get_memory_modules = mock.Mock(side_effect=AssertionError('server pool forbidden'))
+        execute_read = mock.AsyncMock(side_effect=AssertionError('Neo4j query forbidden'))
+        with mock.patch.dict('os.environ', {'LM_PROXY_GRAPH_BACKEND': 'ladybug'}), \
+                mock.patch.dict(sys.modules, {'_helpers': helpers, 'graph_bootstrap': bootstrap}):
+            output = asyncio.run(module.describe_file_impl(
+                project_path='/missing-project', file_path='missing.txt', execute_read=execute_read,
+            ))
+        driver.describe_file_symbols.assert_awaited_once_with('project:file:missing.txt')
+        execute_read.assert_not_awaited()
+        module.get_memory_modules.assert_not_called()
+        self.assertIn('[Function] indexed:1-2', output)
+
     def test_format_file_purpose_uses_roles_and_key_symbols(self):
         module = load_module()
 

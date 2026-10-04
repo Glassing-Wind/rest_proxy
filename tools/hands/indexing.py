@@ -582,6 +582,10 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
               - "rebuild": Wipes all existing project data and starts fresh.
               - "cleanup": Only removes orphaned/deleted files from the index.
     """
+    from memory.storage_config import embedded_graph_selected, EMBEDDED_INDEXING_UNAVAILABLE
+
+    if embedded_graph_selected():
+        return EMBEDDED_INDEXING_UNAVAILABLE
     claimed_lock = False
     project_id = ""
     job_id = ""
