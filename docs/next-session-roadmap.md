@@ -2,10 +2,19 @@
 
 ## Current checkpoint — October 4, 2026
 
+The [real embedding baseline](real-embedding-acceptance.md) now passes strict
+Jina/LM Studio indexing and reopened retrieval on 131 frozen production files /
+1,629 chunks. Five source-anchor probes covered 4/5 expected files with vector
+search and 5/5 with hybrid; these are not controlled coding outcomes. Provider
+response indices and truncation checks are hardened, and encoder metadata persists
+with the publication. Resident model-artifact binding remains unverified (CLI/API
+size metadata differs from the local GGUF). Full graph queries and MCP/REST owner
+routing remain the next Priority 2 implementation gates.
+
 The [embedding provider direction](embedding-provider-direction.md) keeps LM Studio
 optional and proposes FastEmbed/ONNX native and TEI service evaluations. The
-configured Jina code-embedding model is loaded locally, but real-model acceptance
-on the combined embedded owner is still pending. Compare measured retrieval,
+configured Jina code-embedding model supplied the functional baseline above;
+controlled comparisons and production model-identity acceptance remain pending. Compare measured retrieval,
 resources and Python 3.14 installs before choosing a default; record preprocessing
 and truncation in encoder identity. No provider or inference setup changed.
 
@@ -14,8 +23,9 @@ chunks under a fresh run and exposes them through the atomic Ladybug receipt.
 Native text/vector/hybrid retrieval, failure/cancellation/crash recovery, cleanup
 and deletion passed. Network-denied storage acceptance covered 130 files and
 1,622 chunks using explicitly synthetic vectors; semantic quality is unmeasured.
-Actual provider acceptance, complete graph queries and MCP/REST owner routing
-remain the next Priority 2 gates. The outline checkpoints below preceded this work.
+The real-provider baseline above extends that synthetic storage proof; production
+provider identity, complete graph queries and MCP/REST owner routing remain Priority 2
+gates. The outline checkpoints below preceded this work.
 
 [Owned embedded outlines](owned-embedded-outlines.md) now publish structural
 file/symbol snapshots and originals atomically, protected by a local database

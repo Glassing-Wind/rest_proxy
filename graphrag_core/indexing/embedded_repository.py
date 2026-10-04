@@ -56,7 +56,12 @@ class EmbeddedRepositoryOwner:
             raise RuntimeError('Repository owner is not open')
 
     async def index(self, source_root: str, project_id: str, paths: list[str], *, embed,
-                    encoder_id: str) -> dict:
+                    encoder_id: str, encoder_metadata: dict | None = None) -> dict:
+        if encoder_metadata is not None:
+            encoded = json.dumps(encoder_metadata, sort_keys=True, allow_nan=False)
+            if not isinstance(encoder_metadata, dict) or len(encoded.encode()) > 8192:
+                raise ValueError('Encoder metadata must be a bounded JSON object')
+            encoder_metadata = json.loads(encoded)
         if not encoder_id or len(encoder_id) > 512:
             raise ValueError('An explicit embedding encoder identity is required')
         async with self._lock:
@@ -94,6 +99,8 @@ class EmbeddedRepositoryOwner:
             count = await self.vectors.stage_run(project_id, snapshot['run_id'], chunks)
             snapshot['manifest']['retrieval'] = {'run_id': snapshot['run_id'], 'chunks': count,
                                                   'dimension': self.dimension, 'encoder_id': encoder_id}
+            if encoder_metadata is not None:
+                snapshot['manifest']['retrieval']['encoder_metadata'] = encoder_metadata
             snapshot['manifest'].pop('sha256')
             canonical = json.dumps(snapshot['manifest'], sort_keys=True, separators=(',', ':'), ensure_ascii=False)
             snapshot['manifest']['sha256'] = hashlib.sha256(canonical.encode()).hexdigest()

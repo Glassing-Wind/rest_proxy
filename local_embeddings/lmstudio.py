@@ -412,7 +412,12 @@ class LMStudioEmbeddingProvider(LocalEmbeddingProvider):
         elapsed = time.perf_counter() - started
         if not isinstance(data, dict) or not isinstance(data.get("data"), list):
             raise ModelLoadError("LM Studio returned an unexpected response for POST /v1/embeddings")
-        items = sorted(data["data"], key=lambda item: item.get("index", 0))
+        items = data["data"]
+        if (len(items) != len(texts) or any(not isinstance(item, dict) for item in items)
+                or any(type(item.get("index")) is not int for item in items)
+                or {item["index"] for item in items} != set(range(len(texts)))):
+            raise ModelLoadError("LM Studio embeddings response has invalid input/vector indices.")
+        items = sorted(items, key=lambda item: item["index"])
         vectors = [item.get("embedding") for item in items]
         if any(not isinstance(vec, list) for vec in vectors):
             raise ModelLoadError("LM Studio embeddings response was missing embedding vectors.")

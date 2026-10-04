@@ -26,7 +26,9 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
             state = str(Path(directory) / 'state')
             async with EmbeddedRepositoryOwner(state, 3) as owner:
                 first = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed,
-                                          encoder_id='fixture-v1')
+                                          encoder_id='fixture-v1', encoder_metadata={'model': 'fixture'})
+                self.assertEqual(first['manifest']['retrieval']['encoder_metadata'], {'model': 'fixture'})
+                self.assertEqual((await read_outline_publication(owner.graph, 'p'))['manifest']['retrieval']['encoder_metadata'], {'model': 'fixture'})
                 await owner.index(str(root), 'q', ['a.py'], embed=fixture_embed, encoder_id='fixture-v1')
                 for mode in ('text', 'vector', 'hybrid'):
                     hits = await owner.search('p', encoder_id='fixture-v1', text='authenticate',

@@ -48,6 +48,35 @@ class LMStudioProviderTests(unittest.IsolatedAsyncioTestCase):
         mod = importlib.import_module("local_embeddings.lmstudio")
         return importlib.reload(mod)
 
+    async def test_embedding_indices_must_cover_every_input_once(self):
+        mod = self._load_module()
+        provider = mod.LMStudioEmbeddingProvider()
+        invalid = [
+            [{'index': 0, 'embedding': [1.]}],
+            [{'index': 0, 'embedding': [1.]}, {'index': 0, 'embedding': [2.]}],
+            [{'index': 1, 'embedding': [1.]}, {'index': 2, 'embedding': [2.]}],
+            [{'index': False, 'embedding': [1.]}, {'index': 1, 'embedding': [2.]}],
+            [{'embedding': [1.]}, {'index': 1, 'embedding': [2.]}],
+        ]
+        try:
+            for rows in invalid:
+                provider._request_json = mock.AsyncMock(return_value={'data': rows})
+                with self.assertRaises(mod.ModelLoadError):
+                    await provider._embed_request(['one', 'two'])
+        finally:
+            await provider.close()
+
+    async def test_out_of_order_embedding_response_restores_input_order(self):
+        mod = self._load_module()
+        provider = mod.LMStudioEmbeddingProvider()
+        provider._request_json = mock.AsyncMock(return_value={'data': [
+            {'index': 1, 'embedding': [2.]}, {'index': 0, 'embedding': [1.]},
+        ]})
+        try:
+            self.assertEqual(await provider._embed_request(['one', 'two']), [[1.], [2.]])
+        finally:
+            await provider.close()
+
     async def test_auto_load_then_embed_uses_native_and_openai_endpoints(self):
         with mock.patch.dict(
             os.environ,

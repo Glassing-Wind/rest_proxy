@@ -89,4 +89,6 @@ priorities.
 
 The [embedding provider direction](embedding-provider-direction.md) defines the
 next real-model baseline and optional runtime comparisons. LM Studio is optional
-in the intended native distribution; all current acceptance here remains synthetic.
+in the intended native distribution. The acceptance recorded above used synthetic
+vectors; the subsequent [real-model baseline](real-embedding-acceptance.md) records
+strict-provider indexing/retrieval and its model-identity limitations.

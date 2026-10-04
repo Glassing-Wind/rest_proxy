@@ -42,8 +42,12 @@ provider independence is implemented at the experimental repository-owner bounda
 not throughout the existing indexing pipeline.
 
 [Embedded run acceptance](embedded-run-publication.md) used synthetic 3D vectors
-and proves storage/publication behavior only. Real-provider embedded indexing,
-semantic quality, FastEmbed/TEI compatibility and a provider default remain unverified.
+and proves storage/publication behavior only. The subsequent
+[real-model functional baseline](real-embedding-acceptance.md) indexed 131 frozen
+production files / 1,629 chunks with the already loaded Jina model and passed
+reopen/citation checks. The five-probe coverage pilot is not a controlled quality
+comparison. Resident-artifact binding, robust semantic/coding outcomes,
+FastEmbed/TEI compatibility and a provider default remain unverified.
 This update adds no runtime dependency, downloads no model and changes no
 interpreter.
 
