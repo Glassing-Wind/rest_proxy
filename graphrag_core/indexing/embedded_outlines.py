@@ -30,6 +30,8 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
         raise ValueError('Invalid root, duplicate manifest paths, or manifest exceeds 5000 files')
     files = []
     used_bytes = 0
+    fact_count = 0
+    fact_bytes = 0
     symbol_count = 0
     skipped_count = 0
     for relative in sorted(paths):
@@ -72,7 +74,8 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
                                       span.get('start_byte'), span.get('end_byte')])
                     symbols.append({'id': project_id + ':symbol:' + hashlib.sha256(
                         identity.encode()).hexdigest(), 'kind': kind, 'name': name,
-                        'start': start + 1, 'end': end + 1, 'signature': item.get('signature')})
+                        'start': start + 1, 'end': end + 1, 'signature': item.get('signature'),
+                        'start_byte': span['start_byte'], 'end_byte': span['end_byte']})
                     symbol_count += 1
                     if symbol_count > 25000:
                         raise ValueError('Outline exceeds 25000 symbols')
@@ -81,10 +84,18 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
                 walk(item.get('children') or [], ancestry + (name,))
 
         walk(result.get('structure') or [])
+        from graphrag_core.indexing.embedded_facts import build_file_facts
+        facts = build_file_facts(ts_pack, source, language, relative, result, symbols)
+        facts_json = _json(facts)
+        fact_count += len(facts['calls']) + len(facts['imports'])
+        fact_bytes += len(facts_json.encode())
+        if fact_count > 50000 or fact_bytes > 64 * 1024 * 1024:
+            raise ValueError('Snapshot exceeds bounded parser fact budget')
         files.append({'id': file_id, 'path': relative, 'sha256': hashlib.sha256(raw).hexdigest(),
                       'content': source, 'language': language, 'symbols': symbols,
-                      'facts_json': _json(ts_pack.extract_file_facts(source, language))})
-    manifest = {'files': [{key: file[key] for key in ('path', 'sha256', 'language')}
+                      'facts_json': facts_json,
+                      'facts_sha256': hashlib.sha256(facts_json.encode()).hexdigest()})
+    manifest = {'files': [{key: file[key] for key in ('path', 'sha256', 'language', 'facts_sha256')}
                           for file in files], 'symbols': symbol_count,
                 'unsupported_symbols': skipped_count, 'source_bytes': used_bytes}
     manifest['sha256'] = hashlib.sha256(_json(manifest).encode()).hexdigest()

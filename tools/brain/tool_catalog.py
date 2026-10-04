@@ -20,6 +20,8 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "get_embedded_file_facts": ToolCatalogEntry(
+        "primary", "embedded investigation", "Read published import/call/route observations with source and run citations."),
     "list_embedded_projects": ToolCatalogEntry(
         "primary", "embedded investigation", "Discover committed embedded projects and canonical workspace paths."),
     "index_embedded_repository": ToolCatalogEntry(

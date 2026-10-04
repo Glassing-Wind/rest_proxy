@@ -48,6 +48,10 @@ async def inspect(session, args):
                                            {'project_id': args.project_id, 'file_path': args.file,
                                             'max_lines': 12}))
     assert source['run_id'] == overview['run_id']
+    facts = decode(await session.call_tool('get_embedded_file_facts',
+                                          {'project_id': args.project_id, 'file_path': args.file, 'limit': 5}))
+    assert facts['run_id'] == overview['run_id']
+    assert facts['source_sha256'] == source['source_sha256']
     hits = decode(await session.call_tool('search_embedded_repository',
                                           {'project_id': args.project_id, 'query': args.query,
                                            'mode': 'text', 'limit': 5}))
@@ -56,7 +60,7 @@ async def inspect(session, args):
         hits = hits['result']
     assert hits and all(hit['run_id'] == overview['run_id'] for hit in hits)
     return {'overview': overview, 'source': source, 'projects': projects,
-            'resolution': resolution, 'workspace_overview': workspace_overview,
+            'resolution': resolution, 'workspace_overview': workspace_overview, 'file_facts': facts,
             'hit_citations': [{key: hit[key] for key in ('file_path', 'ref_id', 'source_sha256', 'run_id')}
                              for hit in hits]}
 
@@ -111,7 +115,8 @@ async def run(args):
             'run_id': stdio['overview']['run_id'], 'files': stdio['overview']['files'],
             'dimension': args.dimension, 'source_sha256': stdio['source']['source_sha256'],
             'hit_citations': stdio['hit_citations'], 'model_required': False, 'workspace_resolution_verified': True,
-            'project_listing_verified': True,
+            'project_listing_verified': True, 'file_facts_verified': True,
+            'fact_contract_status': stdio['file_facts'].get('status', 'v1'),
             'sandbox': args.sandbox, 'external_storage_network_allowed': False if args.sandbox else None}
 
 

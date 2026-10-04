@@ -41,8 +41,16 @@ async def list_embedded_projects(limit: int = 25, after: str = '') -> dict:
     return await get_embedded_runtime().list_projects(limit=limit, after=after)
 
 
+async def get_embedded_file_facts(project_id: str, file_path: str, limit: int = 50, offset: int = 0) -> dict | None:
+    """Read cited imports, syntactic call sites and native route/HTTP facts from a publication.
+
+    Targets are observations, not resolved CALLS edges. Older snapshots require reindexing.
+    """
+    return await get_embedded_runtime().file_facts(project_id, file_path, limit=limit, offset=offset)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
-                     describe_embedded_file, get_embedded_overview, list_embedded_projects):
+                     describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts):
             mcp.tool()(tool)

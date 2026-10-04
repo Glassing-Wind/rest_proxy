@@ -2,6 +2,13 @@
 
 ## Current checkpoint — October 4, 2026
 
+[Embedded parser facts](embedded-parser-facts.md) now persist hashed imports,
+syntactic call observations and native route/HTTP facts with the publication.
+A fresh real-model run on 131 frozen files contains 806 imports and 12,996 calls;
+all source/fact hashes and STDIO/HTTP evidence verified. Call targets are not yet
+resolved relationships. Full symbol/caller/import/route queries remain Priority 2
+work, along with remaining application metadata and REST integration.
+
 [Embedded project discovery](embedded-project-discovery.md) now lists durable
 publication IDs/roots/runs and routes the existing project-resolution and overview
 tools through the embedded owner. Canonical path/unique-name resolution refuses

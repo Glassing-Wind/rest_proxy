@@ -61,7 +61,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
                                              'LM_PROXY_EMBEDDED_STATE': '/unused'}):
             embedded.register(mcp)
-        self.assertEqual(len(mcp._tool_manager.list_tools()), 5)
+        self.assertEqual(len(mcp._tool_manager.list_tools()), 6)
         runtime = mock.AsyncMock()
         runtime.describe_file.return_value = {'run_id': 'r', 'source_sha256': 'hash', 'source': '1: original'}
         with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):

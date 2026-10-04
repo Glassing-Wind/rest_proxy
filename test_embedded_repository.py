@@ -181,6 +181,42 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((await runtime.list_projects())['projects'][0]['project_id'], "beta'quoted")
             await runtime.close()
 
+    async def test_published_facts_citations_bounds_reopen_and_tampering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            source = root / 'a.py'
+            source.write_text('from util import helper\ndef caller():\n    return helper(helper())\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                publication = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                evidence = await owner.file_facts('p', 'a.py', limit=1)
+                self.assertEqual(evidence['counts']['calls'], 2)
+                self.assertEqual(len(evidence['facts']['calls']), 1)
+                self.assertEqual(evidence['next_offset'], 1)
+                page = await owner.file_facts('p', 'a.py', limit=1, offset=1)
+                self.assertIsNone(page['next_offset'])
+                self.assertGreater(page['facts']['calls'][0]['start_byte'], evidence['facts']['calls'][0]['start_byte'])
+                self.assertIn('calls', evidence['truncated_groups'])
+                self.assertEqual(evidence['facts']['calls'][0]['owner_name'], 'caller')
+                self.assertEqual(evidence['run_id'], publication['run_id'])
+                self.assertEqual(evidence['source_sha256'], publication['manifest']['files'][0]['sha256'])
+                source.write_text('def changed():\n    pass\n')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.file_facts('p', 'a.py', limit=1), evidence)
+                self.assertIsNone(await owner.file_facts('q', 'a.py'))
+                with self.assertRaises(ValueError):
+                    await owner.file_facts('p', 'a.py', limit=0)
+                async with owner.graph.session() as session:
+                    async def corrupt(tx):
+                        await tx.run('MATCH (s:SourceEvidence {id:$fid}) SET s.facts_json=$facts',
+                                     fid='p:file:a.py', facts='{}')
+                    await session.execute_write(corrupt)
+                with self.assertRaises(RuntimeError):
+                    await owner.file_facts('p', 'a.py')
+                await owner.delete_project('p')
+                self.assertIsNone(await owner.file_facts('p', 'a.py'))
+
     async def test_kill_after_staging_preserves_published_retrieval(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'

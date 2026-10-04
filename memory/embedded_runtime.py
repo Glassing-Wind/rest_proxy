@@ -88,6 +88,10 @@ class EmbeddedRuntime:
         async with self._lock:
             return await (await self._get_owner()).overview(project_id)
 
+    async def file_facts(self, project_id: str, file_path: str, *, limit: int = 50, offset: int = 0):
+        async with self._lock:
+            return await (await self._get_owner()).file_facts(project_id, file_path, limit=limit, offset=offset)
+
     async def list_projects(self, *, limit: int = 25, after: str = ''):
         async with self._lock:
             return await (await self._get_owner()).list_projects(limit=limit, after=after)

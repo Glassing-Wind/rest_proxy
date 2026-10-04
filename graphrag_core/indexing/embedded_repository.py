@@ -148,6 +148,12 @@ class EmbeddedRepositoryOwner:
                     'retrieval': manifest.get('retrieval'),
                     'capabilities': ['published-source', 'file-outlines', 'text', 'vector', 'hybrid']}
 
+    async def file_facts(self, project_id: str, file_path: str, *, limit: int = 50, offset: int = 0):
+        from graphrag_core.indexing.embedded_facts import read_file_facts
+        async with self._lock:
+            self._require_open()
+            return await read_file_facts(self.graph, project_id, file_path, limit=limit, offset=offset)
+
     async def list_projects(self, *, limit: int = 25, after: str = '') -> dict:
         from graphrag_core.indexing.embedded_projects import list_projects
         async with self._lock:
