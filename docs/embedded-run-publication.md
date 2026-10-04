@@ -86,3 +86,7 @@ real hybrid MCP investigation with external storage disabled. Native packaging,
 restore drills, load/resource measurements and supported-platform CI remain release
 gates. FIRE task checkpoints and whole-request context budgeting remain subsequent
 priorities.
+
+The [embedding provider direction](embedding-provider-direction.md) defines the
+next real-model baseline and optional runtime comparisons. LM Studio is optional
+in the intended native distribution; all current acceptance here remains synthetic.

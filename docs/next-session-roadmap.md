@@ -2,6 +2,13 @@
 
 ## Current checkpoint — October 4, 2026
 
+The [embedding provider direction](embedding-provider-direction.md) keeps LM Studio
+optional and proposes FastEmbed/ONNX native and TEI service evaluations. The
+configured Jina code-embedding model is loaded locally, but real-model acceptance
+on the combined embedded owner is still pending. Compare measured retrieval,
+resources and Python 3.14 installs before choosing a default; record preprocessing
+and truncation in encoder identity. No provider or inference setup changed.
+
 [Combined embedded publication](embedded-run-publication.md) now stages LanceDB
 chunks under a fresh run and exposes them through the atomic Ladybug receipt.
 Native text/vector/hybrid retrieval, failure/cancellation/crash recovery, cleanup

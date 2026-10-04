@@ -4,7 +4,7 @@ Product name: **FIRE — Find, Integrate, Retrieve, Explain**. See
 [the FIRE direction](fire-platform.md) for the first checkpoint/provenance slice
 and compaction/resumption acceptance scenarios.
 
-Updated October 3, 2026. This is the coordinating implementation plan; linked
+Updated October 4, 2026. This is the coordinating implementation plan; linked
 research and evidence retain their detailed findings.
 
 ## Outcome
@@ -30,6 +30,17 @@ packaging. Existing server backends remain supported during the transition.
   Audit the exact artifact, dependencies, native extensions, utilities and models.
 - One process owns mutable embedded graph storage. Indexing must share that owner,
   rather than opening the same database independently in subprocesses.
+
+## Embedding provider direction
+
+Keep embedding generation behind a provider boundary. LM Studio remains an
+optional development adapter and the first available real-model baseline; it is
+not a requirement of the native embedded distribution. Evaluate FastEmbed/ONNX
+for in-process generation and TEI for optional team serving. Select defaults from
+measured code retrieval, resource use and installation reliability, with pinned
+model/configuration identity and Python 3.14/platform acceptance. No candidate
+runtime has been adopted or shown superior. The inference proxy remains separate.
+See [embedding provider direction](embedding-provider-direction.md).
 
 ## Implementation milestones
 

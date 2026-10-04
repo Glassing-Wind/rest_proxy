@@ -87,6 +87,16 @@ PostgreSQL version. Build and test AGE plus pgvector in the same disposable imag
 before proposing consolidation. [Cypher interface](https://age.apache.org/age-manual/master/intro/cypher.html),
 [installation](https://github.com/apache/age), [releases](https://github.com/apache/age/releases).
 
+## Embedding generation
+
+Embedding runtimes are separate from storage and the optional inference proxy.
+Keep LM Studio optional; evaluate an in-process FastEmbed/ONNX runtime for the
+native distribution and TEI for optional team serving. Runtime and model adoption
+require code-retrieval, resource, exact artifact/license and Python 3.14/platform
+acceptance. No alternative has been adopted or established as superior. See the
+[embedding provider direction](embedding-provider-direction.md) for primary
+references and the controlled comparison gates.
+
 ## Retrieval and cache choices
 
 **Keep PostgreSQL/pgvector for the server profile.** pgvector explicitly documents
