@@ -43,7 +43,7 @@ TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
     "cleanup_stale_shadow_graph": ToolCatalogEntry(
         "operational",
         "indexing",
-        "Inspect or remove stale Neo4j shadow namespaces left by failed structural index runs.",
+        "Inspect shadow ownership; remove explicitly selected terminal runs while protecting active or unknown writers.",
     ),
     "delete_documentation": ToolCatalogEntry(
         "admin",

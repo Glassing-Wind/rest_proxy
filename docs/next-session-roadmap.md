@@ -1,5 +1,26 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Current checkpoint — October 4, 2026
+
+Fork PR #1 and rest_proxy PR #1 are merged. Post-merge hosted CI and Security
+passed; both requirements files retain fork SHA
+`e1c99f71478dd1d2f974cb02e4038424d21a12ce`. Earlier pending/draft entries below
+describe historical checkpoints.
+
+The next implementation adds tracked shadow ownership/heartbeats, explicit
+namespace selection and terminal-state cleanup guards, atomic structural graph
+replacement, and nonzero finalization failure exits. Six focused checks (including
+disposable live Neo4j fixtures), the 21 indexing-health regressions and full local
+CI passed. See [indexing lifecycle safety](indexing-lifecycle-safety.md).
+Legacy 582-node residue remains protected because its ownership is unknown.
+
+Next: abandoned-run adjudication/recovery and coordinated graph/vector publication;
+resolve the existing 80-versus-81 retrieval golden discrepancy; complete owned
+Ladybug/LanceDB indexing and retrieval; implement FIRE persistence/resume and
+whole-request budgeting; finish distribution notices and controlled outcome
+evaluations. The [smart-glasses direction](smart-glasses-project-direction.md) is
+a separate project and does not extend this application's implementation scope.
+
 ## Decision and scope
 
 Keep retrieval behavior fixed until paired investigations reveal a reproducible weakness.

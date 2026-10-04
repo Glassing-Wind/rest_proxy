@@ -328,64 +328,23 @@ def _promote_struct_shadow_graph(
     driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
     try:
         with driver.session(database=neo4j_db) as session:
-            delete_nodes_started_at = time.perf_counter()
-            session.execute_write(
-                lambda tx: tx.run(
-                    promote_delete_nodes_query,
-                    canonical_pid=canonical_project_id,
-                ).consume()
+            @neo4j.unit_of_work(
+                timeout=120, metadata={"source": "lm_proxy", "op": "atomic_shadow_promotion"}
             )
-            _log_timed_step("promote.delete_canonical_nodes", delete_nodes_started_at)
+            def promote(tx):
+                params = dict(canonical_pid=canonical_project_id,
+                              shadow_pid=shadow_project_id, run_id=run_id)
+                for query in (promote_delete_nodes_query, promote_nodes_query,
+                              promote_rels_query, cleanup_shadow_nodes_query):
+                    tx.run(query, **params).consume()
+                record = tx.run(verify_canonical_ids_query, **params).single()
+                invalid_count = int(record["invalid_count"]) if record else 0
+                if invalid_count:
+                    raise RuntimeError(
+                        f"Atomic shadow promotion invariant failed: canonical_shadow_ids={invalid_count}"
+                    )
 
-            promote_nodes_started_at = time.perf_counter()
-            session.execute_write(
-                lambda tx: tx.run(
-                    promote_nodes_query,
-                    canonical_pid=canonical_project_id,
-                    shadow_pid=shadow_project_id,
-                    run_id=run_id,
-                ).consume()
-            )
-            _log_timed_step("promote.promote_nodes", promote_nodes_started_at)
-
-            promote_rels_started_at = time.perf_counter()
-            session.execute_write(
-                lambda tx: tx.run(
-                    promote_rels_query,
-                    canonical_pid=canonical_project_id,
-                    shadow_pid=shadow_project_id,
-                    run_id=run_id,
-                ).consume()
-            )
-            _log_timed_step("promote.promote_rels", promote_rels_started_at)
-
-            cleanup_shadow_nodes_started_at = time.perf_counter()
-            session.execute_write(
-                lambda tx: tx.run(
-                    cleanup_shadow_nodes_query,
-                    shadow_pid=shadow_project_id,
-                ).consume()
-            )
-            _log_timed_step("promote.cleanup_shadow_nodes", cleanup_shadow_nodes_started_at)
-
-            verify_ids_started_at = time.perf_counter()
-
-            def _verify_tx(tx: neo4j.ManagedTransaction):
-                return tx.run(
-                    verify_canonical_ids_query,
-                    canonical_pid=canonical_project_id,
-                    run_id=run_id,
-                ).single()
-
-            invalid_record = session.execute_read(_verify_tx)
-            _log_timed_step("promote.verify_canonical_ids", verify_ids_started_at)
-
-            invalid_count = int(invalid_record["invalid_count"]) if invalid_record else 0
-            if invalid_count:
-                raise RuntimeError(
-                    "Atomic shadow promotion invariant failed: "
-                    f"canonical_shadow_ids={invalid_count}"
-                )
+            session.execute_write(promote)
     finally:
         driver.close()
 
@@ -422,45 +381,7 @@ def _verify_shadow_namespace_cleared(
         )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Structural (Rust-native) indexer")
-    parser.add_argument("project_path")
-    parser.add_argument("project_id")
-    parser.add_argument("--manifest-file", required=True)
-    parser.add_argument(
-        "--neo4j-uri", default=os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
-    )
-    parser.add_argument(
-        "--neo4j-user", default=os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
-    )
-    parser.add_argument(
-        "--neo4j-pass", default=os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
-    )
-    parser.add_argument("--neo4j-db", default=os.getenv("LM_PROXY_NEO4J_DB", "proxy"))
-    args = parser.parse_args()
-
-    print(
-        "[ts-pack:struct] NOTE: For aligned indexing, run the MCP tool "
-        "index_workspace() which generates a shared manifest for struct/semantic.",
-        file=sys.stderr,
-        flush=True,
-    )
-
-    if not os.path.exists(args.manifest_file):
-        print(
-            f"[ts-pack:struct] ERROR: manifest not found: {args.manifest_file}",
-            file=sys.stderr,
-        )
-        return 1
-
-    print(
-        f"[ts-pack:struct] Starting — project={args.project_id} "
-        f"manifest={args.manifest_file}",
-        file=sys.stderr,
-        flush=True,
-    )
-    run_id = f"{args.project_id}:{os.getpid()}:{int(os.times().elapsed * 1_000_000_000)}"
-    shadow_project_id = f"{args.project_id}::shadow::{run_id}"
+def _run_struct_index(args, run_id: str, shadow_project_id: str) -> int:
     struct_started_at = time.perf_counter()
 
     try:
@@ -497,7 +418,7 @@ def main() -> int:
         _log_timed_step("index_workspace", index_started_at, extra=f"files={len(files)}")
     except Exception as exc:
         print(f"[ts-pack:struct] ERROR: {exc}", file=sys.stderr, flush=True)
-        return 1
+        raise RuntimeError("Structural indexing did not complete")
 
     try:
         finalize_started_at = time.perf_counter()
@@ -663,8 +584,63 @@ def main() -> int:
             file=sys.stderr,
             flush=True,
         )
+        raise RuntimeError("Structural indexing did not complete")
 
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Structural (Rust-native) indexer")
+    parser.add_argument("project_path")
+    parser.add_argument("project_id")
+    parser.add_argument("--manifest-file", required=True)
+    parser.add_argument(
+        "--neo4j-uri", default=os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
+    )
+    parser.add_argument(
+        "--neo4j-user", default=os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
+    )
+    parser.add_argument(
+        "--neo4j-pass", default=os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
+    )
+    parser.add_argument("--neo4j-db", default=os.getenv("LM_PROXY_NEO4J_DB", "proxy"))
+    args = parser.parse_args()
+
+    print(
+        "[ts-pack:struct] NOTE: For aligned indexing, run the MCP tool "
+        "index_workspace() which generates a shared manifest for struct/semantic.",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    if not os.path.exists(args.manifest_file):
+        print(
+            f"[ts-pack:struct] ERROR: manifest not found: {args.manifest_file}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"[ts-pack:struct] Starting — project={args.project_id} "
+        f"manifest={args.manifest_file}",
+        file=sys.stderr,
+        flush=True,
+    )
+    run_id = f"{args.project_id}:{os.getpid()}:{int(os.times().elapsed * 1_000_000_000)}"
+    shadow_project_id = f"{args.project_id}::shadow::{run_id}"
+    import neo4j
+    from graphrag_core.indexing.shadow import ShadowLifecycle
+
+    driver = neo4j.GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_pass))
+    try:
+        with ShadowLifecycle(driver, args.neo4j_db, args.project_id, shadow_project_id, run_id):
+            return _run_struct_index(args, run_id, shadow_project_id)
+    except Exception:
+        print("[ts-pack:struct] ERROR: structural run failed; staged evidence retained.",
+              file=sys.stderr, flush=True)
+        return 1
+    finally:
+        driver.close()
 
 
 if __name__ == "__main__":

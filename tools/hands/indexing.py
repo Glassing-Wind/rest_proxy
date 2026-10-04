@@ -424,6 +424,54 @@ async def _list_shadow_project_ids(session, limit: int) -> list[str]:
     ]
 
 
+def stable_shadow_owner(owner: dict) -> str:
+    fields = ("status", "project_id", "run_id", "host", "pid", "heartbeat_at", "reason")
+    return ", ".join(f"{key}={owner[key]}" for key in fields if owner.get(key) is not None)
+
+
+async def _inspect_shadow_run(session, namespace: str) -> dict:
+    """Report tracked ownership; absence or duplicate records means unknown ownership."""
+    rows = await _execute_read(
+        session,
+        "MATCH (s:ShadowRun {namespace:$namespace}) "
+        "OPTIONAL MATCH (p:Project {id:s.project_id}) "
+        "RETURN s.project_id AS project_id, s.run_id AS run_id, s.owner AS owner, "
+        "s.host AS host, s.pid AS pid, s.status AS status, "
+        "s.heartbeat_at AS heartbeat_at, s.finished_at AS finished_at, "
+        "p.struct_index_status AS project_status ORDER BY s.started_at",
+        namespace=namespace, op="inspect_shadow_owner",
+    )
+    if len(rows) != 1:
+        return {"status": "unknown", "reason": "ownership absent or ambiguous"}
+    owner = rows[0]
+    owner["eligible"] = bool(
+        owner.get("status") in {"finished", "failed"}
+        and owner.get("owner") and owner.get("finished_at") is not None
+        and f"{owner.get('project_id')}::shadow::{owner.get('run_id')}" == namespace
+        and owner.get("project_status") not in {"in_progress", "running", "cancelling"}
+    )
+    owner["reason"] = "terminal tracked run" if owner["eligible"] else "protected; activity or ownership uncertain"
+    return owner
+
+
+# Acquire the ownership-record lock before checking eligibility in every deletion
+# transaction. Running/expired/unknown writers are never automatically reclaimed.
+_SHADOW_DELETE_GUARD = """
+MATCH (s:ShadowRun {namespace:$pid})
+SET s.cleanup_lock = coalesce(s.cleanup_lock, 0) + 1
+WITH collect(s) AS owners
+WHERE size(owners) = 1
+WITH owners[0] AS s
+WHERE s.status IN ['finished', 'failed']
+  AND s.owner IS NOT NULL AND s.finished_at IS NOT NULL
+  AND s.project_id + '::shadow::' + s.run_id = $pid
+  AND NOT EXISTS {
+    MATCH (p:Project {id:s.project_id})
+    WHERE p.struct_index_status IN ['in_progress', 'running', 'cancelling']
+  }
+"""
+
+
 def _describe_apple_graph_health(coverage: dict[str, int]) -> list[str]:
     notes: List[str] = []
     if coverage.get("project_files", 0) > 0 and coverage.get("targets", 0) == 0:
@@ -1711,7 +1759,9 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         )
     if shadow_nodes or shadow_rels:
         recommendations.append(
-            "- Stale shadow graph data exists. Run `cleanup_stale_shadow_graph(dry_run=False)` during a quiet indexing window."
+            "- Shadow graph data exists. Inspect ownership with `cleanup_stale_shadow_graph()`; "
+            "deletion via `cleanup_stale_shadow_graph(dry_run=False)` also requires exact namespaces "
+            "and tracked terminal ownership."
         )
 
     if audit:
@@ -1746,9 +1796,10 @@ async def cleanup_stale_shadow_graph(
     node_batch: int = 5000,
     rel_batch: int = 5000,
     max_project_ids: int = 1000,
+    namespaces: Optional[List[str]] = None,
 ) -> str:
     """
-    Inspect or remove stale Neo4j shadow project namespaces.
+    Inspect shadow namespaces or remove explicitly selected, completed staging runs.
 
     Shadow project IDs are used while structural indexing stages a replacement
     graph. Successful promotions remove them. Residue usually means an index
@@ -1759,10 +1810,17 @@ async def cleanup_stale_shadow_graph(
         node_batch: Max nodes to delete per transaction when dry_run is False.
         rel_batch: Max relationships to delete per transaction when dry_run is False.
         max_project_ids: Safety cap for the number of shadow project IDs to process.
+        namespaces: Exact namespace IDs required for deletion; unknown owners are protected.
     """
     node_batch = max(1, int(node_batch or 5000))
     rel_batch = max(1, int(rel_batch or 5000))
     max_project_ids = max(1, int(max_project_ids or 1000))
+
+    if not dry_run and not namespaces:
+        return "Cleanup refused: supply exact namespaces from a dry-run inspection."
+    selected = sorted(set(namespaces or []))
+    if any("::shadow::" not in pid for pid in selected):
+        return "Cleanup refused: every selected namespace must be a shadow project ID."
 
     import graph_bootstrap
 
@@ -1785,9 +1843,12 @@ async def cleanup_stale_shadow_graph(
             lines.append(f"- Shadow nodes: {int(before.get('nodes') or 0)}")
             lines.append(f"- Shadow relationships: {int(before.get('rels') or 0)}")
             if project_ids:
+                for pid in project_ids:
+                    owner = await _inspect_shadow_run(session, pid)
+                    lines.append(f"- Namespace: {pid}; ownership: {stable_shadow_owner(owner)}")
                 lines.append(
-                    "- To clean: run `cleanup_stale_shadow_graph(dry_run=False)` "
-                    "during a quiet indexing window."
+                    "- Cleanup requires dry_run=False and an explicit namespaces list. "
+                    "Only tracked terminal runs are eligible; active and unknown owners are protected."
                 )
             elif int(before.get("nodes") or 0) or int(before.get("rels") or 0):
                 lines.append(
@@ -1806,12 +1867,17 @@ async def cleanup_stale_shadow_graph(
         deleted_nodes = 0
         deleted_rels = 0
         processed = 0
-        for pid in project_ids:
+        protected = []
+        for pid in selected[:max_project_ids]:
+            owner = await _inspect_shadow_run(session, pid)
+            if not owner.get("eligible"):
+                protected.append(pid)
+                continue
             processed += 1
             while True:
                 count = await _execute_write_scalar(
                     session,
-                    """
+                    _SHADOW_DELETE_GUARD + """
                     MATCH ()-[r]->()
                     WHERE r.project_id = $pid
                     WITH r LIMIT $limit
@@ -1829,7 +1895,7 @@ async def cleanup_stale_shadow_graph(
             while True:
                 count = await _execute_write_scalar(
                     session,
-                    """
+                    _SHADOW_DELETE_GUARD + """
                     MATCH (n {project_id: $pid})
                     WITH n LIMIT $limit
                     DETACH DELETE n
@@ -1848,6 +1914,7 @@ async def cleanup_stale_shadow_graph(
 
     lines = ["## Stale Shadow Graph Cleanup"]
     lines.append(f"- Shadow project IDs processed: {processed}")
+    lines.append(f"- Protected active/unknown namespaces: {len(protected)}")
     lines.append(f"- Relationships deleted: {deleted_rels}")
     lines.append(f"- Nodes deleted: {deleted_nodes}")
     lines.append(
