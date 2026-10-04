@@ -124,10 +124,16 @@ class LadybugGraphDriver:
         import ladybug
 
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = db_path
+        from memory.embedded_owner import EmbeddedOwnerLock
+        self.db_path = str(Path(db_path).resolve())
+        self._owner = EmbeddedOwnerLock(self.db_path)
         self._engine = ladybug
-        self._database = ladybug.Database(db_path, buffer_pool_size=buffer_pool_size,
-                                         max_num_threads=2)
+        try:
+            self._database = ladybug.Database(self.db_path, buffer_pool_size=buffer_pool_size,
+                                             max_num_threads=2)
+        except BaseException:
+            self._owner.close()
+            raise
         self._lock = asyncio.Lock()
         self._sessions = set()
         self._closed = False
@@ -184,5 +190,10 @@ class LadybugGraphDriver:
                 raise RuntimeError('Close sessions before closing the driver')
             try:
                 await _finish_thread(self._database.close)
-            finally:
+            except asyncio.CancelledError:
+                # Native close completed before _finish_thread propagates cancellation.
                 self._closed = True
+                self._owner.close()
+                raise
+            self._closed = True
+            self._owner.close()

@@ -13,6 +13,11 @@ SCHEMA_STATEMENTS = (
     *(f'CREATE NODE TABLE IF NOT EXISTS {label}(id STRING PRIMARY KEY, name STRING, '
       'start_line INT64, end_line INT64, signature STRING, project_id STRING)'
       for label in SYMBOL_LABELS),
+    'CREATE NODE TABLE IF NOT EXISTS OutlinePublication('
+    'id STRING PRIMARY KEY, run_id STRING, root_path STRING, manifest_json STRING)',
+    'CREATE NODE TABLE IF NOT EXISTS SourceEvidence('
+    'id STRING PRIMARY KEY, project_id STRING, run_id STRING, path STRING, '
+    'sha256 STRING, content STRING, language STRING, facts_json STRING)',
     'CREATE REL TABLE IF NOT EXISTS CONTAINS(' +
     ', '.join(f'FROM File TO {label}' for label in SYMBOL_LABELS) + ')',
 )
@@ -27,6 +32,11 @@ FILE_SYMBOL_QUERY = ' UNION ALL '.join(
 SCHEMA_COLUMNS = {
     'EmbeddedSchema': {'id': 'STRING', 'version': 'INT64'},
     'File': {'id': 'STRING', 'path': 'STRING', 'project_id': 'STRING'},
+    'OutlinePublication': {'id': 'STRING', 'run_id': 'STRING', 'root_path': 'STRING',
+                           'manifest_json': 'STRING'},
+    'SourceEvidence': {'id': 'STRING', 'project_id': 'STRING', 'run_id': 'STRING',
+                       'path': 'STRING', 'sha256': 'STRING', 'content': 'STRING',
+                       'language': 'STRING', 'facts_json': 'STRING'},
     **{label: {'id': 'STRING', 'name': 'STRING', 'start_line': 'INT64',
                'end_line': 'INT64', 'signature': 'STRING', 'project_id': 'STRING'}
        for label in SYMBOL_LABELS},

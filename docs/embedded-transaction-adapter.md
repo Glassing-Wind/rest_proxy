@@ -78,3 +78,7 @@ passed on Python 3.14. Native tests include all 13 symbol labels, null signature
 file scoping, schema idempotence, incompatible-schema rejection and bootstrap
 with external graph construction forbidden. Full local CI passed. Receipt:
 [Ladybug integration](../benchmarks/reports/2026-10-04/ladybug-integration.json).
+
+The subsequent [owned outline publisher](owned-embedded-outlines.md) adds an OS
+owner lock and atomic source/outline publication. Its standalone CLI remains
+separate from the guarded MCP indexing pipeline.

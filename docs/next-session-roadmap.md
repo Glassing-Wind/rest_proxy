@@ -2,6 +2,12 @@
 
 ## Current checkpoint — October 4, 2026
 
+[Owned embedded outlines](owned-embedded-outlines.md) now publish structural
+file/symbol snapshots and originals atomically, protected by a local database
+owner lock. Network-denied indexing/reopen inspected 128 production Python files
+and 1,122 symbols. The remaining query corpus, owner routing, LanceDB and
+coordinated graph/vector publication remain Priority 2 work.
+
 The [embedded transaction adapter](embedded-transaction-adapter.md) now passes
 native Python 3.14 rollback, cancellation, read-only and persistence checks.
 Application bootstrap now selects Ladybug in embedded mode and supports explicit
