@@ -513,6 +513,7 @@ def register(mcp: FastMCP) -> None:
         intent: str = "",
         include_admin: bool = False,
         limit: int = 25,
+        tool_name: str = "",
     ) -> str:
         """
         Choose the right MCP tool for an indexed-repo task.
@@ -522,8 +523,22 @@ def register(mcp: FastMCP) -> None:
                 "architecture", "retrieval QA", or "change review".
             include_admin: Include destructive/admin-only tools when true.
             limit: Maximum number of catalog entries to return.
+            tool_name: Exact tool name to retrieve its argument schema for dispatch.
         """
 
+        if tool_name:
+            import json
+            from tools.brain.primary import DEEP_ANALYSIS_TOOL_NAMES
+
+            tool = mcp._tool_manager.get_tool(tool_name)
+            if tool is None:
+                return f"Unknown tool: {tool_name}"
+            return json.dumps({
+                "name": tool.name,
+                "description": tool.description,
+                "inputSchema": tool.parameters,
+                "dispatch_allowed": tool_name in DEEP_ANALYSIS_TOOL_NAMES,
+            }, sort_keys=True)
         return render_tool_catalog(
             intent=intent, include_admin=include_admin, limit=limit
         )

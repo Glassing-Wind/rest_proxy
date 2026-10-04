@@ -189,6 +189,27 @@ class CrossProjectToolTests(unittest.TestCase):
         preview = self.module._symbol_centered_preview(content, "detect_language", limit=180)
         self.assertIn("pub fn detect_language", preview)
         self.assertLessEqual(len(preview), 180)
+    def test_graph_usage_is_scoped_to_both_projects(self):
+        captured = {}
+
+        async def fake_execute_read(session, cypher, **kwargs):
+            if kwargs.get("op") == "trace_symbol_graph_usages":
+                captured.update(query=cypher, params=kwargs)
+                self.assertIn("MATCH (target {project_id: $spid})", cypher)
+                self.assertEqual(kwargs["spid"], "srcid")
+                self.assertEqual(kwargs["tpid"], "tgtid")
+                return [{"caller_name": "real_consumer", "caller_file": "consumer.py",
+                         "caller_line": 10, "caller_kind": "Function"}]
+            return []
+
+        with mock.patch.dict(sys.modules, {
+            "graph_bootstrap": self.graph_bootstrap_mod,
+            "embedding_service": fake_embedding_module(),
+        }), mock.patch.object(self.search_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(self.mcp.tools["trace_symbol_cross_project"]("shared_name", "src", "tgt"))
+        self.assertIn("real_consumer", output)
+        self.assertEqual(captured["params"]["names"], ["shared_name"])
+
     def test_trace_symbol_cross_project_resolves_export_alias_definition(self):
         async def fake_execute_read(session, cypher, **kwargs):
             op = kwargs.get("op")
@@ -207,6 +228,7 @@ class CrossProjectToolTests(unittest.TestCase):
                 ]
             if op == "trace_symbol_graph_usages":
                 self.assertEqual(kwargs.get("names"), ["OpencodeClientConfig", "Config"])
+                self.assertEqual(kwargs.get("spid"), "srcid")
                 return []
             return []
 

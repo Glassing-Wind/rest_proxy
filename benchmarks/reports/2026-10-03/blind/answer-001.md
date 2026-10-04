@@ -1,0 +1,22 @@
+Question: Explain how the shared HTTP MCP server starts, registers tools, and exposes its health endpoints.
+
+The shared HTTP MCP server is `brain_server.py`: a **Starlette application serving stateful Streamable HTTP at `/mcp`**, separate from the FastAPI inference proxy.
+
+1. **Startup.** The documented entry point is `scripts/start_brain_server_daemon.sh`. It takes a startup lock, checks for an existing server, then launches the startup wrapper with `nohup`, redirects output to a log, and records the PID. The wrapper loads the repository `.env`, chooses Python with Uvicorn available, sets `LM_PROXY_TRANSPORT=http`, and runs `uvicorn brain_server:app` with **one worker**, bound to `127.0.0.1`, default port `8001`. See [operations.md:5](/Users/michaelmarler/Projects/rest_proxy/docs/operations.md:5), [daemon script:17](/Users/michaelmarler/Projects/rest_proxy/scripts/start_brain_server_daemon.sh:17), and [startup wrapper:11](/Users/michaelmarler/Projects/rest_proxy/scripts/start_brain_server.sh:11). Direct execution of `brain_server.py` also starts Uvicorn on `127.0.0.1:8001` ([brain_server.py:347](/Users/michaelmarler/Projects/rest_proxy/brain_server.py:347)).
+
+2. **Tool registration happens during import.** `brain_server.py` imports the shared `mcp` object from `_mcp.py`. That module loads environment settings, creates `FastMCP("graphrag-brain", stateless_http=False)`, and immediately calls `register_all(mcp)`. The STDIO entry point uses the same module-defined instance within its own process ([‌_mcp.py:1](/Users/michaelmarler/Projects/rest_proxy/_mcp.py:1)). `register_all` registers memory, catalog, code search/intelligence, development, documentation, indexing, graph, search, project tools, and the primary dispatcher ([tools/__init__.py:10](/Users/michaelmarler/Projects/rest_proxy/tools/__init__.py:10)). Individual registration functions expose callables using `@mcp.tool()`; see [search/tools.py:8](/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/tools.py:8).
+
+   With `LM_PROXY_TOOL_PROFILE=primary`, `compact`, or `agent`, registration additionally filters tool **discovery** to the primary list. It does not remove the other registered tools or establish an authorization boundary ([tools/__init__.py:29](/Users/michaelmarler/Projects/rest_proxy/tools/__init__.py:29), [primary.py:48](/Users/michaelmarler/Projects/rest_proxy/tools/brain/primary.py:48)).
+
+3. **Application startup manages shared services and MCP sessions.** The lifespan handler registers the running event loop for jobs, attempts to open the optional memory database pool with nonfatal error handling, loads watcher configuration, and starts the file watcher. It then enters `mcp.session_manager.run()` around the serving lifetime. Normal shutdown stops the watcher and closes the memory pool ([brain_server.py:146](/Users/michaelmarler/Projects/rest_proxy/brain_server.py:146)).
+
+4. **Routing exposes health before the MCP mount.** The server builds `mcp.streamable_http_app()` and mounts it at `/`, preserving its internal `/mcp` path. Explicit health and fingerprint routes come first, so the mount does not swallow them. The outer app also installs session-context and MCP request-logging middleware ([brain_server.py:324](/Users/michaelmarler/Projects/rest_proxy/brain_server.py:324)).
+
+   | Endpoint | Response |
+   |---|---|
+   | `/` and `/health` | The same JSON health response: server name, protocol versions, `/mcp` transport path, tool count, boot ID, fingerprint, uptime, session information, and `"status": "online"`. |
+   | `/fingerprint` | A smaller diagnostic response containing boot ID, fingerprint, tool count, uptime, and session information. |
+
+   Response implementations are at [brain_server.py:279](/Users/michaelmarler/Projects/rest_proxy/brain_server.py:279) and [brain_server.py:303](/Users/michaelmarler/Projects/rest_proxy/brain_server.py:303). Both add `x-graphrag-boot-id`, `x-graphrag-tool-fingerprint`, `x-graphrag-session-known`, and `x-graphrag-active-sessions` headers ([brain_server.py:130](/Users/michaelmarler/Projects/rest_proxy/brain_server.py:130)).
+
+**Limits and uncertainty:** These endpoints report process/transport diagnostics; they do not probe database availability, watcher health, or indexing readiness. `"online"` is unconditional once the health handler runs, and the tool count reflects the discovery filter when enabled. This was a source-only investigation: I did not verify a running server, installed SDK behavior, or environment-dependent configuration.

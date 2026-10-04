@@ -54,8 +54,9 @@ def _implementation_source_files(
         except Exception:
             continue
         if root.is_file():
-            if root.suffix == ".py":
-                paths.add(str(root))
+            # Explicit roots include dependency manifests as well as Python.
+            # Directory discovery remains Python-only to avoid hashing data/secrets.
+            paths.add(str(root))
             continue
         if not root.is_dir():
             continue

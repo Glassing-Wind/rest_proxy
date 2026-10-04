@@ -281,9 +281,24 @@ def _index_signature(
 
 
 async def init_graph_db() -> None:
-    """Initialize Neo4j driver and ensure basic schema constraints exist."""
+    """Initialize Neo4j or embedded Kùzu driver and ensure basic schema constraints exist."""
     global _driver, _last_init_error, _last_init_error_at
     async with _get_init_lock():
+        backend = os.getenv("LM_PROXY_STORAGE_BACKEND", "").strip().lower()
+        graph_backend = os.getenv("LM_PROXY_GRAPH_BACKEND", "").strip().lower()
+        if backend == "embedded" or graph_backend == "kuzu":
+            try:
+                from memory.embedded_kuzu import get_embedded_kuzu_driver
+                _driver = get_embedded_kuzu_driver()
+                _last_init_error = None
+                _debug("kuzu_embedded_connected", db_path=_driver.db_path)
+                return
+            except Exception as exc:
+                _debug("kuzu_embedded_init_failed", error=str(exc))
+                _last_init_error = str(exc)
+                _driver = None
+                return
+
         if not _NEO4J_ENABLED:
             _debug("graph_disabled")
             return

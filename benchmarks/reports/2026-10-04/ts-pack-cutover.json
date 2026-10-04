@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-04",
+  "fork_commit": "4342fa4251d5abed1ce8c5da595680189ca2b962",
+  "fork_source_tree": "4dd3a756c9079e5860bf78fd0501dc388c7d8d73",
+  "draft_pr": "https://github.com/Zmaroo/tree-sitter-language-pack/pull/1",
+  "pins_updated": [
+    "requirements.txt",
+    "requirements-ci.txt"
+  ],
+  "wheel": {
+    "path": ".runtime/ts-pack-120-published-wheels/tree_sitter_language_pack-1.20.0-cp310-abi3-macosx_11_0_arm64.whl",
+    "sha256": "3cbb22e637cc1c7fa650c9fa54683586711863d5654f42e97c5f234230043027",
+    "origin": "fresh wheel build from exact published Git SHA, not local source tree"
+  },
+  "installed_runtime": ".venv -> .runtime/python314-verify/venv",
+  "installed_version": "1.20.0",
+  "checks": {
+    "remote_wheel_contracts": "4 passed",
+    "pip_check": "passed",
+    "full_project_ci": "passed",
+    "daemon_freshness": "passed",
+    "live_daemon_native_library_path": ".runtime/python314-verify/venv/lib/python3.14/site-packages/tree_sitter_language_pack/_native.abi3.so",
+    "direct_mcp_transport_parity": {
+      "passed": 68,
+      "skipped": 0,
+      "scope": "normalized direct vs transport outputs; content goldens not evaluated"
+    },
+    "full_live_golden_suite": "failed on pre-existing rental_app_flow_summary expected 81 links vs actual 80; old/new wheel outputs identical",
+    "isolated_index": {
+      "parsed_files": 11,
+      "skipped": 0,
+      "semantic_chunks": 64,
+      "synthetic_embeddings": true
+    },
+    "isolated_registered_tool_probes": "passed"
+  },
+  "daemon": {
+    "boot_id": "3774-805cdc87",
+    "fingerprint": "88fd6e2281aa",
+    "tools": 60
+  },
+  "platform_ci": {
+    "run": "https://github.com/Zmaroo/tree-sitter-language-pack/actions/runs/37206638721",
+    "macos": "passed",
+    "ubuntu": "passed",
+    "windows": "passed",
+    "overall": "success"
+  },
+  "rollback": {
+    "pin": "1ed4fa08816e051337e12123c1f4585ec8e6ac16",
+    "script": ".runtime/ts-pack-120-cutover/rollback.sh",
+    "wheel": ".runtime/python314-wheels/tree_sitter_language_pack-1.4.1-cp310-abi3-macosx_11_0_arm64.whl"
+  },
+  "snapshot_correction": "Earlier staged source tar omitted tested Cargo.toml changes; published commit and freshly built wheel include them. Corrected published source tar retained.",
+  "enterprise_distribution_limits": [
+    "Historical Neo4j crate notices and downloaded grammar packaging remain unresolved.",
+    "No blanket legal approval or controlled coding outcome advantage claimed."
+  ],
+  "rest_proxy_changes_committed": false
+}

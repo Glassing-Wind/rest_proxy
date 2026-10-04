@@ -83,6 +83,8 @@ if __name__ == "__main__":
             from memory.bootstrap import bootstrap_schema
             ok = await bootstrap_schema()
             print(f"[lm-proxy] Bootstrap complete ok={ok}", file=sys.stderr)
+            if not ok:
+                raise SystemExit(1)
 
         asyncio.run(_run_bootstrap())
     else:

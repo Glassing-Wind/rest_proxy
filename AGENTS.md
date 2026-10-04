@@ -8,6 +8,21 @@
 # 3.11+, with async I/O and optional integrations (Neo4j, Postgres/pgvector,
 # Redis, LM Studio). The server is resilient: optional dependencies should not
 # break request flow when missing.
+#
+# Product goal: supply coding agents (including Codex and open-source models)
+# with trustworthy repository evidence and measurably better investigation tools.
+# The LM Studio inference proxy is a separate, optional compatibility layer.
+# Do not interpret improving the agent/tooling stack as a request to migrate the
+# proxy's inference provider. Read docs/next-session-roadmap.md and the latest
+# benchmarks/reports evidence before choosing enterprise-readiness work.
+#
+# Tool choice: for unfamiliar indexed-repo investigations, check indexing health
+# and project overview, then use semantic search, symbol context, callers, and
+# provenance as the question requires. For a known file, prefer bounded source
+# evidence (describe_file with include_source=True) or a direct file read; do not
+# force semantic discovery for exact lookups. Count native fallbacks in evaluations.
+# Passing tool contracts is not evidence of lower end-to-end latency, token usage,
+# or better coding outcomes; those claims require controlled paired measurements.
 
 # ------------------------------------------------------------------------------
 # Build / Run / Lint / Test Commands

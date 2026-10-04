@@ -26,7 +26,7 @@ Individual indexed features naturally require their corresponding service.
 
 ## Requirements
 
-- Python 3.11 or newer.
+- Python 3.14 recommended (3.11 remains the compatibility floor).
 - `rg` (ripgrep) for exact-search fallbacks.
 - LM Studio or another compatible inference endpoint for proxy requests and
   local embeddings.
@@ -41,10 +41,8 @@ You can run the HTTP proxy without enabling every indexed or memory feature.
 Create an environment and install dependencies:
 
 ```bash
-python3 -m venv .venv
+./scripts/setup_project_python.sh
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
 ```
 
 Create local configuration:
@@ -85,6 +83,11 @@ curl -sS http://127.0.0.1:8000/health
 The proxy exposes OpenAI-compatible `/v1/models` and `/v1/chat/completions`
 routes and forwards requests to `LM_BASE`, which defaults to LM Studio at
 `http://127.0.0.1:1234`.
+
+Set `LM_PROXY_PROVIDER=openai` and supply `OPENAI_API_KEY` to use GPT-6 Sol
+through OpenAI Responses while retaining the Chat Completions client interface.
+Local embeddings and GraphRAG services continue using their existing configuration.
+See [OpenAI setup, validation, and rollback](docs/openai.md).
 
 ## Recommended agent workflow
 
@@ -154,3 +157,28 @@ The pinned `tree_sitter_language_pack` fork and CI policy are documented in
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+The [evidence-driven tooling plan](docs/enterprise-tooling-plan.md) distinguishes
+verified tooling behavior from embedded-backend experiments and productivity
+claims. See [development appliance setup](docs/development-appliance.md) for
+portable Compose configuration and its validation limits.
+
+## Product direction
+
+**FIRE — Find, Integrate, Retrieve, Explain** names the platform direction:
+persistent evidence and task continuity across context compaction, with a bounded
+working set for each model request. See [FIRE contracts and acceptance](docs/fire-platform.md).
+
+The planned native embedded distribution combines LadybugDB and LanceDB with
+persistent context and bounded, evidence-backed working sets. Context assembly
+selects and concatenates relevant source and task memory for MCP clients and an
+optional REST inference proxy. Docker is optional packaging. This direction is
+not yet a fully integrated embedded backend or an unlimited model context window.
+See [context platform direction](docs/context-platform-direction.md) and
+[native verification](docs/native-embedded-verification.md).
+
+The [integrated platform plan](docs/integrated-platform-plan.md) coordinates
+implementation milestones, native packaging, context continuity and Python migration.
+
+See [Python 3.14 runtime setup and rollback](docs/python314-runtime.md).

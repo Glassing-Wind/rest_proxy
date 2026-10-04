@@ -1,0 +1,174 @@
+{
+  "review_type": "independent static source verification",
+  "scale": {
+    "4": "Accurate and complete for requested scope; valid citations; no unsupported material claims.",
+    "3": "Minor substantive defect or omission.",
+    "2": "Material gaps or inaccuracies.",
+    "1": "Mostly unreliable.",
+    "0": "Absent or fundamentally wrong."
+  },
+  "blinding": "Read only blind instructions and six question/answer files plus repository source. No sibling artifacts, keys, benchmark reports/cases, histories, runtime registries or credentials inspected. Answer prose may partially reveal provenance; conditions and metrics remained hidden.",
+  "method": "Static source reads only; no repository changes, application/tests execution, services or delegation. Repeated-question answers independently checked against shared source.",
+  "limitations": "No conclusions about index freshness, live service outcomes, latency or token savings. Grading reflects requested major stages, not exhaustive documentation of every configuration.",
+  "answers": [
+    {
+      "answer_id": "answer-001",
+      "topic": "code search",
+      "scores": {
+        "correctness": 4,
+        "completeness": 4,
+        "citation_validity": 4,
+        "unsupported_claims": 4
+      },
+      "overall": "pass",
+      "material_errors": [],
+      "material_omissions": [],
+      "unsupported_material_claims": [],
+      "notes": [
+        {
+          "severity": "nonblocking precision caveat",
+          "detail": "Ordinary-query metadata boosts/surface penalties depend on include_metadata. Defaults activate it through test filters or meta_boost, but an explicitly unfiltered metadata-disabled configuration sorts ordinary queries by RRF alone. The answers correctly describe the major/default path; this condition could be explicit.",
+          "source": "memory/code_retrieval.py:298-306,328-392"
+        }
+      ],
+      "verified_claims": "Verified semantic-anchored 2:1 RRF, intent ranking, indexed rescue gates, lexicographic order, clone/file dedup, caps, nonempty-only grep supplement and distinct store-level Neo4j fallback.",
+      "source_evidence": [
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic.py:190-196",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/code_retrieval.py:105-238,274-425,427-680",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/code_retrieval_postprocess.py:39-78",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/retrieval_duplicates.py:499-568",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/store_search.py:175-290"
+      ],
+      "citation_assessment": "Cited paths and locations support substantive claims; some links mark the start or end of a relevant block rather than every supporting line."
+    },
+    {
+      "answer_id": "answer-002",
+      "topic": "cross-project trace",
+      "scores": {
+        "correctness": 4,
+        "completeness": 4,
+        "citation_validity": 4,
+        "unsupported_claims": 4
+      },
+      "overall": "pass",
+      "material_errors": [],
+      "material_omissions": [],
+      "unsupported_material_claims": [],
+      "notes": [],
+      "verified_claims": "Verified directed project resolution, exact/alias definition ranking, name-based graph consumers, Enum discrepancy, substring-constrained retrieval, five-file selection and graph-first suggestion.",
+      "source_evidence": [
+        "/Users/michaelmarler/Projects/rest_proxy/_helpers.py:19-39,106-162",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/cross_project_trace.py:48-138,190-490",
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/cross_project.py:40-48"
+      ],
+      "citation_assessment": "Cited paths and locations support substantive claims; some links mark the start or end of a relevant block rather than every supporting line."
+    },
+    {
+      "answer_id": "answer-003",
+      "topic": "cross-project trace",
+      "scores": {
+        "correctness": 4,
+        "completeness": 4,
+        "citation_validity": 4,
+        "unsupported_claims": 4
+      },
+      "overall": "pass",
+      "material_errors": [],
+      "material_omissions": [],
+      "unsupported_material_claims": [],
+      "notes": [
+        {
+          "severity": "optional additional limitation",
+          "detail": "Could additionally mention that embedding/PostgreSQL failure discards previously found graph evidence through the wrapper error return. Not required to explain definition/consumer selection.",
+          "source": "tools/brain/search/cross_project.py:40-48"
+        }
+      ],
+      "verified_claims": "Verified directed project resolution, exact/alias definition ranking, name-based graph consumers, Enum discrepancy, substring-constrained retrieval, five-file selection and graph-first suggestion.",
+      "source_evidence": [
+        "/Users/michaelmarler/Projects/rest_proxy/_helpers.py:19-39,106-162",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/cross_project_trace.py:48-138,190-490",
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/cross_project.py:40-48"
+      ],
+      "citation_assessment": "Cited paths and locations support substantive claims; some links mark the start or end of a relevant block rather than every supporting line."
+    },
+    {
+      "answer_id": "answer-004",
+      "topic": "symbol context",
+      "scores": {
+        "correctness": 4,
+        "completeness": 4,
+        "citation_validity": 4,
+        "unsupported_claims": 4
+      },
+      "overall": "pass",
+      "material_errors": [],
+      "material_omissions": [],
+      "unsupported_material_claims": [],
+      "notes": [],
+      "verified_claims": "Verified graph requirement, direct/inferred edges together, ambiguity handling, no source-based graph recovery, local preview then indexed SQL preview, distinct cap behavior and swallowed preview errors.",
+      "source_evidence": [
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/core.py:1065-1234",
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/symbol_graph.py:35-75,321-506,783-835,992-1009",
+        "/Users/michaelmarler/Projects/rest_proxy/graph_bootstrap.py:423-435"
+      ],
+      "citation_assessment": "Cited paths and locations support substantive claims; some links mark the start or end of a relevant block rather than every supporting line."
+    },
+    {
+      "answer_id": "answer-005",
+      "topic": "symbol context",
+      "scores": {
+        "correctness": 4,
+        "completeness": 4,
+        "citation_validity": 4,
+        "unsupported_claims": 4
+      },
+      "overall": "pass",
+      "material_errors": [],
+      "material_omissions": [],
+      "unsupported_material_claims": [],
+      "notes": [],
+      "verified_claims": "Verified graph requirement, direct/inferred edges together, ambiguity handling, no source-based graph recovery, local preview then indexed SQL preview, distinct cap behavior and swallowed preview errors.",
+      "source_evidence": [
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/core.py:1065-1234",
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/symbol_graph.py:35-75,321-506,783-835,992-1009",
+        "/Users/michaelmarler/Projects/rest_proxy/graph_bootstrap.py:423-435"
+      ],
+      "citation_assessment": "Cited paths and locations support substantive claims; some links mark the start or end of a relevant block rather than every supporting line."
+    },
+    {
+      "answer_id": "answer-006",
+      "topic": "code search",
+      "scores": {
+        "correctness": 4,
+        "completeness": 4,
+        "citation_validity": 4,
+        "unsupported_claims": 4
+      },
+      "overall": "pass",
+      "material_errors": [],
+      "material_omissions": [],
+      "unsupported_material_claims": [],
+      "notes": [
+        {
+          "severity": "nonblocking precision caveat",
+          "detail": "Ordinary-query metadata boosts/surface penalties depend on include_metadata. Defaults activate it through test filters or meta_boost, but an explicitly unfiltered metadata-disabled configuration sorts ordinary queries by RRF alone. The answers correctly describe the major/default path; this condition could be explicit.",
+          "source": "memory/code_retrieval.py:298-306,328-392"
+        }
+      ],
+      "verified_claims": "Verified semantic-anchored 2:1 RRF, intent ranking, indexed rescue gates, lexicographic order, clone/file dedup, caps, nonempty-only grep supplement and distinct store-level Neo4j fallback.",
+      "source_evidence": [
+        "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/semantic.py:190-196",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/code_retrieval.py:105-238,274-425,427-680",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/code_retrieval_postprocess.py:39-78",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/retrieval_duplicates.py:499-568",
+        "/Users/michaelmarler/Projects/rest_proxy/memory/store_search.py:175-290"
+      ],
+      "citation_assessment": "Cited paths and locations support substantive claims; some links mark the start or end of a relevant block rather than every supporting line."
+    }
+  ],
+  "summary": {
+    "pass": 6,
+    "qualified": 0,
+    "fail": 0
+  }
+}

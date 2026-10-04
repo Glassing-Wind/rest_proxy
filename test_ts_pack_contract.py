@@ -9,16 +9,13 @@ import tree_sitter_language_pack as ts_pack
 def _ensure_language_available(test_case: unittest.TestCase, language: str) -> None:
     """Hydrate parser assets the same way the indexer does before parsing."""
     try:
-        if ts_pack.has_language(language):
-            return
-        ts_pack.download([language])
+        # Known manifest names are not proof that a parser is installed. Opening
+        # the parser follows the same automatic hydration path as real parsing.
+        parser = ts_pack.get_parser(language)
     except Exception as exc:
-        test_case.fail(f"tree_sitter_language_pack.download({language!r}) failed: {exc}")
+        test_case.fail(f"tree_sitter_language_pack.get_parser({language!r}) failed: {exc}")
+    test_case.assertIsNotNone(parser, f"required parser is unavailable: {language!r}")
 
-    test_case.assertTrue(
-        ts_pack.has_language(language),
-        f"tree_sitter_language_pack could not hydrate required language {language!r}",
-    )
 
 
 class TsPackContractTests(unittest.TestCase):

@@ -24,6 +24,7 @@ pick_python() {
     local -a candidates=(
         "${LM_PROXY_PYTHON:-}"
         "${LM_PROXY_INDEX_PYTHON:-}"
+        "$REPO/.venv/bin/python"
         "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
         "$(command -v python3 2>/dev/null || true)"
         "$(command -v python 2>/dev/null || true)"

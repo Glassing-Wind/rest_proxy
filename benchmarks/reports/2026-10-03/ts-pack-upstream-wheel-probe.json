@@ -1,0 +1,30 @@
+{
+  "python": "3.14.4",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "package_version": "1.20.0",
+  "native_import": "passed",
+  "required_exports": {
+    "ProcessConfig": true,
+    "process": true,
+    "detect_language": true,
+    "detect_language_from_extension": true,
+    "has_language": true,
+    "download": true,
+    "build_semantic_payload": false,
+    "build_line_window_chunks": false,
+    "build_swift_chunks": false,
+    "execute_codebase_embedding_upsert": false,
+    "execute_semantic_index_driver": false
+  },
+  "process_signature": "(source: str, config: tree_sitter_language_pack.options.ProcessConfig | None = None) -> tree_sitter_language_pack.options.ProcessResult",
+  "process_config_signature": "(language: 'str' = '', structure: 'bool' = True, imports: 'bool' = True, exports: 'bool' = True, comments: 'bool' = False, docstrings: 'bool' = False, symbols: 'bool' = False, diagnostics: 'bool' = False, chunk_max_size: 'int | None' = None, data_extraction: 'bool' = False, max_source_bytes: 'int | None' = None, parse_timeout_ms: 'int | None' = None) -> None",
+  "existing_process_contract": {
+    "passed": false,
+    "result_type": "ProcessResult"
+  },
+  "upstream_process_probe": {
+    "passed": true,
+    "result_type": "ProcessResult",
+    "structure_count": 1
+  }
+}

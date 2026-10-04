@@ -1,0 +1,49 @@
+{
+  "synthetic_embeddings": true,
+  "initial": {
+    "synthetic_embeddings": true,
+    "tools": 12,
+    "calls": {
+      "index_workspace": "Indexing started in background.\n  job_id:      408f7838\n  project_id:  eab0d61a99b6\n  files found: 1\n\nUse get_index_status('408f7838') to monitor progress. A file parse summary will appear when the job completes.",
+      "get_index_status": "Job 408f7838: DONE\n  project:    /workspace\n  project_id: eab0d61a99b6\n  files:      1\n  runtime:    /usr/local/bin/python [sys.executable]\n  elapsed:    9.1s\n  struct:     exit 0 (ok)\n  semantic:   exit 0 (ok)\n  struct_run: eab0d61a99b6:71:4296322500000000\n  semantic_run: eab0d61a99b6:semantic:fe9a47aa629d\n  semantic_struct_run: eab0d61a99b6:71:4296322500000000\n  aligned:    yes\n  maintenance: complete\n  finished:   8.7s total\n  parse_summary: [semantic] [lm-proxy:indexer] File parse summary \u2014 parsed=1 skipped=0\n\nRecent log lines (last 20):\n[struct] [ts-pack:timing] promote.promote_nodes: 0.03s\n[struct] [ts-pack:timing] promote.promote_rels: 0.01s\n[struct] [ts-pack:timing] promote.cleanup_shadow_nodes: 0.01s\n[struct] Received notification from DBMS server: <GqlStatusObject gql_status='01N52', status_description='warn: property key does not exist. The property `file_id` does not exist. Verify that the spelling is correct.', position=<SummaryInputPosition line=7, column=15, offset=192>, raw_classification='UNRECOGNIZED', classification=<NotificationClassification.UNRECOGNIZED: 'UNRECOGNIZED'>, raw_severity='WARNING', severity=<NotificationSeverity.WARNING: 'WARNING'>, diagnostic_record={'_classification': 'UNRECOGNIZED', '_severity': 'WARNING', '_position': {'offset': 192, 'line': 7, 'column': 15}, 'OPERATION': '', 'OPERATION_CODE': '0', 'CURRENT_SCHEMA': '/'}> for query: \"\\n    MATCH (n:Node {project_id:$canonical_pid})\\n    WHERE NOT n:Project AND NOT n:IndexRun\\n      AND n.last_promoted_run = $run_id\\n      AND (\\n        n.id CONTAINS '::shadow::'\\n        OR (n.file_id IS NOT NULL AND n.file_id CONTAINS '::shadow::')\\n      )\\n    RETURN count(n) AS invalid_count\\n    \"\n[struct] Received notification from DBMS server: <GqlStatusObject gql_status='01N52', status_description='warn: property key does not exist. The property `file_id` does not exist. Verify that the spelling is correct.', position=<SummaryInputPosition line=7, column=41, offset=218>, raw_classification='UNRECOGNIZED', classification=<NotificationClassification.UNRECOGNIZED: 'UNRECOGNIZED'>, raw_severity='WARNING', severity=<NotificationSeverity.WARNING: 'WARNING'>, diagnostic_record={'_classification': 'UNRECOGNIZED', '_severity': 'WARNING', '_position': {'offset': 218, 'line': 7, 'column': 41}, 'OPERATION': '', 'OPERATION_CODE': '0', 'CURRENT_SCHEMA': '/'}> for query: \"\\n    MATCH (n:Node {project_id:$canonical_pid})\\n    WHERE NOT n:Project AND NOT n:IndexRun\\n      AND n.last_promoted_run = $run_id\\n      AND (\\n        n.id CONTAINS '::shadow::'\\n        OR (n.file_id IS NOT NULL AND n.file_id CONTAINS '::shadow::')\\n      )\\n    RETURN count(n) AS invalid_count\\n    \"\n[struct] [ts-pack:timing] promote.verify_canonical_ids: 0.02s\n[struct] [ts-pack:timing] promote_struct_shadow_graph: 0.10s\n[struct] [ts-pack:shadow] Promoted \u2014 shadow namespace eab0d61a99b6::shadow::eab0d61a99b6:71:4296322500000000 is now canonical eab0d61a99b6.\n[struct] [ts-pack:timing] set_struct_run_status(done): 0.05s\n[struct] [ts-pack:timing] struct_total: 7.86s \u2014 project=eab0d61a99b6\n[semantic] [lm-proxy:indexer] Semantic phase \u2014 1 files (device=fake(768), embed_batch=64, write_batch=1024, chunk_concurrency=64)\n[semantic] [lm-proxy:indexer] ts_pack preflight \u2014 downloading 1 languages\n[semantic] [lm-proxy:indexer] Semantic chunking \u2014 native ts-pack manifest path\n[semantic] [lm-proxy:indexer] Chunked 1 files in 0.01s\n[semantic] [lm-proxy:indexer] File parse summary \u2014 parsed=1 skipped=0\n[semantic] [lm-proxy:indexer] Semantic prepare \u2014 0.00s (existing=1 orphans=0 pruned=0 new=0)\n[semantic] [lm-proxy:indexer] 1 chunks already indexed \u2014 skipping unchanged\n[semantic] [lm-proxy:indexer] Semantic file role graph promotion \u2014 matched=1 files=1 non_empty=1\n[semantic] [lm-proxy:indexer] Done \u2014 0 new / 1 skipped / 1 files in 4.22s (parsed=1 skipped_files=0)\n[semantic] [lm-proxy:indexer] Ingest timing \u2014 embed=0.00s/0 calls/0 chunks, pg_write=0.00s/0 calls/0 chunks, neo4j_link=0.00s/0 refs",
+      "get_indexing_health": "# Indexing Health Audit: `/workspace`\nProject ID: `eab0d61a99b6`\n\n## 1. Synchronization (Level 1)\n  - Files on disk:             1\n  - Files in structural index: 1\n  - Files in semantic index:   1\n  - **Sync Status**: \u2705 Healthy\n\n## 1.5 Run Alignment\n  - Structural status:        `done`\n  - Structural active run:    `eab0d61a99b6:71:4296322500000000`\n  - Structural last success:  `eab0d61a99b6:71:4296322500000000`\n  - Semantic status:          `done`\n  - Semantic active run:      `eab0d61a99b6:semantic:fe9a47aa629d`\n  - Semantic last success:    `eab0d61a99b6:semantic:fe9a47aa629d`\n  - Semantic target struct:   `eab0d61a99b6:71:4296322500000000`\n  - Semantic active struct:   `eab0d61a99b6:71:4296322500000000`\n  - **Run Alignment**:        \u2705 Aligned\n\n## 2. Structural Integrity (Level 2)\n  - **Parse Success Rate**: 100.0% (1/1 source-eligible files)\n  - *Hint: Add `audit=True` to run a deep fidelity check.*\n\n## 4. Recommended Actions\n- No actions required. Everything looks healthy!",
+      "describe_file": "Source: /workspace/service.py\nSHA256: 86283057eb6c3ed773b8db9cc19e494755b1debdddbe99f6d48bd4e5de812c0d\nOrigin: current local file (not indexed content)\nTotal lines: 5\nLines: 1-5\n1: def authenticate(token):\n2:     return validate(token)\n3: \n4: def validate(token):\n5:     return bool(token)\nEnd of file.",
+      "get_symbol_context": "## `authenticate` (Function)\n**File:** `service.py`  Lines 1\u20132\n\n**Calls** (1):\n  - `validate`  in service.py\n\n**Source preview:**\n```python\ndef authenticate(token):\n    return validate(token)\n\ndef validate(token):\n    return bool(token)\n```",
+      "search_codebase": "--- service.py ---\nmeta: lang=python, symbols=2, node_types=2, lines=5\n// File: service.py\ndef authenticate(token):\n    return validate(token)\n\ndef validate(token):\n    return bool(token)\n"
+    },
+    "passed": true
+  },
+  "restart": {
+    "mode": "restart",
+    "synthetic_embeddings": true,
+    "calls": {
+      "describe_file": "Source: /workspace/service.py\nSHA256: 86283057eb6c3ed773b8db9cc19e494755b1debdddbe99f6d48bd4e5de812c0d\nOrigin: current local file (not indexed content)\nTotal lines: 5\nLines: 1-5\n1: def authenticate(token):\n2:     return validate(token)\n3: \n4: def validate(token):\n5:     return bool(token)\nEnd of file.",
+      "get_symbol_context": "## `authenticate` (Function)\n**File:** `service.py`  Lines 1\u20132\n\n**Calls** (1):\n  - `validate`  in service.py\n\n**Source preview:**\n```python\ndef authenticate(token):\n    return validate(token)\n\ndef validate(token):\n    return bool(token)\n```",
+      "search_codebase": "--- service.py ---\nmeta: lang=python, symbols=2, node_types=2, lines=5\n// File: service.py\ndef authenticate(token):\n    return validate(token)\n\ndef validate(token):\n    return bool(token)\n"
+    },
+    "passed": true
+  },
+  "outage": {
+    "mode": "outage",
+    "synthetic_embeddings": true,
+    "calls": {
+      "describe_file": "Source: /workspace/service.py\nSHA256: 86283057eb6c3ed773b8db9cc19e494755b1debdddbe99f6d48bd4e5de812c0d\nOrigin: current local file (not indexed content)\nTotal lines: 5\nLines: 1-5\n1: def authenticate(token):\n2:     return validate(token)\n3: \n4: def validate(token):\n5:     return bool(token)\nEnd of file."
+    },
+    "passed": true
+  },
+  "chunks_before": 1,
+  "chunks_after": 1,
+  "limits": [
+    "Synthetic embeddings verify plumbing, not semantic ranking quality.",
+    "Outage checks cover source reads without graph; not all request paths or automatic pool recovery.",
+    "Local isolated Compose volumes; no production access-control or backup validation."
+  ],
+  "failed_attempts": [
+    "Initial harness falsely accepted a text search error; retained externally as initial-attempt.json.",
+    "A query during storage restart observed a terminated PostgreSQL connection.",
+    "Search telemetry resolved parents[3] under /app and failed; fixed and rebuilt."
+  ],
+  "passed": true,
+  "image_id": "sha256:4416b78332f6664a62d3fa40676c0e02ebb7bbbffa0ae8637f16740c41dd77d8",
+  "image_bytes": 5734841246
+}

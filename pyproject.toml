@@ -9,6 +9,7 @@ dynamic = ["dependencies"]
 description = "FastAPI inference proxy and indexed GraphRAG tooling for AI coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
+classifiers = ["Programming Language :: Python :: 3.11", "Programming Language :: Python :: 3.14"]
 license = "MIT"
 license-files = ["LICENSE"]
 

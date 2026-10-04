@@ -1,0 +1,67 @@
+{
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64",
+    "python": "3.14.4"
+  },
+  "versions": {
+    "ladybug": "0.21.2",
+    "lancedb": "0.39.0",
+    "pyarrow": "25.0.1"
+  },
+  "checks": {
+    "graph_traversal": {
+      "passed": true,
+      "details": true
+    },
+    "explicit_transaction_rollback": {
+      "passed": true,
+      "details": true
+    },
+    "separate_connection_concurrent_reads": {
+      "passed": true,
+      "details": true
+    },
+    "unmodified_describe_file_query": {
+      "passed": false,
+      "error": "Parser exception: Invalid input <MATCH (f:File {id: $fid})-[:CONTAINS]->(s)\n            WHERE s:>: expected rule oC_SingleQuery (line: 2, offset: 19)\n\"            WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Module\"\n                    ^"
+    },
+    "explicit_label_query": {
+      "passed": true,
+      "details": true
+    },
+    "graph_reopen_persistence": {
+      "passed": true,
+      "details": true
+    },
+    "native_full_text": {
+      "passed": true,
+      "details": true
+    },
+    "hybrid_rrf_project_filter": {
+      "passed": true,
+      "details": true
+    },
+    "vector_upsert_idempotence": {
+      "passed": true,
+      "details": true
+    },
+    "project_deletion": {
+      "passed": true,
+      "details": true
+    },
+    "vector_reopen_persistence": {
+      "passed": true,
+      "details": true
+    }
+  },
+  "native_engine_smoke_passed": true,
+  "unmodified_query_compatible": false,
+  "application_embedded_ready": false,
+  "limits": [
+    "Disposable synthetic fixtures; no external services used by this probe.",
+    "Does not exercise full application indexing, native ts-pack or MCP routing.",
+    "Concurrent read smoke only; no concurrent writer/crash or load validation.",
+    "No cross-platform execution or complete license audit."
+  ]
+}

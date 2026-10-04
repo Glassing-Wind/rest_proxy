@@ -1,0 +1,128 @@
+{
+  "reviews": [
+    {
+      "answer_label": "answer-001",
+      "correctness": "passed",
+      "completeness": "passed",
+      "citation_validity": "passed",
+      "unsupported_claims": [],
+      "source_evidence": [
+        "scripts/start_brain_server_daemon.sh:17-68",
+        "scripts/start_brain_server.sh:11-60",
+        "_mcp.py:13-24",
+        "tools/__init__.py:10-31",
+        "tools/brain/primary.py:48-59",
+        "brain_server.py:146-187",
+        "brain_server.py:279-349",
+        "docs/operations.md:5-14"
+      ],
+      "notes": "Accurately explains launch, import-time registration, lifespan, routing, discovery filtering, and diagnostic endpoints. Citations support the claims. Omitted startup resource-limit handling is incidental detail, not a substantive error."
+    },
+    {
+      "answer_label": "answer-002",
+      "correctness": "partial",
+      "completeness": "passed",
+      "citation_validity": "passed",
+      "unsupported_claims": [
+        "Successful GraphRAG MCP availability checks and indexing health reporting 312 files in both indexes, healthy synchronization, and aligned runs cannot be verified from repository source."
+      ],
+      "source_evidence": [
+        "README.md:60-69",
+        "scripts/start_brain_server_daemon.sh:17-68",
+        "scripts/start_brain_server.sh:11-60",
+        "_mcp.py:13-24",
+        "tools/__init__.py:10-31",
+        "tools/brain/primary.py:48-59",
+        "brain_server.py:60-70",
+        "brain_server.py:146-187",
+        "brain_server.py:279-343"
+      ],
+      "notes": "The substantive server explanation and its source citations are correct and sufficiently complete. Partial correctness reflects the unsupported runtime assertions, which are unverified rather than demonstrated false."
+    },
+    {
+      "answer_label": "answer-003",
+      "correctness": "passed",
+      "completeness": "passed",
+      "citation_validity": "passed",
+      "unsupported_claims": [],
+      "source_evidence": [
+        "tools/brain/search/semantic.py:190-221",
+        "tools/brain/search/semantic.py:271-296",
+        "memory/code_retrieval.py:93-237",
+        "memory/code_retrieval.py:242-425",
+        "memory/code_retrieval.py:427-561",
+        "memory/code_retrieval.py:618-679",
+        "memory/retrieval_surfaces.py:245-277",
+        "memory/retrieval_enrichment.py:367-405",
+        "memory/code_retrieval_loaders.py:101-130",
+        "memory/code_retrieval_postprocess.py:39-61",
+        "memory/retrieval_duplicates.py:499-569",
+        "memory/retrieval_telemetry.py:31-63",
+        "memory/retrieval_fallbacks.py:175-234",
+        "memory/store_search.py:175-291"
+      ],
+      "notes": "Correctly distinguishes semantic-anchored fusion, policy ranking, indexed rescue, deduplication, concentration fallback, and the separate store-level service fallback. The broad-mode rendering mismatch is supported. Specialized usage partitioning and dispatcher filtering are omitted details, not substantive errors in this major-stage trace."
+    },
+    {
+      "answer_label": "answer-004",
+      "correctness": "partial",
+      "completeness": "passed",
+      "citation_validity": "passed",
+      "unsupported_claims": [
+        "Successful GraphRAG discovery/invocation and indexing health reporting 312 files in both indexes, healthy synchronization, and aligned runs cannot be verified from repository source."
+      ],
+      "source_evidence": [
+        "tools/brain/code_intel/core.py:1065-1142",
+        "tools/brain/code_intel/core.py:1144-1234",
+        "tools/brain/code_intel/symbol_graph.py:35-69",
+        "tools/brain/code_intel/symbol_graph.py:321-347",
+        "tools/brain/code_intel/symbol_graph.py:381-431",
+        "tools/brain/code_intel/symbol_graph.py:453-486",
+        "graph_bootstrap.py:287-300"
+      ],
+      "notes": "Correctly traces graph resolution, ambiguity handling, local previews, and SQL-selected source fallback. Runtime assertions remain unsupported. Configured K\u00f9zu support and the requirement that workspace_id itself exist locally are omitted qualifications, not errors in the central fallback explanation."
+    },
+    {
+      "answer_label": "answer-005",
+      "correctness": "partial",
+      "completeness": "passed",
+      "citation_validity": "passed",
+      "unsupported_claims": [
+        "Successful MCP discovery and indexing health reporting 312 files in both indexes, healthy synchronization, and aligned runs cannot be verified from repository source.",
+        "The grep concentration threshold is described as 0.4 without qualification; source compares against the configurable fallback_ratio parameter, whose default is 0.4."
+      ],
+      "source_evidence": [
+        "tools/brain/search/semantic.py:170-221",
+        "tools/brain/search/semantic.py:271-296",
+        "memory/code_retrieval.py:47-71",
+        "memory/code_retrieval.py:93-237",
+        "memory/code_retrieval.py:242-425",
+        "memory/code_retrieval.py:427-561",
+        "memory/code_retrieval.py:618-679",
+        "memory/retrieval_surfaces.py:245-277",
+        "memory/code_retrieval_postprocess.py:39-61",
+        "memory/retrieval_duplicates.py:499-569"
+      ],
+      "notes": "The major ranking and fallback stages are accurately covered, with valid citations. Besides unverifiable runtime claims, the threshold wording overgeneralizes default behavior. Detailed rescue prerequisites and specialized ranking branches are omissions rather than substantive contradictions."
+    },
+    {
+      "answer_label": "answer-006",
+      "correctness": "passed",
+      "completeness": "passed",
+      "citation_validity": "passed",
+      "unsupported_claims": [],
+      "source_evidence": [
+        "tools/brain/code_intel/core.py:1065-1142",
+        "tools/brain/code_intel/core.py:1144-1234",
+        "tools/brain/code_intel/symbol_graph.py:35-69",
+        "tools/brain/code_intel/symbol_graph.py:381-431",
+        "tools/brain/code_intel/symbol_graph.py:453-486",
+        "tools/brain/code_intel/symbol_graph.py:830-836",
+        "tools/brain/code_intel/symbol_graph.py:992-1007",
+        "graph_bootstrap.py:287-300",
+        "graph_bootstrap.py:438-450"
+      ],
+      "notes": "Accurately distinguishes configured graph backends from outage fallback, and graph failure from source-preview fallback. Source limits, SQL ordering, and advisory navigation are supported. It omits the explicit local workspace_id existence check without materially misrepresenting the flow."
+    }
+  ]
+}

@@ -12,6 +12,9 @@ REQUIRE_WHEEL="${LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL:-0}"
 mkdir -p "$(dirname "$FILTERED_REQ")"
 
 PYTHON_BIN="${LM_PROXY_PYTHON:-${LM_PROXY_INDEX_PYTHON:-}}"
+if [[ -z "$PYTHON_BIN" ]] && [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+fi
 if [[ -z "$PYTHON_BIN" ]] && [[ -x "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python" ]]; then
   PYTHON_BIN="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
 fi
@@ -42,7 +45,7 @@ if [[ -d "$WHEEL_DIR" ]]; then
   shopt -u nullglob
   if (( ${#wheels[@]} > 0 )); then
     echo "[ci-deps] Installing ts-pack wheel artifact: ${wheels[0]}"
-    "$PYTHON_BIN" -m pip install --no-deps "${wheels[0]}"
+    "$PYTHON_BIN" -m pip install --force-reinstall --no-deps "${wheels[0]}"
   elif [[ "$REQUIRE_WHEEL" == "1" || "$REQUIRE_WHEEL" == "true" || "$REQUIRE_WHEEL" == "yes" ]]; then
     echo "[ci-deps] ERROR: ts-pack wheel artifact required but not found in $WHEEL_DIR" >&2
     exit 1

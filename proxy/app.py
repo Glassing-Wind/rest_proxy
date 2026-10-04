@@ -22,6 +22,7 @@ from proxy.config import (
     ENABLE_MODEL_VALIDATION,
     USE_LOCAL_MODELS_FOR_V1,
     LOOP_DETECT_THRESHOLD,
+    INFERENCE_PROVIDER,
 )
 
 import os
@@ -87,6 +88,10 @@ load_state()
 
 @app.get("/v1/models")
 async def list_models() -> Any:
+    if INFERENCE_PROVIDER == "openai":
+        from proxy.openai_provider import list_models as list_openai_models
+
+        return await list_openai_models()
     if USE_LOCAL_MODELS_FOR_V1:
         payload = await fetch_lmstudio_models()
         local_models = build_local_llm_models(payload)
@@ -132,6 +137,7 @@ async def health() -> Any:
     return JSONResponse(
         {
             "ok": True,
+            "inference_provider": INFERENCE_PROVIDER,
             "lm_base": LM_BASE,
             "openai_base": OPENAI_BASE,
             "filtering_enabled": ENABLE_PROXY_FILTERING,
@@ -165,6 +171,13 @@ async def debug_state() -> Any:
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request) -> Any:
     body = await request.json()
+
+    if INFERENCE_PROVIDER == "openai":
+        from proxy.openai_provider import forward_completion
+
+        return await forward_completion(body)
+    if INFERENCE_PROVIDER != "lmstudio":
+        raise HTTPException(503, "LM_PROXY_PROVIDER must be lmstudio or openai")
 
     # OpenAI clients often send stream_options even for non-streaming calls.
     # We strip it here so the messages hash remains consistent for history_key.

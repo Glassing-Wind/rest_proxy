@@ -239,7 +239,7 @@ async def trace_symbol_cross_project_core(
         records = await execute_read(
             session,
             """
-            MATCH (target)
+            MATCH (target {project_id: $spid})
             WHERE target.name IN $names
               AND (target:Function OR target:Class OR target:Struct
                OR target:Method   OR target:Trait OR target:Protocol
@@ -254,6 +254,7 @@ async def trace_symbol_cross_project_core(
             LIMIT 20
             """,
             names=resolved_names,
+            spid=src_id,
             tpid=tgt_id,
             op="trace_symbol_graph_usages",
         )

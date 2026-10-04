@@ -31,6 +31,25 @@ def _sample_tool():
 
 
 class ToolFingerprintTests(unittest.TestCase):
+    def test_dependency_manifest_changes_invalidate_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = Path(tmpdir) / "requirements.txt"
+            ignored = Path(tmpdir) / ".env"
+            manifest.write_text("mcp==1.0\n", encoding="utf-8")
+            ignored.write_text("TEST_VALUE=one\n", encoding="utf-8")
+            mcp = _FakeMCP([_FakeTool("sample_tool", _sample_tool)])
+            roots = [tmpdir, manifest]
+            before, _ = compute_tool_fingerprint(mcp, implementation_source_roots=roots)
+            manifest.write_text("mcp==2.0\n", encoding="utf-8")
+            after, _ = compute_tool_fingerprint(mcp, implementation_source_roots=roots)
+            self.assertNotEqual(before, after)
+            ignored.write_text("TEST_VALUE=two\n", encoding="utf-8")
+            unchanged, _ = compute_tool_fingerprint(mcp, implementation_source_roots=roots)
+            self.assertEqual(after, unchanged)
+            manifest.unlink()
+            removed, _ = compute_tool_fingerprint(mcp, implementation_source_roots=roots)
+            self.assertNotEqual(after, removed)
+
     def test_fingerprint_changes_when_loaded_local_module_changes(self):
         with tempfile.TemporaryDirectory(dir=REPO_ROOT) as tmpdir:
             module_path = Path(tmpdir) / "fingerprint_probe.py"

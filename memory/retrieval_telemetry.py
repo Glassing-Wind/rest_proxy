@@ -112,12 +112,12 @@ def _append_telemetry_event(
     default_max: int,
 ) -> None:
     """Resolve target path and write a bounded NDJSON event."""
-    path = os.getenv(path_env, "").strip()
-    if path:
-        target = Path(os.path.expanduser(path))
-    else:
-        target = Path(__file__).resolve().parents[3] / ".runtime" / default_filename
     try:
+        path = os.getenv(path_env, "").strip()
+        if path:
+            target = Path(os.path.expanduser(path))
+        else:
+            target = Path(__file__).resolve().parents[1] / ".runtime" / default_filename
         _append_bounded_ndjson_event(
             target,
             event,

@@ -125,6 +125,7 @@ async def describe_file_impl(
     symbol_names: list[str] = []
 
     ts_symbols: list[str] = []
+    live_ast_available = False
     try:
         import tree_sitter_language_pack as ts_pack
 
@@ -136,6 +137,7 @@ async def describe_file_impl(
                 cfg = ts_pack.ProcessConfig(lang)
                 cfg.diagnostics = True
                 result = normalize_ts_pack_result(code, lang, ts_pack.process(code, config=cfg))
+                live_ast_available = not (result.get("metrics") or {}).get("error_count", 0)
                 result["_language"] = lang
                 ts_symbols, lang_label = format_ts_pack_symbols(result)
                 symbol_names = [
@@ -182,9 +184,27 @@ async def describe_file_impl(
                     neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
                     if rec.get("name") and rec["name"] not in symbol_names:
                         symbol_names.append(str(rec["name"]))
-            use_symbols = neo_symbols or ts_symbols
+            if live_ast_available:
+                # Replace the whole outline: retaining indexed rows resurrects deleted
+                # symbols and leaves signatures/locations stale after ordinary edits.
+                use_symbols = ts_symbols
+                symbol_names = [
+                    str(item.get("name")) for item in result.get("structure") or []
+                    if item.get("name")
+                ]
+                lines.append("  [Outline: current working-tree live AST]")
+                lines.append(
+                    "  [Freshness: indexed content alignment unknown; "
+                    "no indexed source hash available]"
+                )
+                lines.append("  Graph relationships and semantic preview remain indexed evidence.")
+            else:
+                use_symbols = neo_symbols or ts_symbols
+                lines.append("  [Freshness: live AST unavailable or incomplete; indexed alignment unknown]")
+
         except Exception:
             use_symbols = ts_symbols
+            lines.append("  [Freshness: graph unavailable; current working-tree outline only]")
 
     if use_symbols:
         preview_count = min(10, len(use_symbols))
@@ -226,6 +246,6 @@ async def describe_file_impl(
     lines.append("")
     lines.append(format_file_purpose(display_path, semantic_roles, symbol_names))
     if preview_content:
-        lines.append(f"\nFirst chunk preview:\n{preview_content[:500].rstrip()}")
+        lines.append(f"\nIndexed first chunk preview (freshness unverified):\n{preview_content[:500].rstrip()}")
 
     return "\n".join(lines)

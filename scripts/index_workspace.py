@@ -38,7 +38,7 @@ def _ensure_runtime_dependencies() -> None:
             raise
         runtime = resolve_python_runtime()
         preferred = str(runtime.get("python") or "")
-        if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+        if not preferred or os.path.abspath(preferred) == os.path.abspath(sys.executable):
             raise
         os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
         os.execv(preferred, [preferred, __file__, *sys.argv[1:]])

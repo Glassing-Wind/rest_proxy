@@ -8,7 +8,16 @@ WHEEL_DIR="${1:-.runtime/wheels}"
 mkdir -p "$WHEEL_DIR"
 rm -f "$WHEEL_DIR"/tree_sitter_language_pack-*.whl
 
+# Default release stripping produced a malformed Mach-O library on macOS.
+# Keep release symbols for reproducible loadable wheels; callers can override.
+export CARGO_PROFILE_RELEASE_STRIP="${CARGO_PROFILE_RELEASE_STRIP:-false}"
+# Match validated artifacts: download parsers on demand at runtime.
+export TSLP_OFFLINE="${TSLP_OFFLINE:-1}"
+
 PYTHON_BIN="${LM_PROXY_PYTHON:-${LM_PROXY_INDEX_PYTHON:-}}"
+if [[ -z "$PYTHON_BIN" ]] && [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+fi
 if [[ -z "$PYTHON_BIN" ]]; then
   PYTHON_BIN="$(command -v python3 || command -v python)"
 fi
@@ -33,4 +42,4 @@ PY
 )"
 
 echo "[ci-wheel] Building pinned ts-pack wheel from: $TS_PACK_SPEC"
-"$PYTHON_BIN" -m pip wheel --wheel-dir "$WHEEL_DIR" "$TS_PACK_SPEC"
+"$PYTHON_BIN" -m pip wheel --no-cache-dir --no-deps --wheel-dir "$WHEEL_DIR" "$TS_PACK_SPEC"

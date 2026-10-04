@@ -94,6 +94,27 @@ class RuntimeResolutionTests(unittest.TestCase):
             self.assertEqual(info["python"], fake_python)
             self.assertEqual(info["source"], "env")
 
+    def test_resolve_python_runtime_prefers_project_venv_over_implicit_conda(self):
+        runtime_mod = importlib.import_module("_runtime")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_python = Path(tmpdir) / ".venv" / "bin" / "python"
+            fake_python.parent.mkdir(parents=True)
+            fake_python.write_text("#!/bin/sh\nexit 0\n")
+            fake_python.chmod(stat.S_IRWXU)
+            with (
+                mock.patch.dict(os.environ, {
+                    "LM_PROXY_CONDA_ENV": "", "LM_PROXY_INDEX_PYTHON": "", "LM_PROXY_PYTHON": ""
+                }),
+                mock.patch.object(runtime_mod, "__file__", str(Path(tmpdir) / "_runtime.py")),
+                mock.patch.object(runtime_mod, "_conda_env_python") as conda,
+            ):
+                runtime_mod.resolve_python_runtime.cache_clear()
+                info = runtime_mod.resolve_python_runtime()
+                conda.assert_not_called()
+            self.assertEqual(info["cmd"], [str(fake_python)])
+            self.assertEqual(info["source"], "project_venv")
+        runtime_mod.resolve_python_runtime.cache_clear()
+
     def test_resolve_python_runtime_prefers_configured_conda_env(self):
         runtime_mod = importlib.import_module("_runtime")
         with mock.patch.dict(

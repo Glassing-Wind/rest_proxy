@@ -43,8 +43,10 @@ async def search_similar_memory(
         CALL db.index.vector.queryNodes('memory_embeddings_vector', $k, $query_vector)
         YIELD node, score
         WHERE ($global_search OR ($same_session OR node.session_id = $sid))
-        RETURN node.ref_id as ref_id,
+        RETURN coalesce(node.ref_id, node.id) as ref_id,
                node.ref_type as ref_type,
+               node.session_id as session_id,
+               node.project_id as project_id,
                node.text as compact_text,
                node.created_at as created_at,
                score as rrf_score

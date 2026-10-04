@@ -6,6 +6,9 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 PYTHON_BIN="${LM_PROXY_PYTHON:-${LM_PROXY_INDEX_PYTHON:-}}"
+if [[ -z "$PYTHON_BIN" ]] && [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+fi
 if [[ -z "$PYTHON_BIN" ]] && [[ -x "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python" ]]; then
   PYTHON_BIN="/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python"
 fi
@@ -44,6 +47,12 @@ fi
 
 echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_cross_project_tools.py
+"$PYTHON_BIN" test_tool_fingerprint.py
+"$PYTHON_BIN" test_controlled_agent_pilot.py
+"$PYTHON_BIN" test_primary_and_overlay.py
+"$PYTHON_BIN" test_appliance_entrypoint.py
+"$PYTHON_BIN" test_appliance_bootstrap.py
+"$PYTHON_BIN" test_appliance_telemetry.py
 "$PYTHON_BIN" test_dev_tools.py
 "$PYTHON_BIN" test_docs_admin_family.py
 "$PYTHON_BIN" test_docs_research.py
@@ -55,6 +64,8 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_indexing_health_alignment.py
 "$PYTHON_BIN" test_job_state_persistence.py
 "$PYTHON_BIN" test_memory_mode.py
+"$PYTHON_BIN" test_fire_context.py
+"$PYTHON_BIN" test_openai_provider.py
 "$PYTHON_BIN" test_nltk_security.py
 "$PYTHON_BIN" test_mcp_tool_parity_selection.py
 "$PYTHON_BIN" test_compare_agent_tooling.py

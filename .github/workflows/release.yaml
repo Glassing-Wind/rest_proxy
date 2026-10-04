@@ -59,14 +59,14 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           grep -q "^## \\[$version\\]" CHANGELOG.md
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: TSLP_OFFLINE=1 CARGO_PROFILE_RELEASE_STRIP=false pip install -r requirements.txt
 
       - name: Run gated CI checks
         run: bash scripts/run_ci_checks.sh

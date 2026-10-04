@@ -193,3 +193,143 @@ and text tokenization. An isolated candidate also passed Crawl4AI import/chunkin
 No corpus was downloaded and no unsafe NLTK model-loading API was exercised.
 This is one compatibility-tested dependency batch, not resolution of all baseline
 debt. The larger PR remains open pending remote checks and full branch review.
+
+## September 30 enterprise tooling follow-up
+
+Fixed dependency-manifest runtime fingerprinting and source-project identity in
+cross-project graph tracing. Added offline regressions and a rollback-only live
+Neo4j identity regression. Removed confirmed inactive shadow residue (4,576 nodes,
+379 relationships). Local CI and the full live retrieval-quality gate passed.
+
+Ran six fresh investigation sessions and an independent source-based grading pass.
+All answers passed, but the intended MCP sessions had no exposed MCP tools, so
+the comparison is excluded. The runner now requires an observed successful MCP
+health call rather than trusting configuration alone. Resolve isolated CLI MCP
+exposure before repeating; no productivity or superiority claim is supported.
+See [the dated report](../benchmarks/reports/2026-09-30/README.md) for measurements,
+failed-attempt accounting, evidence and remaining experiment requirements.
+
+## October 3 plan correction
+
+Follow [the evidence-driven implementation plan](enterprise-tooling-plan.md).
+Fresh CLI MCP availability now passed with an observed health call. Keep the
+September 30 comparison excluded. Compact-profile schema counts must be measured,
+not inferred from tool counts. Current-file outlines now replace indexed symbols
+and explicitly report unknown content alignment; no full graph overlay is claimed.
+The Compose stack is a development appliance pending actual lifecycle validation.
+Kuzu's archived status reopens graph-engine selection; embedded support stays an
+experimental feasibility track. See the dated report for verification and limits.
+
+October 3 validation is complete: full CI and the live retrieval-quality gate
+passed; a real isolated Compose stack passed indexing/query/restart checks and
+source reads during a graph outage. The compact schema measured 3,687 tokens
+versus 16,414 for all tools (77.54% reduction), not the original target.
+The six-session warm-index pilot was protocol-valid, but MCP aggregate elapsed
+was 1.41% greater and input tokens 71.60% greater. Independent grading passed all
+citation/completeness checks; native correctness passed, MCP correctness was
+partial for source-unverifiable runtime assertions and one default-threshold
+overgeneralization. No superiority is supported. Embedded graph feasibility failed
+query compatibility, rollback and independent connections; keep it experimental.
+See [the October 3 report](../benchmarks/reports/2026-10-03/README.md) for raw rows,
+grading, failed attempts and limits. Next prioritize repeated compact-profile
+outcome measurements, native indexed content hashes and maintained graph selection.
+
+## Context continuity direction
+
+Follow [the context platform direction](context-platform-direction.md). The native
+embedded target remains LadybugDB + LanceDB with Docker optional. Add a shared,
+provider-independent context assembly contract: select evidence, concatenate within
+complete-request token budgets, retain provenance/freshness, and checkpoint scoped
+task state. Reuse memory/retrieval.py and memory/types.py foundations. Prioritize
+bundle contracts and budget tests alongside embedded integration; verify MCP/REST
+parity, resumption, invalidation and no duplicate injection. “Limitless context” is
+persistent retrieval continuity, not unlimited model input or guaranteed recall.
+
+## Coordinating plan
+
+Use [the integrated platform plan](integrated-platform-plan.md) to sequence native
+packaging, backend parity, context assembly and release acceptance. Keep Apple
+Python untouched; retain project Python 3.11.15 while validating 3.14 separately.
+
+## Operational Python target
+
+The local daemon and project scripts now default to Python 3.14 through `.venv`.
+Retain the old 3.11 environment for explicit rollback. Use
+[the reproducible setup and rollback procedure](python314-runtime.md); the pinned
+ts-pack build disables release stripping and validates the native import.
+
+## FIRE and compaction continuity
+
+The accepted platform name is **FIRE — Find, Integrate, Retrieve, Explain**.
+Follow [the FIRE implementation slice](fire-platform.md): scoped evidence/checkpoint
+contracts, provenance-preserving retrieval, budgeted bundles and opt-in resume
+tools. Validate recovery after the original prompt is removed, corrections,
+source changes, scope isolation and storage failure. Existing compact strings and
+truncated tool records do not establish recoverable originals. Client compaction
+is not automatically observable; checkpoint/resume must work explicitly.
+
+First FIRE slice implemented: versioned EvidenceReference and TaskCheckpoint
+contracts plus structured retrieved_evidence on AssembledMemory. Ranking retains
+returned provenance; exact-text deduplication preserves distinct shared-prefix
+evidence. Graph memory search returns source identity and scope. Four offline FIRE
+regressions are included in CI; local gated checks passed on Python 3.14. Persistence,
+original-evidence recovery, token budgeter and resume tools remain next steps.
+
+## ts-pack upgrade investigation
+
+Follow [the verified fork-upgrade investigation](ts-pack-upgrade.md). Upstream
+v1.20.0 binary import/parsing passed on Python 3.14, but five required native fork
+helpers are absent and process() returns a typed object instead of our dictionary
+contract. A merge simulation found core/binding conflicts alongside fixture churn.
+Keep the current requirement pin until an isolated integrated fork passes the
+indexing/semantic contracts. Include the local Swift fix beyond the deployed pin.
+
+The isolated codex/fire-ts-pack-120 candidate now builds a loadable macOS ARM64
+Python 3.14 wheel while retaining native fork helpers. Core 313/index 144 tests
+passed; two ignored cache tests passed separately; two other ignored tests remain
+unrun. Final-wheel project CI passed with shared existing dependency versions.
+Review preserved extraction semantics and upstream fixtures, then run clean-profile,
+isolated indexing/retrieval and platform validation before publishing or repinning.
+The ordinary daemon still runs the previous dependency pin.
+
+
+Clean full-manifest Python 3.14 install and isolated full CI now pass without
+shared dependency paths. A mixed-language fixture indexed 11 files and 64 chunks;
+registered health, source, symbol and search probes passed with aligned runs.
+Synthetic embeddings validate plumbing only. See the upgrade document for the
+first attempt's `.env` isolation failure and verified cleanup. Remaining gates are
+extraction parity, platform builds and artifact/license notices before repinning.
+
+
+Declaration parity gaps were found and repaired in the candidate: ten declaration
+integration checks now pass, retaining Swift Protocol/Extension fork vocabulary.
+Core/index suites, rebuilt macOS and Linux ARM64 wheel contracts and repeated
+isolated CI/indexing/retrieval pass. Source/archive/patch hashes are recorded in
+`ts-pack-platform-parity-validation.json`. The candidate has an unexecuted native
+platform workflow. Windows/x86_64 execution and notice reconciliation (historical
+Neo4j crates, downloaded grammars; MPL source already bundled) remain before
+commit/push and production repinning. See the upgrade document for limits.
+
+
+Development/CI now uses published fork SHA
+`4342fa4251d5abed1ce8c5da595680189ca2b962` in both requirements files and the
+refreshed Python 3.14 daemon. Remote-SHA wheel build, contract tests, full CI,
+isolated indexing/retrieval and 68 direct/MCP transport parity checks passed.
+Full content goldens retain a pre-existing rental 81-vs-80 link mismatch, proven
+identical under old/new wheels. macOS, Ubuntu and Windows native PR jobs all passed. See `benchmarks/reports/2026-10-04/ts-pack-cutover.json` for rollback,
+source-snapshot correction and outstanding distribution notices. Fork PR #1
+remains draft; rest-proxy working changes remain uncommitted.
+
+
+## Project checkpoint — 2026-10-04
+
+The accumulated platform work was reviewed for repository scope and credential
+patterns, then full CI passed again. Build scripts, Docker and release installation
+now default to `TSLP_OFFLINE=1`, matching the validated fork artifacts; parser
+assets hydrate at runtime and this does not establish a fully offline appliance.
+This checkpoint records the Python 3.14 runtime, pinned fork upgrade, optional
+provider/embedded prototypes, FIRE contracts, tooling changes and dated evidence
+on `codex/enterprise-hardening`. Enterprise distribution notices, embedded backend
+query/transaction integration, FIRE persistence/resume and controlled outcome
+improvement remain unfinished. Private environments, native build artifacts and
+rollback runtime remain ignored local data.

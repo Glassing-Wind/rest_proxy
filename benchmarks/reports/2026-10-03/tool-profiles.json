@@ -1,0 +1,18 @@
+{
+  "encoding": "o200k_base",
+  "method": "compact JSON of FastMCP tools/list entries",
+  "limitation": "Not model-specific unless encoding is verified; not per-turn/billed usage.",
+  "profiles": {
+    "all": {
+      "tools": 60,
+      "utf8_bytes": 73655,
+      "schema_tokens": 16414
+    },
+    "primary": {
+      "tools": 12,
+      "utf8_bytes": 16567,
+      "schema_tokens": 3687
+    }
+  },
+  "schema_token_reduction_percent": 77.54
+}

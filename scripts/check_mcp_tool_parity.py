@@ -32,6 +32,7 @@ def _preferred_python() -> str | None:
     for candidate in (
         os.environ.get("LM_PROXY_PYTHON"),
         os.environ.get("LM_PROXY_INDEX_PYTHON"),
+        str(ROOT / ".venv" / "bin" / "python"),
         _LM_PROXY_FALLBACK_PYTHON,
         shutil.which("python3"),
         shutil.which("python"),
@@ -45,7 +46,7 @@ def _reexec_with_preferred_python_if_needed(exc: ModuleNotFoundError) -> None:
     if os.environ.get("LM_PROXY_RUNTIME_REEXECED") == "1":
         return
     preferred = _preferred_python()
-    if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+    if not preferred or os.path.abspath(preferred) == os.path.abspath(sys.executable):
         return
     os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
     os.execv(preferred, [preferred, __file__, *sys.argv[1:]])
