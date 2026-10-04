@@ -88,6 +88,23 @@ class EmbeddedRuntime:
         async with self._lock:
             return await (await self._get_owner()).overview(project_id)
 
+    async def list_projects(self, *, limit: int = 25, after: str = ''):
+        async with self._lock:
+            return await (await self._get_owner()).list_projects(limit=limit, after=after)
+
+    async def resolve_project(self, workspace_id: str):
+        async with self._lock:
+            return await (await self._get_owner()).resolve_project(workspace_id)
+
+    async def workspace_overview(self, workspace_id: str):
+        async with self._lock:
+            owner = await self._get_owner()
+            project = await owner.resolve_project(workspace_id)
+            if project is None:
+                return None
+            overview = await owner.overview(project['project_id'])
+            return dict(overview, workspace_id=workspace_id, workspace_path=project['workspace_path'])
+
     async def graph_driver(self):
         async with self._lock:
             return (await self._get_owner()).graph

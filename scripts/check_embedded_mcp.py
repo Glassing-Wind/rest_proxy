@@ -25,10 +25,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def decode(result):
     if result.isError:
         raise AssertionError('Embedded MCP call failed')
-    if result.structuredContent is not None:
-        content = result.structuredContent
-        return content["result"] if set(content) == {"result"} else content
-    return json.loads(result.content[0].text)
+    value = result.structuredContent if result.structuredContent is not None else json.loads(result.content[0].text)
+    if isinstance(value, dict) and set(value) == {'result'}:
+        value = value['result']
+    return json.loads(value) if isinstance(value, str) else value
+
 
 
 async def inspect(session, args):
@@ -36,6 +37,13 @@ async def inspect(session, args):
     names = {tool.name for tool in (await session.list_tools()).tools}
     assert {'get_embedded_overview', 'describe_embedded_file', 'search_embedded_repository'} <= names
     overview = decode(await session.call_tool('get_embedded_overview', {'project_id': args.project_id}))
+    projects = decode(await session.call_tool('list_embedded_projects', {'limit': 100}))
+    # Existing standard workspace tools must resolve the durable path to this ID.
+    project = next(row for row in projects['projects'] if row['project_id'] == args.project_id)
+    resolution = decode(await session.call_tool('resolve_graph_project', {'workspace_id': project['workspace_path']}))
+    workspace_overview = decode(await session.call_tool('get_project_overview', {'workspace_id': project['workspace_path']}))
+    assert resolution['project_id'] == args.project_id
+    assert workspace_overview['run_id'] == overview['run_id']
     source = decode(await session.call_tool('describe_embedded_file',
                                            {'project_id': args.project_id, 'file_path': args.file,
                                             'max_lines': 12}))
@@ -47,7 +55,8 @@ async def inspect(session, args):
     if isinstance(hits, dict):
         hits = hits['result']
     assert hits and all(hit['run_id'] == overview['run_id'] for hit in hits)
-    return {'overview': overview, 'source': source,
+    return {'overview': overview, 'source': source, 'projects': projects,
+            'resolution': resolution, 'workspace_overview': workspace_overview,
             'hit_citations': [{key: hit[key] for key in ('file_path', 'ref_id', 'source_sha256', 'run_id')}
                              for hit in hits]}
 
@@ -101,7 +110,8 @@ async def run(args):
     return {'transports': ['stdio', 'streamable-http'], 'parity': True,
             'run_id': stdio['overview']['run_id'], 'files': stdio['overview']['files'],
             'dimension': args.dimension, 'source_sha256': stdio['source']['source_sha256'],
-            'hit_citations': stdio['hit_citations'], 'model_required': False,
+            'hit_citations': stdio['hit_citations'], 'model_required': False, 'workspace_resolution_verified': True,
+            'project_listing_verified': True,
             'sandbox': args.sandbox, 'external_storage_network_allowed': False if args.sandbox else None}
 
 

@@ -148,6 +148,18 @@ class EmbeddedRepositoryOwner:
                     'retrieval': manifest.get('retrieval'),
                     'capabilities': ['published-source', 'file-outlines', 'text', 'vector', 'hybrid']}
 
+    async def list_projects(self, *, limit: int = 25, after: str = '') -> dict:
+        from graphrag_core.indexing.embedded_projects import list_projects
+        async with self._lock:
+            self._require_open()
+            return await list_projects(self.graph, limit=limit, after=after)
+
+    async def resolve_project(self, workspace_id: str) -> dict | None:
+        from graphrag_core.indexing.embedded_projects import resolve_project
+        async with self._lock:
+            self._require_open()
+            return await resolve_project(self.graph, workspace_id)
+
     async def cleanup_unpublished(self, project_id: str):
         async with self._lock:
             self._require_open()

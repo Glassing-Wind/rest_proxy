@@ -1,7 +1,7 @@
 # Embedded MCP owner — October 4, 2026
 
 Priority 2 now has an explicit experimental MCP path to the combined Ladybug and
-LanceDB owner. STDIO and Streamable HTTP register the same four tools. This is a
+LanceDB owner. STDIO and Streamable HTTP register the same explicit tool group. This is a
 usable file-outline/source/retrieval slice; full graph compatibility, existing
 application workspace metadata and REST context-bundle integration remain unfinished.
 
@@ -31,6 +31,7 @@ state directory is required for fixture vectors of another dimension.
 | Tool | Behavior |
 | --- | --- |
 | `index_embedded_repository(source_root, project_id, paths)` | Wait for complete replacement from an explicit relative-path manifest. Omitted files disappear. Return publication/count/encoder metadata. |
+| `list_embedded_projects(limit, after)` | Discover committed project IDs, canonical roots and run IDs with bounded pagination. |
 | `get_embedded_overview(project_id)` | Read run/manifest identity, file/symbol counts and retrieval configuration without a model. |
 | `describe_embedded_file(project_id, file_path, ...)` | Read numbered, bounded original source and outlines from the publication, with run ID and source SHA256. |
 | `search_embedded_repository(project_id, query, mode, limit)` | Search published text/vector/hybrid chunks with scope and hash checks. Text mode needs no encoder; other modes require matching encoder identity. |
@@ -96,3 +97,7 @@ claim a new real-model indexing run or independent coding-outcome improvement.
 Private logs live in `.runtime/embedded-mcp-acceptance/` (mode 700).
 Next: full call/import/route query compatibility, application workspace metadata,
 REST integration, production encoder identity and packaging/restore acceptance.
+
+[Durable project discovery](embedded-project-discovery.md) now also routes the
+existing `resolve_graph_project` and `get_project_overview` tools to committed
+embedded metadata. Other legacy workspace and graph-query workflows remain incomplete.

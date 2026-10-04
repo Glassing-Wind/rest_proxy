@@ -1,0 +1,90 @@
+{
+  "application_ready": false,
+  "date": "2026-10-04",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "python": "3.14.4"
+  },
+  "limits": [
+    "individual list pages are transactional; cursor is not a multi-page snapshot",
+    "real transport acceptance reads prior frozen 131-file publication; no new real-model index run",
+    "no coding outcome or latency/token improvement claim",
+    "call/import/route queries, other legacy tools and session/workspace/watch/job metadata remain incomplete",
+    "REST integration and production encoder identity remain acceptance gates"
+  ],
+  "metadata_authority": "atomic Ladybug OutlinePublication ID/root/run receipt; no auxiliary registry writes",
+  "private_log_sha256": {
+    "ci.log": "f2831578d2dcb41fcef32c42140f27ff09d9cfdccea88c065093ca9547428d75",
+    "native-tests.log": "098c3b3359061ccb46f435217906f2595f34ff44a0db4b60ae1534337d88ed0a",
+    "runtime-tests.log": "9f7466c6829aa5614913e100073e660e66d923895ac9ed3c6641849dea548b95",
+    "transports.json": "3e819ba8e162d6c18b8a9430e374bd5e0a1b73c50bf449229879a46d8cc3bd17",
+    "transports.log": "1e213c105d5b7498d7708cc8f3ff10337054b6a9b158df4477f2400c09a6626b"
+  },
+  "schema_migration_required": false,
+  "scope": "durable project discovery and standard workspace-tool bridge",
+  "transport_acceptance": {
+    "dimension": 768,
+    "external_storage_network_allowed": false,
+    "files": 131,
+    "hit_citations": [
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+        "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/strict_lmstudio.py:b0fdf58aab1757",
+        "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-real-provider-proof:v6:memory/embedded_lance_runs.py:b0dc27591e2f57",
+        "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      },
+      {
+        "file_path": "graphrag_core/indexing/embedded_repository.py",
+        "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/embedded_repository.py:681197231296a4",
+        "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+        "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-real-provider-proof:v6:memory/embedded_lance_runs.py:199260fe241f11",
+        "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      }
+    ],
+    "model_required": false,
+    "parity": true,
+    "project_listing_verified": true,
+    "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+    "sandbox": true,
+    "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "workspace_resolution_verified": true
+  },
+  "validation": {
+    "full_local_ci": "passed",
+    "gated_offline_runtime_mcp_tests": 6,
+    "native_checks": [
+      "ordered pagination",
+      "quoted IDs",
+      "canonical paths",
+      "ambiguous basenames",
+      "missing workspaces",
+      "duplicate-key graph rollback preserves previous root/run",
+      "reopen after source directory removal",
+      "standard tool SDK dispatch",
+      "scoped deletion removes discovery entry"
+    ],
+    "native_vectors": "synthetic fixture; no semantic quality claim",
+    "optional_native_combined_owner_methods": 6
+  }
+}

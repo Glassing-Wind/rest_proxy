@@ -117,6 +117,70 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(await reopened.describe_file('p', 'a.py'), expected)
             await reopened.close()
 
+    async def test_durable_project_discovery_resolution_and_rollback(self):
+        from graphrag_core.indexing.embedded_outlines import build_outline_snapshot, publish_outline_snapshot
+        from memory.embedded_runtime import EmbeddedRuntime
+        from tools.brain.graph import tools as graph_tools
+        from tools.brain.search import graph_query
+        from mcp.server.fastmcp import FastMCP
+        import shutil
+
+        with tempfile.TemporaryDirectory() as directory:
+            left = Path(directory).resolve() / 'left' / 'shared'
+            right = Path(directory).resolve() / 'right' / 'shared'
+            for root in (left, right):
+                root.mkdir(parents=True)
+                (root / 'a.py').write_text('def authenticate(token):\n    return token\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                first = await owner.index(str(left), 'alpha', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                await owner.index(str(right), "beta'quoted", ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                page = await owner.list_projects(limit=1)
+                self.assertEqual(page['projects'][0]['project_id'], 'alpha')
+                self.assertEqual(page['next_cursor'], 'alpha')
+                last = await owner.list_projects(limit=1, after=page['next_cursor'])
+                self.assertEqual(last['projects'][0]['project_id'], "beta'quoted")
+                self.assertIsNone(last['next_cursor'])
+                self.assertEqual((await owner.resolve_project(str(left / '..' / 'shared')))['project_id'], 'alpha')
+                self.assertEqual((await owner.resolve_project("beta'quoted"))['workspace_path'], str(right))
+                self.assertIsNone(await owner.resolve_project(str(Path(directory) / 'missing' / 'shared')))
+                self.assertIsNone(await owner.resolve_project('missing'))
+                with self.assertRaises(ValueError):
+                    await owner.resolve_project('shared')
+                bad = build_outline_snapshot(str(right), 'alpha', ['a.py'])
+                bad['files'][0]['symbols'].append(dict(bad['files'][0]['symbols'][0]))
+                with self.assertRaises(Exception):
+                    await publish_outline_snapshot(owner.graph, bad)
+                resolved = await owner.resolve_project('alpha')
+                self.assertEqual(resolved['run_id'], first['run_id'])
+                self.assertEqual(resolved['workspace_path'], str(left))
+            # Metadata resolves from durable receipts even after removing the source and reopening.
+            shutil.rmtree(left)
+            runtime = EmbeddedRuntime(state, 3)
+            mcp = FastMCP('workspace-bridge')
+            graph_tools.register(mcp)
+            graph_query.register(mcp)
+            with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                    mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                    mock.patch.object(runtime, '_get_encoder', side_effect=AssertionError('model touched')):
+                result = json.loads(await mcp._tool_manager.get_tool('resolve_graph_project').run(
+                    {'workspace_id': str(left)}))
+                self.assertEqual(result['project_id'], 'alpha')
+                overview = json.loads(await mcp._tool_manager.get_tool('get_project_overview').run(
+                    {'workspace_id': str(left)}))
+                self.assertEqual(overview['run_id'], first['run_id'])
+                self.assertEqual(overview['files'], 1)
+                self.assertEqual(overview['workspace_path'], str(left))
+                self.assertIn('published-source', overview['capabilities'])
+                missing = json.loads(await mcp._tool_manager.get_tool('resolve_graph_project').run(
+                    {'workspace_id': 'missing'}))
+                self.assertIsNone(missing['project_id'])
+                self.assertEqual(missing['status'], 'not_published')
+                await runtime._owner.delete_project('alpha')
+                self.assertIsNone(await runtime.resolve_project('alpha'))
+                self.assertEqual((await runtime.list_projects())['projects'][0]['project_id'], "beta'quoted")
+            await runtime.close()
+
     async def test_kill_after_staging_preserves_published_retrieval(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'

@@ -58,6 +58,13 @@ def register(mcp: FastMCP) -> None:
             workspace_id: Logical workspace name or absolute project path.
         """
         try:
+            from memory.storage_config import embedded_graph_selected
+            if embedded_graph_selected():
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_overview(workspace_id)
+                return json.dumps(result if result is not None else {
+                    'workspace_id': workspace_id, 'status': 'not_published'}, indent=2)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()

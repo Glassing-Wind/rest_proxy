@@ -36,8 +36,13 @@ async def get_embedded_overview(project_id: str) -> dict | None:
     return await get_embedded_runtime().overview(project_id)
 
 
+async def list_embedded_projects(limit: int = 25, after: str = '') -> dict:
+    """List committed embedded project IDs/paths/runs with a bounded project-ID cursor."""
+    return await get_embedded_runtime().list_projects(limit=limit, after=after)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
-                     describe_embedded_file, get_embedded_overview):
+                     describe_embedded_file, get_embedded_overview, list_embedded_projects):
             mcp.tool()(tool)

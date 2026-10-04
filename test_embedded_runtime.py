@@ -61,7 +61,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
                                              'LM_PROXY_EMBEDDED_STATE': '/unused'}):
             embedded.register(mcp)
-        self.assertEqual(len(mcp._tool_manager.list_tools()), 4)
+        self.assertEqual(len(mcp._tool_manager.list_tools()), 5)
         runtime = mock.AsyncMock()
         runtime.describe_file.return_value = {'run_id': 'r', 'source_sha256': 'hash', 'source': '1: original'}
         with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
@@ -69,6 +69,28 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             tool = mcp._tool_manager.get_tool('describe_embedded_file')
             self.assertEqual(await tool.run({'project_id': 'p', 'file_path': 'a.py'}), expected)
             runtime.describe_file.assert_awaited_with('p', 'a.py', start_line=1, max_lines=80, max_chars=12000)
+
+    async def test_standard_workspace_tools_use_embedded_metadata(self):
+        import json
+        from tools.brain.graph import tools as graph_tools
+        from tools.brain.search import graph_query
+        mcp = FastMCP('workspace-routing')
+        graph_tools.register(mcp)
+        graph_query.register(mcp)
+        runtime = mock.AsyncMock()
+        runtime.resolve_project.return_value = {'project_id': 'p', 'workspace_path': '/source', 'run_id': 'r'}
+        runtime.workspace_overview.return_value = {'project_id': 'p', 'files': 2, 'run_id': 'r'}
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                mock.patch.object(graph_query, 'get_project_id', side_effect=AssertionError('legacy hash used')):
+            resolution = mcp._tool_manager.get_tool('resolve_graph_project')
+            result = json.loads(await resolution.run({'workspace_id': '/source'}))
+            self.assertEqual(result['project_id'], 'p')
+            runtime.resolve_project.assert_awaited_with('/source')
+            overview = mcp._tool_manager.get_tool('get_project_overview')
+            self.assertEqual(json.loads(await overview.run({'workspace_id': '/source'}))['files'], 2)
+            runtime.resolve_project.return_value = None
+            self.assertIsNone(json.loads(await resolution.run({'workspace_id': '/missing'}))['project_id'])
 
     async def test_global_close_allows_new_owner(self):
         from memory import embedded_runtime

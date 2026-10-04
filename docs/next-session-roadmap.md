@@ -2,6 +2,13 @@
 
 ## Current checkpoint — October 4, 2026
 
+[Embedded project discovery](embedded-project-discovery.md) now lists durable
+publication IDs/roots/runs and routes the existing project-resolution and overview
+tools through the embedded owner. Canonical path/unique-name resolution refuses
+ambiguity and invents no missing-project hash. Metadata survives rollback/reopen
+and follows scoped deletion. Full graph queries, other workspace/session/watch/job
+metadata and REST integration remain Priority 2 gates.
+
 The [embedded MCP owner](embedded-mcp-owner.md) now exposes explicit manifest indexing,
 overview, published source and scoped retrieval through a shared process runtime.
 Real STDIO/HTTP MCP reads matched on the 131-file publication with external-storage

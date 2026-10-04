@@ -28,8 +28,10 @@ packaging. Existing server backends remain supported during the transition.
   performance superiority. Preserve that distinction in product claims.
 - Permissive top-level engine licenses do not establish a GPL-free distribution.
   Audit the exact artifact, dependencies, native extensions, utilities and models.
-- One process owns mutable embedded graph storage. Indexing must share that owner,
-  rather than opening the same database independently in subprocesses.
+- One process owns mutable embedded graph storage. The [embedded MCP owner](embedded-mcp-owner.md)
+  shares indexing/retrieval ownership; [durable project discovery](embedded-project-discovery.md)
+  bridges standard resolution/overview tools. Full graph queries and remaining application
+  metadata/REST integration are still acceptance gates.
 
 ## Embedding provider direction
 

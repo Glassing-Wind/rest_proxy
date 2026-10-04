@@ -20,6 +20,8 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "list_embedded_projects": ToolCatalogEntry(
+        "primary", "embedded investigation", "Discover committed embedded projects and canonical workspace paths."),
     "index_embedded_repository": ToolCatalogEntry(
         "admin", "embedded indexing", "Replace an embedded project from an explicit source manifest."),
     "search_embedded_repository": ToolCatalogEntry(
