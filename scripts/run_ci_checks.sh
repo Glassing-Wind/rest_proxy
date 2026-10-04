@@ -71,6 +71,7 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_openai_provider.py
 "$PYTHON_BIN" test_lmstudio_provider.py
 "$PYTHON_BIN" test_strict_lmstudio_encoder.py
+"$PYTHON_BIN" test_embedded_runtime.py
 "$PYTHON_BIN" test_nltk_security.py
 "$PYTHON_BIN" test_dependency_security_batch.py
 "$PYTHON_BIN" test_mcp_tool_parity_selection.py

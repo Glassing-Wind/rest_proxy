@@ -69,6 +69,54 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(await owner.search('p', encoder_id='fixture-v1', text='updated', mode='text'), [])
                 self.assertTrue(await owner.search('q', encoder_id='fixture-v1', text='authenticate', mode='text'))
 
+    async def test_runtime_owner_routing_and_model_free_reopen(self):
+        from memory.embedded_runtime import EmbeddedRuntime
+        from tools.brain import embedded
+        from mcp.server.fastmcp import FastMCP
+        import graph_bootstrap
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source'
+            source.mkdir()
+            (source / 'a.py').write_text('def authenticate(token):\n    return token\n')
+            state = str(Path(directory) / 'state')
+            runtime = EmbeddedRuntime(state, 3)
+            encoder = mock.AsyncMock()
+            encoder.encoder_id = 'fixture-v1'
+            encoder.descriptor = {'model': 'fixture'}
+            encoder.embed_texts.side_effect = fixture_embed
+            runtime._encoder = encoder
+            mcp = FastMCP('native-owner')
+            with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
+                                                'LM_PROXY_GRAPH_BACKEND': 'ladybug',
+                                                'LM_PROXY_EMBEDDED_STATE': state}), \
+                    mock.patch('memory.embedded_runtime._runtime', runtime), \
+                    mock.patch.object(graph_bootstrap, '_driver', None):
+                embedded.register(mcp)
+                publication = await embedded.index_embedded_repository(str(source), 'p', ['a.py'])
+                self.assertEqual((await embedded.get_embedded_overview('p'))['symbols'], 1)
+                driver = await graph_bootstrap.require_driver()
+                self.assertIs(driver, runtime._owner.graph)
+                with self.assertRaises(RuntimeError):
+                    async with EmbeddedRepositoryOwner(state, 3):
+                        pass
+                (source / 'a.py').write_text('def changed():\n    pass\n')
+                expected = await embedded.describe_embedded_file('p', 'a.py')
+                self.assertIn('authenticate', expected['source'])
+                self.assertEqual(expected['run_id'], publication['run_id'])
+                self.assertEqual(await mcp._tool_manager.get_tool('describe_embedded_file').run(
+                    {'project_id': 'p', 'file_path': 'a.py'}), expected)
+                await graph_bootstrap.close_graph_db()
+                encoder.close.assert_awaited_once()
+                self.assertIsNone(runtime._owner)
+            reopened = EmbeddedRuntime(state, 3)
+            with mock.patch.object(reopened, '_get_encoder', side_effect=AssertionError('model touched')):
+                rows = await reopened.search('p', 'authenticate', 'text', 5)
+                self.assertTrue(rows)
+                self.assertEqual(rows[0]['run_id'], publication['run_id'])
+                self.assertEqual(await reopened.describe_file('p', 'a.py'), expected)
+            await reopened.close()
+
     async def test_kill_after_staging_preserves_published_retrieval(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'

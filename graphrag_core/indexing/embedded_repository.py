@@ -1,7 +1,8 @@
 """Experimental single-owner graph/vector publication and scoped retrieval.
 
 Embeddings are supplied by an explicit caller; no inference provider is selected.
-HTTP/STDIO dispatch and complete graph query parity are not implemented here.
+Explicit MCP dispatch lives in memory.embedded_runtime; complete graph query parity
+is not implemented here.
 """
 from __future__ import annotations
 
@@ -131,6 +132,21 @@ class EmbeddedRepositoryOwner:
         async with self._lock:
             self._require_open()
             return await read_outline_file(self.graph, project_id, file_path, **bounds)
+
+    async def overview(self, project_id: str) -> dict | None:
+        """Return bounded publication metadata without loading source or an encoder."""
+        async with self._lock:
+            self._require_open()
+            publication = await read_outline_publication(self.graph, project_id)
+            if publication is None:
+                return None
+            manifest = publication['manifest']
+            return {'project_id': project_id, 'run_id': publication['run_id'],
+                    'files': len(manifest['files']),
+                    'symbols': manifest['symbols'],
+                    'manifest_sha256': manifest['sha256'],
+                    'retrieval': manifest.get('retrieval'),
+                    'capabilities': ['published-source', 'file-outlines', 'text', 'vector', 'hybrid']}
 
     async def cleanup_unpublished(self, project_id: str):
         async with self._lock:

@@ -296,6 +296,12 @@ async def init_graph_db() -> None:
                         "The Kuzu backend is retired. Select LM_PROXY_GRAPH_BACKEND=ladybug "
                         "with a new LM_PROXY_LADYBUG_PATH; existing database migration is not supported."
                     )
+                if os.getenv("LM_PROXY_EMBEDDED_STATE", "").strip():
+                    from memory.embedded_runtime import get_embedded_runtime
+                    _driver = await get_embedded_runtime().graph_driver()
+                    _last_init_error = None
+                    _last_init_error_at = 0.0
+                    return
                 from memory.embedded_ladybug import LadybugGraphDriver
                 db_path = os.getenv("LM_PROXY_LADYBUG_PATH") or str(
                     Path(__file__).resolve().parent / ".runtime" / "ladybug_graph.db"
@@ -440,7 +446,12 @@ async def close_graph_db() -> None:
     global _driver, _last_init_error, _last_init_error_at
     async with _get_init_lock():
         if _driver is not None:
-            await _driver.close()
+            from memory.embedded_runtime import _runtime
+            if _runtime is not None and _driver is getattr(_runtime._owner, "graph", None):
+                from memory.embedded_runtime import close_embedded_runtime
+                await close_embedded_runtime()
+            else:
+                await _driver.close()
             _driver = None
             _debug("neo4j_disconnected")
         _last_init_error = None

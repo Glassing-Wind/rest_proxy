@@ -2,9 +2,10 @@
 import os
 
 EMBEDDED_INDEXING_UNAVAILABLE = (
-    'ERROR: Embedded indexing is not implemented yet. Ladybug currently supports '
+    'ERROR: Standard embedded indexing is not implemented yet. Ladybug currently supports '
     'experimental file-outline reads; the existing workers write to Neo4j/Postgres. '
-    'No indexing worker was started.'
+    'No indexing worker was started. Use index_embedded_repository with an explicit '
+    'manifest and LM_PROXY_EMBEDDED_STATE for the experimental owned path.'
 )
 
 

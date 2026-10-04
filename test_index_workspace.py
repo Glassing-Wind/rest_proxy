@@ -555,7 +555,7 @@ class IndexWorkspaceTests(unittest.TestCase):
             result = asyncio.run(module.index_project('/missing', 'test', []))
         self.assertEqual(result, 0)
         self.assertFalse(module._LAST_INDEX_PROJECT_OK)
-        self.assertIn('Embedded indexing is not implemented', log.getvalue())
+        self.assertIn('Standard embedded indexing is not implemented', log.getvalue())
 
     def test_refresh_semantic_chunk_metadata_updates_stale_rows_without_embeddings(self):
         class FakeCursor:

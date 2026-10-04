@@ -2,14 +2,21 @@
 
 ## Current checkpoint — October 4, 2026
 
+The [embedded MCP owner](embedded-mcp-owner.md) now exposes explicit manifest indexing,
+overview, published source and scoped retrieval through a shared process runtime.
+Real STDIO/HTTP MCP reads matched on the 131-file publication with external-storage
+networking denied and no embedding connection. Graph bootstrap shares the graph
+owner. Full graph queries, application workspace metadata and REST integration
+remain Priority 2 gates; the standard index worker stays guarded.
+
 The [real embedding baseline](real-embedding-acceptance.md) now passes strict
 Jina/LM Studio indexing and reopened retrieval on 131 frozen production files /
 1,629 chunks. Five source-anchor probes covered 4/5 expected files with vector
 search and 5/5 with hybrid; these are not controlled coding outcomes. Provider
 response indices and truncation checks are hardened, and encoder metadata persists
 with the publication. Resident model-artifact binding remains unverified (CLI/API
-size metadata differs from the local GGUF). Full graph queries and MCP/REST owner
-routing remain the next Priority 2 implementation gates.
+size metadata differs from the local GGUF). The explicit MCP path above now shares its owner; full graph queries, application
+metadata and REST integration remain Priority 2 implementation gates.
 
 The [embedding provider direction](embedding-provider-direction.md) keeps LM Studio
 optional and proposes FastEmbed/ONNX native and TEI service evaluations. The

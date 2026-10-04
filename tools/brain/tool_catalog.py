@@ -20,6 +20,14 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "index_embedded_repository": ToolCatalogEntry(
+        "admin", "embedded indexing", "Replace an embedded project from an explicit source manifest."),
+    "search_embedded_repository": ToolCatalogEntry(
+        "primary", "embedded investigation", "Search published embedded chunks with run and source citations."),
+    "describe_embedded_file": ToolCatalogEntry(
+        "primary", "embedded investigation", "Read bounded original source from an embedded publication."),
+    "get_embedded_overview": ToolCatalogEntry(
+        "primary", "embedded investigation", "Check embedded publication counts and encoder identity."),
     "add_memory": ToolCatalogEntry(
         "memory",
         "context",

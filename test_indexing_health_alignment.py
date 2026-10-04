@@ -279,7 +279,7 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
                 mock.patch.object(module, 'get_workspace_path',
                                   side_effect=AssertionError('should not start job')):
             result = asyncio.run(module.index_workspace('/missing'))
-        self.assertIn('Embedded indexing is not implemented', result)
+        self.assertIn('Standard embedded indexing is not implemented', result)
 
     def test_watch_project_syncs_valid_mcp_client_roots(self):
         module = load_indexing_module()

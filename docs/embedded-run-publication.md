@@ -92,3 +92,7 @@ next real-model baseline and optional runtime comparisons. LM Studio is optional
 in the intended native distribution. The acceptance recorded above used synthetic
 vectors; the subsequent [real-model baseline](real-embedding-acceptance.md) records
 strict-provider indexing/retrieval and its model-identity limitations.
+
+The [embedded MCP owner](embedded-mcp-owner.md) now exposes this combined owner
+through opt-in explicit tools on STDIO and HTTP MCP. This extends the standalone
+path; existing index workers and incompatible graph queries remain guarded.

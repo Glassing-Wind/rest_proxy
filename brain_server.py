@@ -174,17 +174,21 @@ async def lifespan(app: Starlette):
         file=sys.stderr,
     )
 
-    async with mcp.session_manager.run():
-        yield
-
-    # Shutdown.
-    await _idx.stop_watcher()
     try:
-        import memory.store as memory_store
-        await memory_store.close_pool()
-    except ImportError:
-        pass
-    print("[brain-server] Shutdown complete.", file=sys.stderr)
+        async with mcp.session_manager.run():
+            yield
+    finally:
+        # Shutdown.
+        await _idx.stop_watcher()
+        from memory.embedded_runtime import close_embedded_runtime
+        await close_embedded_runtime()
+        try:
+            import memory.store as memory_store
+            await memory_store.close_pool()
+        except ImportError:
+            pass
+        print("[brain-server] Shutdown complete.", file=sys.stderr)
+
 
 
 # ---------------------------------------------------------------------------
