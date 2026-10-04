@@ -11,6 +11,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from _runtime import resolve_python_runtime
+from graphrag_core.indexing.failure_evidence import record_index_failure
 
 
 def _ensure_runtime_dependencies() -> None:
@@ -101,7 +102,8 @@ def _metric_status_line(label: str, payload: dict, suffix: str) -> str:
 def _count_file_metric(neo4j_uri: str, neo4j_user: str, neo4j_pass: str, neo4j_db: str, project_id: str, property_name: str) -> int:
     import neo4j
 
-    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-helper pid={os.getpid()}")
     try:
         with driver.session(database=neo4j_db) as session:
             record = session.run(
@@ -116,7 +118,8 @@ def _count_file_metric(neo4j_uri: str, neo4j_user: str, neo4j_pass: str, neo4j_d
 def _count_isolated_files(neo4j_uri: str, neo4j_user: str, neo4j_pass: str, neo4j_db: str, project_id: str) -> int:
     import neo4j
 
-    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-helper pid={os.getpid()}")
     try:
         with driver.session(database=neo4j_db) as session:
             record = session.run(
@@ -140,7 +143,8 @@ def _set_struct_run_status(
 ) -> None:
     import neo4j
 
-    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-helper pid={os.getpid()}")
     try:
         with driver.session(database=neo4j_db) as session:
             record = session.run(
@@ -194,7 +198,8 @@ def _get_struct_run_id(
 ) -> str | None:
     import neo4j
 
-    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-helper pid={os.getpid()}")
     try:
         with driver.session(database=neo4j_db) as session:
             record = session.run(
@@ -247,7 +252,8 @@ def _verify_struct_shadow_graph_clean(
     LIMIT 10
     """
 
-    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-helper pid={os.getpid()}")
     try:
         with driver.session(database=neo4j_db) as session:
             stale_node_count_record = session.run(
@@ -325,7 +331,8 @@ def _promote_struct_shadow_graph(
     RETURN count(n) AS invalid_count
     """
 
-    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-helper pid={os.getpid()}")
     try:
         with driver.session(database=neo4j_db) as session:
             @neo4j.unit_of_work(
@@ -358,7 +365,8 @@ def _verify_shadow_namespace_cleared(
 ) -> None:
     import neo4j
 
-    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-helper pid={os.getpid()}")
     try:
         with driver.session(database=neo4j_db) as session:
             node_record = session.run(
@@ -417,8 +425,10 @@ def _run_struct_index(args, run_id: str, shadow_project_id: str) -> int:
         )
         _log_timed_step("index_workspace", index_started_at, extra=f"files={len(files)}")
     except Exception as exc:
-        print(f"[ts-pack:struct] ERROR: {exc}", file=sys.stderr, flush=True)
-        raise RuntimeError("Structural indexing did not complete")
+        record_index_failure(args.project_id, run_id, "native_index", exc)
+        print(f"[ts-pack:struct] ERROR: native indexing failed ({type(exc).__name__}).",
+              file=sys.stderr, flush=True)
+        raise RuntimeError("Structural indexing did not complete") from exc
 
     try:
         finalize_started_at = time.perf_counter()
@@ -568,19 +578,23 @@ def _run_struct_index(args, run_id: str, shadow_project_id: str) -> int:
         _log_timed_step("set_struct_run_status(done)", set_status_started_at)
         _log_timed_step("struct_total", struct_started_at, extra=f"project={args.project_id}")
     except Exception as exc:
+        record_index_failure(args.project_id, run_id, "finalization_or_publication", exc)
         set_failed_status_started_at = time.perf_counter()
-        _set_struct_run_status(
-            args.neo4j_uri,
-            args.neo4j_user,
-            args.neo4j_pass,
-            args.neo4j_db,
-            args.project_id,
-            "finalize_failed",
-            error=str(exc),
-        )
+        try:
+            _set_struct_run_status(
+                args.neo4j_uri,
+                args.neo4j_user,
+                args.neo4j_pass,
+                args.neo4j_db,
+                args.project_id,
+                "finalize_failed",
+                error=str(exc),
+            )
+        except Exception as status_error:
+            record_index_failure(args.project_id, run_id, "failure_status_write", status_error)
         _log_timed_step("set_struct_run_status(finalize_failed)", set_failed_status_started_at)
         print(
-            f"[ts-pack:struct] WARNING: Rust graph finalization failed: {exc}",
+            f"[ts-pack:struct] WARNING: finalization/publication failed ({type(exc).__name__}).",
             file=sys.stderr,
             flush=True,
         )
@@ -631,11 +645,13 @@ def main() -> int:
     import neo4j
     from graphrag_core.indexing.shadow import ShadowLifecycle
 
-    driver = neo4j.GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_pass))
+    driver = neo4j.GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_pass),
+                                          user_agent=f"rest-proxy/struct-wrapper pid={os.getpid()}")
     try:
         with ShadowLifecycle(driver, args.neo4j_db, args.project_id, shadow_project_id, run_id):
             return _run_struct_index(args, run_id, shadow_project_id)
-    except Exception:
+    except Exception as exc:
+        record_index_failure(args.project_id, run_id, "struct_wrapper", exc)
         print("[ts-pack:struct] ERROR: structural run failed; staged evidence retained.",
               file=sys.stderr, flush=True)
         return 1

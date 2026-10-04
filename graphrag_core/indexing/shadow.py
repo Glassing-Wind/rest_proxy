@@ -61,7 +61,8 @@ class ShadowLifecycle:
                 "SET s.status=$status, s.finished_at=timestamp(), s.heartbeat_at=timestamp()",
                 status="failed" if exc_type else "finished",
             )
-        except Exception:
+        except Exception as terminal_error:
             # Leave protected ownership on an uncertain completion.
-            pass
+            from graphrag_core.indexing.failure_evidence import record_index_failure
+            record_index_failure(self.project_id, self.run_id, "lifecycle_terminal_write", terminal_error)
         return False

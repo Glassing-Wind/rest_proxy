@@ -22,7 +22,11 @@ def load_index_workspace_module():
     dotenv_mod = types.ModuleType("dotenv")
     dotenv_mod.load_dotenv = lambda *args, **kwargs: None
     neo4j_mod = types.ModuleType("neo4j")
-    neo4j_mod.GraphDatabase = types.SimpleNamespace(driver=lambda *args, **kwargs: None)
+    # Helpers import Neo4j lazily after this loader returns. Keep a complete
+    # offline client stub available for the entire test, not just module loading.
+    offline_driver = mock.MagicMock()
+    offline_driver.session.return_value.__enter__.return_value.run.return_value.single.return_value = None
+    neo4j_mod.GraphDatabase = types.SimpleNamespace(driver=mock.Mock(return_value=offline_driver))
 
     runtime_mod = types.ModuleType("_runtime")
     runtime_mod.resolve_python_runtime = lambda: {"python": sys.executable}
@@ -82,6 +86,7 @@ def load_index_workspace_module():
         source = MODULE_PATH.read_text(encoding="utf-8")
         source = source.split("# ── CLI ", 1)[0]
         exec(compile(source, str(MODULE_PATH), "exec"), module.__dict__)
+    module._test_neo4j_stub = neo4j_mod
     return module
 
 
@@ -613,6 +618,15 @@ class IndexWorkspaceTests(unittest.TestCase):
     def setUp(self):
         self.module = load_index_workspace_module()
         self.module._TS_PACK_INIT_DONE = True
+        neo4j_patch = mock.patch.dict(sys.modules, {"neo4j": self.module._test_neo4j_stub})
+        neo4j_patch.start()
+        self.addCleanup(neo4j_patch.stop)
+
+    def test_late_graph_helpers_use_offline_client(self):
+        factory = self.module._test_neo4j_stub.GraphDatabase.driver
+        self.assertIsNone(self.module._get_latest_successful_struct_run_id("fixture"))
+        self.module._set_semantic_run_status("fixture", "run", "failed")
+        self.assertEqual(factory.call_count, 2)
 
     def test_promote_semantic_file_roles_to_graph_skips_legacy_rows_without_emitted_roles(self):
         self.module.memory_store._pg_pool_available = lambda: True

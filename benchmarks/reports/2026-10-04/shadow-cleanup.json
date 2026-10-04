@@ -1,0 +1,149 @@
+{
+  "namespace": "7f6b7aacd978::shadow::7f6b7aacd978:11055:1791067739470000128",
+  "snapshot_sha256": "ffc69ce04f49bf064382c9813e65b1ddb7cbed73e07186a3676f1db6e9cfbe42",
+  "nodes": 582,
+  "relationships": 1639,
+  "boundary_or_tagged_external": 60,
+  "superseding_run": "7f6b7aacd978:38928:1791131090750000128",
+  "evidence": {
+    "failed": {
+      "job_id": "0b72c1fe",
+      "state_sha256": "beacbb9cdf77f2b2497ac8cdbe68e9c6813b4c16af82f6a3f4173ce3aa4c25a8",
+      "log_sha256": "7770aeccaac949c46cfe986215e1ba1cdbf842f4b3956cab86ef8f033748b216",
+      "struct_pid": 11055,
+      "started_at": 1791067739.2838001,
+      "finished_at": 1791067740.417192,
+      "project_path": "/Users/michaelmarler/Projects/rentallaw"
+    },
+    "superseding": {
+      "job_id": "3f3e67a5",
+      "state_sha256": "c357d6db19d5cd393587e6c9c82370f4ecaebe0adbcfd7720c7e7ba8abb0ab32",
+      "log_sha256": "99d65e744a8b9f357abcf5a105a371a6cd7d4e550233945c27fa54de498febf8",
+      "struct_pid": 38928,
+      "started_at": 1791131090.562551,
+      "finished_at": 1791131094.006712,
+      "project_path": "/Users/michaelmarler/Projects/rentallaw"
+    }
+  },
+  "result": {
+    "decision_id": "legacy-shadow-bdc2a48a461a457e838c927f46aeae40",
+    "nodes_deleted": 582,
+    "relationships_deleted": 1639
+  },
+  "local_snapshot": "/Users/michaelmarler/Projects/rest_proxy/.runtime/shadow-cleanup/legacy-shadow-bdc2a48a461a457e838c927f46aeae40/snapshot.json",
+  "canonical_before": {
+    "canonical_nodes": 4514,
+    "canonical_relationships": 9534,
+    "canonical_sha256": "904a22e05c36d607ac986cee695992c693fcc63759a3b64ecf20b4a44a81b632",
+    "publication": [
+      {
+        "struct_run": "7f6b7aacd978:38928:1791131090750000128",
+        "semantic_run": "7f6b7aacd978:semantic:6edcd6b063a5",
+        "semantic_struct": "7f6b7aacd978:38928:1791131090750000128",
+        "status": "done"
+      }
+    ],
+    "shadow": [
+      {
+        "nodes": 582
+      }
+    ]
+  },
+  "canonical_after": {
+    "canonical_nodes": 4514,
+    "canonical_relationships": 9534,
+    "canonical_sha256": "904a22e05c36d607ac986cee695992c693fcc63759a3b64ecf20b4a44a81b632",
+    "publication": [
+      {
+        "struct_run": "7f6b7aacd978:38928:1791131090750000128",
+        "semantic_run": "7f6b7aacd978:semantic:6edcd6b063a5",
+        "semantic_struct": "7f6b7aacd978:38928:1791131090750000128",
+        "status": "done"
+      }
+    ],
+    "shadow": [
+      {
+        "nodes": 0
+      }
+    ]
+  },
+  "canonical_unchanged": true,
+  "historical_run_unchanged": true,
+  "global_shadow_and_test_node_residue": 0,
+  "snapshot_file_sha256": "ffc69ce04f49bf064382c9813e65b1ddb7cbed73e07186a3676f1db6e9cfbe42",
+  "authentication_investigation": {
+    "reproduced_graph_pipeline": {
+      "ci_exit": 0,
+      "events": [
+        {
+          "timestamp": "2026-10-04 16:30:17.237+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "invalid_credentials"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.286+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "invalid_credentials"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.379+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "invalid_credentials"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.417+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "rate_limit"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.418+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "rate_limit"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.512+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "rate_limit"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.512+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "rate_limit"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.545+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "rate_limit"
+        },
+        {
+          "timestamp": "2026-10-04 16:30:17.545+0000",
+          "observed_during": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_index_workspace.py",
+          "category": "rate_limit"
+        }
+      ],
+      "attribution": "temporal correlation only; not server client identity"
+    },
+    "fixed_graph_pipeline": {
+      "ci_exit": 0,
+      "events": [],
+      "attribution": "temporal correlation only; not server client identity"
+    },
+    "fixed_full_ci": {
+      "ci_exit": 0,
+      "events": [],
+      "attribution": "temporal correlation only; not server client identity"
+    },
+    "cause": "test_index_workspace.py released its Neo4j module stub before lazy helper imports; test helpers could use the real driver with default credentials",
+    "historical_client_attribution": "Not directly identifiable from old security log; current controlled reproduction identifies a matching trigger"
+  },
+  "verification": {
+    "live_adjudication_checks": 4,
+    "failure_and_digest_checks": 4,
+    "live_lifecycle_checks": 6,
+    "indexing_health_checks": 21,
+    "semantic_indexer_checks": 22,
+    "full_ci": "passed",
+    "mcp_source_overview_health_cleanup": "passed",
+    "cleanup_and_source_parity": "passed"
+  }
+}

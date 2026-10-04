@@ -381,9 +381,14 @@ async def _get_shadow_graph_health(session) -> dict[str, int]:
     rel_rows = await _execute_read(
         session,
         """
-        MATCH ()-[r]->()
+        MATCH (a)-[r]->(b)
         WHERE r.project_id CONTAINS '::shadow::'
-        RETURN count(r) AS rels, count(DISTINCT r.project_id) AS rel_projects
+           OR a.project_id CONTAINS '::shadow::'
+           OR b.project_id CONTAINS '::shadow::'
+        RETURN count(r) AS rels,
+               count(DISTINCT CASE WHEN a.project_id CONTAINS '::shadow::' THEN a.project_id
+                                  WHEN b.project_id CONTAINS '::shadow::' THEN b.project_id
+                                  ELSE r.project_id END) AS rel_projects
         """,
         op="get_shadow_graph_rel_health",
     )
@@ -452,6 +457,23 @@ async def _inspect_shadow_run(session, namespace: str) -> dict:
     )
     owner["reason"] = "terminal tracked run" if owner["eligible"] else "protected; activity or ownership uncertain"
     return owner
+
+
+async def _preview_shadow_relationships(session, namespace: str) -> dict:
+    rows = await _execute_read(
+        session,
+        "MATCH (a)-[r]->(b) "
+        "WHERE a.project_id=$ns OR b.project_id=$ns OR r.project_id=$ns "
+        "RETURN count(r) AS total, "
+        "sum(CASE WHEN r.project_id=$ns THEN 1 ELSE 0 END) AS tagged, "
+        "sum(CASE WHEN a.project_id=$ns AND b.project_id=$ns THEN 1 ELSE 0 END) AS internal",
+        ns=namespace, op="preview_shadow_relationships",
+    )
+    counts = rows[0] if rows else {}
+    total = int(counts.get("total") or 0)
+    internal = int(counts.get("internal") or 0)
+    return {"total": total, "tagged": int(counts.get("tagged") or 0),
+            "internal": internal, "boundary_or_tagged_external": total - internal}
 
 
 # Acquire the ownership-record lock before checking eligibility in every deletion
@@ -1846,6 +1868,12 @@ async def cleanup_stale_shadow_graph(
                 for pid in project_ids:
                     owner = await _inspect_shadow_run(session, pid)
                     lines.append(f"- Namespace: {pid}; ownership: {stable_shadow_owner(owner)}")
+                    edges = await _preview_shadow_relationships(session, pid)
+                    lines.append(
+                        f"  - Relationships: total={edges['total']}; namespace-tagged={edges['tagged']}; "
+                        f"internal={edges['internal']}; boundary/tagged-external="
+                        f"{edges['boundary_or_tagged_external']}"
+                    )
                 lines.append(
                     "- Cleanup requires dry_run=False and an explicit namespaces list. "
                     "Only tracked terminal runs are eligible; active and unknown owners are protected."
@@ -1878,8 +1906,8 @@ async def cleanup_stale_shadow_graph(
                 count = await _execute_write_scalar(
                     session,
                     _SHADOW_DELETE_GUARD + """
-                    MATCH ()-[r]->()
-                    WHERE r.project_id = $pid
+                    MATCH (a)-[r]->(b)
+                    WHERE r.project_id = $pid OR a.project_id = $pid OR b.project_id = $pid
                     WITH r LIMIT $limit
                     DELETE r
                     RETURN count(r) AS deleted
@@ -1898,7 +1926,7 @@ async def cleanup_stale_shadow_graph(
                     _SHADOW_DELETE_GUARD + """
                     MATCH (n {project_id: $pid})
                     WITH n LIMIT $limit
-                    DETACH DELETE n
+                    DELETE n
                     RETURN count(n) AS deleted
                     """,
                     op="cleanup_shadow_nodes",

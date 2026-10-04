@@ -1,5 +1,9 @@
 # Legacy shadow run investigation — October 4, 2026
 
+Subsequent authorized work completed [guarded cleanup and authentication isolation](../../../docs/legacy-shadow-adjudication.md).
+The namespace now has zero residue. The findings below describe the earlier
+read-only investigation; its original snapshot receipt is preserved.
+
 Read-only investigation of
 `7f6b7aacd978::shadow::7f6b7aacd978:11055:1791067739470000128`.
 The canonical project is `/Users/michaelmarler/Projects/rentallaw`. No operational

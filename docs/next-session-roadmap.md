@@ -2,6 +2,16 @@
 
 ## Current checkpoint — October 4, 2026
 
+Latest implementation: [legacy cleanup and authentication isolation](legacy-shadow-adjudication.md)
+removed the abandoned 582 nodes / 1,639 incident relationships without changing
+the live canonical graph fingerprint or publication IDs. No shadow residue remains.
+Monitored CI traced a reproducible authentication burst to late Neo4j imports in
+`test_index_workspace.py`; keeping the stub active throughout tests eliminated new
+invalid-credential/rate-limit events in graph regressions and full CI. Local
+redacted failure evidence now survives graph status-write outages. Legacy
+adjudication is implemented; uncertain running/remote-writer recovery remains.
+The entries below retain the preceding investigation checkpoints.
+
 Fork PR #1 and rest_proxy PR #1 are merged. Post-merge hosted CI and Security
 passed; both requirements files retain fork SHA
 `e1c99f71478dd1d2f974cb02e4038424d21a12ce`. Earlier pending/draft entries below

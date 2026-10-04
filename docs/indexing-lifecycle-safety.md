@@ -2,6 +2,11 @@
 
 Implemented October 4, 2026, following the Python 3.14 / ts-pack merge.
 
+Latest update: [legacy adjudication and authentication isolation](legacy-shadow-adjudication.md)
+now provides a separate evidence-backed administrative path. The legacy 582-node
+namespace described below was cleaned through that path; current shadow residue
+is zero. Earlier read-only inspection results below remain historical evidence.
+
 Structural indexing builds `<project_id>::shadow::<run_id>` staging graphs. A
 `ShadowRun` record now tracks the canonical project, exact namespace, run ID,
 unique writer token, host, PID, start time, heartbeat and terminal state. The
@@ -93,7 +98,7 @@ published successfully. The originating bad-authentication client remains unknow
 Legacy cleanup is still blocked by missing tracked ownership, pending explicit
 adjudication support; no deletion or historical-state reassignment was performed.
 
-Remaining work: abandoned-run adjudication/recovery, retention for lifecycle
+Remaining work: uncertain running/remote-writer recovery, retention for lifecycle
 records, coordinated graph/vector publication, and the existing retrieval golden
 discrepancy. Embedded storage and FIRE persistence/budgeting remain milestones in
 the [integrated platform plan](integrated-platform-plan.md).
