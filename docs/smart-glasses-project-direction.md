@@ -64,6 +64,19 @@ Example: “Where did I leave my keys?” may produce “Your keys were last rec
 on the kitchen counter at 4:12 PM,” with the supporting image. If the evidence
 does not establish that they are the user's keys, disclose that uncertainty.
 
+## Proposed workflow name: WATER
+
+October 4 discussion proposed **WATER — Watch, Annotate, Trace, Evaluate,
+Retrieve** for the personal-observation workflow. It is a candidate acronym,
+not a selected product name or existing dependency. “Watch” initially means
+deliberate, user-initiated observation within the capture experiment. Annotation
+adds interpretations; tracing retains originals; evaluation checks evidence and
+uncertainty before retrieval supports an answer.
+
+[WET — Working Evidence Trail](fire-platform.md#proposed-supporting-method-wet)
+is a related proposed evidence method. Either concept can be evaluated without
+combining this project's implementation or personal data with rest_proxy.
+
 ## Relationship to FIRE
 
 Find, Integrate, Retrieve, Explain is a useful design pattern for this project:
@@ -113,3 +126,11 @@ References:
 Project name, repository location, target phone platform and hardware selection
 remain undecided. No new repository, device integration, personal-data collection
 or clinical evaluation has been started by this direction document.
+
+## Separate adjacent direction: incident investigation
+
+Flock camera integration was raised as another potential application of evidence
+graphs and retrieval. Keep it separate from personal memory and dementia support:
+agency access, case authorization, evidence preservation and vendor restrictions
+require their own product decisions. See the
+[authorized incident-investigation direction](incident-investigation-project-direction.md).

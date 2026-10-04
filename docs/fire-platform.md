@@ -18,6 +18,24 @@ MCP exposes investigation and context tools. The optional REST proxy can assembl
 context before inference. LadybugDB, LanceDB and our ts-pack fork are the intended
 native storage/parsing foundation; backend integration remains in progress.
 
+## Proposed supporting method: WET
+
+October 4 discussion proposed **WET — Working Evidence Trail** as a method
+supporting FIRE. This is a working acronym, not an adopted product name or an
+existing software dependency. FIRE describes the investigation cycle; WET
+describes the evidence retained behind it.
+
+A working evidence trail links original sources and observations to processing
+steps, interpretations, conclusions and later corrections. Preserve source
+identity/version, scope and timestamps; distinguish observed, inferred and
+user-confirmed claims. Retrieval and compaction must retain those links and
+disclose unavailable originals. These requirements extend the provenance direction
+below; they do not establish that durable trails are already implemented.
+
+The separate wearable discussion also proposed
+[WATER — Watch, Annotate, Trace, Evaluate, Retrieve](smart-glasses-project-direction.md#proposed-workflow-name-water).
+It remains a candidate workflow name for that project.
+
 ## Compaction is the continuity boundary
 
 Continuity must survive compression. A summary provides navigation; every material

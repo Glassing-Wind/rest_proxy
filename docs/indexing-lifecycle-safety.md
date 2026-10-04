@@ -66,8 +66,23 @@ Read-only inspection on October 4 still found 582 nodes in
 `7f6b7aacd978::shadow::7f6b7aacd978:11055:1791067739470000128`. Its canonical
 project reported `done`, while its IndexRun reported `struct_written`. It predates
 tracked ownership; no deletion or terminal-state reassignment was performed. The
-October 3 report's 71 relationships are a historical count, not a fresh count from
-that node inspection.
+initial October 4 inspection counted nodes only. A subsequent read-only inspection
+confirmed the following composition and 71 relationships, all of type `IMPORTS`:
+
+| Node labels (all also carry `Node`) | Count |
+| --- | ---: |
+| Function | 289 |
+| Import | 173 |
+| File | 46 |
+| Section | 37 |
+| Class | 30 |
+| CloneGroup | 5 |
+| FileCloneGroup | 2 |
+| **Total** | **582** |
+
+These are code-indexing records in a staging namespace. They are unrelated to
+personal-memory or smart-glasses inputs. Counts do not establish the cause of
+incomplete promotion or prove an inactive writer.
 
 Remaining work: abandoned-run adjudication/recovery, retention for lifecycle
 records, coordinated graph/vector publication, and the existing retrieval golden
