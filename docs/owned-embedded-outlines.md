@@ -89,3 +89,8 @@ this is not a minimal clean-install recipe.
    manifest/originals are durable, but existing proxy memory still uses its server path.
 6. Complete real-repository MCP investigation with hybrid retrieval and services
    disabled; verify restart, cancellation and cross-store recovery.
+
+Subsequent [combined run publication](embedded-run-publication.md) implements
+LanceDB staging and retrieval behind the shared graph receipt. The remaining-gates
+list above records the standalone outline checkpoint. Application routing and
+complete graph/schema compatibility are still unfinished.

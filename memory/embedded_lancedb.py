@@ -1,6 +1,7 @@
-"""Experimental standalone LanceDB chunk store.
+"""Legacy standalone LanceDB feasibility adapter; not the run-published backend.
 
-Not routed through memory/store or the indexing pipeline. This adapter does not
+New owned publication uses memory.embedded_lance_runs.LanceRunStore.
+This legacy probe adapter is not routed through memory/store or the indexing pipeline. This adapter does not
 construct an ANN index or implement hybrid RRF; backend parity remains unproven.
 """
 

@@ -2,11 +2,19 @@
 
 ## Current checkpoint — October 4, 2026
 
+[Combined embedded publication](embedded-run-publication.md) now stages LanceDB
+chunks under a fresh run and exposes them through the atomic Ladybug receipt.
+Native text/vector/hybrid retrieval, failure/cancellation/crash recovery, cleanup
+and deletion passed. Network-denied storage acceptance covered 130 files and
+1,622 chunks using explicitly synthetic vectors; semantic quality is unmeasured.
+Actual provider acceptance, complete graph queries and MCP/REST owner routing
+remain the next Priority 2 gates. The outline checkpoints below preceded this work.
+
 [Owned embedded outlines](owned-embedded-outlines.md) now publish structural
 file/symbol snapshots and originals atomically, protected by a local database
 owner lock. Network-denied indexing/reopen inspected 128 production Python files
-and 1,122 symbols. The remaining query corpus, owner routing, LanceDB and
-coordinated graph/vector publication remain Priority 2 work.
+and 1,122 symbols. Combined publication now extends this foundation; full query
+compatibility and application owner routing remain Priority 2 work.
 
 The [embedded transaction adapter](embedded-transaction-adapter.md) now passes
 native Python 3.14 rollback, cancellation, read-only and persistence checks.
