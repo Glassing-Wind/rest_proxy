@@ -1,0 +1,217 @@
+{
+  "inspected_at": "2026-10-04T16:10:32.764677+00:00",
+  "namespace": "7f6b7aacd978::shadow::7f6b7aacd978:11055:1791067739470000128",
+  "project_id": "7f6b7aacd978",
+  "failed_job": "0b72c1fe",
+  "failed_run": "7f6b7aacd978:11055:1791067739470000128",
+  "failed_at_utc": "2026-10-03T22:49:00Z",
+  "struct_rc": 1,
+  "semantic_rc": 0,
+  "cause": "Neo4j AuthenticationRateLimit during finalization; same error prevented failure-status write",
+  "trigger": "Server log confirms three invalid-credential attempts before rate limit; originating client not established",
+  "retry_job": "03074bea",
+  "retry_run": "7f6b7aacd978:11751:1791067808970000128",
+  "retry_success": true,
+  "incident_relationships": [
+    {
+      "type": "CALLS",
+      "namespace": null,
+      "count": 541
+    },
+    {
+      "type": "CALLS_EXTERNAL_SYMBOL",
+      "namespace": null,
+      "count": 60
+    },
+    {
+      "type": "CONTAINS",
+      "namespace": null,
+      "count": 529
+    },
+    {
+      "type": "EXPORTS_SYMBOL",
+      "namespace": null,
+      "count": 68
+    },
+    {
+      "type": "HAS_CANONICAL",
+      "namespace": null,
+      "count": 7
+    },
+    {
+      "type": "IMPORTS",
+      "namespace": "7f6b7aacd978::shadow::7f6b7aacd978:11055:1791067739470000128",
+      "count": 71
+    },
+    {
+      "type": "IMPORTS_SYMBOL",
+      "namespace": null,
+      "count": 64
+    },
+    {
+      "type": "MEMBER_OF_CLONE_GROUP",
+      "namespace": null,
+      "count": 283
+    },
+    {
+      "type": "MEMBER_OF_FILE_CLONE_GROUP",
+      "namespace": null,
+      "count": 16
+    }
+  ],
+  "latest_struct_runs": [
+    {
+      "id": "7f6b7aacd978:25843:1791126291820000000",
+      "status": "done",
+      "started": 1791126291835,
+      "finished": 1791126294280,
+      "promoted": 1791126294280
+    },
+    {
+      "id": "7f6b7aacd978:25501:1791126273130000128",
+      "status": "done",
+      "started": 1791126273141,
+      "finished": 1791126275672,
+      "promoted": 1791126275672
+    },
+    {
+      "id": "7f6b7aacd978:9590:1791124493930000128",
+      "status": "done",
+      "started": 1791124493955,
+      "finished": 1791124496992,
+      "promoted": 1791124496992
+    }
+  ],
+  "persisted_active_job_records": [],
+  "database_mutated": false,
+  "sources": [
+    {
+      "path": ".runtime/jobs/0b72c1fe/state.json",
+      "sha256": "beacbb9cdf77f2b2497ac8cdbe68e9c6813b4c16af82f6a3f4173ce3aa4c25a8"
+    },
+    {
+      "path": ".runtime/jobs/0b72c1fe/struct.log",
+      "sha256": "7770aeccaac949c46cfe986215e1ba1cdbf842f4b3956cab86ef8f033748b216"
+    },
+    {
+      "path": ".runtime/jobs/0b72c1fe/semantic.log",
+      "sha256": "e16f0a9a95652dce238e101c02a596c6764955a0488d6c6cb9de62db3535fe8a"
+    },
+    {
+      "path": ".runtime/jobs/03074bea/state.json",
+      "sha256": "c7c4a61536244240f353abe87b75b6879826f772643fbe530d8525d7589b48ae"
+    },
+    {
+      "path": ".runtime/jobs/03074bea/struct.log",
+      "sha256": "d531f9033cd0d2bddbc4d3fef27ffd5e15340a4c6cf61448bac327fc6eef380a"
+    }
+  ],
+  "relationship_boundary_check": [
+    {
+      "incident_relationships": 1639,
+      "internal_relationships": 1579,
+      "boundary_relationships": 60
+    }
+  ],
+  "security_log_evidence": {
+    "path": "/Users/michaelmarler/Library/Application Support/neo4j-desktop/Application/Data/dbmss/dbms-c278d536-bc62-4c16-b241-ceadac7139ac/logs/security.log",
+    "sha256_at_inspection": "cc3e3fc653e864adbce93ddf9abb62b4441fb176eb34ae79a69481c840f082a9",
+    "selected_events": [
+      {
+        "timestamp": "2026-10-03 22:48:59.147+0000",
+        "category": "successful_login"
+      },
+      {
+        "timestamp": "2026-10-03 22:48:59.474+0000",
+        "category": "successful_login"
+      },
+      {
+        "timestamp": "2026-10-03 22:48:59.705+0000",
+        "category": "successful_login"
+      },
+      {
+        "timestamp": "2026-10-03 22:48:59.713+0000",
+        "category": "successful_login"
+      },
+      {
+        "timestamp": "2026-10-03 22:48:59.771+0000",
+        "category": "successful_login"
+      },
+      {
+        "timestamp": "2026-10-03 22:48:59.823+0000",
+        "category": "invalid_credentials"
+      },
+      {
+        "timestamp": "2026-10-03 22:48:59.879+0000",
+        "category": "invalid_credentials"
+      },
+      {
+        "timestamp": "2026-10-03 22:48:59.984+0000",
+        "category": "invalid_credentials"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.028+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.032+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.047+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.047+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.048+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.048+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.153+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.153+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.193+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.193+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.202+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.202+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.205+0000",
+        "category": "rate_limit"
+      },
+      {
+        "timestamp": "2026-10-03 22:49:00.205+0000",
+        "category": "rate_limit"
+      }
+    ],
+    "client_attribution": "not established"
+  },
+  "relationship_totals": {
+    "namespace_property_scoped": 71,
+    "incident": 1639,
+    "internal": 1579,
+    "boundary": 60
+  }
+}

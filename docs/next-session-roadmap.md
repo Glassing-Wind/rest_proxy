@@ -14,6 +14,12 @@ disposable live Neo4j fixtures), the 21 indexing-health regressions and full loc
 CI passed. See [indexing lifecycle safety](indexing-lifecycle-safety.md).
 Legacy 582-node residue remains protected because its ownership is unknown.
 
+The [legacy run investigation](../benchmarks/reports/2026-10-04/shadow-run-investigation.md)
+now confirms authentication rate limiting blocked finalization and failure-status
+recording; a subsequent run published successfully. Identify the bad-authentication
+client, add explicit legacy adjudication, and fix relationship previews: 71 edges
+carry the namespace property, but 1,639 touch its staging nodes.
+
 Next: abandoned-run adjudication/recovery and coordinated graph/vector publication;
 resolve the existing 80-versus-81 retrieval golden discrepancy; complete owned
 Ladybug/LanceDB indexing and retrieval; implement FIRE persistence/resume and

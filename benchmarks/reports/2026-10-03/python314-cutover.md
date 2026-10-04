@@ -54,3 +54,9 @@ imports, files, sections, classes and clone groups. The canonical project report
 still unknown and no cleanup was performed. See the
 [lifecycle safety report and exact counts](../../../docs/indexing-lifecycle-safety.md#verification-and-observed-legacy-residue).
 This follow-up does not change the original cutover measurements.
+
+Further [run investigation](../2026-10-04/shadow-run-investigation.md) confirmed
+authentication rate limiting blocked finalization and the failure-status write.
+The 71 relationship count is namespace-property scoped; 1,639 relationships touch
+the staging nodes when counted by endpoints. The source of the invalid-credential
+attempts remains unresolved, and no legacy cleanup was performed.

@@ -67,7 +67,8 @@ Read-only inspection on October 4 still found 582 nodes in
 project reported `done`, while its IndexRun reported `struct_written`. It predates
 tracked ownership; no deletion or terminal-state reassignment was performed. The
 initial October 4 inspection counted nodes only. A subsequent read-only inspection
-confirmed the following composition and 71 relationships, all of type `IMPORTS`:
+confirmed the following composition and 71 namespace-property-scoped relationships,
+all of type `IMPORTS`:
 
 | Node labels (all also carry `Node`) | Count |
 | --- | ---: |
@@ -81,8 +82,16 @@ confirmed the following composition and 71 relationships, all of type `IMPORTS`:
 | **Total** | **582** |
 
 These are code-indexing records in a staging namespace. They are unrelated to
-personal-memory or smart-glasses inputs. Counts do not establish the cause of
-incomplete promotion or prove an inactive writer.
+personal-memory or smart-glasses inputs. An endpoint-based follow-up counted
+1,639 relationships touching these nodes, including 60 boundary edges; most
+relationships lack their own `project_id`. The 71 count is not the full edge count.
+
+The [read-only failure investigation](../benchmarks/reports/2026-10-04/shadow-run-investigation.md)
+traced this namespace to failed job `0b72c1fe`: Neo4j authentication rate limiting
+blocked finalization and then prevented recording the failure status. A later job
+published successfully. The originating bad-authentication client remains unknown.
+Legacy cleanup is still blocked by missing tracked ownership, pending explicit
+adjudication support; no deletion or historical-state reassignment was performed.
 
 Remaining work: abandoned-run adjudication/recovery, retention for lifecycle
 records, coordinated graph/vector publication, and the existing retrieval golden
