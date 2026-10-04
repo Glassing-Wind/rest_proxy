@@ -64,6 +64,23 @@ Example: “Where did I leave my keys?” may produce “Your keys were last rec
 on the kitchen counter at 4:12 PM,” with the supporting image. If the evidence
 does not establish that they are the user's keys, disclose that uncertainty.
 
+## Temporal framework candidate: Graphiti
+
+Graphiti is the strongest conceptual candidate from the October 4 framework
+review for evolving personal memory: source episodes, temporal relationships,
+corrections and historical retrieval. Evaluate it separately with synthetic events
+before introducing personal data. Test when a fact applied versus when the system
+learned it, provenance, ambiguous identities, scope isolation and deletion of both
+originals and derived records. Extracted claims remain interpretations requiring
+evidence; a past location is not a current location.
+
+Its documented backends do not establish LadybugDB/LanceDB compatibility, and its
+Kùzu driver is deprecated. Storage and Python 3.14 compatibility remain acceptance
+gates. LightRAG/Fast GraphRAG may be transcript/document retrieval alternatives;
+LangGraph may coordinate capture-processing-retrieval workflows later. No framework
+is selected or installed. See the
+[framework research and primary sources](evidence-routing-framework-research.md).
+
 ## Proposed workflow name: WATER
 
 October 4 discussion proposed **WATER — Watch, Annotate, Trace, Evaluate,

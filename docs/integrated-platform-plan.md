@@ -107,6 +107,7 @@ Ladybug adapter. No migration of operational databases is part of these probes.
 
 ## Supporting documents
 
+- [Evidence routing and framework evaluation](evidence-routing-framework-research.md)
 - [Original-plan correction and acceptance](enterprise-tooling-plan.md)
 - [Software and licensing research](hybrid-stack-research.md)
 - [Native verification](native-embedded-verification.md)

@@ -36,6 +36,22 @@ The separate wearable discussion also proposed
 [WATER — Watch, Annotate, Trace, Evaluate, Retrieve](smart-glasses-project-direction.md#proposed-workflow-name-water).
 It remains a candidate workflow name for that project.
 
+## Proposed evidence router
+
+Extend the current intent catalog and allowlisted read dispatcher into an optional
+router that chooses and explains a bounded evidence plan. Known-file questions
+should go directly to source; discovery, caller tracing and provenance questions
+need different routes. Scope, freshness and request budget inform selection.
+Use deterministic rules for clear cases and evaluate model-assisted planning only
+where ambiguity warrants it. Keep direct MCP tool access available.
+
+Own FIRE's routing policy and evidence contracts. LangGraph is an optional workflow
+runtime candidate; LightRAG and Fast GraphRAG are document-retrieval benchmark
+candidates. None replaces parser-derived code evidence by default. Compare actual
+outcomes with current agent-selected tools before adoption. See
+[framework findings, compatibility limits and evaluation order](evidence-routing-framework-research.md).
+This is proposed work, not an implemented autonomous router.
+
 ## Compaction is the continuity boundary
 
 Continuity must survive compression. A summary provides navigation; every material

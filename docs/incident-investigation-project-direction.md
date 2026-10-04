@@ -52,6 +52,21 @@ preservation and sharing controls. Derived graph and vector records must not
 silently bypass those source restrictions. Exact policies depend on the authorized
 deployment and must be established before operational use.
 
+## Framework candidates for synthetic evaluation
+
+Graphiti's temporal model may help separate when an observation occurred, when it
+was recorded and when a later correction became known. Evaluate historical queries
+and source-backed associations on synthetic incident timelines. Generated links
+must remain distinguishable from original observations and confirmed findings.
+LightRAG/Fast GraphRAG are document-retrieval candidates; LangGraph could coordinate
+bounded search and human-review steps. These are candidates, not adopted tools.
+
+Keep case/agency scope, access controls and source retention in application-owned
+contracts. A framework's capabilities do not establish vendor permission for data
+ingestion, embedding, inference or evaluation. Existing Flock authorization gates
+continue to apply. See the separate
+[framework research and compatibility limits](evidence-routing-framework-research.md).
+
 ## First investigation and acceptance gates
 
 1. Identify an authorized customer, concrete incident workflow, supported API

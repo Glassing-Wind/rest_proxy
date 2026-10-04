@@ -2,6 +2,16 @@
 
 ## Current checkpoint — October 4, 2026
 
+The [routing/framework review](evidence-routing-framework-research.md) recommends
+an optional evidence router built on the current catalog/read dispatcher, evaluated
+against agent-selected tools before retrieval changes. LangGraph is an optional
+workflow runtime; LightRAG/Fast GraphRAG are document-retrieval benchmark candidates.
+Graphiti's temporal-memory experiment belongs to the separate personal-memory
+direction, with synthetic incident timelines considered independently. No framework
+adoption or Ladybug/LanceDB compatibility is established. Existing recovery,
+publication, embedded-storage and FIRE continuity work remains the implementation
+priority; routing is a bounded follow-up evaluation.
+
 Latest implementation: [legacy cleanup and authentication isolation](legacy-shadow-adjudication.md)
 removed the abandoned 582 nodes / 1,639 incident relationships without changing
 the live canonical graph fingerprint or publication IDs. No shadow residue remains.
