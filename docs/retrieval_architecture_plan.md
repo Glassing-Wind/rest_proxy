@@ -1,5 +1,10 @@
 # Retrieval Architecture Plan
 
+> **Archived planning record.** This document preserves the detailed extraction
+> plan and completed phases. For current ownership and change guidance, use
+> [Retrieval Architecture](retrieval_architecture.md). For the dated readiness
+> snapshot, use [Tool Trust Status](tool_trust_status.md).
+
 ## Goal
 
 Make retrieval first-in-class and keep it there.
@@ -167,8 +172,12 @@ These belong in `ts-pack` or a lower-level retrieval/indexing layer, not in MCP 
 
 ### Boundary Drift
 
-- docs retrieval semantics still live in Python MCP code
-- code retrieval contract is not strong enough to prevent fallback regressions
+- docs retrieval semantics still partly live in Python MCP code
+- legacy path fallback remains only where current semantic metadata is absent or
+  cannot exist yet (for example pre-index source eligibility); promoted tools use
+  the same semantic role precedence
+- a few query families still rely on `rest_proxy` policy where lower-level
+  metadata is not yet rich enough
 
 ### Topic Governance
 
@@ -180,6 +189,135 @@ These belong in `ts-pack` or a lower-level retrieval/indexing layer, not in MCP 
 - helper-level tests exist
 - product-behavior tests are too sparse
 - important retrieval guarantees are not pinned by golden tests
+
+
+## Current Status
+
+As of 2026-06-27, the architecture is materially closer to the target layering
+than when this plan was first written.
+
+### What Has Already Moved Deeper
+
+- semantic file-surface roles now come from `ts-pack` instead of being guessed
+  only in `rest_proxy`
+- focused dispatcher-anchor metadata and contract capabilities now come from
+  `ts-pack`
+- routing/request-handler semantic roles now come from `ts-pack`
+- Swift attributed extension classification, inherited protocol metadata, and
+  resource-reference query extraction now come from the pinned `ts-pack` fork;
+  Swift protocol call-chain conformers should be graph-owned when the repo has
+  been rebuilt with the current native extension.
+- semantic chunk identity and several indexing invariants were fixed below the
+  MCP layer instead of being papered over in retrieval logic
+- docs retrieval now has a reusable core in `memory/docs_retrieval.py`
+- code retrieval now has a reusable core in `memory/code_retrieval.py`
+- implementation retrieval policy has been split into focused `memory/`
+  modules for metadata, surfaces, query parsing, intent, semantic metadata,
+  query intent classification, rank-intent policy, scoring primitives,
+  workflow-specific scoring, role/node rank policy, enrichment, duplicate
+  handling, telemetry, and contracts
+
+### Current Retrieval Module Ownership
+
+- `memory/docs_retrieval.py`: docs query expansion, topic-family matching,
+  filtering, and docs ranking.
+- `memory/code_retrieval.py`: code retrieval orchestration across semantic,
+  exact, fallback, path-hint, crate, and final ranking stages; shared
+  `_enrich_rescue_rows` helper keeps all rescue-injection enrichment uniform.
+- `memory/cross_project_trace.py`: cross-project symbol definition selection,
+  semantic-consumer ranking, graph/semantic trace orchestration, and source
+  preview centering for non-MCP callers and MCP wrappers.
+- `memory/code_retrieval_loaders.py`: database read helpers for code retrieval
+  rescue rows, path-hint rows, Cargo crate metadata, and Neo4j read
+  transaction policy.
+- `memory/code_retrieval_clone.py`: optional Neo4j-backed clone deduplication
+  for code retrieval results, including debug-row insertion when requested.
+- `memory/code_retrieval_postprocess.py`: duplicate-aware reranking, per-file
+  dedupe, dispatcher/routing telemetry, and final implementation post-ranking.
+- `memory/retrieval_metadata.py`: shared metadata coercion, filtering, cargo
+  scope handling, and result rendering helpers.
+- `memory/retrieval_surfaces.py`: docs/support/generated/usage-heavy surface
+  classification and final implementation rank tuple.
+- `memory/retrieval_query.py`: query-symbol, member-expression, declaration
+  subject, and explicit path-hint parsing.
+- `memory/retrieval_semantics.py`: file roles, chunk roles, node types, member
+  usages, and result surface flags.
+- `memory/retrieval_intent_queries.py`: implementation query classification,
+  exact identifiers, inferred filename hints, generated-surface acceptance, and
+  query-family predicates.
+- `memory/retrieval_intent.py`: rank-intent weight policy, support-surface
+  penalties, usage-surface bonuses, and compatibility exports for intent
+  callers.
+- `memory/retrieval_scoring.py`: path/symbol/API/dispatcher/routing scoring
+  primitives and penalties, plus compatibility exports for scoring callers; shared
+  `_count_definition_patterns` helper keeps regex matching consistent.
+- `memory/retrieval_scoring_workflows.py`: dispatcher, command, provider,
+  routing, request-handler, controller, server-infra, and view-body scoring
+  policy.
+- `memory/retrieval_rank_policy.py`: implementation result role classification
+  plus role and node-type ranking policy.
+- `memory/retrieval_enrichment.py`: implementation result enrichment, rank-score
+  component assembly, ranking traces, and per-file dedupe.
+- `memory/retrieval_duplicates.py`: near-duplicate analysis, collapse, and
+  diversity reranking runtime.
+- `memory/retrieval_telemetry.py`: duplicate, dispatcher, and routing telemetry
+  contracts.
+- `memory/retrieval_policy.py`: compatibility facade for historical
+  `semantic_helpers` callers plus duplicate contract wrappers.
+
+### What `rest_proxy` Now Mostly Does
+
+- orchestration and health/alignment gating
+- role-aware ranking using lower-level metadata
+- query-family intent detection where product policy still belongs in the tool
+  layer
+- live telemetry, enterprise evals, parity checks, and user-facing formatting
+
+### What Was Successfully Deleted Or Reduced
+
+- stale-index compatibility as a silent default
+- dispatcher rescue/reordering branches that were only compensating for weak
+  ranking
+- routing partition and additive routing bonus branches once semantic roles and
+  structural ranking were strong enough
+- many path-only test/example/docs/benchmark suppressions in retrieval,
+  orientation, summaries, and code-intel paths
+- conflicting support-role demotion across promoted tools: implementation now
+  overrides coexisting docs/config/support roles, while generated and
+  test/example/benchmark classifications remain deliberately low signal
+
+### What Is Still Intentionally In `rest_proxy`
+
+These are not obviously wrong to keep higher:
+
+- product-level retrieval intent and ranking tradeoffs between structurally
+  valid answers, now mostly isolated in focused `memory/` modules
+- presentation decisions such as “Inspect First” wording or graph summary shape
+- telemetry and enterprise-eval diagnostics
+
+### What Is Still Not Clean Enough
+
+- primary and secondary promoted tools now classify candidates through the same
+  semantic-role-first precedence contract; remaining path-only compatibility is
+  confined to smaller admin/debug surfaces and legacy records
+- some query families may still need richer lower-level metadata if real usage
+  finds another repeated weak spot
+- `memory/retrieval_policy.py` is now a small facade; continue splitting only
+  when another clean ownership boundary emerges instead of moving logic for its
+  own sake
+
+
+## What To Do Next
+
+This plan should not be interpreted as “move everything down immediately.”
+Current next steps should follow this order:
+
+1. Use live MCP workflows and telemetry to find the next real hesitation.
+2. If the issue is a durable structural fact, move it down into `ts-pack` or a
+   lower-level index contract.
+3. If the issue is a query/product tradeoff, keep it in `rest_proxy`.
+4. Only add new goldens or workflow cases when they protect a real current
+   boundary.
 
 
 ## Golden Behavior Tests
@@ -241,6 +379,36 @@ The lower-level retrieval stack should expose separate contracts for:
 
 - duplicate candidate generation
 - result reranking/diversification
+
+## MCP Tool Surface
+
+`rest_proxy` is now the single owner of duplicate-aware retrieval policy at the MCP layer.
+
+Cross-repo callers should use:
+
+- `rerank_retrieval_results`
+- `analyze_duplicate_results`
+
+`rerank_retrieval_results` accepts a caller-supplied ranked list and returns:
+
+- a compact ordered path/index decision list by default
+- kept and suppressed counts plus redundancy before/after
+- duplicate-relation counts and regression alerts
+- the full results, groups, pairs, selection metadata, and candidate trace only
+  when `include_debug=true`
+
+`analyze_duplicate_results` exposes duplicate decisions without changing order. Its
+default output includes only detected duplicate pairs with path labels; use
+`include_debug=true` for full group and pair internals.
+
+Both tools expect each caller-supplied row to contain `content` and either
+`file_path` or `source_url`. Relevance can be supplied as `rrf` or `rank_score`.
+For code ranking QA, current semantic metadata belongs under `metadata`, notably
+`file_roles`, `chunk_role`, `node_types`, and `file_symbols`.
+
+This keeps duplicate-policy logic centralized in `rest_proxy` while allowing other repos to reuse it without reimplementing retrieval semantics locally.
+
+For normal agent usage, documentation retrieval already applies this reranking by default through `search_documentation`. That default path returns the post-rerank final list and collapses repeated chunks from the same documentation URL. The standalone MCP tools remain for debugging, evaluation, and caller-supplied custom candidate lists.
 
 ### Duplicate Candidate API
 
@@ -415,15 +583,18 @@ These tests should be treated as release gates for retrieval changes.
 
 ## Immediate Next Steps
 
-1. Keep the Rust duplicate primitive and Python binding in place.
-2. Leave Rust-backed retrieval collapse disabled by default until golden retrieval tests pass.
-3. Add corpus-specific duplicate-analysis fixtures for:
-   - exact duplicates
-   - renamed clones
-   - similar-but-different code
-   - canonical docs vs mirrors
-4. Build the reranker contract below `rest_proxy` before enabling default collapse/diversification.
-5. Delete Python-side duplicate heuristics only after the lower-level path has proven parity or better.
+1. Keep MCP wrappers thin: new search behavior should enter through
+   `memory/docs_retrieval.py`, `memory/code_retrieval.py`, or a focused
+   `memory/retrieval_*` module.
+2. Keep `memory/retrieval_policy.py` stable as a compatibility facade unless
+   another extracted unit has a clear product boundary and preserves existing
+   callers.
+3. Use live workflow misses to decide whether a weakness belongs in
+   `ts-pack` metadata, retrieval scoring, retrieval intent, or presentation.
+4. Keep standard-gate coverage aligned with promoted tool behavior and avoid
+   adding historical one-off cases that do not protect current trust.
+5. Update this document and `docs/tool_trust_status.md` whenever a module
+   changes ownership or a promoted MCP workflow changes its trust level.
 
 
 ## Recommended Implementation Order
@@ -450,19 +621,19 @@ These tests should be treated as release gates for retrieval changes.
 
 ### Phase 5. Delete Duplicate Tool-Layer Logic
 
-- remove transitional Python heuristics once parity is proven
-- keep one retrieval policy, not several competing ones
+- keep duplicate analysis and diversity policy in `memory/retrieval_duplicates.py`
+- keep MCP duplicate tools as contract/presentation wrappers
+- avoid reintroducing duplicate heuristics in tool-specific search code
 
 
 ## File-Level Direction
 
 ### Move Deeper
 
-- `tools/brain/docs/search.py`
-  Most retrieval semantics.
-- parts of `tools/brain/docs/config.py`
-  Topic families, ranking/source policy.
-- code retrieval fallback logic currently spread around search layers.
+- remaining durable structural facts that retrieval still infers at runtime
+- repeated path-only compatibility branches proven by live usage to represent
+  missing lower-level metadata
+- any new docs/code ranking behavior that two frontends should share
 
 ### Keep In `rest_proxy`
 

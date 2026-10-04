@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "exports": [
+    "authenticate",
+    "validate"
+  ],
+  "module_path": "/Users/michaelmarler/Projects/tree-sitter-language-pack/crates/ts-pack-python/python/tree_sitter_language_pack/__init__.py",
+  "metrics": {
+    "blank_lines": 1,
+    "code_lines": 4,
+    "comment_lines": 0,
+    "error_count": 0,
+    "max_depth": 6,
+    "node_count": 35,
+    "total_bytes": 97,
+    "total_lines": 5
+  },
+  "platform": "macOS-27.0.1-arm64-arm-64bit",
+  "limits": "Uses existing editable native installation; clean-install packaging and embedded graph writes are unverified."
+}

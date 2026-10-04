@@ -1,0 +1,146 @@
+5ac2aa735c Fix attributed Swift extension extraction
+1ed4fa0881 Keep declared route paths unmounted
+a96f5482f8 Canonicalize mounted route handlers
+27fff71ef9 Index declared Spring routes
+b0af5c6bd3 Reject false declaration anchors
+2ec203b6a5 Distinguish tool implementations from support files
+e0c2246685 Classify test files by semantic basename
+b12a2c512b Merge inferred semantic file roles
+551704abaf Register parser cache for language availability
+7cdf14c63c Emit routing handler semantic roles
+b30c31565f Strengthen model dispatcher anchor recall
+58bbcd09c4 Improve provider dispatcher anchor recall
+c55fefef5a Version focused dispatcher anchor contract
+3842d77a01 Make dispatcher anchors content-sensitive
+2d12439db2 Strengthen native dispatcher semantic anchors
+789fd80204 Emit command and package-aware semantic roles
+55bbeb3f86 Emit implementation family semantic file roles
+b9da80408b Emit api runtime and facade file roles
+79c70fd4d8 Emit docs and config semantic file roles
+31c2f11ab5 Emit semantic file surface roles
+87f175216e Strengthen ts-pack semantic metadata and provenance
+0af25f9fa2 Improve Kotlin JVM import resolution
+f34a94dce2 Add Kotlin tag queries for structural calls
+4100f917ae Store embedding timestamps as epoch seconds
+7845406c82 Respect configured Neo4j database in structural indexing
+5d178312e1 Add native semantic ingestion controls
+f543a778ce Improve structural graph fidelity and write stability
+ce50bbcf03 Sanitize semantic chunks for pathological source
+812bd6bd8e Harden Swift pathological parsing and ObjC++ routing
+fdd0b10753 Improve Swift protocol and extension fidelity
+d695e4b1bf Improve Swift package enrichment
+1837eab582 Add synthetic Swift entrypoint callers
+9022a8c77c Fix Swift shadow enrichment promotion
+0be18b33ee Fix Swift declaration chunks and classification
+ee17611c69 Add structured parse and resolve provenance
+7a25f47b4f Split resolution policy and add provenance reports
+961b5b1bb1 Document call provenance debugging
+d560dc2fdb Add targeted graph provenance debug tracing
+531756dc62 Split finalize graph helpers into focused modules
+1051f790f8 Refine finalize graph contract flow
+124a1ea416 Add file graph link to shared contract
+1a497a8a77 Export Python graph contract
+78a2f53aa8 Adopt schema constants in write paths
+6ca0212396 Formalize graph and semantic contract exports
+f9242135a5 Extract writer query helper stages
+ebe2bec5ad Split call resolution stages and telemetry
+e9db5d96c7 Split prep phase lookup and debug stages
+3eb5aa2ff3 Split parse phase into staged helpers
+573e6505a0 Split tag query orchestration from extraction
+4f14a2f228 Move semantic chunk enrichment into ts-pack
+e833aed45f Harden duplicate query-class overrides and exact Python types
+324c86a7ec Restore exact Rust wrapper call edges
+114b4adc13 Tighten exact call graph boundaries
+68e03a7f5b Improve exact and external call resolution
+2f156a3003 docs: add call resolution debugging guide
+2a20c038b5 Add call resolution diagnostics and Rust path fixes
+940806d24b Refactor call resolution around staged CallRef pipeline
+00bafa1ade Reduce Neo4j call write contention
+a9150b5458 Implement shadow graph promotion for structural indexing
+20a3e12536 feat: add 57 new tree-sitter grammars, bringing total to 305 languages
+c53e540950 Document local fork boundary
+bd77378043 Fix GDS graph projection materialization
+8713206231 Return structured file-graph metric status
+5bf0612879 Harden DB tag filtering against predicate misses
+9e46621323 Fix file-facts predicate filtering
+0ff000bc3e Range-limit hot web fact patterns
+e9ab8d6a03 Reduce web file-facts overmatching
+eef7a2749e Trim JS wrapper fact parsing overhead
+06b1b5dd87 Speed up file facts extraction
+2554d5ad71 Fix prepared JS/TS tag bundle path
+ccb5ff2772 Reduce external tag query overhead
+6e9023a6c5 Tighten JS/TS external call query filtering
+458d96d376 Use prepared queries for hot tag bundles
+23935792f0 Reduce JS/TS tag query setup overhead
+ecae95c62f Optimize query and extraction hot paths
+fb79d2f452 Optimize index intelligence hot path
+bf3977a6a9 Improve helper clone query distinction
+a8f3761fb4 Support TypeScript namespace re-exports
+52f83025ef Resolve alias exports through imported symbols
+4b367d8313 Format tags query helper
+07ac306548 Preserve alias-aware export facts
+dc8366bee0 Resolve TypeScript re-exports into export edges
+120d8e87b8 Extract Go type declarations as symbols
+1d8d7f9edf Harden index symbol coverage and query profiling
+5a924dddbb Cache compiled extraction and query paths
+d65f58ff65 Add duplicate trace and experiment surfaces
+4efc72b617 Add query-aware duplicate diversification core
+03fa61b9ec Extract reusable duplicate primitives from clone enrichment
+5fabbc02b7 Apply indexer cleanup and formatting
+a472d42ed2 Strengthen exported and test graph facts
+ab22a3459d Mitigate Neo4j deadlocks in ts-pack-index writes
+090af5abc9 fix: deepen js api route graph extraction
+457c91294d fix: serialize call edge writes to avoid neo4j deadlocks
+c695243e66 feat: add rust db model graph facts
+f5ee909e74 feat: enrich rust cargo and impl graph facts
+db86e7f0c2 feat: add rust route and http file facts
+0b1c8f24e7 feat: improve js structure extraction and auto-download
+c4cc263475 feat: move semantic payload builder into native bindings
+9059722cab feat: move semantic upsert execution into native bindings
+20c65ecf41 feat: move chunk fallback helpers into native bindings
+7da80404d4 chore: trim legacy semantic helper exports
+ae9cc92604 feat: move semantic index driver into native bindings
+745668e030 refactor: move semantic driver planning into native bindings
+486e57f805 refactor: move semantic round planning into native bindings
+19fb2a7703 feat: add semantic index driver to ts-pack package
+c268a39527 refactor: move semantic sync helpers into native bindings
+5cfb0b96b4 feat: add semantic index round executor to ts-pack package
+0465587acb feat: add semantic index prepare helper to ts-pack package
+00cf1d0bd5 feat: add semantic sync executor to ts-pack package
+1bba9ef5e2 feat: add codebase embedding upsert helper to ts-pack package
+195442c5d1 feat: add semantic sync and row helpers to ts-pack package
+59c247e493 feat: add chunk shaping helpers to ts-pack package
+443af06dcd feat: add semantic payload builder to ts-pack python package
+4fbd25eba4 fix: stabilize rust graph finalizer counts
+c444595d6b feat: move struct graph finalization into ts-pack rust
+6460c07e98 feat: move swift semantic graph writes into ts-pack rust
+54174fef97 feat: move asset graph derivation into ts-pack index
+8142fa1c7b refactor: make implicit symbol imports experimental
+452db642c2 fix: tighten swift implicit symbol graph derivation
+6f07f5f5bb feat: write file import graph in ts-pack index
+93d5517ad0 feat: port swift semantic extraction to native bindings
+25e73dd7e8 feat: centralize swift semantic extraction in python package
+d2ce2b7800 refactor: centralize apple file fact extraction in python binding
+64b7441855 feat: add apple build facts to parser outputs
+e384d420b1 feat: expose parser-owned file facts
+a32b2671e6 test ts-pack index parser facts
+d790ae2aec test ts-pack index module helpers
+aec646482a test and harden ts-pack index writes
+d2a9eba6d1 refactor: extract ts-pack index model types
+2c7d472541 refactor: extract write phase orchestration
+755cc0abc6 refactor: extract graph prep phase
+441c1494ce refactor: extract parse phase module
+199c164ff7 refactor: extract clone enrichment phase
+0dbca2da0b split ts-pack-index helpers into modules
+867125c349 export extraction helpers in python bindings
+569a29c492 fix: include small functions in winnow candidates
+d99489f20f feat: add rust clone grouping and launch resolution
+565361eb30 feat: add implicit swift imports and python attr calls
+82ea48315f feat: expand swift and rust import/export edges
+e0749092e4 docs: clarify import fields and indexer resolution
+ed810754a3 chore: sync lockfile and index metadata
+a0a873d6c5 feat: improve python import resolution
+65524391dd feat: auto-download parsers during indexing
+7077c59042 fix: restore python index_workspace binding
+63a1dd26b9 fix: restore ts-pack-index manifest and guard detect imports
+d68a460e03 feat: extend Swift symbols and fix manifest downloads

@@ -1,9 +1,11 @@
 import json
 import subprocess
 import unittest
+from pathlib import Path
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/duplicate_eval.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "duplicate_eval.py"
 
 
 def _run_eval_in_lmproxy() -> dict:
@@ -68,6 +70,48 @@ class RetrievalDuplicateEvalTests(unittest.TestCase):
         self.assertEqual(promoted["top_k"][0], 0)
         self.assertNotIn("hit_at_k_regressed", promoted["promotion_alerts"])
         self.assertNotIn("best_answer_retention_regressed", promoted["promotion_alerts"])
+
+    def test_exact_duplicate_case_does_not_raise_ndcg_alert_when_redundancy_improves(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "code_exact_duplicate_helpers")
+        promoted = case["configs"]["group_representatives"]
+        self.assertNotIn("ndcg_regressed", promoted["promotion_alerts"])
+
+    def test_small_ndcg_shift_without_other_regressions_does_not_alert(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_prose_near_duplicates_do_not_overcollapse")
+        query_aware = case["configs"]["query_aware"]
+        self.assertNotIn("ndcg_regressed", query_aware["promotion_alerts"])
+
+    def test_docs_canonical_mirror_suppression_does_not_alert_when_canonical_and_version_survive(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_canonical_mirror_preferred")
+        promoted = case["configs"]["promoted_non_exact"]
+        self.assertTrue(promoted["canonical_doc_preference_success"])
+        self.assertTrue(promoted["version_sensitive_doc_retention"])
+        self.assertNotIn("ndcg_regressed", promoted["promotion_alerts"])
+
+    def test_docs_neo4j_python_transaction_preferred(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_neo4j_python_transaction_preferred")
+        query_aware = case["configs"]["query_aware"]
+        self.assertEqual(query_aware["top_k"][0], 0)
+        self.assertTrue(query_aware["canonical_doc_preference_success"])
+
+    def test_docs_polluted_mirror_suppressed(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_polluted_mirror_suppressed")
+        promoted = case["configs"]["promoted_non_exact"]
+        self.assertEqual(promoted["top_k"][0], 0)
+        self.assertNotIn(1, promoted["top_k"])
+
+    def test_docs_deadlock_query_returns_locking_pages_first(self):
+        report = _run_eval_in_lmproxy()
+        case = next(case for case in report["cases"] if case["id"] == "docs_prose_near_duplicates_do_not_overcollapse")
+        query_aware = case["configs"]["query_aware"]
+        top_k = query_aware["top_k"]
+        self.assertIn(0, top_k[:3])
+        self.assertIn(1, top_k[:3])
 
 
 if __name__ == "__main__":

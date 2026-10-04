@@ -1,15 +1,18 @@
 import asyncio
 import importlib.util
+import tempfile
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/core.py"
-HELPER_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/symbol_graph.py"
-FILE_DESCRIBE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/file_describe.py"
-REFERENCES_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/code_intel/references.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "core.py"
+HELPER_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "symbol_graph.py"
+FILE_DESCRIBE_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "file_describe.py"
+REFERENCES_PATH = REPO_ROOT / "tools" / "brain" / "code_intel" / "references.py"
 
 
 class FakeMCP:
@@ -80,6 +83,7 @@ def load_code_intel_module():
     helpers_mod = types.ModuleType("_helpers")
     helpers_mod.get_memory_modules = lambda: (None, None, None, None, None)
     helpers_mod.get_project_id = lambda workspace_id: "proj123"
+    helpers_mod.get_workspace_path = lambda workspace_id: workspace_id
     proxy_logging = types.ModuleType("proxy.logging")
     proxy_logging.debug_log = lambda *args, **kwargs: None
     ts_diag = types.ModuleType("ts_diagnostics")
@@ -138,6 +142,10 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.graph_bootstrap_mod.require_driver = _require_driver
         self.graph_bootstrap_mod._NEO4J_DB = "neo4j"
+        self.graph_bootstrap_mod._NEO4J_URI = "bolt://127.0.0.1:7687"
+        self.graph_bootstrap_mod._NEO4J_USER = "neo4j"
+        self.graph_bootstrap_mod._NEO4J_PASSWORD = "password"
+        self.module.normalize_ts_pack_result = lambda value: value
 
     def test_get_call_chain_prefers_backend_candidate_and_filters_public_noise(self):
         async def fake_executor(cypher, **kwargs):
@@ -150,7 +158,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/public/assets/application-center.js",
                         "rank": 0,
-                        "path_rank": 3,
                     },
                     {
                         "eid": "2",
@@ -159,13 +166,13 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/api/routes/buildRouter.ts",
                         "rank": 0,
-                        "path_rank": 0,
                     },
                 ]
             if "MATCH path = (start)" in cypher:
-                self.assertIn("/public/", cypher)
-                self.assertIn("/test/", cypher)
-                self.assertIn("/gen/", cypher)
+                self.assertIn("AS file_roles", cypher)
+                self.assertNotIn("CONTAINS '/public/'", cypher)
+                self.assertNotIn("CONTAINS '/test/'", cypher)
+                self.assertNotIn("CONTAINS '/generated/'", cypher)
                 return [
                     {
                         "chain": ["buildRouter", "leaseRouter", "LeaseService"],
@@ -174,6 +181,7 @@ class CodeIntelToolTests(unittest.TestCase):
                             "src/api/routes/leaseRoutes.ts",
                             "src/services/leaseService.ts",
                         ],
+                        "file_roles": [[], [], []],
                     }
                 ]
             return []
@@ -235,6 +243,9 @@ class CodeIntelToolTests(unittest.TestCase):
                 CURRENT_EXECUTOR = None
 
         self.assertIn("```mermaid", output)
+        self.assertIn("## Subgraph: `buildRouter` (Function)", output)
+        self.assertIn("## Inspect First", output)
+        self.assertIn("inspect `src/api/routes/buildRouter.ts` first because it contains the focus symbol `buildRouter`", output)
         self.assertIn("|contains|", output)
         self.assertIn("|calls|", output)
         self.assertIn("leaseRouter", output)
@@ -282,6 +293,107 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("DrawThingsCLI.swift", output)
         self.assertNotIn("config_data_model_generated.swift", output)
+
+    def test_trace_graph_provenance_formats_parse_resolve_finalize_samples(self):
+        ts_pack_mod = types.ModuleType("tree_sitter_language_pack")
+        ts_pack_mod.trace_graph_provenance = lambda *args, **kwargs: {
+            "project_id": "proj123",
+            "parse": {
+                "call_ref_samples": [
+                    {
+                        "caller_filepath": "src/api/routes.py",
+                        "callee": "load_lease",
+                        "kind": "member",
+                        "receiver_hint": "lease_service",
+                        "qualified_hint": "lease_service.load_lease",
+                    }
+                ]
+            },
+            "resolve": {
+                "resolved_internal_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "dst": "src/services/lease.py",
+                        "caller": "build_router",
+                        "callee": "load_lease",
+                        "via": "CALLS",
+                    }
+                ],
+                "external_symbol_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "caller": "build_router",
+                        "callee": "get",
+                        "qualified_name": "requests.get",
+                        "language": "python",
+                    }
+                ],
+                "note": "Unresolved and filtered decisions remain available through index-time provenance logging.",
+            },
+            "finalize": {
+                "calls_file_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "dst": "src/services/lease.py",
+                        "caller": "build_router",
+                        "callee": "load_lease",
+                        "via": "CALLS",
+                    }
+                ],
+                "file_graph_link_samples": [
+                    {
+                        "src": "src/api/routes.py",
+                        "dst": "src/services/lease.py",
+                        "source_rel": "CALLS_FILE",
+                    }
+                ],
+            },
+        }
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "graph_bootstrap": self.graph_bootstrap_mod,
+                "tree_sitter_language_pack": ts_pack_mod,
+            },
+        ):
+            output = asyncio.run(
+                self.mcp.tools["trace_graph_provenance"](
+                    "/tmp/rental",
+                    symbol_filter="load_lease",
+                    file_filter="src/api",
+                )
+            )
+
+        self.assertIn("# Graph Provenance: rental", output)
+        self.assertIn("Project ID: `proj123`", output)
+        self.assertIn("Symbol filter: `load_lease`", output)
+        self.assertIn("File filter: `src/api`", output)
+        self.assertIn("## Inspect First", output)
+        self.assertIn(
+            "- inspect `src/services/lease.py` first because `src/api/routes.py` resolves `build_router -> load_lease` into it",
+            output,
+        )
+        self.assertIn("## Parse Call Samples", output)
+        self.assertIn(
+            "`src/api/routes.py` -> `load_lease` [member] (receiver=lease_service, qualified=lease_service.load_lease)",
+            output,
+        )
+        self.assertIn("## Resolved Internal Samples", output)
+        self.assertIn(
+            "`src/api/routes.py` -> `src/services/lease.py` via `build_router -> load_lease` [CALLS]",
+            output,
+        )
+        self.assertIn("## External Symbol Samples", output)
+        self.assertIn(
+            "`src/api/routes.py` external via `build_router -> get` (qualified=requests.get, language=python)",
+            output,
+        )
+        self.assertIn("Resolve note: Unresolved and filtered decisions remain available through index-time provenance logging.", output)
+        self.assertIn(
+            "`src/api/routes.py` -> `src/services/lease.py` [CALLS_FILE]",
+            output,
+        )
 
     def test_visualize_subgraph_filters_wrapper_and_test_neighbors_for_monorepo_runtime_symbol(self):
         async def fake_executor(cypher, **kwargs):
@@ -332,6 +444,44 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertNotIn("iife", output)
         self.assertNotIn("project-init-git.test.ts", output)
         self.assertNotIn("prompt-effect.test.ts", output)
+
+    def test_visualize_subgraph_dedupes_duplicate_neighbor_files(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN n.id AS id" in cypher:
+                return [
+                    {
+                        "id": "focus-1",
+                        "kind": "Struct",
+                        "name": "SidebarView",
+                        "fp": "FrameCreator/Views/SidebarView.swift",
+                        "sl": 3,
+                    }
+                ]
+            if "parent.id AS parent_id" in cypher:
+                return [
+                    {
+                        "parent_id": "file-1",
+                        "parent_name": "SidebarView.swift",
+                        "parent_fp": "FrameCreator/Views/SidebarView.swift",
+                        "callers": [
+                            {"id": "caller-a", "name": "ContentView.swift", "fp": "FrameCreator/Views/ContentView.swift"},
+                            {"id": "caller-b", "name": "ContentView.swift", "fp": "FrameCreator/Views/ContentView.swift"},
+                        ],
+                        "importers": [],
+                        "callees": [],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["visualize_subgraph"]("/tmp/framecreator", "SidebarView"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output.count("FrameCreator/Views/ContentView.swift"), 1)
 
     def test_describe_file_includes_type_alias_symbols_from_graph(self):
         async def fake_executor(cypher, **kwargs):
@@ -390,15 +540,18 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_get_symbol_context_prefers_repo_owned_runtime_symbol_over_generated_match(self):
         async def fake_executor(cypher, **kwargs):
-            if "MATCH (s {name: $name, project_id: $pid})" in cypher:
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
                 return [
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/sdk/js/src/v2/gen/types.gen.ts",
                         "start_line": 1,
                         "end_line": 12,
                         "signature": None,
                         "parent_file": "packages/sdk/js/src/v2/gen/types.gen.ts",
+                        "file_roles": [],
                         "callers": [],
                         "callees": [],
                         "callers_in": 0,
@@ -406,11 +559,14 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "Class",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/opencode/src/config/config.ts",
                         "start_line": 8,
                         "end_line": 60,
                         "signature": "class Config",
                         "parent_file": "packages/opencode/src/config/config.ts",
+                        "file_roles": ["generated_surface"],
                         "callers": [{"name": "boot", "file": "packages/opencode/src/app/app.ts", "line": 14}],
                         "callees": [],
                         "callers_in": 3,
@@ -460,10 +616,12 @@ class CodeIntelToolTests(unittest.TestCase):
 
     def test_get_symbol_context_reports_ambiguous_generic_monorepo_name(self):
         async def fake_executor(cypher, **kwargs):
-            if "MATCH (s {name: $name, project_id: $pid})" in cypher:
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
                 return [
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/sdk/js/src/v2/gen/types.gen.ts",
                         "start_line": 1,
                         "end_line": 12,
@@ -476,6 +634,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "Class",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/sdk/js/src/gen/sdk.gen.ts",
                         "start_line": 337,
                         "end_line": 371,
@@ -488,6 +648,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/plugin/src/index.ts",
                         "start_line": 38,
                         "end_line": 40,
@@ -500,6 +662,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/desktop-electron/src/main/cli.ts",
                         "start_line": 23,
                         "end_line": 29,
@@ -512,6 +676,8 @@ class CodeIntelToolTests(unittest.TestCase):
                     },
                     {
                         "kind": "TypeAlias",
+                        "name": "Config",
+                        "qualified_name": None,
                         "filepath": "packages/opencode/src/control-plane/adaptors/worktree.ts",
                         "start_line": 11,
                         "end_line": 17,
@@ -542,6 +708,376 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Multiple exact matches found for `Config`", output)
         self.assertIn("packages/opencode/src/control-plane/adaptors/worktree.ts", output)
 
+    def test_get_symbol_context_prefers_runtime_impl_over_generated_surface_without_ambiguity(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "generateImage",
+                        "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                        "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "start_line": 552,
+                        "end_line": 1218,
+                        "signature": "private func generateImage(",
+                        "parent_file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 3,
+                        "callees_out": 10,
+                    },
+                    {
+                        "kind": "Method",
+                        "name": "generateImage",
+                        "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                        "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "start_line": 552,
+                        "end_line": 1218,
+                        "signature": "private func generateImage(",
+                        "parent_file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 3,
+                        "callees_out": 10,
+                    },
+                    {
+                        "kind": "Function",
+                        "name": "generateImage",
+                        "qualified_name": "ImageService.generateImage",
+                        "filepath": "Libraries/GRPC/Models/Sources/imageService/imageService.grpc.swift",
+                        "start_line": 1268,
+                        "end_line": 1300,
+                        "signature": "public func generateImage<Result>(",
+                        "parent_file": "Libraries/GRPC/Models/Sources/imageService/imageService.grpc.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 1,
+                        "callees_out": 0,
+                    },
+                    {
+                        "kind": "Function",
+                        "name": "generateImage",
+                        "qualified_name": "ScriptExecutor.generateImage",
+                        "filepath": "Libraries/Scripting/Sources/ScriptExecutor.swift",
+                        "start_line": 320,
+                        "end_line": 370,
+                        "signature": "func generateImage(_ args: [String: Any])",
+                        "parent_file": "Libraries/Scripting/Sources/ScriptExecutor.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 1,
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/draw-things-community",
+                        "generateImage",
+                        include_source_preview=False,
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("ImageGenerationServiceImpl.swift", output)
+        self.assertIn("private func generateImage(", output)
+        self.assertNotIn("Multiple exact matches found", output)
+
+    def test_get_symbol_context_uses_file_path_to_disambiguate(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                self.assertEqual(kwargs.get("file_path"), "crates/ts-pack-core/src/lib.rs")
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "process",
+                        "qualified_name": "process",
+                        "filepath": "crates/ts-pack-cli/src/main.rs",
+                        "start_line": 10,
+                        "end_line": 30,
+                        "signature": "fn process()",
+                        "parent_file": "crates/ts-pack-cli/src/main.rs",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 4,
+                    },
+                    {
+                        "kind": "Function",
+                        "name": "process",
+                        "qualified_name": "process",
+                        "filepath": "crates/ts-pack-core/src/lib.rs",
+                        "start_line": 235,
+                        "end_line": 244,
+                        "signature": "pub fn process(source: &str, config: &ProcessConfig)",
+                        "parent_file": "crates/ts-pack-core/src/lib.rs",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 3,
+                        "callees_out": 2,
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/tree-sitter-language-pack",
+                        "process",
+                        include_source_preview=False,
+                        file_path="crates/ts-pack-core/src/lib.rs",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("crates/ts-pack-core/src/lib.rs", output)
+        self.assertNotIn("crates/ts-pack-cli/src/main.rs", output)
+
+    def test_get_symbol_context_source_preview_prefers_definition_chunk(self):
+        executed: list[tuple[str, tuple[object, ...]]] = []
+
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Struct",
+                        "name": "SidebarView",
+                        "qualified_name": None,
+                        "filepath": "FrameCreator/Views/SidebarView.swift",
+                        "start_line": 3,
+                        "end_line": 9,
+                        "signature": "struct SidebarView: View",
+                        "parent_file": "FrameCreator/Views/SidebarView.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 1,
+                        "callees_out": 1,
+                    }
+                ]
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                executed.append((query, params))
+
+            async def fetchall(self):
+                return [("struct SidebarView: View {\n    var body: some View { Text(\"Sidebar\") }\n}",)]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            open_pool=mock.AsyncMock(),
+            _pg_pool=_FakePool(),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_symbol_context"](
+                            "/tmp/FrameCreator",
+                            "SidebarView",
+                            include_source_preview=True,
+                            file_path="FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("struct SidebarView: View", output)
+        self.assertTrue(executed)
+        query, params = executed[0]
+        self.assertIn("metadata->'declared_symbols'", query)
+        self.assertIn("LIMIT 1", query)
+        self.assertEqual(params[2], "SidebarView")
+        self.assertEqual(params[3], 3)
+
+    def test_get_symbol_context_source_preview_prefers_local_file_span_when_available(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Class",
+                        "name": "DynamicGraph",
+                        "qualified_name": None,
+                        "filepath": "nnc/DynamicGraph.swift",
+                        "start_line": 9,
+                        "end_line": 30,
+                        "signature": "public final class DynamicGraph",
+                        "parent_file": "nnc/DynamicGraph.swift",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    }
+                ]
+            return []
+
+        source_text = "\n".join(
+            [
+                "#if canImport(C_nnc)",
+                "import C_nnc",
+                "#endif",
+                "",
+                "/// Comment",
+                "/// More comment",
+                "",
+                "",
+                "public final class DynamicGraph {",
+                "  func run() {}",
+                "}",
+                "",
+                "extension DynamicGraph {",
+                "  func trackGrad() {}",
+                "}",
+            ]
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module.os.path, "exists", side_effect=lambda path: True):
+                with mock.patch("builtins.open", mock.mock_open(read_data=source_text)):
+                    global CURRENT_EXECUTOR
+                    CURRENT_EXECUTOR = fake_executor
+                    try:
+                        output = asyncio.run(
+                            self.mcp.tools["get_symbol_context"](
+                                "/tmp/s4nncFork",
+                                "DynamicGraph",
+                                include_source_preview=True,
+                                file_path="nnc/DynamicGraph.swift",
+                            )
+                        )
+                    finally:
+                        CURRENT_EXECUTOR = None
+
+        self.assertIn("```swift", output)
+        self.assertIn("public final class DynamicGraph {", output)
+        self.assertLess(
+            output.index("public final class DynamicGraph {"),
+            output.index("extension DynamicGraph {"),
+        )
+
+    def test_get_symbol_context_full_preview_uses_symbol_end_line_with_caps(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "build",
+                        "qualified_name": None,
+                        "filepath": "src/build.py",
+                        "start_line": 2,
+                        "end_line": 7,
+                        "signature": "def build():",
+                        "parent_file": "src/build.py",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    }
+                ]
+            return []
+
+        source_text = "\n".join(
+            ["import os", "", "def build():", "    one()", "    two()", "    three()", "    four()", "after()"]
+        )
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}), mock.patch.object(
+            self.module.os.path, "exists", return_value=True
+        ), mock.patch("builtins.open", mock.mock_open(read_data=source_text)):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/repo",
+                        "build",
+                        full_source_preview=True,
+                        source_preview_lines=400,
+                        source_preview_chars=16000,
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("    four()", output)
+        self.assertNotIn("after()", output)
+
+    def test_get_symbol_context_reports_source_preview_truncation(self):
+        async def fake_executor(cypher, **kwargs):
+            if "OPTIONAL MATCH (s)<-[:CONTAINS]-(parent:File)" in cypher:
+                return [
+                    {
+                        "kind": "Function",
+                        "name": "build",
+                        "qualified_name": None,
+                        "filepath": "src/build.py",
+                        "start_line": 1,
+                        "end_line": 20,
+                        "signature": "def build():",
+                        "parent_file": "src/build.py",
+                        "callers": [],
+                        "callees": [],
+                        "callers_in": 0,
+                        "callees_out": 0,
+                    }
+                ]
+            return []
+
+        source_text = "\n".join(f"line_{index}" for index in range(1, 21))
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}), mock.patch.object(
+            self.module.os.path, "exists", return_value=True
+        ), mock.patch("builtins.open", mock.mock_open(read_data=source_text)):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_symbol_context"](
+                        "/tmp/repo",
+                        "build",
+                        full_source_preview=True,
+                        source_preview_lines=3,
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Source preview truncated at the requested safety cap", output)
+        self.assertNotIn("line_4", output)
+
     def test_get_call_chain_summarizes_broad_fanout(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:
@@ -553,7 +1089,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/api/routes/financeAdminRoutes.ts",
                         "rank": 0,
-                        "path_rank": 0,
                     }
                 ]
             if "MATCH path = (start)" in cypher:
@@ -587,6 +1122,50 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("serviceCall0", output)
         self.assertIn("… 3 more first-hop call(s) hidden", output)
 
+    def test_get_call_chain_marks_inferred_edges(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "2",
+                        "name": "dispatch",
+                        "qualified_name": None,
+                        "signature": None,
+                        "filepath": "src/api/dispatch.py",
+                        "rank": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                self.assertIn("type(r)", cypher)
+                return [
+                    {
+                        "chain": ["dispatch", "route", "persist"],
+                        "files": [
+                            "src/api/dispatch.py",
+                            "src/api/routes.py",
+                            "src/services/store.py",
+                        ],
+                        "edge_types": ["CALLS_INFERRED", "CALLS"],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/repo", "dispatch", depth=2
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("`route` [inferred]", output)
+        self.assertIn("`persist`  (", output)
+        self.assertNotIn("`persist` [inferred]", output)
+
     def test_get_call_chain_up_filters_unnamed_callers(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:
@@ -598,7 +1177,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "src/public/assets/financial-summary.js",
                         "rank": 0,
-                        "path_rank": 3,
                     }
                 ]
             if "MATCH path = (start)" in cypher:
@@ -645,7 +1223,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "packages/opencode/src/project/instance.ts",
                         "rank": 0,
-                        "path_rank": 1,
                         "callers_in": 7,
                     }
                 ]
@@ -683,6 +1260,106 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertNotIn("`iife`", output)
         self.assertNotIn("`fn`", output)
 
+    def test_get_call_chain_empty_graph_message_is_language_neutral(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "processNewVisitForm",
+                        "qualified_name": "OwnerController.processNewVisitForm",
+                        "signature": None,
+                        "filepath": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+                        "rank": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/spring-petclinic-upstream",
+                        "processNewVisitForm",
+                        depth=3,
+                        direction="down",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("resolved but no callees within 3 hops", output)
+        self.assertIn("call graph edges are available", output)
+        self.assertNotIn("Swift CALLS edges", output)
+
+    def test_get_call_chain_filters_cross_language_noise_from_swift_paths(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "handleGenerateImage",
+                        "qualified_name": "ImageGenerationServiceImpl.handleGenerateImage",
+                        "signature": None,
+                        "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "rank": 0,
+                        "callers_in": 1,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return [
+                    {
+                        "chain": [
+                            "handleGenerateImage",
+                            "writeResponseSynchronously",
+                            "sync",
+                        ],
+                        "files": [
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Scripts/ServerManagement/GPUScript/UpdateModels/r2_sync_verification.py",
+                        ],
+                        "lines": [220, 1400, 72],
+                    },
+                    {
+                        "chain": [
+                            "handleGenerateImage",
+                            "writeResponseSynchronously",
+                            "write",
+                        ],
+                        "files": [
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            "Libraries/GRPC/Server/Sources/ImageGenerationClientWrapper.swift",
+                        ],
+                        "lines": [220, 1400, 88],
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/draw-things-community",
+                        "handleGenerateImage",
+                        depth=3,
+                        direction="down",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("writeResponseSynchronously", output)
+        self.assertIn("ImageGenerationClientWrapper.swift", output)
+        self.assertNotIn("r2_sync_verification.py", output)
+
     def test_get_call_chain_prefers_same_package_runtime_hops_for_monorepo_entrypoint(self):
         async def fake_executor(cypher, **kwargs):
             if "ORDER BY rank ASC" in cypher:
@@ -694,7 +1371,6 @@ class CodeIntelToolTests(unittest.TestCase):
                         "signature": None,
                         "filepath": "packages/opencode/src/project/instance.ts",
                         "rank": 0,
-                        "path_rank": 1,
                         "callers_in": 7,
                     }
                 ]
@@ -738,6 +1414,620 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertLess(output.index("`loadProject`"), output.index("`track`"))
 
+    def test_get_call_chain_uses_swift_semantic_usage_fallback_for_callers(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "SidebarView",
+                        "qualified_name": "SidebarView",
+                        "signature": "struct SidebarView: View",
+                        "filepath": "FrameCreator/Views/SidebarView.swift",
+                        "rank": 0,
+                        "callers_in": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            return []
+
+        executed = []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                executed.append((query, params))
+
+            async def fetchall(self):
+                return [
+                    (
+                        "tools/FrameCreator/Views/ContentView.swift",
+                        "12",
+                        "// File: tools/FrameCreator/Views/ContentView.swift\nSidebarView(viewModel: viewModel)",
+                        ["implementation_surface", "support_surface"],
+                    ),
+                    (
+                        "FrameCreator/Support/GeneratedView.swift",
+                        "8",
+                        "// File: FrameCreator/Support/GeneratedView.swift\nSidebarView(viewModel: model)",
+                        ["support_surface"],
+                    ),
+                ]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_call_chain"](
+                            "/tmp/FrameCreator",
+                            "SidebarView",
+                            depth=1,
+                            direction="up",
+                            file_path="FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("Swift caller-like usages", output)
+        self.assertIn("tools/FrameCreator/Views/ContentView.swift", output)
+        self.assertNotIn("FrameCreator/Support/GeneratedView.swift", output)
+        self.assertTrue(executed)
+
+    def test_get_call_chain_uses_swift_protocol_graph_fallback_before_semantic_usage(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "EventLoop",
+                        "qualified_name": "EventLoop",
+                        "signature": "public protocol EventLoop: EventLoopGroup",
+                        "filepath": "Sources/NIOCore/EventLoop.swift",
+                        "kind": "Protocol",
+                        "rank": 0,
+                        "callers_in": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            if "IMPLEMENTS_TYPE" in cypher and "ORDER BY size(chain)" in cypher:
+                return [
+                    {
+                        "chain": ["EventLoop", "EmbeddedEventLoop", "main"],
+                        "files": [
+                            "Sources/NIOCore/EventLoop.swift",
+                            "Sources/NIOEmbedded/EmbeddedEventLoop.swift",
+                            "Benchmarks/Benchmarks/NIOCoreBenchmarks/Benchmarks.swift",
+                        ],
+                        "lines": [10, 12, 45],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_call_chain"](
+                        "/tmp/swift-nio",
+                        "EventLoop",
+                        depth=2,
+                        direction="up",
+                        file_path="Sources/NIOCore/EventLoop.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Call chain: `EventLoop`", output)
+        self.assertIn("`EmbeddedEventLoop`", output)
+        self.assertNotIn("Swift caller-like usages", output)
+
+    def test_get_call_chain_uses_swift_protocol_source_fallback_when_edges_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "ORDER BY rank ASC" in cypher:
+                return [
+                    {
+                        "eid": "1",
+                        "name": "EventLoop",
+                        "qualified_name": "EventLoop",
+                        "signature": "public protocol EventLoop: EventLoopGroup",
+                        "filepath": "Sources/NIOCore/EventLoop.swift",
+                        "kind": "Protocol",
+                        "rank": 0,
+                        "callers_in": 0,
+                    }
+                ]
+            if "MATCH path = (start)" in cypher:
+                return []
+            if "IMPLEMENTS_TYPE" in cypher and "ORDER BY size(chain)" in cypher:
+                return []
+            if "candidate:Class" in cypher and "candidate.filepath ENDS WITH '.swift'" in cypher:
+                return [
+                    {
+                        "name": "NIOAsyncTestingEventLoop",
+                        "file": "Sources/NIOEmbedded/AsyncTestingEventLoop.swift",
+                        "start_line": 510,
+                    },
+                    {
+                        "name": "SupportHelper",
+                        "file": "Sources/NIOEmbedded/SupportHelper.swift",
+                        "start_line": 1,
+                    },
+                ]
+            return []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source_dir = root / "Sources" / "NIOEmbedded"
+            source_dir.mkdir(parents=True)
+            (source_dir / "AsyncTestingEventLoop.swift").write_text(
+                "public final class NIOAsyncTestingEventLoop: EventLoop, @unchecked Sendable {\n"
+                "    func execute(_ task: () -> Void) {}\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (source_dir / "SupportHelper.swift").write_text(
+                "struct SupportHelper {}\n",
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_call_chain"](
+                            tmpdir,
+                            "EventLoop",
+                            depth=2,
+                            direction="up",
+                            file_path="Sources/NIOCore/EventLoop.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("Swift protocol conformer fallback", output)
+        self.assertIn("`NIOAsyncTestingEventLoop`", output)
+        self.assertIn("Sources/NIOEmbedded/AsyncTestingEventLoop.swift", output)
+        self.assertNotIn("SupportHelper", output)
+        self.assertNotIn("Swift caller-like usages", output)
+
+    def test_pick_call_chain_candidate_prefers_swift_protocol_over_same_file_extension(self):
+        picked = self.module.symbol_graph.pick_call_chain_candidate(
+            [
+                {
+                    "eid": "ext",
+                    "name": "EventLoop",
+                    "qualified_name": "EventLoop",
+                    "signature": None,
+                    "filepath": "Sources/NIOCore/EventLoop.swift",
+                    "kind": "Extension",
+                    "rank": 0,
+                    "callers_in": 0,
+                },
+                {
+                    "eid": "proto",
+                    "name": "EventLoop",
+                    "qualified_name": "EventLoop",
+                    "signature": None,
+                    "filepath": "Sources/NIOCore/EventLoop.swift",
+                    "kind": "Protocol",
+                    "rank": 0,
+                    "callers_in": 0,
+                },
+            ],
+            normalized_file_path="Sources/NIOCore/EventLoop.swift",
+            normalized_signature=None,
+        )
+
+        self.assertIsNotNone(picked)
+        self.assertEqual(picked["eid"], "proto")
+
+    def test_symbol_context_dedupes_file_level_swift_caller_when_symbol_caller_exists(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Struct",
+                "filepath": "FrameCreator/Views/SidebarView.swift",
+                "start_line": 3,
+                "end_line": 20,
+                "signature": "struct SidebarView: View",
+                "callers": [
+                    {
+                        "name": "ContentView.swift",
+                        "file": "FrameCreator/Views/ContentView.swift",
+                        "line": None,
+                    },
+                    {
+                        "name": "ContentView",
+                        "file": "FrameCreator/Views/ContentView.swift",
+                        "line": 4,
+                    },
+                ],
+                "callees": [],
+                "external_callees": [],
+            },
+            "SidebarView",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("`ContentView`:4", rendered)
+        self.assertNotIn("`ContentView.swift`", rendered)
+
+    def test_symbol_context_formats_file_level_caller_without_code_ticks(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Struct",
+                "filepath": "FrameCreator/Views/SidebarView.swift",
+                "start_line": 3,
+                "end_line": 20,
+                "signature": "struct SidebarView: View",
+                "callers": [
+                    {
+                        "name": "ContentView.swift",
+                        "file": "FrameCreator/Views/ContentView.swift",
+                        "line": None,
+                    },
+                ],
+                "callees": [],
+                "external_callees": [],
+            },
+            "SidebarView",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("ContentView.swift  in FrameCreator/Views/ContentView.swift", rendered)
+        self.assertNotIn("`ContentView.swift`", rendered)
+
+    def test_find_references_includes_file_level_graph_callers(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN DISTINCT f.filepath AS fp" in cypher:
+                return [
+                    {
+                        "fp": "FrameCreator/Views/SidebarView.swift",
+                        "sl": 3,
+                        "cn": "SidebarView",
+                        "tpid": "proj123",
+                    }
+                ]
+            if "MATCH (f:File {project_id: row.pid, filepath: row.fp})-[:CONTAINS]->(s:Node)" in cypher:
+                return [
+                    {
+                        "pid": "proj123",
+                        "fp": "FrameCreator/Views/ContentView.swift",
+                        "symbol_name": "ContentView",
+                        "sl": 4,
+                    }
+                ]
+            if "MATCH (caller:File)-[:CALLS|CALLS_INFERRED]->(target)" in cypher:
+                return [
+                    {
+                        "fp": "FrameCreator/Views/ContentView.swift",
+                        "sl": None,
+                        "cn": "ContentView.swift",
+                        "tpid": "proj123",
+                    }
+                ]
+            if "MATCH (target:ExternalSymbol)" in cypher:
+                return []
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module.references,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["find_references"](
+                            "/tmp/FrameCreator",
+                            "SidebarView",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("### Functional References (Graph)", output)
+        self.assertIn("FrameCreator/Views/SidebarView.swift:3 (SidebarView) [Project: proj123]", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift:4 (ContentView) [Project: proj123]", output)
+
+    def test_symbol_context_filters_cross_language_noise_for_swift_symbol(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Class",
+                "name": "ImageGenerationServiceImpl",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 100,
+                "end_line": 1486,
+                "signature": "final class ImageGenerationServiceImpl",
+                "callers": [
+                    {
+                        "name": "runAndBlock",
+                        "file": "Apps/gRPCServerCLI/gRPCServerCLI.swift",
+                        "line": 511,
+                    }
+                ],
+                "callees": [
+                    {
+                        "name": "sync",
+                        "file": "Scripts/ServerManagement/GPUScript/UpdateModels/r2_sync_verification.py",
+                    },
+                    {
+                        "name": "writeResponseSynchronously",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                ],
+                "external_callees": [],
+            },
+            "ImageGenerationServiceImpl",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("runAndBlock", rendered)
+        self.assertIn("writeResponseSynchronously", rendered)
+        self.assertNotIn("r2_sync_verification.py", rendered)
+
+    def test_symbol_context_hides_same_location_self_alias_caller(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [
+                    {
+                        "name": "generateImage",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "line": 552,
+                    },
+                    {
+                        "name": "generateImage",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                        "line": 348,
+                    },
+                ],
+                "callees": [],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        self.assertIn("`generateImage`:348", rendered)
+        self.assertNotIn("`generateImage`:552", rendered)
+
+    def test_symbol_context_ranks_runtime_callees_ahead_of_vendor_and_generated(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [],
+                "callees": [
+                    {
+                        "name": "withUnsafeMutableBytes",
+                        "file": "Vendors/ZIPFoundation/Sources/ZIPFoundation/Data+Compression.swift",
+                    },
+                    {
+                        "name": "ImageGenerationSignpostProto",
+                        "file": "Libraries/GRPC/Models/Sources/imageService/imageService.pb.swift",
+                    },
+                    {
+                        "name": "cancel",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "grpcTraceTags",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "generate",
+                        "file": "Apps/DrawThingsCLI/DrawThingsCLI.swift",
+                    },
+                ],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        cancel_index = rendered.index("`cancel`")
+        generate_index = rendered.index("`generate`")
+        generated_index = rendered.index("`ImageGenerationSignpostProto`")
+        vendor_index = rendered.index("`withUnsafeMutableBytes`")
+        self.assertLess(cancel_index, generated_index)
+        self.assertLess(generate_index, generated_index)
+        self.assertLess(cancel_index, vendor_index)
+        self.assertLess(generate_index, vendor_index)
+
+    def test_symbol_context_demotes_type_and_property_like_callees_below_behavioral_calls(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [],
+                "callees": [
+                    {
+                        "name": "ImageGeneratorDeviceType",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "cachedRawMaskTensor",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "cancel",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "emitTerminalEvent",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                    {
+                        "name": "grpcTraceTags",
+                        "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    },
+                ],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        cancel_index = rendered.index("`cancel`")
+        emit_index = rendered.index("`emitTerminalEvent`")
+        type_index = rendered.index("`ImageGeneratorDeviceType`")
+        cached_index = rendered.index("`cachedRawMaskTensor`")
+        self.assertLess(cancel_index, type_index)
+        self.assertLess(emit_index, cached_index)
+
+    def test_symbol_context_limits_same_file_callee_clutter_before_cross_file_edges(self):
+        output = self.module.symbol_graph.format_symbol_context(
+            {
+                "kind": "Function",
+                "name": "generateImage",
+                "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                "start_line": 552,
+                "end_line": 1218,
+                "signature": "private func generateImage(",
+                "callers": [],
+                "callees": [
+                    {"name": "cancel", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "emitTerminalEvent", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "grpcTraceTags", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "cachedRawMaskTensor", "file": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift"},
+                    {"name": "generate", "file": "Apps/DrawThingsCLI/DrawThingsCLI.swift"},
+                    {"name": "ImageGeneratorTrace", "file": "Libraries/ImageGenerator/Sources/ImageGeneratorProtocol.swift"},
+                ],
+                "external_callees": [],
+            },
+            "generateImage",
+        )
+
+        rendered = "\n".join(output)
+        second_same_file_index = rendered.index("`emitTerminalEvent`")
+        cross_file_index = rendered.index("`generate`")
+        later_same_file_index = rendered.index("`grpcTraceTags`")
+        self.assertLess(second_same_file_index, cross_file_index)
+        self.assertLess(cross_file_index, later_same_file_index)
+
+    def test_symbol_context_ambiguity_dedupes_same_location_candidates(self):
+        rendered = self.module.symbol_graph.format_symbol_context_ambiguity(
+            [
+                {
+                    "kind": "Function",
+                    "name": "generateImage",
+                    "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                    "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    "start_line": 552,
+                    "end_line": 1218,
+                    "signature": "private func generateImage(",
+                    "callers_in": 3,
+                    "callees_out": 10,
+                },
+                {
+                    "kind": "Method",
+                    "name": "generateImage",
+                    "qualified_name": "ImageGenerationServiceImpl.generateImage",
+                    "filepath": "Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                    "start_line": 552,
+                    "end_line": 1218,
+                    "signature": "private func generateImage(",
+                    "callers_in": 3,
+                    "callees_out": 10,
+                },
+                {
+                    "kind": "Function",
+                    "name": "generateImage",
+                    "qualified_name": "ImageService.generateImage",
+                    "filepath": "Libraries/GRPC/Models/Sources/imageService/imageService.grpc.swift",
+                    "start_line": 1268,
+                    "end_line": 1300,
+                    "signature": "public func generateImage<Result>(",
+                    "callers_in": 1,
+                    "callees_out": 0,
+                },
+            ],
+            symbol_name="generateImage",
+        )
+
+        self.assertEqual(rendered.count("ImageGenerationServiceImpl.swift:552"), 1)
+
     def test_get_code_importance_includes_cargo_crate_context(self):
         async def fake_executor(cypher, **kwargs):
             if "f.pagerank IS NOT NULL" in cypher:
@@ -775,6 +2065,985 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("Crate: api", output)
         self.assertIn("crates/api/src/lib.rs", output)
         self.assertIn("[crate:api]", output)
+        self.assertIn("architectural leverage", output)
+        self.assertIn("Use this to decide where architectural leverage", output)
+
+    def test_get_code_importance_prefers_semantic_roles_over_misleading_paths(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.pagerank IS NOT NULL" in cypher:
+                self.assertIn("f.semantic_file_roles", cypher)
+                return [
+                    {
+                        "file": "src/public/assets/generated-looking.ts",
+                        "file_roles": ["service_surface"],
+                        "sym_count": 4,
+                        "sym_examples": ["dispatch"],
+                        "top_pagerank": 1.0,
+                        "score": 2.0,
+                        "betweenness": 0.0,
+                        "isolated": False,
+                    },
+                    {
+                        "file": "src/runtime.ts",
+                        "file_roles": ["generated_surface"],
+                        "sym_count": 20,
+                        "sym_examples": ["generatedClient"],
+                        "top_pagerank": 10.0,
+                        "score": 100.0,
+                        "betweenness": 0.0,
+                        "isolated": False,
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_importance"]("/tmp/app"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        recommendations = output.split("Recommended starting points:", 1)[1]
+        self.assertLess(
+            recommendations.index("src/public/assets/generated-looking.ts"),
+            recommendations.index("src/runtime.ts"),
+        )
+        self.assertIn("service boundary", recommendations)
+
+    def test_get_code_importance_reports_empty_result(self):
+        async def fake_executor(cypher, **kwargs):
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_importance"]("/tmp/empty"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No importance metrics found (ensure project is indexed).")
+
+    def test_get_code_communities_reports_empty_result(self):
+        async def fake_executor(cypher, **kwargs):
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/empty"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No communities found (ensure project is indexed).")
+
+    def test_get_related_files_ignores_generic_swiftui_import_only_matches(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/ContentView.swift",
+                        "shared_imports": 1,
+                        "sample_imports": ["SwiftUI"],
+                    }
+                ]
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [("FrameCreator/Views/ContentView.swift", 3)]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/FrameCreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("semantic co-mentions", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift", output)
+
+    def test_get_related_files_accepts_workspace_id_keyword(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "Libraries/GRPC/ProxyServer/Sources/ProxyCPUServer.swift",
+                        "shared_imports": 3,
+                        "sample_imports": ["GRPCCore", "Logging", "Foundation"],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_workspace_path",
+                return_value="/tmp/draw-things-community",
+            ) as workspace_mock:
+                with mock.patch.object(self.module, "get_project_id", return_value="proj456") as project_id_mock:
+                    global CURRENT_EXECUTOR
+                    CURRENT_EXECUTOR = fake_executor
+                    try:
+                        output = asyncio.run(
+                            self.mcp.tools["get_related_files"](
+                                workspace_id="draw-things-community",
+                                file_path="Libraries/GRPC/Server/Sources/ImageGenerationServiceImpl.swift",
+                            )
+                        )
+                    finally:
+                        CURRENT_EXECUTOR = None
+
+        workspace_mock.assert_called_once_with("draw-things-community")
+        project_id_mock.assert_called_once_with("draw-things-community")
+        self.assertIn("ProxyCPUServer.swift", output)
+
+    def test_get_related_files_ignores_generic_c_bridge_import_only_matches(self):
+        async def fake_executor(cypher, **kwargs):
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "nnc/CoreMLConversion.swift",
+                        "shared_imports": 2,
+                        "sample_imports": ["C_nnc", "C_swiftpm_nnc"],
+                    }
+                ]
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "=="}, {"name": "DynamicGraph"}, {"name": "DynamicGraph"}]
+            return []
+
+        class _FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [("examples/cifar-10/main.swift", 4)]
+
+        class _FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return _FakeCursor()
+
+        class _FakePool:
+            def connection(self):
+                return _FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(open_pool=mock.AsyncMock(), _pg_pool=_FakePool())
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(
+                self.module,
+                "get_memory_modules",
+                return_value=(fake_memory_store, None, None, None, None),
+            ):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/s4nncFork",
+                            "nnc/DynamicGraph.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No structurally related files found.")
+
+    def test_get_related_files_prefers_same_directory_impl_neighbors_over_generic_import_matches(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "Sources/NIOCore/SocketAddresses.swift",
+                        "shared_imports": 4,
+                        "sample_imports": ["CNIOLinux", "CNIOOpenBSD", "WinSDK"],
+                    },
+                    {
+                        "related_file": "Sources/NIOPosix/SocketChannel.swift",
+                        "shared_imports": 4,
+                        "sample_imports": ["CNIOLinux", "CNIOOpenBSD", "NIOCore", "NIOEmbedded"],
+                    },
+                    {
+                        "related_file": "Tests/NIOPosixTests/ChannelTests.swift",
+                        "shared_imports": 5,
+                        "sample_imports": ["NIOCore", "NIOPosix", "XCTest"],
+                    },
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/swift-nio",
+                        "Sources/NIOPosix/Bootstrap.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        socket_idx = output.index("Sources/NIOPosix/SocketChannel.swift")
+        tests_idx = output.index("Tests/NIOPosixTests/ChannelTests.swift")
+        self.assertLess(socket_idx, tests_idx)
+        self.assertNotIn("Sources/NIOCore/SocketAddresses.swift", output)
+
+    def test_get_related_files_prefers_symbol_usage_neighbors_before_semantic_fallback(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+                        "symbol": "Exchange",
+                    },
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                ]
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/okhttp",
+                        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Related Files:", output)
+        self.assertIn("Symbol graph:", output)
+        self.assertIn("RealCall.kt", output)
+        self.assertIn("ConnectInterceptor.kt", output)
+        self.assertIn("caller of 2 symbol(s) defined in target file", output)
+        self.assertNotIn("semantic co-mentions", output)
+        self.assertLess(
+            output.index("RealCall.kt"),
+            output.index("ConnectInterceptor.kt"),
+        )
+
+    def test_get_related_files_surfaces_same_directory_runtime_neighbors_when_graph_is_thin(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return [
+                    {
+                        "related_file": "Sources/NIOPosix/BaseSocketChannel.swift",
+                        "symbol": "cancelWritesOnClose",
+                    },
+                    {
+                        "related_file": "Sources/NIOPosix/BaseSocketChannel.swift",
+                        "symbol": "flushNow",
+                    },
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return [
+                    {
+                        "related_file": "Benchmarks/Benchmarks/NIOPosixBenchmarks/Benchmarks.swift",
+                        "symbol": "DatagramChannel",
+                    },
+                ]
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "Sources/NIOPosix/Bootstrap.swift",
+                        "sym_count": 10,
+                        "sym_examples": ["bootstrap", "bind"],
+                    },
+                    {
+                        "related_file": "Tests/NIOPosixTests/ChannelTests.swift",
+                        "sym_count": 22,
+                        "sym_examples": ["testBind", "testClose"],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/swift-nio",
+                        "Sources/NIOPosix/SocketChannel.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Sibling implementation files:", output)
+        self.assertIn("Sources/NIOPosix/Bootstrap.swift", output)
+        self.assertNotIn("Tests/NIOPosixTests/ChannelTests.swift", output)
+
+    def test_get_related_files_uses_same_directory_neighbors_for_inspect_first_when_other_signals_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/CanvasView.swift",
+                        "sym_count": 5,
+                        "sym_examples": ["CanvasView", "CheckerboardBackground", "Data"],
+                    },
+                    {
+                        "related_file": "FrameCreator/Views/SettingsView.swift",
+                        "sym_count": 2,
+                        "sym_examples": ["SettingsView"],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/FrameCreator",
+                        "FrameCreator/Views/SidebarView.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        self.assertIn("FrameCreator/Views/CanvasView.swift", output)
+        self.assertIn("Sibling implementation files:", output)
+
+    def test_get_related_files_prefers_same_family_sibling_roles_over_symbol_count(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 5,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+                        "sym_count": 1,
+                        "sym_examples": ["PetController"],
+                        "file_roles": None,
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertIn("PetController.java", inspect_section)
+        self.assertLess(
+            output.index("PetController.java"),
+            output.index("Pet.java"),
+        )
+
+    def test_get_related_files_does_not_use_path_family_fallback_when_roles_are_present(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 5,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+                        "sym_count": 1,
+                        "sym_examples": ["PetController"],
+                        "file_roles": [],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertIn("Pet.java", inspect_section)
+        self.assertLess(
+            output.index("Pet.java"),
+            output.index("PetController.java"),
+        )
+
+    def test_get_related_files_does_not_use_test_path_penalty_when_roles_are_present(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 1,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "sym_count": 6,
+                        "sym_examples": ["OwnerControllerFlow"],
+                        "file_roles": [],
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertIn("tests/OwnerControllerFlow.java", inspect_section)
+        self.assertLess(
+            output.index("Pet.java"),
+            output.index("tests/OwnerControllerFlow.java"),
+        )
+
+    def test_get_related_files_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 1,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "sym_count": 6,
+                        "sym_examples": ["OwnerControllerFlow"],
+                        "file_roles": None,
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertNotIn("tests/OwnerControllerFlow.java", inspect_section)
+
+    def test_get_related_files_legacy_example_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if kwargs.get("op") == "get_related_files_target_roles":
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/Pet.java",
+                        "sym_count": 1,
+                        "sym_examples": ["Pet"],
+                        "file_roles": [],
+                    },
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/examples/OwnerControllerExample.java",
+                        "sym_count": 6,
+                        "sym_examples": ["OwnerControllerExample"],
+                        "file_roles": None,
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertNotIn("examples/OwnerControllerExample.java", inspect_section)
+
+    def test_get_related_files_structural_calls_keep_test_path_when_roles_are_present(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN f.semantic_file_roles AS file_roles" in cypher:
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "caller_file <> owner" in cypher:
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "symbol": "processFindForm",
+                        "file_roles": [],
+                    }
+                ]
+            if (
+                "<-[:CALLS_INFERRED]-(caller:Node)" in cypher
+                or "<-[:CALLS]-(caller_file:File" in cypher
+                or "<-[:CALLS_INFERRED]-(caller_file:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher
+            ):
+                return []
+            if "get_related_files_same_directory" in kwargs.get("op", "") or "target_dir_prefix" in kwargs:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("tests/OwnerControllerFlow.java", output)
+
+    def test_get_related_files_structural_calls_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "RETURN f.semantic_file_roles AS file_roles" in cypher:
+                return [{"file_roles": ["api_surface", "controller_surface"]}]
+            if "<-[:CALLS]-(caller:Node)" in cypher and "caller_file <> owner" in cypher:
+                return [
+                    {
+                        "related_file": "src/main/java/org/springframework/samples/petclinic/owner/tests/OwnerControllerFlow.java",
+                        "symbol": "processFindForm",
+                        "file_roles": None,
+                    }
+                ]
+            if (
+                "<-[:CALLS_INFERRED]-(caller:Node)" in cypher
+                or "<-[:CALLS]-(caller_file:File" in cypher
+                or "<-[:CALLS_INFERRED]-(caller_file:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher
+                or "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher
+            ):
+                return []
+            if "get_related_files_same_directory" in kwargs.get("op", "") or "target_dir_prefix" in kwargs:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/petclinic",
+                        "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No structurally related files found.")
+
+    def test_get_related_files_prefers_file_level_graph_callers_before_same_directory_fallback(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS]-(caller_file:File" in cypher:
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/ContentView.swift",
+                        "symbol": "SidebarView",
+                    }
+                ]
+            if "<-[:CALLS_INFERRED]-(caller_file:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if (
+                "get_related_files_same_directory" in kwargs.get("op", "")
+                or "target_dir_prefix" in kwargs
+            ):
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/CanvasView.swift",
+                        "sym_count": 5,
+                        "sym_examples": ["CanvasView", "CheckerboardBackground", "Data"],
+                    }
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/FrameCreator",
+                        "FrameCreator/Views/SidebarView.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        self.assertIn("FrameCreator/Views/ContentView.swift", inspect_section)
+        self.assertLess(
+            output.index("FrameCreator/Views/ContentView.swift"),
+            output.index("FrameCreator/Views/CanvasView.swift"),
+        )
+
+    def test_get_related_files_does_not_promote_shared_import_graph_into_inspect_first_when_structural_exists(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/RealCall.kt",
+                        "symbol": "RealInterceptorChain",
+                    }
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RetryAndFollowUpInterceptor.kt",
+                        "shared_imports": 8,
+                        "sample_imports": ["java.io.IOException", "java.net.Proxy", "okhttp3.Interceptor"],
+                    }
+                ]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/okhttp",
+                        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        inspect_section = output.split("Inspect First:", 1)[1]
+        for marker in ("Symbol graph:", "Symbol import graph:", "Import graph:", "Apple build graph:"):
+            inspect_section = inspect_section.split(marker, 1)[0]
+        self.assertIn("RealCall.kt", inspect_section)
+        self.assertNotIn("RetryAndFollowUpInterceptor.kt", inspect_section)
+        self.assertIn("Import graph:", output)
+        self.assertIn("RetryAndFollowUpInterceptor.kt", output)
+
+    def test_get_related_files_prefers_runtime_symbol_import_neighbors_over_test_neighbors(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return [
+                    {
+                        "related_file": "okhttp/src/jvmTest/kotlin/okhttp3/JSSETest.kt",
+                        "symbol": "connection",
+                    },
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/connection/ConnectInterceptor.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                    {
+                        "related_file": "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http2/Http2ExchangeCodec.kt",
+                        "symbol": "RealInterceptorChain",
+                    },
+                ]
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/okhttp",
+                        "okhttp/src/commonJvmAndroid/kotlin/okhttp3/internal/http/RealInterceptorChain.kt",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Symbol import graph:", output)
+        self.assertIn("imports 1 symbol(s) defined in target file", output)
+        self.assertLess(
+            output.index("ConnectInterceptor.kt"),
+            output.index("JSSETest.kt"),
+        )
+        self.assertLess(
+            output.index("Http2ExchangeCodec.kt"),
+            output.index("JSSETest.kt"),
+        )
+
+    def test_get_related_files_omits_empty_symbol_graph_section_after_highlight(self):
+        async def fake_executor(cypher, **kwargs):
+            if "<-[:CALLS]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return [
+                    {
+                        "related_file": "FrameCreator/Views/ContentView.swift",
+                        "symbol": "SidebarView",
+                    }
+                ]
+            if "<-[:CALLS_INFERRED]-(caller:Node)" in cypher and "[:CONTAINS*1..]->(caller)" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "[:CONTAINS*1..]->(target:Node)<-[:IMPLICIT_IMPORTS_SYMBOL]-(importer:File" in cypher:
+                return []
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/FrameCreator",
+                        "FrameCreator/Views/SidebarView.swift",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        self.assertIn("FrameCreator/Views/ContentView.swift", output)
+        self.assertNotIn("Symbol graph:\n", output)
 
     def test_get_code_communities_groups_directory_fallback_by_cargo_crate(self):
         async def fake_executor(cypher, **kwargs):
@@ -817,6 +3086,11 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertIn("crate `api`", output)
         self.assertIn("crate `core`", output)
         self.assertIn("crates/api/src/lib.rs", output)
+        self.assertIn("Use this after `get_project_overview` to choose an architectural area", output)
+        self.assertIn("Community Summary:", output)
+        self.assertIn("- Start with api", output)
+        self.assertIn("Dominant concerns:", output)
+        self.assertIn("Priority exploration order:", output)
 
     def test_get_code_communities_hides_singleton_zero_symbol_noise(self):
         async def fake_executor(cypher, **kwargs):
@@ -892,6 +3166,110 @@ class CodeIntelToolTests(unittest.TestCase):
         self.assertLess(backend_index, ui_index)
         self.assertIn("[backend/app]", output)
         self.assertIn("[ui/public]", output)
+
+    def test_get_code_communities_uses_roles_before_misleading_paths(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.louvainCommunity IS NOT NULL" in cypher:
+                self.assertIn("f.semantic_file_roles", cypher)
+                self.assertIn("top_file_entries", cypher)
+                self.assertIn("'docs_surface'", cypher)
+                return [
+                    {
+                        "comm": 20,
+                        "file_count": 3,
+                        "total_syms": 30,
+                        "top_file_entries": [
+                            {
+                                "path": "src/public/api.ts",
+                                "roles": ["api_surface"],
+                            },
+                            {
+                                "path": "src/public/service.ts",
+                                "roles": ["service_surface"],
+                            },
+                            {
+                                "path": "src/public/store.ts",
+                                "roles": ["repository_surface"],
+                            },
+                        ],
+                    },
+                    {
+                        "comm": 21,
+                        "file_count": 3,
+                        "total_syms": 30,
+                        "top_file_entries": [
+                            {
+                                "path": "src/api/views/a.tsx",
+                                "roles": ["view_surface"],
+                            },
+                            {
+                                "path": "src/api/views/b.tsx",
+                                "roles": ["view_surface"],
+                            },
+                            {
+                                "path": "src/api/views/c.tsx",
+                                "roles": ["view_surface"],
+                            },
+                        ],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/repo"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("cluster #20 [backend/app]", output)
+        self.assertIn("cluster #21 [ui/app]", output)
+        self.assertLess(output.index("cluster #20"), output.index("cluster #21"))
+
+    def test_get_code_communities_labels_dominant_implementation_areas(self):
+        async def fake_executor(cypher, **kwargs):
+            if "f.louvainCommunity IS NOT NULL" in cypher:
+                return [
+                    {
+                        "comm": 20,
+                        "file_count": 5,
+                        "total_syms": 40,
+                        "top_files": [
+                            "tools/brain/graph/overview.py",
+                            "tools/brain/graph/flow_summary.py",
+                            "tools/brain/code_intel/core.py",
+                            "scripts/check_parity.py",
+                        ],
+                    },
+                    {
+                        "comm": 21,
+                        "file_count": 4,
+                        "total_syms": 30,
+                        "top_files": [
+                            "packages/provider/openai.py",
+                            "packages/provider/anthropic.py",
+                            "packages/provider/google.py",
+                        ],
+                    },
+                ]
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/repo"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("cluster #20 [area/tools]", output)
+        self.assertIn("cluster #21 [area/provider]", output)
+        self.assertIn("cohesive implementation area", output)
 
     def test_get_code_communities_labels_monorepo_sdk_generated_and_cli_clusters(self):
         async def fake_executor(cypher, **kwargs):
@@ -970,6 +3348,54 @@ class CodeIntelToolTests(unittest.TestCase):
 
         self.assertIn("cluster #10", output)
         self.assertNotIn("cluster #99", output)
+        self.assertIn("Suppressed 1 small long-tail cluster(s)", output)
+
+    def test_get_code_communities_collapses_large_singleton_tail(self):
+        async def fake_executor(cypher, **kwargs):
+            if "get_code_communities_louvain" in kwargs.get("op", "") or "f.louvainCommunity IS NOT NULL" in cypher:
+                rows = [
+                    {
+                        "comm": 10 + idx,
+                        "file_count": 3,
+                        "total_syms": 120 - idx,
+                        "top_files": [f"packages/opencode/src/cli/cmd/{idx}.ts"],
+                    }
+                    for idx in range(12)
+                ]
+                rows.extend(
+                    [
+                        {
+                            "comm": 99,
+                            "file_count": 1,
+                            "total_syms": 3,
+                            "top_files": ["packages/ui/src/components/tiny.tsx"],
+                        },
+                        {
+                            "comm": 100,
+                            "file_count": 1,
+                            "total_syms": 2,
+                            "top_files": ["packages/ui/src/components/tiny2.tsx"],
+                        },
+                    ]
+                )
+                return rows
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(self.mcp.tools["get_code_communities"]("/tmp/opencode"))
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Suppressed 2 small long-tail cluster(s)", output)
+        self.assertIn("Community Summary:", output)
+        self.assertIn("2 noisy/small cluster(s) suppressed", output)
+        self.assertNotIn("cluster #99", output)
+        self.assertNotIn("cluster #100", output)
 
     def test_get_code_importance_downweights_vendor_files(self):
         async def fake_executor(cypher, **kwargs):
@@ -1022,11 +3448,25 @@ class CodeIntelToolTests(unittest.TestCase):
                 ]
             if "same crate" not in cypher and "MATCH (c:CargoCrate {project_id:$pid, name:$crate})-[:DEFINED_IN_FILE]" in cypher:
                 return [
+                    {
+                        "related_file": "crates/api/tests/routes.rs",
+                        "sym_count": 30,
+                        "file_roles": ["test_surface"],
+                    },
                     {"related_file": "crates/api/src/routes.rs", "sym_count": 8},
                     {"related_file": "crates/api/src/http.rs", "sym_count": 4},
                 ]
             if "MATCH (src:CargoCrate {project_id:$pid, name:$crate})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate" in cypher:
-                return [{"crate": "core", "files": ["crates/core/src/service.rs"]}]
+                return [
+                    {
+                        "crate": "core",
+                        "files": [
+                            "crates/core/README.md",
+                            "crates/core/Cargo.toml",
+                            "crates/core/src/service.rs",
+                        ],
+                    }
+                ]
             if "MATCH (src:CargoCrate {project_id:$pid})-[:DEPENDS_ON_PACKAGE]->(tgt:CargoCrate {project_id:$pid, name:$crate})" in cypher:
                 return [{"crate": "cli", "files": ["crates/cli/src/main.rs"]}]
             if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
@@ -1044,10 +3484,543 @@ class CodeIntelToolTests(unittest.TestCase):
                 CURRENT_EXECUTOR = None
 
         self.assertIn("Crate: api", output)
+        self.assertIn("Use this to find the fastest adjacent files", output)
+        self.assertIn("Inspect First:", output)
+        self.assertIn("- start with crates/api/src/routes.rs", output)
         self.assertIn("crates/api/src/routes.rs", output)
+        self.assertNotIn("crates/api/tests/routes.rs", output)
         self.assertIn("depends on crate `core`", output)
+        self.assertIn("crates/core/src/service.rs", output)
+        self.assertNotIn("crates/core/README.md", output)
+        self.assertNotIn("crates/core/Cargo.toml", output)
         self.assertIn("used by crate `cli`", output)
         self.assertIn("Import graph:", output)
+
+    def test_get_related_files_surfaces_apple_workspace_context(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (w:XcodeWorkspace {project_id:$pid, filepath:$file_path})" in cypher:
+                return [
+                    {
+                        "related_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                        "relation": "referenced by workspace",
+                    },
+                    {
+                        "related_file": "BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+                        "relation": "referenced by workspace",
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/applews",
+                        "BGM.xcworkspace/contents.xcworkspacedata",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Related Files:", output)
+        self.assertIn("Inspect First:", output)
+        self.assertIn("Apple build graph:", output)
+        self.assertIn("BGMApp/BGMApp.xcodeproj/project.pbxproj (referenced by workspace)", output)
+        self.assertIn("BGMDriver/BGMDriver.xcodeproj/project.pbxproj (referenced by workspace)", output)
+        self.assertEqual(
+            output.count("BGMApp/BGMApp.xcodeproj/project.pbxproj (referenced by workspace)"),
+            1,
+        )
+
+    def test_get_related_files_does_not_highlight_low_signal_apple_project_context(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (project_file:File {project_id:$pid, filepath:$file_path})" in cypher:
+                return [
+                    {
+                        "related_file": "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme",
+                        "relation": "scheme builds a target from this project",
+                    },
+                    {
+                        "related_file": "App/Assets.xcassets/AppIcon.appiconset/Contents.json",
+                        "relation": "bundled by a target in this project",
+                    },
+                ]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return []
+            return []
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["get_related_files"](
+                        "/tmp/appleproj",
+                        "Food Truck.xcodeproj/project.pbxproj",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Related Files:", output)
+        self.assertIn("Apple build graph:", output)
+        self.assertNotIn("Inspect First:", output)
+        self.assertIn(
+            "Food Truck.xcodeproj/xcshareddata/xcschemes/Food Truck.xcscheme (scheme builds a target from this project)",
+            output,
+        )
+        self.assertIn(
+            "App/Assets.xcassets/AppIcon.appiconset/Contents.json (bundled by a target in this project)",
+            output,
+        )
+
+    def test_get_related_files_semantic_fallback_does_not_repeat_highlighted_first_result(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [
+                    ("FrameCreator/Views/ContentView.swift", 3),
+                    ("FrameCreator/Views/InspectorView.swift", 2),
+                ]
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            _pg_pool=FakePool(),
+            open_pool=mock.AsyncMock(return_value=None),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_memory_modules", return_value=(fake_memory_store, None, None, None, None)):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/framecreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("Inspect First:", output)
+        self.assertEqual(output.count("FrameCreator/Views/ContentView.swift"), 1)
+        self.assertIn("FrameCreator/Views/InspectorView.swift", output)
+
+    def test_get_related_files_semantic_fallback_keeps_test_like_path_when_roles_are_present(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [
+                    ("tests/SidebarViewNeighbors.swift", []),
+                ]
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            _pg_pool=FakePool(),
+            open_pool=mock.AsyncMock(return_value=None),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_memory_modules", return_value=(fake_memory_store, None, None, None, None)):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/framecreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("tests/SidebarViewNeighbors.swift", output)
+
+    def test_get_related_files_semantic_fallback_legacy_test_path_penalty_still_applies_when_roles_missing(self):
+        async def fake_executor(cypher, **kwargs):
+            if "CALL db.labels()" in cypher:
+                return [{"labels": []}]
+            if "MATCH (f1:File {id: $fid})-[:CONTAINS]->(imp1:Import)" in cypher:
+                return []
+            if "RETURN s.name AS name" in cypher:
+                return [{"name": "SidebarView"}]
+            return []
+
+        class FakeCursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def execute(self, query, params):
+                return None
+
+            async def fetchall(self):
+                return [
+                    ("tests/SidebarViewNeighbors.swift", None),
+                ]
+
+        class FakeConnection:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def cursor(self):
+                return FakeCursor()
+
+        class FakePool:
+            def connection(self):
+                return FakeConnection()
+
+        fake_memory_store = types.SimpleNamespace(
+            _pg_pool=FakePool(),
+            open_pool=mock.AsyncMock(return_value=None),
+        )
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_memory_modules", return_value=(fake_memory_store, None, None, None, None)):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_related_files"](
+                            "/tmp/framecreator",
+                            "FrameCreator/Views/SidebarView.swift",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertEqual(output, "No structurally related files found.")
+
+    def test_get_symbol_context_uses_file_extension_for_source_preview_fence(self):
+        record = {
+            "kind": "Class",
+            "filepath": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+            "start_line": 48,
+            "end_line": 176,
+            "name": "OwnerController",
+            "signature": None,
+            "parent_name": None,
+            "parent_file": None,
+            "docs": None,
+            "callers": [],
+            "callees": [],
+        }
+
+        async def fake_executor(cypher, **kwargs):
+            return [record]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = Path(tmpdir) / record["filepath"]
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            abs_path.write_text(
+                "\n".join(
+                    [f"// filler {idx}" for idx in range(1, 48)]
+                    + [
+                        "@Controller",
+                        "class OwnerController {",
+                        "}",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["get_symbol_context"](
+                            tmpdir,
+                            "OwnerController",
+                            include_source_preview=True,
+                            file_path=record["filepath"],
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        self.assertIn("```java", output)
+        self.assertNotIn("```swift", output)
+        self.assertIn("@Controller", output)
+
+    def test_list_symbol_matches_prefers_types_and_formats_context(self):
+        async def fake_executor(cypher, **kwargs):
+            self.assertEqual(kwargs["q"], "Router")
+            self.assertEqual(kwargs["kinds"], ["Class", "Method"])
+            return [
+                {
+                    "kinds": ["Class", "Node"],
+                    "name": "Router",
+                    "qualified_name": "api.Router",
+                    "signature": None,
+                    "filepath": "src/api/router.py",
+                },
+                {
+                    "kinds": ["Method", "Node"],
+                    "name": "buildRouter",
+                    "qualified_name": "api.Router.buildRouter",
+                    "signature": "def buildRouter(self) -> Router",
+                    "filepath": "src/api/router_factory.py",
+                },
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/rental",
+                        "Router",
+                        kinds=["Class", "Method", "BogusKind"],
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertIn("Symbol matches for 'Router':", output)
+        self.assertIn("- Router (api.Router) (Class)  src/api/router.py", output)
+        self.assertIn(
+            "- buildRouter (api.Router.buildRouter) (Method)  src/api/router_factory.py"
+            " — def buildRouter(self) -> Router",
+            output,
+        )
+        self.assertLess(
+            output.index("src/api/router.py"),
+            output.index("src/api/router_factory.py"),
+        )
+
+    def test_list_symbol_matches_rejects_empty_query(self):
+        output = asyncio.run(self.mcp.tools["list_symbol_matches"]("/tmp/rental", "   "))
+        self.assertEqual(output, "Query is empty. Provide a symbol name substring to match.")
+
+    def test_list_symbol_matches_compacts_long_multiline_signatures(self):
+        async def fake_executor(cypher, **kwargs):
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "configure_provider",
+                    "qualified_name": "providers.configure_provider",
+                    "signature": (
+                        "def configure_provider(\n"
+                        "    provider: Provider[Any], model: Model, settings: ModelSettings, "
+                        "request_parameters: ModelRequestParameters, instrumentation: InstrumentationSettings,\n"
+                        ") -> ConfiguredProvider"
+                    ),
+                    "filepath": "src/providers.py",
+                }
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/rental",
+                        "configure_provider",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        match_line = next(line for line in output.splitlines() if line.startswith("- "))
+        self.assertIn("configure_provider", match_line)
+        self.assertIn("src/providers.py", match_line)
+        self.assertTrue(match_line.endswith("..."))
+        self.assertNotIn("\n", match_line)
+        signature_text = match_line.split(" — ", 1)[1]
+        self.assertLessEqual(len(signature_text), 140)
+
+    def test_list_symbol_matches_accepts_workspace_id_keyword(self):
+        async def fake_executor(cypher, **kwargs):
+            self.assertEqual(kwargs["q"], "infer_provider")
+            self.assertEqual(kwargs["pid"], "proj456")
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "pydantic_ai.providers.infer_provider",
+                    "signature": "def infer_provider(provider: str) -> Provider[Any]",
+                    "filepath": "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                }
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            with mock.patch.object(self.module, "get_project_id", return_value="proj456") as project_id_mock:
+                global CURRENT_EXECUTOR
+                CURRENT_EXECUTOR = fake_executor
+                try:
+                    output = asyncio.run(
+                        self.mcp.tools["list_symbol_matches"](
+                            workspace_id="pydantic-ai",
+                            query="infer_provider",
+                        )
+                    )
+                finally:
+                    CURRENT_EXECUTOR = None
+
+        project_id_mock.assert_called_once_with("pydantic-ai")
+        self.assertIn("infer_provider", output)
+        self.assertIn("pydantic_ai.providers.infer_provider", output)
+
+    def test_list_symbol_matches_demotes_test_symbols_after_impl_symbols(self):
+        async def fake_executor(cypher, **kwargs):
+            self.assertIn("AS file_roles", cypher)
+            self.assertNotIn("CONTAINS '/tests/'", cypher)
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "pydantic_ai.providers.infer_provider",
+                    "signature": None,
+                    "filepath": "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                    "file_roles": [],
+                },
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "test_infer_provider",
+                    "qualified_name": "tests.providers.test_provider_names.test_infer_provider",
+                    "signature": None,
+                    "filepath": "tests/providers/test_provider_names.py",
+                    "file_roles": None,
+                },
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/pydantic-ai",
+                        "infer_provider",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertLess(
+            output.index("pydantic_ai_slim/pydantic_ai/providers/__init__.py"),
+            output.index("tests/providers/test_provider_names.py"),
+        )
+
+    def test_list_symbol_matches_keeps_test_symbol_eligible_when_roles_are_present_empty(self):
+        async def fake_executor(cypher, **kwargs):
+            return [
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "tests.providers.test_provider_names.infer_provider",
+                    "signature": None,
+                    "filepath": "tests/providers/test_provider_names.py",
+                    "file_roles": [],
+                },
+                {
+                    "kinds": ["Function", "Node"],
+                    "name": "infer_provider",
+                    "qualified_name": "pydantic_ai.providers.infer_provider",
+                    "signature": None,
+                    "filepath": "pydantic_ai_slim/pydantic_ai/providers/__init__.py",
+                    "file_roles": None,
+                },
+            ]
+
+        with mock.patch.dict(sys.modules, {"graph_bootstrap": self.graph_bootstrap_mod}):
+            global CURRENT_EXECUTOR
+            CURRENT_EXECUTOR = fake_executor
+            try:
+                output = asyncio.run(
+                    self.mcp.tools["list_symbol_matches"](
+                        "/tmp/pydantic-ai",
+                        "infer_provider",
+                    )
+                )
+            finally:
+                CURRENT_EXECUTOR = None
+
+        self.assertLess(
+            output.index("tests/providers/test_provider_names.py"),
+            output.index("pydantic_ai_slim/pydantic_ai/providers/__init__.py"),
+        )
 
 
 if __name__ == "__main__":

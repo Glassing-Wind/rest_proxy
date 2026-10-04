@@ -1,0 +1,27 @@
+# Indexing Health Audit: `/Users/michaelmarler/Projects/rest_proxy`
+Project ID: `6f8dead37cb2`
+
+## 1. Synchronization (Level 1)
+  - Files on disk:             312
+  - Files in structural index: 312
+  - Files in semantic index:   312
+  - **Sync Status**: ✅ Healthy
+
+## 1.5 Run Alignment
+  - Structural status:        `done`
+  - Structural active run:    `6f8dead37cb2:84684:1791062537500000000`
+  - Structural last success:  `6f8dead37cb2:84684:1791062537500000000`
+  - Semantic status:          `done`
+  - Semantic active run:      `6f8dead37cb2:semantic:2e9a701ed9bd`
+  - Semantic last success:    `6f8dead37cb2:semantic:2e9a701ed9bd`
+  - Semantic target struct:   `6f8dead37cb2:84684:1791062537500000000`
+  - Semantic active struct:   `6f8dead37cb2:84684:1791062537500000000`
+  - **Run Alignment**:        ✅ Aligned
+
+## 2. Structural Integrity (Level 2)
+  - **Parse Success Rate**: 100.0% (219/219 source-eligible files)
+  - Support-file coverage: 100.0% (312/312 across all manifest-kept files)
+  - *Hint: Add `audit=True` to run a deep fidelity check.*
+
+## 4. Recommended Actions
+- No actions required. Everything looks healthy!

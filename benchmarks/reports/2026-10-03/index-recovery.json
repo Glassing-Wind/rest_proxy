@@ -1,0 +1,21 @@
+{
+  "failed_jobs": [
+    "2421480d",
+    "8a9081ed"
+  ],
+  "namespaces": [
+    {
+      "namespace": "6f8dead37cb2::shadow::6f8dead37cb2:62262:1791039285430000128",
+      "nodes": 4929,
+      "deleted_nodes": 4929,
+      "deleted_relationships": 405
+    },
+    {
+      "namespace": "6f8dead37cb2::shadow::6f8dead37cb2:65686:1791039790890000128",
+      "nodes": 4937,
+      "deleted_nodes": 4937,
+      "deleted_relationships": 406
+    }
+  ],
+  "remaining_shadow_nodes": 0
+}

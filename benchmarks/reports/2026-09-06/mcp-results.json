@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "condition": "mcp",
+  "repository": "rest_proxy",
+  "revision": "b05363c4b43df110f749a0a238fc0589bd76a49f",
+  "index_state": "warm",
+  "setup_seconds": 7.233,
+  "token_measurement": "estimated",
+  "measurement_notes": "Fresh condition-level subagent context, no other condition answers/results read. Cases interleaved/batched within one context using expected_evidence file hints. elapsed_seconds is summed instrumented tool duration, not end-to-end per-case task latency; do not compare as speed advantage. Token estimates ceil((prompt + tool arguments + canonical tool text chars)/4) and ceil(answer chars/4), excluding system/history/reasoning/caching/wrapper duplication. Not actual telemetry. Setup excludes initial skill/tool discovery and AGENTS/case/schema read, timed from post-schema setup marker through health; no indexing performed. See mcp-measurement-notes.md and mcp-evidence-log.json. Post-run audit found automatic structural reindexing and failed semantic updates; warm is the initial state only, not a stable condition. See post-run-index-health.md. This invalidates controlled-index attribution.",
+  "runs": [
+    {
+      "case_id": "http_mcp_startup",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 0.598,
+      "tool_calls": 5,
+      "files_opened": 2,
+      "input_tokens": 3097,
+      "output_tokens": 145,
+      "evidence": [
+        "_mcp.py:13",
+        "_mcp.py:21",
+        "brain_server.py:147",
+        "brain_server.py:279",
+        "brain_server.py:330"
+      ],
+      "answer": "Imports _mcp's shared stateful FastMCP instance, which loads environment and calls register_all for brain/hands tools. brain_server creates the MCP Starlette app, mounts it at root so /mcp remains intact, and exposes / and /health plus /fingerprint before the mount. Lifespan registers the main event loop, opens the optional pool non-fatally, loads/starts watching, and runs the session manager; shutdown stops watching/closes storage. Direct execution starts uvicorn at 127.0.0.1:8001. Health reports protocol versions, tool count, boot/fingerprint, uptime and session state.",
+      "native_fallback_calls": 2,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 2. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "proxy_chat_flow",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 0.529,
+      "tool_calls": 5,
+      "files_opened": 2,
+      "input_tokens": 3992,
+      "output_tokens": 168,
+      "evidence": [
+        "proxy/app.py:166",
+        "proxy/app.py:289",
+        "proxy/handlers_responses.py:138",
+        "proxy/handlers_responses.py:231",
+        "proxy/config.py:88"
+      ],
+      "answer": "chat_completions parses JSON, removes stream_options and stop, resolves the model, injects/compacts codebase_search tools, and applies tool-message filtering plus guarded memory injection when applicable. Both branches forward to forward_responses_api_completion. That handler derives a history key, reuses only resp_ IDs, sends latest input for continuing responses or full history otherwise, and posts with AsyncClient to OPENAI_BASE/responses (LM_BASE + /v1/responses). Non-streaming failures fall back to forward_openai_chat_completion. Success updates response state, schedules best-effort memory persistence, and maps Responses output into choices for the client.",
+      "native_fallback_calls": 0,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 0. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "memory_mode_gating",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 0.648,
+      "tool_calls": 2,
+      "files_opened": 1,
+      "input_tokens": 1851,
+      "output_tokens": 142,
+      "evidence": [
+        "proxy/config.py:22",
+        "proxy/config.py:35",
+        "proxy/config.py:49",
+        "proxy/config.py:64"
+      ],
+      "answer": "LM_PROXY_MEMORY_MODE defaults to stateless, normalized to off; aliases select assist/full and unknown values also become off. LM_PROXY_MEMORY_ENABLED defaults true but activation also needs assist/full. Persistence, Redis and injection each require this mode gate plus their respective LM_PROXY_MEMORY_ENABLE_PERSISTENCE, _REDIS, _INJECT flags (all default true). Embeddings require global enabled, full mode and LM_PROXY_MEMORY_ENABLE_EMBEDDINGS (default false). Missing optional imports reset module references to None. Injection's recent-turn bound defaults to 10.",
+      "native_fallback_calls": 1,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 1. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "index_job_recovery",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 0.393,
+      "tool_calls": 4,
+      "files_opened": 1,
+      "input_tokens": 3539,
+      "output_tokens": 151,
+      "evidence": [
+        "_jobs.py:180",
+        "_jobs.py:210",
+        "_jobs.py:248",
+        "_jobs.py:868"
+      ],
+      "answer": "_persist_job_state serializes runtime fields including statuses, return codes, PIDs, log paths, timestamps and maintenance state to a unique temporary JSON file then atomically replaces state. load_job_record checks memory then disk, reconciles running/cancelling records and restores them to the registry. Reconciliation polls surviving Popen objects; for dead recorded PIDs it infers return codes from logs or marks failure. Once both phases finish it sets done/failed/cancelled, records finish time, removes manifest, releases project/capacity locks, persists, and runs pending post-index maintenance.",
+      "native_fallback_calls": 1,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 1. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "semantic_search_ranking",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 0.585,
+      "tool_calls": 5,
+      "files_opened": 2,
+      "input_tokens": 8008,
+      "output_tokens": 200,
+      "evidence": [
+        "memory/code_retrieval.py:47",
+        "memory/code_retrieval.py:15",
+        "memory/retrieval_policy.py:61"
+      ],
+      "answer": "search_codebase_core resolves workspace IDs, classifies implementation intent/identifiers/path hints, and gathers project searches. SQL ranks vector neighbors and keyword hits with weighted RRF (2/(60+semantic rank) plus 1/(60+keyword rank)); the left join is anchored in semantic candidates. It rescues explicit runtime/path definitions, filters metadata/path/test/crate scope, enriches implementation scores through retrieval_policy/retrieval_scoring, penalizes low-signal/doc surfaces and sorts candidates. It can rescue definitions/member usages through grep and load matching indexed rows, apply optional clone dedup, duplicate/file postprocessing, then per-file/directory caps and top-k. Broad mode relaxes caps and enables grep; concentrated final results can emit exact grep fallback paths.",
+      "native_fallback_calls": 2,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 2. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. Initial path-filtered semantic query returned no match; MCP describe/extract recovered source; one native glob lookup failed."
+    },
+    {
+      "case_id": "duplicate_suppression",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 0.751,
+      "tool_calls": 5,
+      "files_opened": 2,
+      "input_tokens": 5386,
+      "output_tokens": 182,
+      "evidence": [
+        "memory/retrieval_duplicates.py:441",
+        "memory/retrieval_duplicates.py:499",
+        "memory/retrieval_duplicates.py:600",
+        "memory/code_retrieval_postprocess.py:14",
+        "memory/code_retrieval.py:47"
+      ],
+      "answer": "memory/retrieval_duplicates delegates duplicate group/pair analysis to ts_pack.analyze_duplicate_texts, with runtime subprocess fallback and keep-all defaults when unavailable. rerank_diverse_results passes texts, relevance and context to ts_pack. rerank_retrieval_results_contract combines trace selection and analysis, normalizes groups/pairs, and materializes results from keep_indices, recording representatives/suppression policy. Code postprocessing invokes that contract when dedupe_files is enabled and trace/telemetry/experiments request it, then implementation sorting and file dedupe apply; final caps/top-k are downstream in code_retrieval. Group analysis alone is diagnostic, while selected indices alter output.",
+      "native_fallback_calls": 1,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 1. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "documentation_pipeline",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 0.886,
+      "tool_calls": 5,
+      "files_opened": 5,
+      "input_tokens": 6179,
+      "output_tokens": 175,
+      "evidence": [
+        "tools/brain/docs/indexer.py:35",
+        "tools/brain/docs/pipeline.py:23",
+        "tools/brain/docs/discovery.py:79",
+        "tools/brain/docs/crawl.py:214",
+        "tools/brain/docs/chunking.py:35",
+        "tools/brain/docs/pipeline.py:197"
+      ],
+      "answer": "indexer.py delegates to index_docs. The pipeline opens/bootstrap storage and probes embeddings before crawling. Discovery is opt-in; discover_pages tries llms.txt and sitemap/link discovery with scope/filter handling. Without discovery, deduplicated seeds are used. crawl_pages treats raw GitHub markdown directly and uses adaptive HTTP/Playwright plus trafilatura for other content. chunk_content prefers ts_pack markdown/XML AST chunks and context paths, with line-window fallback. index_docs buffers chunks, embeds at effective batch size, and upserts doc_embeddings by chunk_id, including content, vector and metadata (topic/title/context/domain/type/section). Storage errors return zero written.",
+      "native_fallback_calls": 2,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 2. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "symbol_context",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 1.705,
+      "tool_calls": 4,
+      "files_opened": 2,
+      "input_tokens": 3835,
+      "output_tokens": 168,
+      "evidence": [
+        "tools/brain/code_intel/core.py:1066",
+        "tools/brain/code_intel/symbol_graph.py:381",
+        "tools/brain/code_intel/symbol_graph.py:453"
+      ],
+      "answer": "get_symbol_context is registered in tools/brain/code_intel/core.py. It obtains the project-scoped graph candidate query, normalizes file/signature filters, and uses symbol_graph helpers to disambiguate or rank/select a candidate and format definition/call relationships. No candidate returns a not-found message; a graph failure returns an error rather than bypassing graph lookup. For source preview it prefers local disk at the graph symbol span with line/character caps; if unavailable it queries Postgres by project/file, prioritizing declared symbol, definition chunk role and proximity to start_line. Preview failures are swallowed so graph context can still return.",
+      "native_fallback_calls": 0,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 0. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "test_coverage_lookup",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 1.291,
+      "tool_calls": 2,
+      "files_opened": 1,
+      "input_tokens": 3315,
+      "output_tokens": 142,
+      "evidence": [
+        "tools/hands/dev.py:204"
+      ],
+      "answer": "get_test_coverage_for combines filesystem name patterns (Python/TS/Rust/Go), Neo4j IMPORTS and IMPORTS_SYMBOL edges, and ripgrep basename mentions in test files. If no matches, it tries generic route suites/route token matches and then project-scoped Postgres test/spec chunks containing path/basename tokens, filtered by file roles. It deduplicates by file, favors package locality and stronger match reasons, limits weak basename matches, and returns up to 25. Graph/text/semantic errors are guarded. These are likely related tests, not measured execution coverage.",
+      "native_fallback_calls": 0,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 0. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "watcher_lifecycle",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 1.19,
+      "tool_calls": 5,
+      "files_opened": 2,
+      "input_tokens": 3757,
+      "output_tokens": 150,
+      "evidence": [
+        "tools/hands/indexing.py:1088",
+        "graphrag_core/indexing/watcher.py:26",
+        "graphrag_core/indexing/watcher.py:119",
+        "graphrag_core/indexing/watcher.py:141",
+        "graphrag_core/indexing/watcher.py:171",
+        "graphrag_core/indexing/watcher.py:219"
+      ],
+      "answer": "watch_project accepts an explicit workspace or queries MCP client roots, ignores invalid/nonlocal roots and duplicates, then adds absolute paths to PINNED_WATCHES. add_watch/remove_watch persist the sorted pin list and synchronize WATCHED_PATHS. Enabled startup restores existing directory pins and starts polling; polling compares manifest mtimes and invokes indexing on change every 30 seconds. Removal drops runtime roots through synchronization. LM_PROXY_WATCHER_ENABLED defaults off; auto-watch helper is currently a no-op even when its flags are set. stop_watcher cancels and awaits its task.",
+      "native_fallback_calls": 2,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 2. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "stale_mcp_session",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 1.588,
+      "tool_calls": 3,
+      "files_opened": 2,
+      "input_tokens": 2076,
+      "output_tokens": 144,
+      "evidence": [
+        "_mcp.py:15",
+        "brain_server.py:68",
+        "brain_server.py:110",
+        "brain_server.py:130",
+        "brain_server.py:260"
+      ],
+      "answer": "_mcp configures stateful HTTP (stateless_http=False), so transport sessions belong to the current process. brain_server generates a new PID/UUID BOOT_ID and checks the incoming mcp-session-id against session_manager._server_instances for diagnostic known/active values. Middleware delegates protocol handling to the MCP app; when its response is 404 for a supplied session ID it logs a stale rejection once. It attaches boot/fingerprint/session-known headers, and health exposes the snapshot. BOOT_ID is diagnostic, not a middleware comparison that itself rejects the request.",
+      "native_fallback_calls": 2,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 2. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "tool_fingerprint",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 1.615,
+      "tool_calls": 2,
+      "files_opened": 1,
+      "input_tokens": 1926,
+      "output_tokens": 163,
+      "evidence": [
+        "_tool_fingerprint.py:12",
+        "_tool_fingerprint.py:31",
+        "_tool_fingerprint.py:47",
+        "_tool_fingerprint.py:69"
+      ],
+      "answer": "compute_tool_fingerprint hashes sorted registered tool names plus source path/content SHA256 records and returns a 12-hex prefix and tool count. Sources include inspected tool function files, recursive Python files in tools/graphrag_core/memory/local_embeddings, listed Python helpers, and explicit runtime_source_files such as brain_server.py. Unreadable files get a sentinel. Although requirements.txt and requirements-ci.txt are listed in default roots, the file collector only accepts .py files, so dependency-pin changes in those text manifests do not affect the default fingerprint. Installed dependency versions/content are not directly hashed.",
+      "native_fallback_calls": 1,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 1. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. Dependency-manifest listing is misleading: .py-only collection excludes requirements files."
+    },
+    {
+      "case_id": "cross_project_trace",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 1.956,
+      "tool_calls": 3,
+      "files_opened": 1,
+      "input_tokens": 4265,
+      "output_tokens": 183,
+      "evidence": [
+        "memory/cross_project_trace.py:164",
+        "memory/cross_project_trace.py:48",
+        "memory/cross_project_trace.py:115"
+      ],
+      "answer": "trace_symbol_cross_project_core resolves source and target workspace IDs/paths. It queries source-project named definitions and export aliases, selects the highest _definition_rank candidate, and expands resolved names for aliases. Target graph consumers are callers in the target project with CALLS/CALLS_INFERRED to named symbols; target matching itself is by name rather than source project. Semantic consumers combine target-project exact text and vector/keyword candidates, require symbol text, dedupe chunk keys, rank using _semantic_usage_rank and keep one hit per file up to five. Source previews are selected near the chosen definition. Output distinguishes structural consumers, implementation text and test/support text.",
+      "native_fallback_calls": 0,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 0. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    },
+    {
+      "case_id": "optional_dependency_failure",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 3.361,
+      "tool_calls": 5,
+      "files_opened": 3,
+      "input_tokens": 4320,
+      "output_tokens": 147,
+      "evidence": [
+        "proxy/config.py:56",
+        "proxy/handlers_memory.py:103",
+        "proxy/handlers_memory.py:143",
+        "proxy/handlers_memory.py:159",
+        "proxy/handlers_memory.py:256",
+        "proxy/handlers_responses.py:298"
+      ],
+      "answer": "proxy/config.py catches ImportError for optional memory modules and resets their references to None. Effective mode/feature gates suppress automatic work by default. _persist_memory_best_effort returns for disabled/off/missing modules, gates Redis/Postgres/embeddings separately and catches runtime storage failures; embedding/summary failures have narrower guards. handlers_responses schedules persistence in a background task with scheduling error handling. These guards isolate the optional memory path; they do not prove every possible startup/configuration exception is non-fatal.",
+      "native_fallback_calls": 3,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 3. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. One guessed symbol was not found; one native file lookup failed before locating handlers_memory."
+    },
+    {
+      "case_id": "tool_choice_catalog",
+      "correct": true,
+      "unsupported_claims": 0,
+      "elapsed_seconds": 2.899,
+      "tool_calls": 2,
+      "files_opened": 1,
+      "input_tokens": 2824,
+      "output_tokens": 154,
+      "evidence": [
+        "tools/brain/tool_catalog.py:11",
+        "tools/brain/tool_catalog.py:53",
+        "tools/brain/tool_catalog.py:69",
+        "tools/brain/tool_catalog.py:451",
+        "tools/brain/tool_catalog.py:500"
+      ],
+      "answer": "ToolCatalogEntry records tier, workflow, reach_for_when, prefer_after and rank_bias. The catalog explicitly marks normal investigation tools primary and overlapping narrow tools support/secondary, for example describe_file versus extract_function_body (prefer after get_symbol_context), and find_definitions after list_symbol_matches/get_symbol_context. render_tool_catalog filters intent tokens, hides admin entries by default, orders by intent adjustment/tier/bias/workflow/name, and prints primary-first guidance plus Prefer after hints. get_mcp_tool_catalog exposes this guidance through the registered surface.",
+      "native_fallback_calls": 1,
+      "notes": "Token fields are character/4 payload estimates, not actual billed/model tokens. elapsed_seconds sums measured tool durations only (interleaved cases; excludes reasoning). Native fallback calls: 1. files_opened counts distinct source files with visible content/search snippets (not backend physical opens). Self-graded pending independent review. "
+    }
+  ],
+  "elapsed_measurement": "tool_latency"
+}

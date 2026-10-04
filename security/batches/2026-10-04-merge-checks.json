@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-04",
+  "new_ci_findings_resolved": 19,
+  "upgrades": {
+    "anyio": "4.12.1 -> 4.14.2",
+    "urllib3": "2.6.3 -> 2.8.0",
+    "hpack": "4.1.0 -> 4.2.0",
+    "PyJWT": "2.12.1 -> 2.15.1",
+    "sentence-transformers": "5.4.0 -> 5.6.0",
+    "transformers": "5.0.0rc3 -> 5.9.0",
+    "soupsieve": "2.8.3 -> 2.9.0"
+  },
+  "resolved_baseline_ids_removed": [
+    "PYSEC-2026-141",
+    "PYSEC-2026-142",
+    "PYSEC-2026-175",
+    "PYSEC-2026-176",
+    "PYSEC-2026-177",
+    "PYSEC-2026-178",
+    "PYSEC-2026-179",
+    "PYSEC-2026-2288",
+    "PYSEC-2026-2289",
+    "PYSEC-2026-2290",
+    "PYSEC-2026-3071",
+    "PYSEC-2026-3072"
+  ],
+  "remaining_advisory_rows": 99,
+  "new_baseline_exemptions": 0,
+  "candidate_checks": {
+    "fresh_python314_full_install": "passed",
+    "pip_check": "passed",
+    "full_project_ci": "passed",
+    "offline_security_model_regressions": "3 passed",
+    "production_manifest_audit": "passed; 99 existing rows ignored",
+    "ci_manifest_audit": "passed; 94 existing rows ignored",
+    "installed_runtime_full_ci": "passed",
+    "daemon_freshness": "passed"
+  },
+  "gitleaks": {
+    "full_history": "passed",
+    "false_positive": "Recorded SHA-256 grading-key.json digest verified against retained artifact; exact historical fingerprint only",
+    "future_same_file_line_detection": "passed"
+  },
+  "fork_followup": {
+    "commit": "e1c99f71478dd1d2f974cb02e4038424d21a12ce",
+    "cli_tests": "26 unit + 1 integration passed",
+    "validation": "Conventional PR title and local contribution metadata checked; pinned imported v1.20.0 ancestry retains its original authorship metadata",
+    "scope_regression": "Imported metadata excluded; new contribution attribution remains detectable",
+    "wheel_sha256": "63c8c04069f30b1e6a9c3a4bb6e57dbecdfe72e3d269c4d1c54624d04649ed79",
+    "platform_wheels": "macOS, Ubuntu and Windows passed",
+    "docker_all_grammars": "running"
+  },
+  "advisory_sources": [
+    "https://api.osv.dev/v1/vulns/PYSEC-2026-4174",
+    "https://api.osv.dev/v1/vulns/PYSEC-2026-4146",
+    "https://pypi.org/project/PyJWT/2.15.1/"
+  ],
+  "logs": ".runtime/merge-checks/"
+}

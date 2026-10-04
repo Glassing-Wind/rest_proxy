@@ -88,6 +88,19 @@ def resolve_python_runtime() -> dict[str, object]:
             "conda_env": os.getenv("LM_PROXY_CONDA_ENV", "").strip(),
         }
 
+    # Explicit conda selection still wins; otherwise prefer the project's venv.
+    if not os.getenv("LM_PROXY_CONDA_ENV", "").strip():
+        project_python = _existing_python(
+            os.path.join(os.path.dirname(__file__), ".venv", "bin", "python")
+        )
+        if project_python:
+            return {
+                "cmd": [project_python],
+                "python": project_python,
+                "source": "project_venv",
+                "conda_env": "",
+            }
+
     target_env = os.getenv("LM_PROXY_CONDA_ENV", "lmproxy").strip()
     resolved = _conda_env_python(target_env) if target_env else None
     if resolved:

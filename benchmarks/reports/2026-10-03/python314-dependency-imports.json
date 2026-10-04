@@ -1,0 +1,29 @@
+{
+  "torch": {
+    "passed": true
+  },
+  "transformers": {
+    "passed": true
+  },
+  "sentence_transformers": {
+    "passed": true
+  },
+  "scipy": {
+    "passed": true
+  },
+  "sklearn": {
+    "passed": true
+  },
+  "asyncpg": {
+    "passed": true
+  },
+  "psycopg": {
+    "passed": true
+  },
+  "neo4j": {
+    "passed": true
+  },
+  "playwright.sync_api": {
+    "passed": true
+  }
+}

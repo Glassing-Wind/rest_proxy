@@ -1,4 +1,4 @@
-"""memory_summary.py – Summarization and tool-output compaction for the memory layer.
+"""Summarization and tool-output compaction for the memory layer.
 
 Upgrades:
 - Structured rolling summary JSON with stable sections.

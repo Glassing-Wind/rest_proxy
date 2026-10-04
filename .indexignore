@@ -1,3 +1,8 @@
 session-*.md
 doc_*.json
 *_manifest.json
+
+# Keep grading evidence and prior answers outside retrieval treatment.
+benchmarks/reports
+benchmarks/reports/*
+benchmarks/agent_tooling_cases.json

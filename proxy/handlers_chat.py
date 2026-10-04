@@ -10,13 +10,11 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from proxy.config import (
-    _ENABLE_EMBEDDINGS,
     _memory_retrieval,
     _memory_store,
-    ENABLE_DEBUG_LOGGING,
     OPENAI_BASE,
 )
-from proxy.logging import debug_log, stable_json
+from proxy.logging import debug_log
 from proxy.state import STATE, save_state
 from proxy.handlers_memory import _derive_session_id, _persist_memory_best_effort
 from proxy.handlers_utils import history_key

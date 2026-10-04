@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from mcp.server.fastmcp import FastMCP
 
-from _helpers import get_project_id, get_workspace_path
 from tools.brain.graph import core as graph_core
 from tools.brain.graph import flow_summary as graph_flow_summary
 from tools.brain.graph import overview as graph_overview
@@ -106,7 +104,9 @@ def register(mcp: FastMCP) -> None:
         expand_api_calls: bool = False,
     ) -> str:
         """
-        Summarize UI → API → Service → DB paths for a project.
+        Summarize UI → API → Service → DB paths for a full-stack web project.
+        Reach for this specialty view when those layers should exist; empty
+        results diagnose missing graph evidence and route to get_flow_summary.
         """
         try:
             import graph_bootstrap
@@ -307,19 +307,19 @@ def register(mcp: FastMCP) -> None:
                 return f"### Flow Type: CLI\n{cli_result}"
 
         # Step 2: Heuristic Fallback
-        heuristic_result = await get_heuristic_flow_summary(
+        heuristic_result = await _get_heuristic_flow_summary_fallback(
             workspace_id, limit=limit, as_table=as_table
         )
         if not _is_missing_or_error_result(heuristic_result, ("No heuristic",)):
             return f"### Heuristic Flow Summary\n{heuristic_result}"
 
         # Step 3: Topology Summary (Last Resort)
-        return await get_topology_summary(workspace_id, limit=limit)
+        return await _get_topology_summary_fallback(workspace_id, limit=limit)
 
-    async def get_heuristic_flow_summary(
+    async def _get_heuristic_flow_summary_fallback(
         workspace_id: str, limit: int = 20, as_table: bool = False
     ) -> str:
-        """Heuristic flow based on directory patterns and IMPORTS edges."""
+        """Internal fallback flow view based on directory patterns and IMPORTS edges."""
         try:
             import graph_bootstrap
 
@@ -334,8 +334,8 @@ def register(mcp: FastMCP) -> None:
         except Exception as e:
             return f"Error in heuristic flow: {str(e)}"
 
-    async def get_topology_summary(workspace_id: str, limit: int = 10) -> str:
-        """High-level summary of the most connected files/directories."""
+    async def _get_topology_summary_fallback(workspace_id: str, limit: int = 10) -> str:
+        """Internal raw-connectivity fallback behind get_flow_summary."""
         try:
             import graph_bootstrap
 

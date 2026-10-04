@@ -1,0 +1,61 @@
+{
+  "python": "3.14.4 (main, Apr  7 2026, 13:13:20) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "free_threaded": false,
+  "interpreter": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python",
+  "platform": "macOS ARM64",
+  "versions": {
+    "tree-sitter-language-pack": "1.4.1",
+    "ladybug": "0.21.2",
+    "lancedb": "0.39.0",
+    "pyarrow": "25.0.1",
+    "fastapi": "0.135.1",
+    "mcp": "1.26.0",
+    "torch": "2.10.0",
+    "transformers": "5.0.0rc3"
+  },
+  "ts_pack_source": {
+    "subdirectory": "crates/ts-pack-python",
+    "url": "https://github.com/Zmaroo/tree-sitter-language-pack.git",
+    "vcs_info": {
+      "commit_id": "1ed4fa08816e051337e12123c1f4585ec8e6ac16",
+      "requested_revision": "1ed4fa08816e051337e12123c1f4585ec8e6ac16",
+      "vcs": "git"
+    }
+  },
+  "checks": {
+    "full_manifest_resolution": true,
+    "full_manifest_installation": true,
+    "pip_check": true,
+    "native_engine_smoke": true,
+    "initial_ci": false,
+    "ci_after_unstripped_rebuild": true,
+    "live_retrieval_gate": true,
+    "repository_index_refresh": true,
+    "initial_live_gate": false
+  },
+  "native_build_workaround": {
+    "environment": "CARGO_PROFILE_RELEASE_STRIP=false",
+    "source_revision": "1ed4fa08816e051337e12123c1f4585ec8e6ac16",
+    "initial_error": "mis-aligned LINKEDIT string pool",
+    "same_binary_load_failure_on_python311": true,
+    "unstripped_native_import_and_parse": true
+  },
+  "logs": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify",
+  "limits": [
+    "Only standard GIL-enabled CPython 3.14.4 on this Mac tested.",
+    "Existing server stores used by integration gates; embedded app integration remains incomplete.",
+    "Default native build failed; workaround required and needs reproducible packaging.",
+    "No performance comparison or operational runtime migration."
+  ],
+  "initial_live_gate_reason": "317 disk files versus 312 indexed; planning/source changes required refresh.",
+  "log_sha256": {
+    "full-resolution.log": "59fb00bc65deb695ea404ea02d332e2b48eb52d687c205b8bce02524b458a6e0",
+    "full-install.log": "3d36b57aed055d68fa9bc022771d8102232819510a49ea45107f62fd6c8ce412",
+    "ts-rebuild-unstripped.log": "fb2e524ab80f51bde867871a9aee5eb32b799ae60b5a0b6f1ed1a3a88ec2d68f",
+    "ci.log": "e4052e1bcc787f731a04b44d6ad7c22df9e2384ea54b151d70c10d33c9d2ee80",
+    "ci-unstripped.log": "979d61cfeae5f451164948ae43ed0bb35e2f984ed0712217e53a1d4c46e2ef92",
+    "index-refresh.log": "794320649bbc786dc7e2419431b227d7af7b98d71f0d3502c26655cf113fdff8",
+    "retrieval-gate.log": "a6b6ec301661bc20d69926051527157650b4f9cc9a476bde40334c7957a136ee",
+    "retrieval-gate-refreshed.log": "1c2a24e8dcee3ec86df4a185e624a42ec4418b2155118315094d6d8966f45d8e"
+  }
+}

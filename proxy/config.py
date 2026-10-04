@@ -25,7 +25,7 @@ def _normalize_memory_mode(raw_mode: str) -> str:
         return "off"
     if value in {"assist", "assistant", "summary", "local", "small"}:
         return "assist"
-    if value in {"full", "stateful", "enabled"}:
+    if value in {"full", "stateful", "enabled", "hybrid"}:
         return "full"
     return "off"
 
@@ -87,11 +87,21 @@ def get_env(name: str, default=None):
 
 LM_BASE = os.getenv("LM_BASE", "http://127.0.0.1:1234").rstrip("/")
 OPENAI_BASE = f"{LM_BASE}/v1"
+
+# Cloud inference is opt-in. LM_BASE continues to own local embeddings/admin APIs.
+INFERENCE_PROVIDER = os.getenv("LM_PROXY_PROVIDER", "lmstudio").strip().lower()
+OPENAI_API_BASE = os.getenv("LM_PROXY_OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.getenv("LM_PROXY_OPENAI_MODEL", "gpt-6-sol").strip()
+OPENAI_REASONING_EFFORT = os.getenv("LM_PROXY_OPENAI_REASONING_EFFORT", "low").strip()
+OPENAI_CODEBASE_SEARCH = _env_flag("LM_PROXY_OPENAI_CODEBASE_SEARCH", "0")
+
+
 def _get_writable_path(env_var: str, default_rel: str) -> Path:
     env_val = os.getenv(env_var)
     if env_val:
         return Path(env_val)
-    
+
     # Try current directory .runtime
     local_runtime = Path("./.runtime")
     try:

@@ -9,15 +9,15 @@ brain_server_runtime_dir() {
 }
 
 brain_server_pid_file() {
-  printf '%s/brain_server.pid\n' "$(brain_server_runtime_dir)"
+  printf '%s/brain_server.%s.pid\n' "$(brain_server_runtime_dir)" "$(brain_server_port)"
 }
 
 brain_server_lock_file() {
-  printf '%s/brain_server.lock\n' "$(brain_server_runtime_dir)"
+  printf '%s/brain_server.%s.lock\n' "$(brain_server_runtime_dir)" "$(brain_server_port)"
 }
 
 brain_server_log_file() {
-  printf '%s/brain_server.log\n' "$(brain_server_runtime_dir)"
+  printf '%s/brain_server.%s.log\n' "$(brain_server_runtime_dir)" "$(brain_server_port)"
 }
 
 brain_server_port() {

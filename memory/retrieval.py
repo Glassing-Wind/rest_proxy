@@ -1,4 +1,4 @@
-"""memory_retrieval.py – Embedding provider interface and memory assembly for the proxy.
+"""Embedding provider interface and memory assembly for the proxy.
 
 Responsibilities:
   1. Embedding provider abstraction (LM Studio/OpenAI endpoint or no-op stub).
@@ -21,7 +21,9 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from embedding_service import get_embedding_service
-from memory.types import AssembledMemory, _empty_working_memory
+from memory.types import (
+    AssembledMemory, EvidenceReference, RetrievedEvidence, _empty_working_memory,
+)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -54,7 +56,7 @@ _ENABLE_DEBUG = os.getenv("LM_PROXY_DEBUG", "false").strip().lower() in {
 _embed_cache: Dict[str, List[float]] = {}
 
 
-def _rerank_by_recency(hits: List[Dict[str, Any]]) -> List[str]:
+def _rerank_hits_by_recency(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Re-order retrieval hits by blending RRF score with a recency decay factor.
 
@@ -63,12 +65,12 @@ def _rerank_by_recency(hits: List[Dict[str, Any]]) -> List[str]:
     If a hit has no created_at or recency is disabled (_RECENCY_HALF_LIFE == 0),
     the rrf_score is used as-is (no decay applied).
 
-    Returns compact_text strings ordered best-first.
+    Returns complete hit records ordered best-first, preserving provenance.
     """
     if not hits:
         return []
     if _RECENCY_HALF_LIFE <= 0:
-        return [h["compact_text"] for h in hits]
+        return list(hits)
 
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     # ln(2) / half_life gives the decay constant for exp decay
@@ -94,10 +96,45 @@ def _rerank_by_recency(hits: List[Dict[str, Any]]) -> List[str]:
                 recency_weight = 1.0
         else:
             recency_weight = 1.0
-        scored.append((rrf * recency_weight, h["compact_text"]))
+        scored.append((rrf * recency_weight, h))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    return [text for _, text in scored]
+    return [hit for _, hit in scored]
+
+
+def _rerank_by_recency(hits: List[Dict[str, Any]]) -> List[str]:
+    """Compatibility wrapper for callers that need compact strings."""
+    return [hit["compact_text"] for hit in _rerank_hits_by_recency(hits)]
+
+
+def _select_retrieved_evidence(hits: List[Dict[str, Any]]) -> List[RetrievedEvidence]:
+    """Select bounded evidence without inventing scope or original availability."""
+    selected: List[RetrievedEvidence] = []
+    seen = set()
+    for hit in _rerank_hits_by_recency(hits):
+        compact_text = hit.get("compact_text", "")
+        if not isinstance(compact_text, str) or not compact_text:
+            continue
+        # Exact duplicates collapse; shared prefixes alone are not duplicates.
+        if compact_text in seen:
+            continue
+        seen.add(compact_text)
+        reference = EvidenceReference(
+            project_id=hit.get("project_id") or "",
+            session_id=hit.get("session_id") or "",
+            source_kind=hit.get("ref_type") or "unknown",
+            source_id=hit.get("ref_id"),
+            original_reference=hit.get("original_reference"),
+            content_hash=hit.get("content_hash"),
+        )
+        selected.append(RetrievedEvidence(
+            compact_text=compact_text,
+            reference=reference,
+            metadata=dict(hit),
+        ))
+        if len(selected) == 3:
+            break
+    return selected
 
 
 def _debug(message: str, **fields: Any) -> None:
@@ -283,6 +320,7 @@ async def assemble_memory(
     working_memory: Dict[str, Any] = _empty_working_memory()
     recent_turns: List[Dict[str, Any]] = []
     retrieved_snippets: List[str] = []
+    retrieved_evidence: List[RetrievedEvidence] = []
 
     try:
         rolling_summary = await get_rolling_summary(session_id)
@@ -314,18 +352,8 @@ async def assemble_memory(
                     global_search=global_search,
                 )
                 if hits:
-                    # Recency-weighted rerank; returns compact_text strings
-                    raw_snippets = _rerank_by_recency(hits)
-                    # deduplicate + cap retrieved snippets
-                    seen = set()
-                    deduped = []
-                    for s in raw_snippets:
-                        key = s[:120]
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        deduped.append(s)
-                    retrieved_snippets = deduped[:3]
+                    retrieved_evidence = _select_retrieved_evidence(hits)
+                    retrieved_snippets = [item.compact_text for item in retrieved_evidence]
         except Exception as exc:
             _debug("assemble_retrieval_error", error=str(exc))
 
@@ -381,4 +409,5 @@ async def assemble_memory(
         recent_turns=recent_turns,
         retrieved_snippets=retrieved_snippets,
         assembled_text=assembled_text,
+        retrieved_evidence=retrieved_evidence,
     )

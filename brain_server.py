@@ -11,9 +11,10 @@ Architecture:
   - Session context middleware for multi-client session scoping
 """
 
+# ruff: noqa: E402 - resource limits must be raised before importing server stacks.
+
 import asyncio
 import hashlib
-import json
 import os
 import resource
 import sys
@@ -48,22 +49,26 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
 from _mcp import mcp
+from _tool_fingerprint import compute_tool_fingerprint
+from mcp.shared.version import SUPPORTED_PROTOCOL_VERSIONS
+from mcp.types import LATEST_PROTOCOL_VERSION
 
 # ---------------------------------------------------------------------------
 # Tool fingerprint
 # ---------------------------------------------------------------------------
 
 def _compute_tool_fingerprint() -> str:
-    try:
-        tool_names = sorted(t.name for t in mcp._tool_manager.list_tools())
-    except Exception:
-        tool_names = []
-    return hashlib.sha256(json.dumps(tool_names).encode()).hexdigest()[:12]
+    fingerprint, _ = compute_tool_fingerprint(
+        mcp,
+        runtime_source_files=[__file__],
+    )
+    return fingerprint
 
 
 BOOT_FINGERPRINT: str = _compute_tool_fingerprint()
 BOOT_ID: str = f"{os.getpid()}-{uuid4().hex[:8]}"
 STARTED_AT: float = time.time()
+_LOGGED_STALE_MCP_SESSIONS: set[str] = set()
 
 
 def _resolve_session_id(scope) -> str:
@@ -246,18 +251,21 @@ class MCPRequestLoggingMiddleware:
                         break
 
                 if created_session_id:
-                    print(
-                        "[brain-server] MCP session created "
-                        f"boot={BOOT_ID} method={method} session={_short_session_id(created_session_id)}",
-                        file=sys.stderr,
-                    )
+                    if created_session_id != incoming_session_id:
+                        print(
+                            "[brain-server] MCP session created "
+                            f"boot={BOOT_ID} method={method} session={_short_session_id(created_session_id)}",
+                            file=sys.stderr,
+                        )
                 elif status == 404 and incoming_session_id:
-                    print(
-                        "[brain-server] MCP stale session rejected "
-                        f"boot={BOOT_ID} method={method} session={_short_session_id(incoming_session_id)} "
-                        "status=404",
-                        file=sys.stderr,
-                    )
+                    if incoming_session_id not in _LOGGED_STALE_MCP_SESSIONS:
+                        _LOGGED_STALE_MCP_SESSIONS.add(incoming_session_id)
+                        print(
+                            "[brain-server] MCP stale session rejected "
+                            f"boot={BOOT_ID} method={method} session={_short_session_id(incoming_session_id)} "
+                            "status=404",
+                            file=sys.stderr,
+                        )
 
             await send(message)
 
@@ -277,7 +285,9 @@ async def health(request: Request) -> JSONResponse:
     incoming_session_id = _mcp_transport_session_id(request.scope)
     response = JSONResponse({
         "server": "GraphRAG MCP Brain",
-        "standard": "Streamable HTTP (2025-03-26)",
+        "standard": f"Streamable HTTP ({LATEST_PROTOCOL_VERSION})",
+        "protocol_version": LATEST_PROTOCOL_VERSION,
+        "supported_protocol_versions": SUPPORTED_PROTOCOL_VERSIONS,
         "transport_path": "/mcp",
         "tools": tool_count,
         "boot_id": BOOT_ID,

@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.example
+.runtime
+__pycache__
+*.pyc
+.venv
+venv
+benchmarks/reports
+security/batches
+*.log

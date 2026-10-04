@@ -1,10 +1,17 @@
 """memory/store_search.py — vector search helpers."""
 
-import json
 from typing import Any, Dict, List
 
 import graph_bootstrap
 from memory import store_core
+
+
+def _is_missing_vector_index_error(exc: Exception) -> bool:
+    text = str(exc)
+    return (
+        "No such vector schema index" in text
+        or "There is no such vector schema index" in text
+    )
 
 
 async def search_similar_memory(
@@ -36,8 +43,10 @@ async def search_similar_memory(
         CALL db.index.vector.queryNodes('memory_embeddings_vector', $k, $query_vector)
         YIELD node, score
         WHERE ($global_search OR ($same_session OR node.session_id = $sid))
-        RETURN node.ref_id as ref_id,
+        RETURN coalesce(node.ref_id, node.id) as ref_id,
                node.ref_type as ref_type,
+               node.session_id as session_id,
+               node.project_id as project_id,
                node.text as compact_text,
                node.created_at as created_at,
                score as rrf_score
@@ -71,6 +80,13 @@ async def search_similar_memory(
         return results
 
     except Exception as exc:
+        if _is_missing_vector_index_error(exc):
+            store_core._debug(
+                "graph_search_similar_skipped",
+                session_id=session_id,
+                reason="memory_embeddings_vector_missing",
+            )
+            return []
         store_core._debug(
             "graph_search_similar_error", session_id=session_id, error=str(exc)
         )

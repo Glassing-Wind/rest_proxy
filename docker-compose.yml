@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lm_proxy_mem
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${LM_PROXY_APPLIANCE_PG_PASSWORD:?Set LM_PROXY_APPLIANCE_PG_PASSWORD}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lm_proxy_mem"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: "neo4j/${LM_PROXY_APPLIANCE_NEO4J_PASSWORD:?Set LM_PROXY_APPLIANCE_NEO4J_PASSWORD}"
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
+      NEO4J_server_memory_heap_initial__size: "512m"
+      NEO4J_server_memory_heap_max__size: "2G"
+      NEO4J_server_memory_pagecache_size: "1G"
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rest_proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      LM_PROXY_PG_DSN: "postgresql://postgres:${LM_PROXY_APPLIANCE_PG_PASSWORD}@postgres:5432/lm_proxy_mem"
+      LM_PROXY_NEO4J_URI: "bolt://neo4j:7687"
+      LM_PROXY_NEO4J_USER: "neo4j"
+      LM_PROXY_NEO4J_PASSWORD: "${LM_PROXY_APPLIANCE_NEO4J_PASSWORD}"
+      LM_PROXY_NEO4J_DB: "neo4j"
+      LM_PROXY_REDIS_URL: "redis://redis:6379/0"
+      LM_PROXY_MEMORY_ENABLED: "1"
+      LM_PROXY_MEMORY_ENABLE_PERSISTENCE: "1"
+      LM_PROXY_GRAPH_ENABLED: "1"
+      LM_PROXY_TOOL_PROFILE: "primary"
+      LM_PROXY_DEBUG: "false"
+      LM_PROXY_WATCHER_ENABLED: "0"
+    ports:
+      - "127.0.0.1:${LM_PROXY_APPLIANCE_PORT:-8000}:8000"
+    volumes:
+      - "${LM_PROXY_APPLIANCE_WORKSPACE:-.}:/workspace:ro"
+      - runtimedata:/app/.runtime
+
+volumes:
+  pgdata:
+  neo4jdata:
+  redisdata:
+  runtimedata:

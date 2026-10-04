@@ -1,0 +1,35 @@
+{
+  "versions": {
+    "kuzu": "0.11.3",
+    "lancedb": "0.39.0",
+    "pyarrow": "25.0.1"
+  },
+  "checks": {
+    "actual_describe_file_query": {
+      "passed": false,
+      "error": "Parser exception: Invalid input <MATCH (f:File {id: $fid})-[:CONTAINS]->(s)\n            WHERE s:>: expected rule oC_SingleQuery (line: 2, offset: 19)\n\"            WHERE s:Function OR s:Class OR s:Struct OR s:Trait OR s:Enum OR s:Module\"\n                    ^"
+    },
+    "write_transaction_rollback": {
+      "passed": false,
+      "remaining_rows": 1
+    },
+    "independent_session_connections": {
+      "passed": false
+    },
+    "vector_upsert_idempotent": {
+      "passed": true
+    },
+    "lexical_retrieval": {
+      "passed": true
+    },
+    "project_scope": {
+      "passed": true
+    }
+  },
+  "adoption_ready": false,
+  "limits": [
+    "Small disposable fixtures, not a query-corpus or performance benchmark.",
+    "No end-to-end indexing, memory/store routing, RRF, or ANN index validation.",
+    "Kuzu upstream is archived; graph engine selection remains open."
+  ]
+}

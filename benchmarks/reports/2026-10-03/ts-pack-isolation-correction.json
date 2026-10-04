@@ -1,0 +1,9 @@
+{
+  "issue": "load_env CWD .env overrode explicit probe environment",
+  "disposable_project_id": "0863b2ebdadf",
+  "fixture_workspace": "/Users/michaelmarler/Projects/rest_proxy/.runtime/ts-pack-120-isolated/workspace",
+  "fixture_nodes_removed": 151,
+  "remaining_fixture_nodes": 0,
+  "semantic_ingestion": "failed before writing chunks; timestamp schema mismatch",
+  "corrective_action": "isolated engine source copy with no .env"
+}

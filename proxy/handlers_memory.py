@@ -1,7 +1,6 @@
 """proxy/handlers_memory.py — session/memory helpers."""
 
 import hashlib
-import json
 from typing import Any, Dict, List, Optional
 
 from proxy.config import (
@@ -19,7 +18,7 @@ from proxy.config import (
     _skeleton_extractor,
 )
 from proxy.logging import debug_log, stable_json
-from proxy.state import STATE, save_state
+from proxy.state import STATE
 from proxy.handlers_utils import content_to_text, history_key, _truncate_text
 
 

@@ -1,0 +1,21 @@
+{
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 138.08237187499617,
+  "observed_models": [],
+  "model_verification": "requested_only_unverified",
+  "usage": {
+    "cache_write_input_tokens": 0,
+    "cached_input_tokens": 324352,
+    "output_tokens": 2853,
+    "input_tokens": 396199,
+    "reasoning_output_tokens": 85
+  },
+  "completed_turns": 1,
+  "malformed_lines": 0,
+  "command_calls": 14,
+  "mcp_calls": 0,
+  "successful_mcp_calls": 0,
+  "policy_violations": [],
+  "errors": []
+}

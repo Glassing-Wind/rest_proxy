@@ -1,0 +1,73 @@
+{
+  "host_python": "3.14.4 (main, Apr  7 2026, 13:13:20) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "project_venv": "/Users/michaelmarler/Projects/rest_proxy/.venv",
+  "venv_target": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv",
+  "background_runtime": {
+    "cmd": [
+      "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python"
+    ],
+    "python": "/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python",
+    "source": "project_venv",
+    "conda_env": ""
+  },
+  "checks": {
+    "native_setup": true,
+    "local_ci": true,
+    "retrieval_gate": true,
+    "container_smoke": true
+  },
+  "container": {
+    "passed": true,
+    "python": "3.14.8 (main, Oct  1 2026, 21:39:59) [GCC 14.2.0]",
+    "platform": "Linux-7.0.14-linuxkit-aarch64-with-glibc2.41",
+    "architecture": "aarch64",
+    "primary_tools": 12,
+    "native_exports": [
+      "ready"
+    ],
+    "ts_pack": "1.4.1",
+    "proxy_app_import": true,
+    "brain_app_import": true
+  },
+  "image": {
+    "id": "sha256:068a2bfc6ae57aa93368a1044ad7fc4dfd530743f3025a8f3f58b570f8b51be9",
+    "architecture": "arm64",
+    "os": "linux",
+    "size_bytes": 5714437914
+  },
+  "native_build": {
+    "strip": "false",
+    "source_pin": "1ed4fa08816e051337e12123c1f4585ec8e6ac16",
+    "cache_bypassed": true
+  },
+  "log_directory": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify",
+  "log_sha256": {
+    "setup-reproducible.log": "74f0ad3ef62c5fa67e92533b5184bb0351a3bb55ea9ad494472e72feb56cd8e5",
+    "setup-reproducible-final.log": "0b431c6b9447e0e2b9c4c43d49f28aad4f5668d25e24f2fe71d67557eecc38de",
+    "cutover-restart.log": "e30a8473813ab74011d64de2ce6fd914dec796f0ff23a458a987234bd3bcaf55",
+    "cutover-ci.log": "cc210d31c9f2b612d15c037b8083c01782d4586c1ae67787ffba6a4ddad58e1c",
+    "cutover-index.log": "2ee764270e5713ca276635e89654daf646d61c726bd32a0d39230ec858ae9f5d",
+    "cutover-retrieval.log": "5394a2a710d2abd704f147976e9d2719034d5c940b0f57bf923d5963856281cc",
+    "docker-build.log": "3984d6d27d2f72b72f5b20a3cfce0165fca8a48674b6480fbc2e988a6a27138a",
+    "docker-build-final.log": "800fe1757f50e33691c8f9f6d1b5161fd7ef4a12f337b60af5e86f2d6873f4cf",
+    "container-smoke.log": "30332e9fc3d7cc47ed5e956bc38b06d1b5159218b4a4f0b047a5154bea1a805b",
+    "global-python-reexec.log": "cb2f74d913af525805ef2254deec86ece1d9c119f2d0d4afbac9b7881ff9ea27"
+  },
+  "rollback_python": "/opt/homebrew/Caskroom/miniforge/base/envs/lmproxy/bin/python",
+  "limits": [
+    "Remote CI configured for 3.14 but not executed in this session.",
+    "Linux container import/parser/catalog smoke, not a new full appliance lifecycle test.",
+    "No embedded application backend or performance superiority claim.",
+    "Apple system Python and old project environment unchanged."
+  ],
+  "final_index_health": {
+    "disk_files": 319,
+    "structural_files": 319,
+    "semantic_files": 319,
+    "synchronized": true,
+    "aligned": true,
+    "global_shadow_nodes": 582,
+    "global_shadow_relationships": 71,
+    "global_shadow_cleanup": "Read-only inspection only; ownership/activity not established, no deletion performed."
+  }
+}

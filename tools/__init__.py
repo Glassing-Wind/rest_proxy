@@ -6,13 +6,16 @@ Phase 2: Partitioned into brain/ (reasoning) and hands/ (filesystem).
 
 from mcp.server.fastmcp import FastMCP
 
+
 def register_all(mcp: FastMCP) -> None:
-    from tools.brain import memory, code_search, code_intel, documentation
+    import os
+    from tools.brain import memory, code_search, code_intel, documentation, tool_catalog, primary
     from tools.brain.graph import core as graph_tools
     from tools.brain.search import tools as search_tools
     from tools.hands import dev, indexing, project
 
     memory.register(mcp)
+    tool_catalog.register(mcp)
     code_search.register(mcp)
     code_intel.register(mcp)
     dev.register(mcp)
@@ -21,3 +24,8 @@ def register_all(mcp: FastMCP) -> None:
     graph_tools.register(mcp)
     search_tools.register(mcp)
     project.register(mcp)
+    primary.register_primary_dispatcher(mcp)
+
+    profile = os.getenv("LM_PROXY_TOOL_PROFILE", "").strip().lower()
+    if profile in {"primary", "compact", "agent"}:
+        primary.apply_primary_tool_filter(mcp)

@@ -1,13 +1,17 @@
 import asyncio
 import importlib.util
+import os
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/flow_summary.py"
-APPLE_MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/graph/flow_summary_apple.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "graph" / "flow_summary.py"
+APPLE_MODULE_PATH = REPO_ROOT / "tools" / "brain" / "graph" / "flow_summary_apple.py"
 
 
 def load_flow_summary_module():
@@ -18,6 +22,36 @@ def load_flow_summary_module():
     graph_pkg = types.ModuleType("tools")
     brain_pkg = types.ModuleType("tools.brain")
     graph_subpkg = types.ModuleType("tools.brain.graph")
+    graph_contract_mod = types.ModuleType("tools.brain.graph_contract")
+    graph_contract_mod.node_label = lambda name: {
+        "file": "File",
+        "model": "Model",
+        "external_api": "ExternalApi",
+        "resource": "Resource",
+        "xcode_target": "XcodeTarget",
+        "xcode_workspace": "XcodeWorkspace",
+        "xcode_scheme": "XcodeScheme",
+        "api_route": "ApiRoute",
+        "cargo_crate": "CargoCrate",
+    }.get(name, name)
+    graph_contract_mod.rel_type = lambda name: {
+        "asset_links": "ASSET_LINKS",
+        "calls_api_route": "CALLS_API_ROUTE",
+        "handled_by": "HANDLED_BY",
+        "calls_service": "CALLS_SERVICE",
+        "calls_db_model": "CALLS_DB_MODEL",
+        "calls_db": "CALLS_DB",
+        "calls_api_external": "CALLS_API_EXTERNAL",
+        "calls_api": "CALLS_API",
+        "imports": "IMPORTS",
+        "defined_in_file": "DEFINED_IN_FILE",
+        "file_graph_link": "FILE_GRAPH_LINK",
+        "backed_by_file": "BACKED_BY_FILE",
+        "bundled_in_target": "BUNDLED_IN_TARGET",
+        "bundles_file": "BUNDLES_FILE",
+        "references_project": "REFERENCES_PROJECT",
+        "builds_target": "BUILDS_TARGET",
+    }.get(name, name.upper())
     core_mod = types.ModuleType("tools.brain.graph.core")
 
     async def _execute_read(*args, **kwargs):
@@ -41,6 +75,7 @@ def load_flow_summary_module():
             "_helpers": helpers_mod,
             "tools": graph_pkg,
             "tools.brain": brain_pkg,
+            "tools.brain.graph_contract": graph_contract_mod,
             "tools.brain.graph": graph_subpkg,
             "tools.brain.graph.core": core_mod,
             "tools.brain.graph.flow_summary_apple": apple_module,
@@ -153,9 +188,86 @@ class FlowSummaryTests(unittest.TestCase):
 
         self.assertIn("POST /api/leases", output)
         self.assertEqual(output.count("src/api/leaseRoutes.ts"), 1)
+        self.assertIn("Use this to decide which UI entrypoints reach real APIs or services", output)
+        self.assertIn("Inspect First:", output)
         self.assertNotIn(
             "src/public/properties.html -> src/public/assets/properties.js -> src/api/leaseRoutes.ts -> src/services/leaseService.ts",
             output,
+        )
+
+    def test_get_app_flow_summary_as_table_diagnoses_empty_graph(self):
+        async def fake_execute_read(session, query, **kwargs):
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rentallaw",
+                    include_coverage=False,
+                    limit=20,
+                    as_table=True,
+                )
+            )
+
+        self.assertTrue(output.startswith("No UI → API → Service → DB paths found."))
+        self.assertIn("Diagnosis:", output)
+        self.assertIn("ui_files=0 js_files=0", output)
+        self.assertIn("Missing evidence: HTML/Astro UI entry files", output)
+        self.assertIn("get_flow_summary('/tmp/rentallaw', mode='auto')", output)
+
+    def test_get_app_flow_summary_diagnoses_missing_edges_with_source_files_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_coverage_files":
+                return [{"ui_files": 3, "js_files": 8}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/fullstack",
+                    include_coverage=True,
+                    limit=20,
+                )
+            )
+
+        self.assertIn("ui_files=3 js_files=8", output)
+        self.assertNotIn("HTML/Astro UI entry files", output)
+        self.assertNotIn("JavaScript/TypeScript client files", output)
+        self.assertIn("ASSET_LINKS UI-to-client edges", output)
+        self.assertIn("CALLS_API or CALLS_API_ROUTE edges", output)
+
+    def test_coverage_lines_include_file_graph_links(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_coverage_files":
+                return [{"ui_files": 2, "js_files": 3}]
+            if op == "get_app_flow_summary_coverage_assets":
+                return [{"asset_links": 4}]
+            if op == "get_app_flow_summary_coverage_api":
+                return [{"api_links": 5}]
+            if op == "get_app_flow_summary_coverage_service":
+                return [{"service_links": 6}]
+            if op == "get_app_flow_summary_coverage_db":
+                return [{"db_links": 7}]
+            if op == "get_app_flow_summary_coverage_api_routes":
+                return [{"api_route_links": 8}]
+            if op == "get_app_flow_summary_coverage_file_graph":
+                return [{"file_graph_links": 9}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            lines = asyncio.run(self.module._coverage_lines(FakeSession(), "proj123"))
+
+        self.assertEqual(
+            lines,
+            [
+                "Coverage: ui_files=2 js_files=3 asset_links=4 api_links=5 api_route_links=8 service_links=6 db_links=7 file_graph_links=9"
+            ],
         )
 
     def test_suppress_coarse_route_service_rows_drops_file_level_service_for_multi_route_api(self):
@@ -236,9 +348,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "tests/routes.test.ts",
                         "js": "tests/routes.test.ts",
+                        "ui_roles": None,
+                        "js_roles": None,
                         "route": "GET /api/applications",
                         "api": "src/api/routes/applicationOpsRoutes.ts",
+                        "api_roles": [],
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -246,9 +362,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "src/public/financial-summary.html",
                         "js": "src/public/assets/financial-summary.js",
+                        "ui_roles": [],
+                        "js_roles": [],
                         "route": "GET /api/financials/tax-package",
                         "api": "src/api/routes/financeAdminRoutes.ts",
+                        "api_roles": [],
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -271,6 +391,42 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("src/public/financial-summary.html", output)
         self.assertNotIn("tests/routes.test.ts", output)
 
+    def test_get_app_flow_summary_keeps_test_like_rows_when_file_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary":
+                return [
+                    {
+                        "ui": "tests/routes.test.ts",
+                        "js": "tests/routes.test.ts",
+                        "ui_roles": [],
+                        "js_roles": [],
+                        "route": "GET /api/applications",
+                        "api": "src/api/routes/applicationOpsRoutes.ts",
+                        "api_roles": [],
+                        "svc": None,
+                        "svc_roles": None,
+                        "model": None,
+                        "schema": None,
+                        "external": None,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_app_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    include_coverage=False,
+                    limit=20,
+                    group_by_ui=True,
+                )
+            )
+
+        self.assertIn("tests/routes.test.ts", output)
+
     def test_get_app_flow_summary_filters_e2e_and_spec_rows_even_if_query_leaks_them(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -279,9 +435,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "packages/console/app/src/routes/enterprise/index.tsx",
                         "js": "packages/app/e2e/actions.ts",
+                        "ui_roles": [],
+                        "js_roles": None,
                         "route": None,
                         "api": None,
+                        "api_roles": None,
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -289,9 +449,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "packages/console/app/src/routes/enterprise/index.tsx",
                         "js": "packages/app/e2e/app/home.spec.ts",
+                        "ui_roles": [],
+                        "js_roles": None,
                         "route": None,
                         "api": None,
+                        "api_roles": None,
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -299,9 +463,13 @@ class FlowSummaryTests(unittest.TestCase):
                     {
                         "ui": "packages/opencode/src/index.ts",
                         "js": "packages/opencode/src/client.ts",
+                        "ui_roles": [],
+                        "js_roles": [],
                         "route": "GET /config",
                         "api": "packages/opencode/src/server/config.ts",
+                        "api_roles": [],
                         "svc": None,
+                        "svc_roles": None,
                         "model": None,
                         "schema": None,
                         "external": None,
@@ -325,6 +493,89 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("GET /config", output)
         self.assertNotIn("packages/app/e2e/actions.ts", output)
         self.assertNotIn("home.spec.ts", output)
+
+    def test_is_low_signal_flow_path_uses_roles_before_path_fallback(self):
+        self.assertFalse(self.module._is_low_signal_flow_path("tests/routes.test.ts", []))
+        self.assertTrue(self.module._is_low_signal_flow_path("tests/routes.test.ts", None))
+        self.assertTrue(self.module._is_low_signal_flow_path("src/app.ts", ["test_surface"]))
+        self.assertTrue(self.module._is_low_signal_flow_path("benchmarks/routes_benchmark.ts", None))
+        self.assertTrue(self.module._is_low_signal_flow_path("docs/architecture.md", None))
+        self.assertTrue(self.module._is_low_signal_flow_path("src/app.ts", ["docs_surface"]))
+        self.assertFalse(
+            self.module._is_low_signal_flow_path(
+                "tools/docs/app.py",
+                ["implementation_surface", "support_surface"],
+            )
+        )
+        self.assertTrue(
+            self.module._is_low_signal_flow_path(
+                "src/app.py",
+                ["implementation_surface", "test_surface"],
+            )
+        )
+
+    def test_build_app_flow_literal_fallback_keeps_test_like_asset_pair_when_roles_are_present(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_asset_pairs":
+                return [
+                    {
+                        "ui": "tests/routes.test.ts",
+                        "ui_roles": [],
+                        "js": "tests/routes.test.ts",
+                        "js_roles": [],
+                    }
+                ]
+            if op == "get_app_flow_summary_route_catalog":
+                return [{"path": "/api/applications", "method": "GET", "api": "src/api/routes/applicationOpsRoutes.ts"}]
+            return []
+
+        with (
+            mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+            mock.patch.object(self.module, "get_workspace_path", return_value="/tmp/repo"),
+            mock.patch("builtins.open", mock.mock_open(read_data="fetch('/api/applications')")),
+        ):
+            rows = asyncio.run(
+                self.module._build_app_flow_literal_fallback(
+                    FakeSession(),
+                    "proj123",
+                    "/tmp/repo",
+                    [],
+                )
+            )
+
+        self.assertEqual(
+            rows,
+            [("tests/routes.test.ts", "tests/routes.test.ts", "GET /api/applications", "src/api/routes/applicationOpsRoutes.ts", None, None, None, None)],
+        )
+
+    def test_build_app_flow_literal_fallback_filters_test_like_asset_pair_when_roles_missing(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "get_app_flow_summary_asset_pairs":
+                return [
+                    {
+                        "ui": "tests/routes.test.ts",
+                        "ui_roles": None,
+                        "js": "tests/routes.test.ts",
+                        "js_roles": None,
+                    }
+                ]
+            if op == "get_app_flow_summary_route_catalog":
+                return [{"path": "/api/applications", "method": "GET", "api": "src/api/routes/applicationOpsRoutes.ts"}]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            rows = asyncio.run(
+                self.module._build_app_flow_literal_fallback(
+                    FakeSession(),
+                    "proj123",
+                    "/tmp/repo",
+                    [],
+                )
+            )
+
+        self.assertEqual(rows, [])
 
     def test_collapse_ambiguous_app_rows_summarizes_cross_product_joins(self):
         rows = [
@@ -483,6 +734,21 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertNotIn("USES_STORYBOARD", query)
         self.assertIn("null AS src, null AS rel", query)
 
+    def test_apple_build_query_uses_coalesced_workspace_project_path(self):
+        query = self.module.flow_summary_apple._apple_build_query(
+            include_resources=False,
+            include_workspaces=True,
+            resource_rel_types=[],
+        )
+        self.assertIn(
+            "coalesce(project_file.filepath, project_file.file_path) = target.project_file",
+            query,
+        )
+        self.assertIn(
+            "coalesce(workspace.filepath, workspace.file_path) AS workspace",
+            query,
+        )
+
     def test_get_apple_build_summary_groups_by_scheme(self):
         async def fake_execute_read(session, query, **kwargs):
             if kwargs.get("op") == "apple_build_presence":
@@ -540,6 +806,62 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("ios/App/View.swift", output)
         self.assertIn("ios/App/Settings.swift", output)
         self.assertNotIn("ios/App/Assets.xcassets/brand.colorset/Contents.json -> target=App -> scheme=App\nios/App/View.swift", output)
+
+    def test_get_apple_build_summary_prefers_scheme_matching_target_when_grouped_by_target(self):
+        async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": ["Resource"]}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": ["BUNDLED_IN_TARGET"]}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 0}]
+            if kwargs.get("op") == "get_apple_build_summary":
+                return [
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "AccentColor",
+                        "kind": "color",
+                        "backing": "Shared/Resources/Assets.xcassets/Colors/AccentColor.colorset/Contents.json",
+                        "target": "Fruta iOS All",
+                        "project_file": "Fruta.xcodeproj/project.pbxproj",
+                        "scheme": "Fruta iOS Widgets",
+                        "scheme_file": "Fruta.xcodeproj/xcshareddata/xcschemes/Fruta iOS Widgets.xcscheme",
+                        "workspace": None,
+                    },
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "AccentColor",
+                        "kind": "color",
+                        "backing": "Shared/Resources/Assets.xcassets/Colors/AccentColor.colorset/Contents.json",
+                        "target": "Fruta iOS All",
+                        "project_file": "Fruta.xcodeproj/project.pbxproj",
+                        "scheme": "Fruta iOS All",
+                        "scheme_file": "Fruta.xcodeproj/xcshareddata/xcschemes/Fruta iOS All.xcscheme",
+                        "workspace": None,
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/fruta",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("scheme=Fruta iOS All", output)
+        self.assertNotIn("scheme=Fruta iOS Widgets", output)
 
     def test_get_apple_build_summary_does_not_cross_join_resources_and_bundles(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -673,6 +995,141 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertEqual("No Apple build graph paths found.", output)
         self.assertEqual(["apple_build_presence"], seen_ops)
 
+    def test_get_apple_build_summary_reports_partial_graph_coverage(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op == "apple_build_presence":
+                return [{"n": 1}]
+            if op == "graph_schema_labels":
+                return [{"labels": ["XcodeTarget"]}]
+            if op == "graph_schema_relationship_types":
+                return [{"rels": []}]
+            if op == "apple_resource_presence":
+                return [{"n": 0}]
+            if op == "apple_workspace_presence":
+                return [{"n": 0}]
+            if op == "get_apple_build_summary":
+                return []
+            if op == "apple_graph_coverage":
+                return [
+                    {
+                        "project_files": 1,
+                        "workspace_files": 1,
+                        "scheme_files": 1,
+                        "resource_files": 4,
+                        "targets": 2,
+                        "schemes": 0,
+                        "workspaces": 0,
+                        "resources": 0,
+                        "bundles_file_edges": 0,
+                        "builds_target_edges": 0,
+                        "references_project_edges": 0,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/framecreator",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("Apple build files detected, but graph coverage is partial.", output)
+        self.assertIn("Graph: targets=2 schemes=0 workspaces=0 resources=0", output)
+        self.assertIn("scheme files exist, but no XcodeScheme nodes were materialized", output)
+        self.assertIn("workspace files exist, but no XcodeWorkspace nodes were materialized", output)
+
+    def test_get_apple_build_summary_surfaces_multi_project_workspace_overview(self):
+        async def fake_execute_read(session, query, **kwargs):
+            if kwargs.get("op") == "apple_build_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "graph_schema_labels":
+                return [{"labels": ["Resource", "XcodeWorkspace"]}]
+            if kwargs.get("op") == "graph_schema_relationship_types":
+                return [{"rels": ["BUNDLED_IN_TARGET", "REFERENCES_PROJECT", "BUILDS_TARGET"]}]
+            if kwargs.get("op") == "apple_resource_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_workspace_presence":
+                return [{"n": 1}]
+            if kwargs.get("op") == "apple_graph_coverage":
+                return [{
+                    "project_files": 2,
+                    "workspace_files": 1,
+                    "scheme_files": 2,
+                    "resource_files": 2,
+                    "targets": 2,
+                    "schemes": 2,
+                    "workspaces": 1,
+                    "resources": 2,
+                    "bundles_file_edges": 2,
+                    "builds_target_edges": 2,
+                    "references_project_edges": 2,
+                }]
+            if kwargs.get("op") == "apple_workspace_projects":
+                return [
+                    {
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                        "project_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                    },
+                    {
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                        "project_file": "BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+                    },
+                ]
+            if kwargs.get("op") == "get_apple_build_summary":
+                return [
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "AirPlayIcon",
+                        "kind": "image",
+                        "backing": "BGMApp/BGMApp/Images.xcassets/AirPlayIcon.imageset/Contents.json",
+                        "target": "Background Music",
+                        "project_file": "BGMApp/BGMApp.xcodeproj/project.pbxproj",
+                        "scheme": "Background Music",
+                        "scheme_file": "BGMApp/BGMApp.xcodeproj/xcshareddata/xcschemes/Background Music.xcscheme",
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                    },
+                    {
+                        "src": None,
+                        "rel": None,
+                        "resource": "DriverIcon",
+                        "kind": "image",
+                        "backing": "BGMDriver/Assets.xcassets/DriverIcon.imageset/Contents.json",
+                        "target": "Background Music Device",
+                        "project_file": "BGMDriver/BGMDriver.xcodeproj/project.pbxproj",
+                        "scheme": "Background Music Device",
+                        "scheme_file": "BGMDriver/BGMDriver.xcodeproj/xcshareddata/xcschemes/Background Music Device.xcscheme",
+                        "workspace": "BGM.xcworkspace/contents.xcworkspacedata",
+                    },
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_apple_build_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/loom",
+                    limit=20,
+                    as_table=False,
+                    group_by="target",
+                )
+            )
+
+        self.assertIn("Workspace Overview:", output)
+        self.assertIn("- BGM.xcworkspace/contents.xcworkspacedata", output)
+        self.assertIn("-> BGMApp/BGMApp.xcodeproj/project.pbxproj", output)
+        self.assertIn("-> BGMDriver/BGMDriver.xcodeproj/project.pbxproj", output)
+        self.assertIn("Target: Background Music", output)
+        self.assertIn("Target: Background Music Device", output)
+
     def test_get_backend_flow_summary_includes_cargo_crate_context(self):
         async def fake_execute_read(session, query, **kwargs):
             op = kwargs.get("op")
@@ -707,6 +1164,8 @@ class FlowSummaryTests(unittest.TestCase):
             )
 
         self.assertIn("Crate: api", output)
+        self.assertIn("Use this to decide which API entrypoints reach real services", output)
+        self.assertIn("Inspect First:", output)
         self.assertIn("[api_crate=api, service_crate=core]", output)
         self.assertIn("crates/api/src/routes.rs -> crates/core/src/service.rs -> User", output)
 
@@ -807,6 +1266,7 @@ class FlowSummaryTests(unittest.TestCase):
             seen_ops,
         )
         self.assertIn("Crate: ts-pack-index", output)
+        self.assertIn("Inspect First:", output)
         self.assertIn("crates/ts-pack-index/src/write_phase.rs", output)
         self.assertIn("neo4j://local", output)
 
@@ -848,6 +1308,51 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("crate/library-oriented", output)
         self.assertIn("ts-pack-index", output)
         self.assertIn("project overview", output)
+
+    def test_get_backend_flow_summary_diagnoses_missing_backend_graph_evidence(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op in {
+                "get_backend_flow_summary",
+                "get_backend_flow_summary_fallback",
+                "get_backend_flow_summary_import_fallback",
+                "get_backend_flow_summary_routes",
+                "backend_flow_cargo_crates",
+            }:
+                return []
+            if op == "backend_flow_cargo_schema_labels":
+                return [{"labels": []}]
+            if op == "get_backend_flow_summary_coverage":
+                return [
+                    {
+                        "routes": 0,
+                        "handled_routes": 0,
+                        "service_links": 3,
+                        "model_links": 0,
+                        "db_links": 2,
+                        "external_links": 0,
+                    }
+                ]
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_backend_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/backend",
+                    limit=20,
+                    as_table=False,
+                )
+            )
+
+        self.assertIn("No API → Service → DB paths found.", output)
+        self.assertIn(
+            "Coverage: routes=0 handled_routes=0 service_links=3 model_links=0 db_links=2 external_links=0",
+            output,
+        )
+        self.assertIn("No connected backend path", output)
+        self.assertIn("get_flow_summary('/tmp/backend', mode='auto')", output)
 
     def test_get_backend_flow_summary_expands_multi_route_api_without_fake_service_binding(self):
         async def fake_execute_read(session, query, **kwargs):
@@ -893,6 +1398,301 @@ class FlowSummaryTests(unittest.TestCase):
         self.assertIn("GET /api/charges", output)
         self.assertIn("POST /api/financials/accounting-sync/quickbooks/export-batch", output)
         self.assertNotIn("src/services/AccountingSyncBatchService.ts", output)
+
+    def test_get_backend_flow_summary_uses_route_only_fallback_without_fake_downstream_binding(self):
+        async def fake_execute_read(session, query, **kwargs):
+            op = kwargs.get("op")
+            if op in {
+                "get_backend_flow_summary",
+                "get_backend_flow_summary_fallback",
+                "get_backend_flow_summary_import_fallback",
+            }:
+                return []
+            if op == "get_backend_flow_summary_routes":
+                return [
+                    {
+                        "api": "src/api/routes/leaseRoutes.ts",
+                        "routes": [
+                            "GET /leases",
+                            "GET /api/leases",
+                            "POST /api/leases",
+                        ],
+                    }
+                ]
+            if op == "backend_flow_cargo_schema_labels":
+                return [{"labels": []}]
+            if op == "backend_flow_cargo_crates":
+                return []
+            return []
+
+        with mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read):
+            output = asyncio.run(
+                self.module.get_backend_flow_summary_impl(
+                    driver=FakeDriver(),
+                    neo4j_db="neo4j",
+                    workspace_id="/tmp/rental",
+                    limit=20,
+                    as_table=False,
+                )
+            )
+
+        self.assertIn("Route-level coverage only", output)
+        self.assertIn(
+            "src/api/routes/leaseRoutes.ts -> GET /api/leases",
+            output,
+        )
+        self.assertIn(
+            "src/api/routes/leaseRoutes.ts -> POST /api/leases",
+            output,
+        )
+        self.assertLess(output.find("GET /api/leases"), output.find("GET /leases"))
+        self.assertNotIn("src/services/", output)
+
+    def test_get_backend_flow_summary_falls_back_for_fastapi_import_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            api_dir = os.path.join(tmpdir, "app", "api")
+            os.makedirs(api_dir, exist_ok=True)
+            api_file = os.path.join(api_dir, "endpoints.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import APIRouter, Depends\n"
+                    "from sqlalchemy.orm import Session\n"
+                    "from app.db.session import get_db\n"
+                    "from app.retrieval.hybrid_search import HybridRetriever\n"
+                    "from app.ingestion.processor import IngestionProcessor\n"
+                    "from app.models.legal_source import LegalSource\n"
+                    "router = APIRouter()\n\n"
+                    "@router.post('/search')\n"
+                    "async def search_legal_content(db: Session = Depends(get_db)):\n"
+                    "    retriever = HybridRetriever(db)\n"
+                    "    return await retriever.search(query='x')\n\n"
+                    "@router.get('/sources')\n"
+                    "def list_sources(db: Session = Depends(get_db)):\n"
+                    "    return db.query(LegalSource).all()\n\n"
+                    "@router.post('/ingest')\n"
+                    "async def trigger_ingestion(db: Session = Depends(get_db)):\n"
+                    "    processor = IngestionProcessor(db)\n"
+                    "    return await processor.process_document(source_id='1')\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [
+                        {"api": "app/api/endpoints.py", "dep": "app/db/session.py"},
+                        {"api": "app/api/endpoints.py", "dep": "app/retrieval/hybrid_search.py"},
+                        {"api": "app/api/endpoints.py", "dep": "app/ingestion/processor.py"},
+                        {"api": "app/api/endpoints.py", "dep": "app/models/legal_source.py"},
+                    ]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="endpoints.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertIn("POST /search", output)
+        self.assertIn("Use this to decide which API entrypoints reach real services", output)
+        self.assertIn("app/retrieval/hybrid_search.py", output)
+        self.assertIn("GET /sources", output)
+        self.assertIn("app/models/legal_source.py", output)
+        self.assertIn("app/db/session.py", output)
+
+    def test_get_backend_flow_summary_falls_back_for_fastapi_app_module_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proxy_dir = os.path.join(tmpdir, "proxy")
+            os.makedirs(proxy_dir, exist_ok=True)
+            api_file = os.path.join(proxy_dir, "app.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import FastAPI, Request\n"
+                    "from proxy.handlers import route_request\n"
+                    "from proxy.models import resolve_model_name\n"
+                    "app = FastAPI()\n\n"
+                    "@app.get('/health')\n"
+                    "async def health():\n"
+                    "    return {'ok': True}\n\n"
+                    "@app.post('/v1/chat/completions')\n"
+                    "async def chat(request: Request):\n"
+                    "    model = resolve_model_name('x', [])\n"
+                    "    return await route_request(request, model)\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [
+                        {"api": "proxy/app.py", "dep": "proxy/handlers.py"},
+                        {"api": "proxy/app.py", "dep": "proxy/models.py"},
+                    ]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="proxy/app.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertIn("POST /v1/chat/completions", output)
+        self.assertIn("proxy/handlers.py", output)
+        self.assertIn("proxy/models.py", output)
+
+    def test_get_backend_flow_summary_keeps_test_like_fastapi_fallback_when_roles_are_present(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tests_dir = os.path.join(tmpdir, "tests")
+            os.makedirs(tests_dir, exist_ok=True)
+            api_file = os.path.join(tests_dir, "app.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import FastAPI\n"
+                    "app = FastAPI()\n\n"
+                    "@app.get('/health')\n"
+                    "async def health():\n"
+                    "    return {'ok': True}\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [{"api": "tests/app.py", "api_roles": [], "dep": "app/db/session.py", "dep_roles": []}]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="tests/app.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertIn("tests/app.py", output)
+        self.assertIn("GET /health", output)
+
+    def test_get_backend_flow_summary_filters_test_like_fastapi_fallback_when_roles_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tests_dir = os.path.join(tmpdir, "tests")
+            os.makedirs(tests_dir, exist_ok=True)
+            api_file = os.path.join(tests_dir, "app.py")
+            with open(api_file, "w", encoding="utf-8") as fh:
+                fh.write(
+                    "from fastapi import FastAPI\n"
+                    "app = FastAPI()\n\n"
+                    "@app.get('/health')\n"
+                    "async def health():\n"
+                    "    return {'ok': True}\n"
+                )
+
+            async def fake_execute_read(session, query, **kwargs):
+                op = kwargs.get("op")
+                if op == "get_backend_flow_summary":
+                    return []
+                if op == "get_backend_flow_summary_fallback":
+                    return []
+                if op == "get_backend_flow_summary_import_fallback":
+                    return [{"api": "tests/app.py", "api_roles": None, "dep": "app/db/session.py", "dep_roles": None}]
+                if op == "get_backend_flow_summary_routes":
+                    return []
+                if op == "backend_flow_cargo_schema_labels":
+                    return [{"labels": []}]
+                if op == "backend_flow_cargo_crates":
+                    return []
+                return []
+
+            with (
+                mock.patch.object(self.module.graph_core, "_execute_read", side_effect=fake_execute_read),
+                mock.patch.object(self.module, "get_workspace_path", return_value=tmpdir),
+            ):
+                output = asyncio.run(
+                    self.module.get_backend_flow_summary_impl(
+                        driver=FakeDriver(),
+                        neo4j_db="neo4j",
+                        workspace_id=tmpdir,
+                        api_contains="tests/app.py",
+                        limit=20,
+                        as_table=False,
+                    )
+                )
+
+        self.assertIn("No API → Service → DB paths found.", output)
+        self.assertIn("Diagnosis:", output)
+        self.assertIn("Coverage: routes=0 handled_routes=0", output)
+        self.assertIn("get_flow_summary(", output)
+
+    def test_extract_python_import_map_supports_parenthesized_imports(self):
+        source_text = (
+            "from proxy.models import (\n"
+            "    resolve_model_name,\n"
+            "    build_local_llm_models,\n"
+            ")\n"
+            "from proxy.handlers import (\n"
+            "    forward_responses_api_completion,\n"
+            ")\n"
+        )
+
+        result = self.module._extract_python_import_map(source_text)
+
+        self.assertEqual("proxy.models", result["resolve_model_name"])
+        self.assertEqual("proxy.models", result["build_local_llm_models"])
+        self.assertEqual(
+            "proxy.handlers",
+            result["forward_responses_api_completion"],
+        )
 
 
 if __name__ == "__main__":

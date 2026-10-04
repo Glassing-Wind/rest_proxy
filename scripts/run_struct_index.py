@@ -4,34 +4,97 @@
 import argparse
 import os
 import sys
-
-from dotenv import load_dotenv
+import time
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(REPO_ROOT, ".env"))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from _runtime import resolve_python_runtime
+
+
+def _ensure_runtime_dependencies() -> None:
+    try:
+        import dotenv  # noqa: F401
+        import neo4j  # noqa: F401
+        import tree_sitter_language_pack  # noqa: F401
+    except ModuleNotFoundError:
+        if os.environ.get("LM_PROXY_RUNTIME_REEXECED") == "1":
+            raise
+        runtime = resolve_python_runtime()
+        preferred = str(runtime.get("python") or "")
+        if not preferred or os.path.realpath(preferred) == os.path.realpath(sys.executable):
+            raise
+        os.environ["LM_PROXY_RUNTIME_REEXECED"] = "1"
+        os.execv(preferred, [preferred, __file__, *sys.argv[1:]])
+
+
+_ensure_runtime_dependencies()
+
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
+
 import tree_sitter_language_pack as ts_pack
+
+def _log_timed_step(label: str, started_at: float, *, extra: str | None = None) -> None:
+    elapsed = time.perf_counter() - started_at
+    suffix = f" — {extra}" if extra else ""
+    print(
+        f"[ts-pack:timing] {label}: {elapsed:.2f}s{suffix}",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def _metric_status_line(label: str, payload: dict, suffix: str) -> str:
     status = (payload or {}).get("status") or "unknown"
     updated = int((payload or {}).get("updated") or 0)
+    extras: list[str] = []
+    estimated_bytes = (payload or {}).get("estimated_bytes_max")
+    sampling_size = (payload or {}).get("sampling_size")
+    concurrency = (payload or {}).get("concurrency")
+    threshold = (payload or {}).get("threshold")
+    threshold_bytes = (payload or {}).get("threshold_bytes_max")
     if status == "ok":
-        return f"[ts-pack:{label}] Done — {suffix.format(updated=updated)}"
+        if estimated_bytes is not None:
+            extras.append(f"estimated_bytes_max={estimated_bytes}")
+        if sampling_size is not None:
+            extras.append(f"sampling_size={sampling_size}")
+        if concurrency is not None:
+            extras.append(f"concurrency={concurrency}")
+        extra_text = f" ({', '.join(extras)})" if extras else ""
+        return f"[ts-pack:{label}] Done — {suffix.format(updated=updated)}{extra_text}"
     if status == "skipped":
         reason = (payload or {}).get("reason") or "unknown"
         file_nodes = int((payload or {}).get("file_nodes") or 0)
         rel_total = int((payload or {}).get("file_rel_total") or 0)
         rel_counts = (payload or {}).get("file_rel_counts") or {}
+        if threshold is not None:
+            extras.append(f"threshold={threshold}")
+        if estimated_bytes is not None:
+            extras.append(f"estimated_bytes_max={estimated_bytes}")
+        if threshold_bytes is not None:
+            extras.append(f"threshold_bytes_max={threshold_bytes}")
+        if sampling_size is not None:
+            extras.append(f"sampling_size={sampling_size}")
+        if concurrency is not None:
+            extras.append(f"concurrency={concurrency}")
+        extra_text = f" extras={{{', '.join(extras)}}}" if extras else ""
         return (
             f"[ts-pack:{label}] Skipped — reason={reason} file_nodes={file_nodes} "
-            f"file_rels={rel_total} rel_breakdown={rel_counts}"
+            f"file_rels={rel_total} rel_breakdown={rel_counts}{extra_text}"
         )
     if status == "failed":
         error = (payload or {}).get("error") or "unknown"
-        return f"[ts-pack:{label}] Failed — {error}"
+        if estimated_bytes is not None:
+            extras.append(f"estimated_bytes_max={estimated_bytes}")
+        if sampling_size is not None:
+            extras.append(f"sampling_size={sampling_size}")
+        if concurrency is not None:
+            extras.append(f"concurrency={concurrency}")
+        extra_text = f" ({', '.join(extras)})" if extras else ""
+        return f"[ts-pack:{label}] Failed — {error}{extra_text}"
     return f"[ts-pack:{label}] Unknown status — {payload}"
 
 
@@ -65,13 +128,307 @@ def _count_isolated_files(neo4j_uri: str, neo4j_user: str, neo4j_pass: str, neo4
         driver.close()
 
 
+def _set_struct_run_status(
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_pass: str,
+    neo4j_db: str,
+    project_id: str,
+    status: str,
+    *,
+    error: str | None = None,
+) -> None:
+    import neo4j
+
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            record = session.run(
+                """
+                MATCH (p:Project {id:$pid})
+                OPTIONAL MATCH (r:IndexRun {id:p.struct_index_run_id})
+                SET p.struct_index_status = $status,
+                    p.struct_index_finished_at = timestamp()
+                FOREACH (_ IN CASE WHEN $status = 'done' THEN [1] ELSE [] END |
+                    SET p.struct_active_run_id = p.struct_index_run_id,
+                        p.struct_last_successful_run_id = p.struct_index_run_id,
+                        p.struct_last_successful_finished_at = timestamp()
+                )
+                FOREACH (_ IN CASE WHEN r IS NULL THEN [] ELSE [1] END |
+                    SET r.status = $status,
+                        r.finished_at = timestamp()
+                )
+                FOREACH (_ IN CASE WHEN r IS NULL OR $status <> 'done' THEN [] ELSE [1] END |
+                    SET r.promoted_at = timestamp()
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [1] ELSE [] END |
+                    REMOVE p.struct_index_error
+                )
+                FOREACH (_ IN CASE WHEN r IS NULL OR $error IS NULL THEN [] ELSE [1] END |
+                    REMOVE r.error
+                )
+                FOREACH (_ IN CASE WHEN $error IS NULL THEN [] ELSE [1] END |
+                    SET p.struct_index_error = $error
+                )
+                FOREACH (_ IN CASE WHEN r IS NULL OR $error IS NULL THEN [] ELSE [1] END |
+                    SET r.error = $error
+                )
+                RETURN p.struct_index_run_id AS run_id
+                """,
+                pid=project_id,
+                status=status,
+                error=(error[:2000] if error else None),
+            ).single()
+            if not record:
+                return
+    finally:
+        driver.close()
+
+
+def _get_struct_run_id(
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_pass: str,
+    neo4j_db: str,
+    project_id: str,
+) -> str | None:
+    import neo4j
+
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            record = session.run(
+                "MATCH (p:Project {id:$pid}) RETURN p.struct_index_run_id AS run_id",
+                pid=project_id,
+            ).single()
+            if not record:
+                return None
+            return record.get("run_id")
+    finally:
+        driver.close()
+
+
+def _verify_struct_shadow_graph_clean(
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_pass: str,
+    neo4j_db: str,
+    project_id: str,
+    run_id: str,
+) -> None:
+    import neo4j
+
+    stale_node_count_query = """
+    MATCH (n {project_id:$pid})
+    WHERE NOT n:Project AND NOT n:IndexRun
+      AND coalesce(n.last_seen_run, '') <> $run_id
+    RETURN count(n) AS stale_count
+    """
+    stale_rel_count_query = """
+    MATCH ()-[r]->()
+    WHERE r.project_id = $pid
+      AND coalesce(r.last_seen_run, '') <> $run_id
+    RETURN count(r) AS stale_count
+    """
+    stale_node_detail_query = """
+    MATCH (n {project_id:$pid})
+    WHERE NOT n:Project AND NOT n:IndexRun
+      AND coalesce(n.last_seen_run, '') <> $run_id
+    RETURN labels(n) AS labels, count(n) AS stale_count
+    ORDER BY stale_count DESC
+    LIMIT 10
+    """
+    stale_rel_detail_query = """
+    MATCH ()-[r]->()
+    WHERE r.project_id = $pid
+      AND coalesce(r.last_seen_run, '') <> $run_id
+    RETURN type(r) AS rel_type, count(r) AS stale_count
+    ORDER BY stale_count DESC
+    LIMIT 10
+    """
+
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            stale_node_count_record = session.run(
+                stale_node_count_query, pid=project_id, run_id=run_id
+            ).single()
+            stale_rel_count_record = session.run(
+                stale_rel_count_query, pid=project_id, run_id=run_id
+            ).single()
+            stale_node_count = int(stale_node_count_record["stale_count"]) if stale_node_count_record else 0
+            stale_rel_count = int(stale_rel_count_record["stale_count"]) if stale_rel_count_record else 0
+            if not stale_node_count and not stale_rel_count:
+                return
+            stale_nodes = list(session.run(stale_node_detail_query, pid=project_id, run_id=run_id))
+            stale_rels = list(session.run(stale_rel_detail_query, pid=project_id, run_id=run_id))
+    finally:
+        driver.close()
+
+    node_bits = [
+        f"labels={record['labels']} count={record['stale_count']}" for record in stale_nodes
+    ]
+    rel_bits = [
+        f"type={record['rel_type']} count={record['stale_count']}" for record in stale_rels
+    ]
+    detail = "; ".join(node_bits + rel_bits)
+    raise RuntimeError(
+        "Shadow graph cleanup invariant failed after finalize/prune: "
+        f"project={project_id} run={run_id} stale={detail}"
+    )
+
+
+def _promote_struct_shadow_graph(
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_pass: str,
+    neo4j_db: str,
+    canonical_project_id: str,
+    shadow_project_id: str,
+    run_id: str,
+) -> None:
+    import neo4j
+
+    promote_delete_nodes_query = """
+    MATCH (old:Node {project_id:$canonical_pid})
+    WHERE NOT old:Chunk AND NOT old:Project AND NOT old:IndexRun
+    DETACH DELETE old
+    """
+    promote_nodes_query = """
+    MATCH (n:Node {project_id:$shadow_pid})
+    WHERE NOT n:Chunk AND NOT n:Project AND NOT n:IndexRun
+      AND coalesce(n.last_seen_run, '') = $run_id
+    SET n.project_id = $canonical_pid,
+        n.last_promoted_run = $run_id,
+        n.id = coalesce(n.stable_id, n.id),
+        n.file_id = coalesce(n.stable_file_id, n.file_id)
+    """
+    promote_rels_query = """
+    MATCH ()-[r]->()
+    WHERE r.project_id = $shadow_pid
+    SET r.project_id = $canonical_pid,
+        r.last_promoted_run = $run_id
+    """
+    cleanup_shadow_nodes_query = """
+    MATCH (n:Node {project_id:$shadow_pid})
+    WHERE NOT n:Project AND NOT n:IndexRun
+    DETACH DELETE n
+    """
+    verify_canonical_ids_query = """
+    MATCH (n:Node {project_id:$canonical_pid})
+    WHERE NOT n:Project AND NOT n:IndexRun
+      AND n.last_promoted_run = $run_id
+      AND (
+        n.id CONTAINS '::shadow::'
+        OR (n.file_id IS NOT NULL AND n.file_id CONTAINS '::shadow::')
+      )
+    RETURN count(n) AS invalid_count
+    """
+
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            delete_nodes_started_at = time.perf_counter()
+            session.execute_write(
+                lambda tx: tx.run(
+                    promote_delete_nodes_query,
+                    canonical_pid=canonical_project_id,
+                ).consume()
+            )
+            _log_timed_step("promote.delete_canonical_nodes", delete_nodes_started_at)
+
+            promote_nodes_started_at = time.perf_counter()
+            session.execute_write(
+                lambda tx: tx.run(
+                    promote_nodes_query,
+                    canonical_pid=canonical_project_id,
+                    shadow_pid=shadow_project_id,
+                    run_id=run_id,
+                ).consume()
+            )
+            _log_timed_step("promote.promote_nodes", promote_nodes_started_at)
+
+            promote_rels_started_at = time.perf_counter()
+            session.execute_write(
+                lambda tx: tx.run(
+                    promote_rels_query,
+                    canonical_pid=canonical_project_id,
+                    shadow_pid=shadow_project_id,
+                    run_id=run_id,
+                ).consume()
+            )
+            _log_timed_step("promote.promote_rels", promote_rels_started_at)
+
+            cleanup_shadow_nodes_started_at = time.perf_counter()
+            session.execute_write(
+                lambda tx: tx.run(
+                    cleanup_shadow_nodes_query,
+                    shadow_pid=shadow_project_id,
+                ).consume()
+            )
+            _log_timed_step("promote.cleanup_shadow_nodes", cleanup_shadow_nodes_started_at)
+
+            verify_ids_started_at = time.perf_counter()
+
+            def _verify_tx(tx: neo4j.ManagedTransaction):
+                return tx.run(
+                    verify_canonical_ids_query,
+                    canonical_pid=canonical_project_id,
+                    run_id=run_id,
+                ).single()
+
+            invalid_record = session.execute_read(_verify_tx)
+            _log_timed_step("promote.verify_canonical_ids", verify_ids_started_at)
+
+            invalid_count = int(invalid_record["invalid_count"]) if invalid_record else 0
+            if invalid_count:
+                raise RuntimeError(
+                    "Atomic shadow promotion invariant failed: "
+                    f"canonical_shadow_ids={invalid_count}"
+                )
+    finally:
+        driver.close()
+
+
+def _verify_shadow_namespace_cleared(
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_pass: str,
+    neo4j_db: str,
+    shadow_project_id: str,
+) -> None:
+    import neo4j
+
+    driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+    try:
+        with driver.session(database=neo4j_db) as session:
+            node_record = session.run(
+                "MATCH (n {project_id:$pid}) RETURN count(n) AS n",
+                pid=shadow_project_id,
+            ).single()
+            rel_record = session.run(
+                "MATCH ()-[r]->() WHERE r.project_id = $pid RETURN count(r) AS n",
+                pid=shadow_project_id,
+            ).single()
+    finally:
+        driver.close()
+
+    node_count = int(node_record["n"]) if node_record else 0
+    rel_count = int(rel_record["n"]) if rel_record else 0
+    if node_count or rel_count:
+        raise RuntimeError(
+            "Shadow namespace cleanup failed after promotion: "
+            f"project={shadow_project_id} nodes={node_count} rels={rel_count}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Structural (Rust-native) indexer")
     parser.add_argument("project_path")
     parser.add_argument("project_id")
     parser.add_argument("--manifest-file", required=True)
     parser.add_argument(
-        "--neo4j-uri", default=os.getenv("LM_PROXY_NEO4J_URI", "bolt://localhost:7687")
+        "--neo4j-uri", default=os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
     )
     parser.add_argument(
         "--neo4j-user", default=os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
@@ -102,36 +459,60 @@ def main() -> int:
         file=sys.stderr,
         flush=True,
     )
+    run_id = f"{args.project_id}:{os.getpid()}:{int(os.times().elapsed * 1_000_000_000)}"
+    shadow_project_id = f"{args.project_id}::shadow::{run_id}"
+    struct_started_at = time.perf_counter()
 
     try:
-        files = ts_pack.index_workspace(
-            path=args.project_path,
-            project_id=args.project_id,
-            neo4j_uri=args.neo4j_uri,
-            neo4j_user=args.neo4j_user,
-            neo4j_pass=args.neo4j_pass,
-            manifest_file=args.manifest_file,
-        )
+        index_started_at = time.perf_counter()
+        struct_index_kwargs = {
+            "path": args.project_path,
+            "project_id": shadow_project_id,
+            "neo4j_uri": args.neo4j_uri,
+            "neo4j_user": args.neo4j_user,
+            "neo4j_pass": args.neo4j_pass,
+            "manifest_file": args.manifest_file,
+            "status_project_id": args.project_id,
+            "run_id": run_id,
+            "neo4j_db": args.neo4j_db,
+        }
+        try:
+            files = ts_pack.index_workspace(**struct_index_kwargs)
+        except TypeError as exc:
+            if "neo4j_db" not in str(exc):
+                raise
+            if args.neo4j_db != "proxy":
+                raise RuntimeError(
+                    "Installed tree_sitter_language_pack does not support neo4j_db; "
+                    f"cannot safely index configured Neo4j database '{args.neo4j_db}'. "
+                    "Reinstall the pinned ts-pack fork."
+                ) from exc
+            struct_index_kwargs.pop("neo4j_db", None)
+            files = ts_pack.index_workspace(**struct_index_kwargs)
         print(
             f"[ts-pack:struct] Done — {len(files)} files indexed.",
             file=sys.stderr,
             flush=True,
         )
+        _log_timed_step("index_workspace", index_started_at, extra=f"files={len(files)}")
     except Exception as exc:
         print(f"[ts-pack:struct] ERROR: {exc}", file=sys.stderr, flush=True)
         return 1
 
     try:
+        finalize_started_at = time.perf_counter()
         finalize = ts_pack.finalize_struct_graph(
             project_path=args.project_path,
-            project_id=args.project_id,
+            project_id=shadow_project_id,
             manifest_file=args.manifest_file,
             indexed_files=[str(fp) for fp in files],
             neo4j_uri=args.neo4j_uri,
             neo4j_user=args.neo4j_user,
             neo4j_pass=args.neo4j_pass,
             neo4j_db=args.neo4j_db,
+            run_id=run_id,
         )
+        _log_timed_step("finalize_struct_graph", finalize_started_at)
         if finalize.get("manifest_added"):
             print(
                 f"[ts-pack:struct] Added {finalize.get('manifest_added')} manifest-only File nodes.",
@@ -150,6 +531,18 @@ def main() -> int:
                 file=sys.stderr,
                 flush=True,
             )
+        if finalize.get("file_call_edges") is not None:
+            print(
+                f"[ts-pack:file-graph] Derived {finalize.get('file_call_edges')} CALLS_FILE edge(s) from symbol calls.",
+                file=sys.stderr,
+                flush=True,
+            )
+        if finalize.get("file_graph_links") is not None:
+            print(
+                f"[ts-pack:file-graph] Materialized {finalize.get('file_graph_links')} FILE_GRAPH_LINK edge(s) for GDS.",
+                file=sys.stderr,
+                flush=True,
+            )
         enrichment = finalize.get("swift_enrichment") or {}
         if enrichment.get("enabled") and enrichment.get("available", True):
             print(
@@ -165,10 +558,12 @@ def main() -> int:
                 file=sys.stderr,
                 flush=True,
             )
+        pagerank_started_at = time.perf_counter()
         pagerank_count = _count_file_metric(
-            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, args.project_id, "pagerank"
+            args.neo4j_uri, args.neo4j_user, args.neo4j_pass, args.neo4j_db, shadow_project_id, "pagerank"
         )
         print(f"[ts-pack:pagerank] Done — pagerank written to {pagerank_count} File nodes.", file=sys.stderr, flush=True)
+        _log_timed_step("count_pagerank_file_nodes", pagerank_started_at, extra=f"updated={pagerank_count}")
         print(
             _metric_status_line(
                 "leiden",
@@ -196,7 +591,73 @@ def main() -> int:
             file=sys.stderr,
             flush=True,
         )
+        prune_started_at = time.perf_counter()
+        prune_kwargs = {
+            "project_id": shadow_project_id,
+            "run_id": run_id,
+            "neo4j_uri": args.neo4j_uri,
+            "neo4j_user": args.neo4j_user,
+            "neo4j_pass": args.neo4j_pass,
+            "neo4j_db": args.neo4j_db,
+        }
+        try:
+            ts_pack.prune_struct_shadow_graph(**prune_kwargs)
+        except TypeError as exc:
+            if "neo4j_db" not in str(exc):
+                raise
+            if args.neo4j_db != "proxy":
+                raise RuntimeError(
+                    "Installed tree_sitter_language_pack does not support neo4j_db; "
+                    f"cannot safely prune configured Neo4j database '{args.neo4j_db}'. "
+                    "Reinstall the pinned ts-pack fork."
+                ) from exc
+            prune_kwargs.pop("neo4j_db", None)
+            ts_pack.prune_struct_shadow_graph(**prune_kwargs)
+        _log_timed_step("prune_struct_shadow_graph", prune_started_at)
+        print(
+            f"[ts-pack:shadow] Done — stale structural graph data pruned for run {run_id}.",
+            file=sys.stderr,
+            flush=True,
+        )
+        promote_started_at = time.perf_counter()
+        _promote_struct_shadow_graph(
+            args.neo4j_uri,
+            args.neo4j_user,
+            args.neo4j_pass,
+            args.neo4j_db,
+            args.project_id,
+            shadow_project_id,
+            run_id,
+        )
+        _log_timed_step("promote_struct_shadow_graph", promote_started_at)
+        print(
+            f"[ts-pack:shadow] Promoted — shadow namespace {shadow_project_id} is now canonical {args.project_id}.",
+            file=sys.stderr,
+            flush=True,
+        )
+        set_status_started_at = time.perf_counter()
+        _set_struct_run_status(
+            args.neo4j_uri,
+            args.neo4j_user,
+            args.neo4j_pass,
+            args.neo4j_db,
+            args.project_id,
+            "done",
+        )
+        _log_timed_step("set_struct_run_status(done)", set_status_started_at)
+        _log_timed_step("struct_total", struct_started_at, extra=f"project={args.project_id}")
     except Exception as exc:
+        set_failed_status_started_at = time.perf_counter()
+        _set_struct_run_status(
+            args.neo4j_uri,
+            args.neo4j_user,
+            args.neo4j_pass,
+            args.neo4j_db,
+            args.project_id,
+            "finalize_failed",
+            error=str(exc),
+        )
+        _log_timed_step("set_struct_run_status(finalize_failed)", set_failed_status_started_at)
         print(
             f"[ts-pack:struct] WARNING: Rust graph finalization failed: {exc}",
             file=sys.stderr,

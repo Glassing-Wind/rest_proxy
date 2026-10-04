@@ -1,0 +1,7 @@
+# Revoked historical Tavily key. Owner confirmed deletion on 2026-09-13.
+# Exact commit/file/rule/line only; new commits remain scanned. See docs/security.md.
+04667ea6a080c8290926884d5d5ac79d74693fbb:session-ses_2b4d.md:generic-api-key:768
+
+# False positive: grading-key.json is a SHA-256 artifact digest, verified against
+# the retained grading file. Exact historical location only; no credential exemption.
+16c8a408c9db60d413f58ed4f6ec9cb2575fd91e:benchmarks/reports/2026-10-03/pilot-raw-manifest.json:generic-api-key:42

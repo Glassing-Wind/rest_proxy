@@ -1,0 +1,77 @@
+{
+  "python": "3.14.4",
+  "package_version": "1.20.0",
+  "wheel_path": "/Users/michaelmarler/Projects/rest_proxy/.runtime/ts-pack-120-wheels/tree_sitter_language_pack-1.20.0-cp310-abi3-macosx_11_0_arm64.whl",
+  "wheel_sha256": "fc6388eddf69b90624a511b91dff51e404f7242b0f6fbb7d04c429dff6967448",
+  "required_fork_exports": {
+    "build_semantic_payload": true,
+    "build_line_window_chunks": true,
+    "build_swift_chunks": true,
+    "execute_codebase_embedding_upsert": true,
+    "execute_semantic_index_driver": true
+  },
+  "process_returns_dictionary": true,
+  "attributed_swift_extensions": [
+    {
+      "body_span": {
+        "end_byte": 87,
+        "end_column": 51,
+        "end_line": 1,
+        "start_byte": 64,
+        "start_column": 28,
+        "start_line": 1
+      },
+      "children": [
+        {
+          "body_span": {
+            "end_byte": 85,
+            "end_column": 49,
+            "end_line": 1,
+            "start_byte": 83,
+            "start_column": 47,
+            "start_line": 1
+          },
+          "container_name": "Widget",
+          "kind": "Method",
+          "name": "refreshed",
+          "qualified_name": "Widget.refreshed",
+          "signature": "func refreshed()",
+          "span": {
+            "end_byte": 85,
+            "end_column": 49,
+            "end_line": 1,
+            "start_byte": 66,
+            "start_column": 30,
+            "start_line": 1
+          }
+        }
+      ],
+      "extended_type": "Widget",
+      "inherited_types": [
+        "Equatable"
+      ],
+      "kind": "Extension",
+      "name": "Widget",
+      "qualified_name": "Widget",
+      "span": {
+        "end_byte": 87,
+        "end_column": 51,
+        "end_line": 1,
+        "start_byte": 0,
+        "start_column": 0,
+        "start_line": 0
+      }
+    }
+  ],
+  "rust_route_facts": [
+    {
+      "framework": "rocket",
+      "method": "GET",
+      "path": "/health"
+    }
+  ],
+  "environment_note": "Candidate venv installs its own wheel and tree-sitter; .pth reuses working project dependency versions for CI. This is not a clean full-manifest installation.",
+  "candidate_checkout": "/Users/michaelmarler/Projects/rest_proxy/.runtime/ts-pack-120-candidate",
+  "candidate_branch": "codex/fire-ts-pack-120",
+  "publication": "uncommitted candidate; working project requirement pin unchanged"
+}

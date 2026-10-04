@@ -11,8 +11,23 @@ import re
 TOKEN_PATTERN = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|<=|>=|->|[{}()\[\];,.:+\-*/%<>=]"
 )
+IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+DECLARATION_PATTERN = re.compile(
+    r"^(?:async\s+def|def|class|(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn|"
+    r"struct|enum|trait|interface|protocol|function|func)\b"
+)
+DECLARATION_NAME_PATTERN = re.compile(
+    r"^(?:async\s+def|def|class|(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn|"
+    r"struct|enum|trait|interface|protocol|function|func)\s+([A-Za-z_][A-Za-z0-9_]*)"
+)
 
 DEFAULT_LOW_SIGNAL_DUPLICATION_PATTERNS = [
+    "tests/**",
+    "**/tests/**",
+    "test_*.py",
+    "**/test_*.py",
+    "**/*.spec.*",
+    "**/*.test.*",
     "docs/node_types/**",
     "**/docs/node_types/**",
     "node_modules/**",
@@ -45,7 +60,101 @@ DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST = {
     "decorator",
     "tool",
     "register",
+    "main",
     "_tx",
+}
+
+PREVIEW_IDENTIFIER_BLOCKLIST = {
+    "def",
+    "async",
+    "fn",
+    "pub",
+    "class",
+    "struct",
+    "trait",
+    "enum",
+    "protocol",
+    "extension",
+    "return",
+    "import",
+    "from",
+    "as",
+    "let",
+    "var",
+    "const",
+    "true",
+    "false",
+    "none",
+    "some",
+    "self",
+    "super",
+    "crate",
+    "mod",
+    "where",
+    "if",
+    "else",
+    "elif",
+    "for",
+    "while",
+    "with",
+    "await",
+    "list",
+    "dict",
+    "str",
+    "int",
+    "bool",
+    "any",
+    "option",
+    "result",
+    "session",
+    "session_id",
+    "project_id",
+    "workspace_id",
+    "limit",
+    "driver",
+    "neo4j_db",
+    "query",
+    "record",
+    "records",
+    "row",
+    "rows",
+    "message",
+    "payload",
+    "file",
+    "filepath",
+    "file_path",
+    "path",
+    "project_path",
+    "text",
+    "content",
+    "data",
+    "name",
+    "value",
+    "main",
+    "optional",
+    "py",
+    "tool",
+    "tools",
+    "docs",
+    "documentation",
+    "search",
+    "graph",
+    "helpers",
+    "helper",
+    "overview",
+    "summary",
+    "flow",
+    "pipeline",
+    "crawl",
+    "research",
+    "raw",
+    "lookup",
+    "indexing",
+    "tuple",
+    "crate_rows",
+    "ts_pack",
+    "__main__",
+    "__name__",
 }
 
 
@@ -55,6 +164,18 @@ def glob_to_like(pattern: str) -> str:
     pattern = pattern.replace("*", "%")
     pattern = pattern.replace("?", "_")
     return pattern
+
+
+def directory_include_pattern(directory_path: str | None) -> str | None:
+    """Normalize an indexed-repo directory into a recursive include glob."""
+    if directory_path is None:
+        return None
+    normalized = directory_path.strip().replace("\\", "/").strip("/")
+    if not normalized or normalized == ".":
+        return None
+    if ".." in normalized.split("/"):
+        raise ValueError("directory_path must stay within the indexed workspace")
+    return f"{normalized}/**"
 
 
 def path_allowed(
@@ -87,8 +208,24 @@ def keep_default_winnow_pair(
     *,
     include_patterns: list[str],
 ) -> bool:
-    _row_a, _row_b, score, struct_score = pair
+    row_a, row_b, score, struct_score = pair
     if score <= 0.50 and struct_score <= 0.0:
+        return False
+    preview_a = preview_line(row_a.get("content") or "")
+    preview_b = preview_line(row_b.get("content") or "")
+    if _is_import_only_preview(preview_a) and _is_import_only_preview(preview_b):
+        return False
+    if _is_entrypoint_preview(preview_a) and _is_entrypoint_preview(preview_b):
+        return False
+    identifiers_a = preview_identifiers(row_a.get("content") or "")
+    identifiers_b = preview_identifiers(row_b.get("content") or "")
+    path_overlap = path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or "")
+    if (
+        score >= 0.90
+        and struct_score >= 0.90
+        and not (identifiers_a & identifiers_b)
+        and not path_overlap
+    ):
         return False
     return True
 
@@ -233,4 +370,262 @@ def is_code_file(file_path: str, metadata: dict | None) -> bool:
 
 
 def preview_line(text: str, limit: int = 200) -> str:
-    return (text or "").strip().splitlines()[0][:limit] if text else ""
+    if not text:
+        return ""
+    for line in (text or "").strip().splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("// File: ") or stripped.startswith("# File: "):
+            continue
+        return stripped[:limit]
+    lines = (text or "").strip().splitlines()
+    return lines[0][:limit] if lines else ""
+
+
+def substantive_preview_line(text: str, limit: int = 200) -> str:
+    """Prefer a declaration over an arbitrary sliding-window boundary."""
+    fallback = preview_line(text, limit=limit)
+    for line in (text or "").strip().splitlines():
+        stripped = line.strip()
+        if DECLARATION_PATTERN.match(stripped):
+            return stripped[:limit]
+    return fallback
+
+
+def is_thin_delegating_declaration(text: str, declaration: str) -> bool:
+    """Return true for tiny compatibility adapters that only delegate work."""
+    lines = (text or "").splitlines()
+    start = next(
+        (index for index, line in enumerate(lines) if line.strip() == declaration),
+        None,
+    )
+    if start is None:
+        return False
+    body: list[str] = []
+    for line in lines[start + 1 :]:
+        stripped = line.strip()
+        if DECLARATION_PATTERN.match(stripped):
+            break
+        if not stripped or stripped.startswith("#"):
+            continue
+        body.append(stripped)
+    if not body or len(body) > 3:
+        return False
+    return bool(re.match(r"^return\s+[A-Za-z_][A-Za-z0-9_.]*\(", body[-1]))
+
+
+def is_low_signal_preview(text: str) -> bool:
+    preview = preview_line(text).strip()
+    if not preview:
+        return True
+    if preview.startswith("#!/"):
+        return True
+    if preview.startswith('"""') or preview.startswith("'''"):
+        return True
+    if preview == 'if __name__ == "__main__":' or preview == "if __name__ == '__main__':":
+        return True
+    if preview in {"unittest.main()", "asyncio.run(main())", "main()"}:
+        return True
+    return False
+
+
+def _is_entrypoint_preview(preview: str) -> bool:
+    stripped = (preview or "").strip()
+    return stripped in {
+        'if __name__ == "__main__":',
+        "if __name__ == '__main__':",
+        "unittest.main()",
+        "asyncio.run(main())",
+        "main()",
+    }
+
+
+def preview_identifiers(text: str) -> set[str]:
+    preview = preview_line(text)
+    if not preview:
+        return set()
+    return {
+        token.lower()
+        for token in IDENTIFIER_PATTERN.findall(preview)
+        if len(token) > 1 and token.lower() not in PREVIEW_IDENTIFIER_BLOCKLIST
+    }
+
+
+def path_token_overlap(path_a: str, path_b: str) -> set[str]:
+    path_stopwords = {
+        "test",
+        "spec",
+        "index",
+        "main",
+        "lib",
+        "flow",
+        "summary",
+        "helper",
+        "helpers",
+        "core",
+        "graph",
+        "search",
+        "code",
+        "intel",
+        "apple",
+        "report",
+        "tools",
+        "brain",
+        "memory",
+        "store",
+        "util",
+        "utility",
+    }
+
+    def _tokens(path: str) -> set[str]:
+        stem = os.path.splitext(os.path.basename(path or ""))[0]
+        return {
+            token.lower()
+            for token in re.split(r"[_\-.]+", stem)
+            if len(token) > 2 and token.lower() not in path_stopwords
+        }
+
+    return _tokens(path_a) & _tokens(path_b)
+
+
+def _is_import_only_preview(preview: str) -> bool:
+    stripped = (preview or "").strip()
+    return stripped.startswith("import ") or stripped.startswith("from ")
+
+
+def has_actionable_duplicate_signal(row_a: dict, row_b: dict) -> bool:
+    if preview_identifiers(row_a.get("content") or "") & preview_identifiers(row_b.get("content") or ""):
+        return True
+    if path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or ""):
+        return True
+    return False
+
+
+def duplicate_candidate_details(
+    row_a: dict,
+    row_b: dict,
+    *,
+    score: float,
+    struct_score: float,
+) -> dict:
+    preview_a = substantive_preview_line(row_a.get("content") or "")
+    preview_b = substantive_preview_line(row_b.get("content") or "")
+    identifiers = preview_identifiers(preview_a) & preview_identifiers(preview_b)
+    path_overlap = path_token_overlap(row_a.get("file_path") or "", row_b.get("file_path") or "")
+    same_dir = os.path.dirname(row_a.get("file_path") or "") == os.path.dirname(
+        row_b.get("file_path") or ""
+    )
+    same_ext = os.path.splitext(row_a.get("file_path") or "")[1].lower() == os.path.splitext(
+        row_b.get("file_path") or ""
+    )[1].lower()
+    low_signal_a = is_low_signal_preview(preview_a)
+    low_signal_b = is_low_signal_preview(preview_b)
+    preview_equal = bool(
+        preview_a and preview_b and preview_a == preview_b and not (low_signal_a and low_signal_b)
+    )
+    declaration_a = DECLARATION_NAME_PATTERN.match(preview_a)
+    declaration_b = DECLARATION_NAME_PATTERN.match(preview_b)
+    declaration_name_a = declaration_a.group(1) if declaration_a else None
+    declaration_name_b = declaration_b.group(1) if declaration_b else None
+    generic_declaration = bool(
+        declaration_name_a
+        and declaration_name_a == declaration_name_b
+        and declaration_name_a in DEFAULT_DUPLICATE_SYMBOL_NAME_BLOCKLIST
+    )
+    declaration_equal = bool(preview_equal and declaration_a and declaration_b)
+    thin_delegation = bool(
+        declaration_equal
+        and is_thin_delegating_declaration(row_a.get("content") or "", preview_a)
+        and is_thin_delegating_declaration(row_b.get("content") or "", preview_b)
+    )
+    if generic_declaration or thin_delegation:
+        preview_equal = False
+        identifiers.discard(declaration_name_a.lower())
+    declaration_equal = bool(preview_equal and declaration_a and declaration_b)
+
+    candidate_score = 0.0
+    candidate_score += min(score, 1.0) * 0.45
+    candidate_score += min(struct_score, 1.0) * 0.10
+    if preview_equal:
+        candidate_score += 0.20
+    if identifiers and not (low_signal_a and low_signal_b):
+        candidate_score += min(0.25, 0.07 * len(identifiers))
+    if path_overlap and not (low_signal_a and low_signal_b):
+        candidate_score += min(0.12, 0.04 * len(path_overlap))
+    if same_dir:
+        candidate_score += 0.06
+    if same_ext:
+        candidate_score += 0.04
+    candidate_score = min(candidate_score, 1.0)
+
+    reasons: list[str] = []
+    if preview_equal:
+        reasons.append(
+            "same declaration" if declaration_equal else "same substantive statement"
+        )
+    if identifiers and not (low_signal_a and low_signal_b):
+        shared = ", ".join(sorted(identifiers)[:3])
+        reasons.append(f"shared identifiers ({shared})")
+    if path_overlap and not (low_signal_a and low_signal_b):
+        shared_path = ", ".join(sorted(path_overlap)[:3])
+        reasons.append(f"path overlap ({shared_path})")
+    if same_dir:
+        reasons.append("same directory")
+    if same_ext:
+        reasons.append("same file type")
+    if score >= 0.95:
+        reasons.append("very high duplicate score")
+    elif score >= 0.85:
+        reasons.append("high duplicate score")
+
+    path_overlap_actionable = bool(path_overlap) and score >= 0.95
+
+    return {
+        "candidate_score": candidate_score,
+        "reasons": reasons,
+        "shared_identifiers": identifiers,
+        "path_overlap": path_overlap,
+        "same_dir": same_dir,
+        "same_ext": same_ext,
+        "preview_equal": preview_equal,
+        "preview_a": preview_a,
+        "preview_b": preview_b,
+        "actionable": bool(
+            not generic_declaration
+            and not thin_delegation
+            and (
+                preview_equal
+                or (identifiers and not (low_signal_a and low_signal_b))
+                or (path_overlap_actionable and not (low_signal_a and low_signal_b))
+            )
+        ),
+    }
+
+
+def deduplicate_refactor_candidates(candidates: list[dict]) -> list[dict]:
+    """Collapse sliding-window matches that describe the same code region."""
+    best_by_region: dict[tuple[str, str, str, str], dict] = {}
+    for candidate in candidates:
+        row_a = candidate.get("row_a") or {}
+        row_b = candidate.get("row_b") or {}
+        side_a = (
+            str(row_a.get("file_path") or ""),
+            str(candidate.get("preview_a") or ""),
+        )
+        side_b = (
+            str(row_b.get("file_path") or ""),
+            str(candidate.get("preview_b") or ""),
+        )
+        first, second = sorted((side_a, side_b))
+        key = (first[0], first[1], second[0], second[1])
+        existing = best_by_region.get(key)
+        if existing is None or (
+            candidate.get("candidate_score", 0),
+            candidate.get("score", 0),
+        ) > (
+            existing.get("candidate_score", 0),
+            existing.get("score", 0),
+        ):
+            best_by_region[key] = candidate
+    return list(best_by_region.values())

@@ -80,17 +80,6 @@ async def resolve(workspace_root: Optional[str] = None) -> WorkspaceContext:
         global _GLOBAL_CURRENT_CONTEXT
         _GLOBAL_CURRENT_CONTEXT = ctx
 
-    # If the watcher loop is enabled, automatically watch the active
-    # workspace root for this MCP session so graph freshness follows the
-    # repo the user is actually working in.
-    try:
-        from graphrag_core.indexing import watcher as index_watcher
-
-        if session_id and os.path.isdir(workspace_path):
-            index_watcher.maybe_auto_watch(workspace_path, reason="workspace_resolve")
-    except Exception:
-        pass
-
     if workspace_root and session_id:
         await _rebind_session(session_id, ctx)
 
@@ -110,7 +99,7 @@ def rebind_session_sync(workspace_id_or_path: str) -> None:
     from _jobs import client_session_id, _MAIN_LOOP
     import asyncio
     sid = client_session_id.get()
-    
+
     async def _do_resolve(session_id: Optional[str]):
         # Manually set the ContextVar inside the async task so resolve() sees it
         token = None
@@ -120,6 +109,11 @@ def rebind_session_sync(workspace_id_or_path: str) -> None:
             # We re-resolve context for the specific workspace root
             new_ctx = await resolve(workspace_id_or_path)
             await _rebind_session(session_id or "local", new_ctx)
+        except ModuleNotFoundError:
+            # Best-effort only: local scripts may not have optional config deps.
+            return
+        except Exception:
+            return
         finally:
             if token:
                 client_session_id.reset(token)

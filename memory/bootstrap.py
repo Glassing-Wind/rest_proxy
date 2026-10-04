@@ -1,4 +1,4 @@
-"""memory_bootstrap.py – Initialize Postgres (pgvector) and Neo4j for the memory layer.
+"""Initialize Postgres, pgvector, and Neo4j support for the memory layer.
 
 Schema:
   Postgres: conversation_turns, memory_embeddings, codebase_embeddings, tool_outputs, etc.
@@ -139,7 +139,8 @@ async def bootstrap_schema() -> bool:
     # 2. Neo4j
     if _ENABLE_PERSISTENCE:
         try:
-            await graph_bootstrap.init_graph_db()
+            if graph_bootstrap._NEO4J_ENABLED:
+                await graph_bootstrap.require_driver()
         except Exception as exc:
             _debug("neo4j_bootstrap_failed", error=str(exc))
             ok = False

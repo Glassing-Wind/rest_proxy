@@ -4,10 +4,12 @@ import json
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = "/Users/michaelmarler/Projects/rest_proxy/tools/brain/search/graph_query.py"
+REPO_ROOT = Path(__file__).resolve().parent
+MODULE_PATH = REPO_ROOT / "tools" / "brain" / "search" / "graph_query.py"
 
 
 class FakeMCP:
@@ -80,7 +82,7 @@ class GraphQueryToolTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
         self.mcp = FakeMCP()
-        self.module.register(self.mcp)
+        self.module.register(self.mcp, include_admin=True)
         self.graph_bootstrap_mod = types.ModuleType("graph_bootstrap")
 
         async def _require_driver():

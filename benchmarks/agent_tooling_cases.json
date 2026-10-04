@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "repository": "rest_proxy",
+  "cases": [
+    {
+      "id": "http_mcp_startup",
+      "category": "entrypoint",
+      "prompt": "Explain how the shared HTTP MCP server starts, registers tools, and exposes its health endpoints.",
+      "expected_evidence": ["brain_server.py", "register"]
+    },
+    {
+      "id": "proxy_chat_flow",
+      "category": "request_flow",
+      "prompt": "Trace a non-streaming /v1/chat/completions request from the FastAPI route to the upstream LM Studio call.",
+      "expected_evidence": ["proxy/app.py", "forward"]
+    },
+    {
+      "id": "memory_mode_gating",
+      "category": "configuration",
+      "prompt": "Which settings determine whether memory persistence, Redis, injection, and embeddings are active?",
+      "expected_evidence": ["proxy/config.py", "_normalize_memory_mode"]
+    },
+    {
+      "id": "index_job_recovery",
+      "category": "state",
+      "prompt": "Explain how indexing job state survives process restarts and how stale jobs are reconciled.",
+      "expected_evidence": ["_jobs.py", "reconcile"]
+    },
+    {
+      "id": "semantic_search_ranking",
+      "category": "retrieval",
+      "prompt": "Trace the major ranking and fallback stages used by code search.",
+      "expected_evidence": ["memory/code_retrieval.py", "retrieval_scoring"]
+    },
+    {
+      "id": "duplicate_suppression",
+      "category": "retrieval",
+      "prompt": "Where are duplicate groups formed and how do they affect final retrieval results?",
+      "expected_evidence": ["memory/retrieval_duplicates.py", "memory/code_retrieval"]
+    },
+    {
+      "id": "documentation_pipeline",
+      "category": "documentation",
+      "prompt": "Trace documentation discovery, crawling, chunking, embedding, and storage.",
+      "expected_evidence": ["tools/brain/docs/indexer.py", "chunk_content"]
+    },
+    {
+      "id": "symbol_context",
+      "category": "code_intelligence",
+      "prompt": "Find the implementation of symbol-context lookup and explain its graph and source fallbacks.",
+      "expected_evidence": ["tools/brain/code_intel", "get_symbol_context"]
+    },
+    {
+      "id": "test_coverage_lookup",
+      "category": "change_review",
+      "prompt": "How does get_test_coverage_for find tests through naming, graph edges, and text search?",
+      "expected_evidence": ["tools/hands/dev.py", "get_test_coverage_for"]
+    },
+    {
+      "id": "watcher_lifecycle",
+      "category": "operations",
+      "prompt": "Explain how projects are added to and removed from background watching.",
+      "expected_evidence": ["graphrag_core/indexing/watcher.py", "watch_project"]
+    },
+    {
+      "id": "stale_mcp_session",
+      "category": "protocol",
+      "prompt": "How does the server detect or reject an MCP session that became stale after restart?",
+      "expected_evidence": ["brain_server.py", "boot_id"]
+    },
+    {
+      "id": "tool_fingerprint",
+      "category": "operations",
+      "prompt": "What source and dependency changes contribute to the MCP tool fingerprint?",
+      "expected_evidence": ["_tool_fingerprint.py", "fingerprint"]
+    },
+    {
+      "id": "cross_project_trace",
+      "category": "architecture",
+      "prompt": "Trace how a symbol definition and its consumers are selected across indexed projects.",
+      "expected_evidence": ["memory/cross_project_trace.py", "project"]
+    },
+    {
+      "id": "optional_dependency_failure",
+      "category": "resilience",
+      "prompt": "Show how unavailable memory or storage integrations are prevented from breaking proxy requests.",
+      "expected_evidence": ["proxy/config.py", "best-effort"]
+    },
+    {
+      "id": "tool_choice_catalog",
+      "category": "product",
+      "prompt": "How does the MCP surface guide an agent toward a first-choice investigation tool instead of overlapping specialist tools?",
+      "expected_evidence": ["tools/brain/tool_catalog.py", "reach_for_when"]
+    }
+  ]
+}

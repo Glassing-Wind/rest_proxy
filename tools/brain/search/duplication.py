@@ -23,6 +23,7 @@ def register(mcp: FastMCP) -> None:
         sample_size: int = 500,
         exclude_paths: list | None = None,
         include_paths: list | None = None,
+        directory_path: str | None = None,
         include_exact: bool = True,
         include_normalized: bool = True,
         include_winnow: bool = True,
@@ -66,6 +67,7 @@ def register(mcp: FastMCP) -> None:
             sample_size: Base chunk sample size (default 500).
             exclude_paths: Optional glob patterns to exclude by file_path.
             include_paths: Optional glob patterns to include by file_path.
+            directory_path: Optional repo-relative directory to search recursively.
             include_winnow: Include token-fingerprint winnowing matches.
             winnow_k: Token shingle length for winnowing (default 3).
             winnow_window: Hash window size for winnowing (default 5).
@@ -148,7 +150,9 @@ def register(mcp: FastMCP) -> None:
             winnow_kgram_sim_threshold = max(0.0, float(winnow_kgram_sim_threshold))
             winnow_sample_size = int(winnow_sample_size)
 
-            include_patterns = include_paths or []
+            requested_include_patterns = list(include_paths or [])
+            directory_pattern = dup_helpers.directory_include_pattern(directory_path)
+            include_patterns = [directory_pattern] if directory_pattern else requested_include_patterns
             exclude_patterns = list(exclude_paths or [])
             exclude_patterns.extend(
                 dup_helpers.default_duplication_exclude_patterns(include_patterns)
@@ -164,10 +168,19 @@ def register(mcp: FastMCP) -> None:
             )
 
             def _path_allowed(file_path: str) -> bool:
-                return dup_helpers.path_allowed(
+                if not dup_helpers.path_allowed(
                     file_path,
                     include_patterns=include_patterns,
                     exclude_patterns=exclude_patterns,
+                ):
+                    return False
+                return not requested_include_patterns or any(
+                    dup_helpers.path_allowed(
+                        file_path,
+                        include_patterns=[pattern],
+                        exclude_patterns=[],
+                    )
+                    for pattern in requested_include_patterns
                 )
 
             queries = dup_queries.build_queries(include_filter_sql)
@@ -199,6 +212,8 @@ def register(mcp: FastMCP) -> None:
                     )
 
             lines: list[str] = []
+            if directory_pattern:
+                lines.append(f"Scope: `{directory_pattern[:-3]}` directory")
             if exclude_patterns and not include_patterns:
                 lines.append(
                     "Default low-signal paths excluded: generated/docs/build artifacts"
@@ -543,58 +558,88 @@ def register(mcp: FastMCP) -> None:
                     lines.append(
                         "\nWinnowed duplicates (multi-scale fingerprints + token fallback)"
                     )
-                    cross_pairs = [
-                        p
-                        for p in winnow_pairs
-                        if p[0]["file_path"] != p[1]["file_path"]
+                    scored_pairs = []
+                    for pair in winnow_pairs:
+                        row_a, row_b, score, struct_score = pair
+                        details = dup_helpers.duplicate_candidate_details(
+                            row_a,
+                            row_b,
+                            score=score,
+                            struct_score=struct_score,
+                        )
+                        scored_pairs.append(
+                            {
+                                "row_a": row_a,
+                                "row_b": row_b,
+                                "score": score,
+                                "struct_score": struct_score,
+                                **details,
+                            }
+                        )
+                    actionable_candidates = [
+                        candidate
+                        for candidate in scored_pairs
+                        if candidate["actionable"]
                     ]
-                    same_pairs = [
-                        p
-                        for p in winnow_pairs
-                        if p[0]["file_path"] == p[1]["file_path"]
-                    ]
-
-                    if cross_file_only:
-                        dup_report.append_winnow_pairs(
-                            lines,
-                            title="Cross-file",
-                            pairs=cross_pairs,
-                            max_pairs=max_pairs,
-                            same_file_allowed=_same_file_allowed,
+                    raw_actionable_count = len(actionable_candidates)
+                    actionable_candidates = dup_helpers.deduplicate_refactor_candidates(
+                        actionable_candidates
+                    )
+                    actionable_candidates.sort(
+                        key=lambda candidate: (
+                            candidate["candidate_score"],
+                            candidate["score"],
+                            len(candidate["shared_identifiers"]),
+                            len(candidate["path_overlap"]),
+                        ),
+                        reverse=True,
+                    )
+                    if not actionable_candidates:
+                        lines.append(
+                            "No high-confidence actionable duplicate chunks found. "
+                            "Broad structural matches were omitted."
                         )
                     else:
-                        if prefer_cross_file:
-                            dup_report.append_winnow_pairs(
-                                lines,
-                                title="Cross-file",
-                                pairs=cross_pairs,
-                                max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
+                        collapsed_count = raw_actionable_count - len(actionable_candidates)
+                        if collapsed_count > 0:
+                            lines.append(
+                                f"Collapsed {collapsed_count} overlapping chunk match(es) "
+                                "into declaration-level refactor regions."
                             )
-                            dup_report.append_winnow_pairs(
+                        cross_candidates = [
+                            candidate
+                            for candidate in actionable_candidates
+                            if candidate["row_a"]["file_path"]
+                            != candidate["row_b"]["file_path"]
+                        ]
+                        same_candidates = [
+                            candidate
+                            for candidate in actionable_candidates
+                            if candidate["row_a"]["file_path"]
+                            == candidate["row_b"]["file_path"]
+                        ]
+                        if cross_file_only:
+                            dup_report.append_refactor_candidates(
                                 lines,
-                                title="Same-file",
-                                pairs=same_pairs,
+                                title="High-confidence refactor candidates",
+                                candidates=cross_candidates,
                                 max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
-                                same_file_counts={},
+                            )
+                        elif prefer_cross_file:
+                            dup_report.append_refactor_candidates(
+                                lines,
+                                title="High-confidence refactor candidates",
+                                candidates=cross_candidates + same_candidates,
+                                max_pairs=max_pairs,
                             )
                         else:
-                            dup_report.append_winnow_pairs(
+                            dup_report.append_refactor_candidates(
                                 lines,
-                                title="Same-file",
-                                pairs=same_pairs,
+                                title="High-confidence refactor candidates",
+                                candidates=same_candidates + cross_candidates,
                                 max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
-                                same_file_counts={},
                             )
-                            dup_report.append_winnow_pairs(
-                                lines,
-                                title="Cross-file",
-                                pairs=cross_pairs,
-                                max_pairs=max_pairs,
-                                same_file_allowed=_same_file_allowed,
-                            )
+
                 else:
                     lines.append("\nNo winnowed duplicate chunks found.")
 
