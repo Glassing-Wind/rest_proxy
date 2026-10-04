@@ -2,6 +2,11 @@
 
 ## Current checkpoint — October 4, 2026
 
+The [embedded transaction adapter](embedded-transaction-adapter.md) now passes
+native Python 3.14 rollback, cancellation, read-only and persistence checks.
+It remains experimental and is not wired into application storage. Query/schema
+replay and single-owner indexing are the next Priority 2 gates.
+
 Latest [reliable-indexing acceptance](../benchmarks/reports/2026-10-04/reliable-indexing.md)
 fixes fetch-method cross-call leakage and resolves the current rental golden to
 78 source-correct route links (paired baseline 80; June's historical 81st edge is
