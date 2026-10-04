@@ -137,6 +137,95 @@ class LiveShadowTests(unittest.TestCase):
         self.assertEqual(row['status'], 'failed')
         self.assertIsInstance(row['finished'], int)
 
+    @unittest.skipIf(os.name == 'nt', 'POSIX termination signals')
+    def test_terminated_writer_preserves_published_graph_and_protects_staging(self):
+        import json
+        import selectors
+        import signal
+        import subprocess
+
+        self.query('CREATE (:Node:File {project_id:$pid,id:$pid,name:"published",content:"usable"})')
+        self.query('CREATE (:Project {id:$pid,project_id:$pid,struct_index_status:"in_progress", '
+                   'struct_index_run_id:$run,struct_active_run_id:"previous"})')
+        before = self.query('MATCH (n:Node {project_id:$pid}) RETURN properties(n) AS node')
+        child_code = '''
+import json, os
+from dotenv import load_dotenv
+from neo4j import GraphDatabase
+from graphrag_core.indexing.shadow import ShadowLifecycle
+load_dotenv('.env')
+p = json.loads(os.environ['SHADOW_TEST_SCOPE'])
+with GraphDatabase.driver(os.environ['LM_PROXY_NEO4J_URI'],
+    auth=(os.environ['LM_PROXY_NEO4J_USER'], os.environ['LM_PROXY_NEO4J_PASSWORD'])) as d:
+    with ShadowLifecycle(d, p['db'], p['project'], p['namespace'], p['run']):
+        with d.session(database=p['db']) as s:
+            s.execute_write(lambda tx: tx.run('CREATE (:Node:File {project_id:$p,id:$p,name:"staged"})',
+                                              p=p['namespace']).consume())
+        if os.environ['SHADOW_TEST_PHASE'] == 'publication':
+            publication_session = d.session(database=p['db'])
+            publication_tx = publication_session.begin_transaction()
+            publication_tx.run('MATCH (n:Node {project_id:$p}) DELETE n', p=p['project']).consume()
+        print('ready', flush=True)
+        import time
+        time.sleep(60)
+'''
+        for sig, phase in ((signal.SIGTERM, 'staging'), (signal.SIGKILL, 'staging'),
+                           (signal.SIGKILL, 'publication')):
+            with self.subTest(signal=sig, phase=phase):
+                env = dict(os.environ, SHADOW_TEST_PHASE=phase, SHADOW_TEST_SCOPE=json.dumps({
+                    'db': self.db, 'project': self.project, 'namespace': self.namespace,
+                    'run': self.run_id,
+                }))
+                proc = subprocess.Popen([sys.executable, '-c', child_code], env=env,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                try:
+                    with selectors.DefaultSelector() as selector:
+                        selector.register(proc.stdout, selectors.EVENT_READ)
+                        self.assertTrue(selector.select(timeout=20), 'child did not stage fixture')
+                        self.assertEqual(proc.stdout.readline().strip(), 'ready')
+                    proc.send_signal(sig)
+                    proc.communicate(timeout=20)
+                    self.assertEqual(proc.returncode, -sig)
+                    self.assertEqual(before, self.query(
+                        'MATCH (n:Node {project_id:$pid}) RETURN properties(n) AS node'))
+                    owner = self.query('MATCH (s:ShadowRun {namespace:$namespace}) '
+                                       'RETURN s.status AS status,s.finished_at AS finished')[0]
+                    self.assertEqual(owner['status'], 'running')
+                    self.assertIsNone(owner['finished'])
+                    self.assertEqual(self.query('MATCH (n:Node {project_id:$namespace}) '
+                                                'RETURN count(n) AS count')[0]['count'], 1)
+                    from graphrag_core.indexing.shadow_recovery import recovery_preview, recover_owned_shadow
+                    with self.driver.session(database=self.db) as session:
+                        preview = session.execute_read(lambda tx: recovery_preview(tx, self.namespace))
+                        self.query('MATCH (p:Project {id:$pid}) SET p.struct_active_run_id=$run')
+                        with self.assertRaisesRegex(RuntimeError, 'publication or project activity'):
+                            session.execute_write(lambda tx: recover_owned_shadow(tx, preview, self.run_id))
+                        self.query('MATCH (p:Project {id:$pid}) SET p.struct_active_run_id="previous"')
+                        self.query('CREATE (:ShadowRun {project_id:$pid,namespace:$namespace+":other", '
+                                   'status:"running"})')
+                        with self.assertRaisesRegex(RuntimeError, 'publication or project activity'):
+                            session.execute_write(lambda tx: recover_owned_shadow(tx, preview, self.run_id))
+                        self.query('MATCH (s:ShadowRun {namespace:$namespace+":other"}) DELETE s')
+                        self.query('MATCH (n:Node {project_id:$namespace}) SET n.name="changed"')
+                        with self.assertRaisesRegex(RuntimeError, 'staging contents changed'):
+                            session.execute_write(lambda tx: recover_owned_shadow(tx, preview, self.run_id))
+                        self.assertEqual(self.query('MATCH (s:ShadowRun {namespace:$namespace}) '
+                                                    'RETURN s.status AS status')[0]['status'], 'running')
+                        preview = session.execute_read(lambda tx: recovery_preview(tx, self.namespace))
+                        result = session.execute_write(lambda tx: recover_owned_shadow(tx, preview, self.run_id))
+                        self.assertFalse(result['data_deleted'])
+                    self.assertEqual(before, self.query(
+                        'MATCH (n:Node {project_id:$pid}) RETURN properties(n) AS node'))
+                    self.assertEqual(self.query('MATCH (s:ShadowRun {namespace:$namespace}) '
+                                                'RETURN s.status AS status')[0]['status'], 'failed')
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.communicate(timeout=10)
+                    # Only disposable fixtures are removed; production uncertain owners stay protected.
+                    self.query('MATCH (n) WHERE n.project_id=$namespace OR n.namespace=$namespace '
+                               'DETACH DELETE n')
+
 
 if __name__ == '__main__':
     unittest.main()

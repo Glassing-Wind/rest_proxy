@@ -1,6 +1,10 @@
 import json
 import tempfile
 import threading
+import socket
+import sys
+import types
+import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -9,6 +13,70 @@ import _jobs
 
 
 class JobStatePersistenceTests(unittest.TestCase):
+    def test_persisted_identity_can_cancel_a_real_owned_worker(self):
+        proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+        try:
+            started = _jobs._process_started_at(proc.pid)
+            self.assertIsNotNone(started)
+            job = {'struct_pid': proc.pid, 'worker_host': socket.gethostname(),
+                   'struct_process_started_at': started}
+            self.assertEqual(_jobs.terminate_index_worker(job, 'struct'), 'signalled')
+            proc.wait(timeout=5)
+            self.assertIsNotNone(proc.returncode)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+
+    def test_cancellation_never_falls_back_to_a_stopped_child_pid(self):
+        proc = mock.Mock()
+        proc.poll.return_value = 0
+        with mock.patch('os.kill') as kill:
+            self.assertEqual(_jobs.terminate_index_worker({'struct_proc': proc, 'struct_pid': 123}, 'struct'),
+                             'already_stopped')
+        proc.terminate.assert_not_called()
+        kill.assert_not_called()
+
+    def test_persisted_cancellation_requires_host_and_creation_time(self):
+        worker = mock.Mock()
+        worker.create_time.return_value = 44.0
+        psutil = types.SimpleNamespace(Process=mock.Mock(return_value=worker))
+        job = {'struct_pid': 123, 'worker_host': socket.gethostname(), 'struct_process_started_at': 33.0}
+        with mock.patch.dict(sys.modules, {'psutil': psutil}):
+            self.assertEqual(_jobs.terminate_index_worker(job, 'struct'), 'identity_unverified')
+            worker.terminate.assert_not_called()
+            job['struct_process_started_at'] = 44.0
+            self.assertEqual(_jobs.terminate_index_worker(job, 'struct'), 'signalled')
+            worker.terminate.assert_called_once()
+            job['worker_host'] = 'other-host'
+            self.assertEqual(_jobs.terminate_index_worker(job, 'struct'), 'identity_unverified')
+            job.pop('worker_host')
+            self.assertEqual(_jobs.terminate_index_worker(job, 'struct'), 'identity_unverified')
+
+    def test_process_inspection_failure_cannot_reclaim_worker(self):
+        with mock.patch('os.kill', side_effect=PermissionError()):
+            self.assertTrue(_jobs._process_alive(123))
+        with mock.patch('os.kill', side_effect=ProcessLookupError()):
+            self.assertFalse(_jobs._process_alive(123))
+
+    def test_recovery_requires_publication_not_native_parse_completion(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log = Path(tmpdir) / 'struct.log'
+            parsed = ('[ts-pack-index] Done — 1 files | parse=0.1s nodes=0.1s '
+                      'imports=0.1s rels=0.1s calls=0.1s total=0.5s\n')
+            log.write_text(parsed)
+            self.assertIsNone(_jobs._infer_return_code_from_log(str(log), _jobs._STRUCT_DONE_RE))
+            log.write_text(parsed + '[ts-pack:shadow] Promoted — fixture\n')
+            self.assertIsNone(_jobs._infer_return_code_from_log(str(log), _jobs._STRUCT_DONE_RE))
+            log.write_text(log.read_text() + '[ts-pack:timing] struct_total: 1.0s\n')
+            self.assertEqual(0, _jobs._infer_return_code_from_log(str(log), _jobs._STRUCT_DONE_RE))
+            log.write_text(parsed + '[ts-pack:struct] Completed — publication and status recorded.\n')
+            self.assertEqual(0, _jobs._infer_return_code_from_log(str(log), _jobs._STRUCT_DONE_RE))
+            log.write_text(log.read_text() + '[ts-pack:index] Processing ERROR_HANDLER.py\n')
+            self.assertEqual(0, _jobs._infer_return_code_from_log(str(log), _jobs._STRUCT_DONE_RE))
+            log.write_text(log.read_text() + '[ts-pack:struct] ERROR: failed\n')
+            self.assertEqual(1, _jobs._infer_return_code_from_log(str(log), _jobs._STRUCT_DONE_RE))
+
     def test_persist_job_state_uses_unique_temp_files_for_concurrent_writers(self):
         job_id = "racejob1"
         original_runtime_dir = _jobs._RUNTIME_JOBS_DIR
@@ -165,7 +233,8 @@ class JobStatePersistenceTests(unittest.TestCase):
                 job_dir.mkdir(parents=True, exist_ok=True)
                 struct_log = job_dir / "struct.log"
                 struct_log.write_text(
-                    "[ts-pack-index] Done — 1 files | parse=0.1s nodes=0.1s imports=0.1s rels=0.1s calls=0.1s total=0.5s\n",
+                    "[ts-pack-index] Done — 1 files | parse=0.1s nodes=0.1s imports=0.1s rels=0.1s calls=0.1s total=0.5s\n"
+                    "[ts-pack:struct] Completed — publication and status recorded.\n",
                     encoding="utf-8",
                 )
                 semantic_log = job_dir / "semantic.log"

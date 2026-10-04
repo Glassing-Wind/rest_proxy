@@ -649,7 +649,11 @@ def main() -> int:
                                           user_agent=f"rest-proxy/struct-wrapper pid={os.getpid()}")
     try:
         with ShadowLifecycle(driver, args.neo4j_db, args.project_id, shadow_project_id, run_id):
-            return _run_struct_index(args, run_id, shadow_project_id)
+            result = _run_struct_index(args, run_id, shadow_project_id)
+        if result == 0:
+            print("[ts-pack:struct] Completed — publication and status recorded.",
+                  file=sys.stderr, flush=True)
+        return result
     except Exception as exc:
         record_index_failure(args.project_id, run_id, "struct_wrapper", exc)
         print("[ts-pack:struct] ERROR: structural run failed; staged evidence retained.",

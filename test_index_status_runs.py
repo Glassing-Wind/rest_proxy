@@ -45,6 +45,8 @@ def load_indexing_module():
         "semantic_log_path": f"/tmp/{job_id}/semantic.log",
     }
     jobs_mod._persist_job_state = lambda *args, **kwargs: None
+    jobs_mod._process_started_at = lambda *args, **kwargs: None
+    jobs_mod.terminate_index_worker = lambda *args, **kwargs: 'already_stopped'
     jobs_mod._release_index_capacity_lock = lambda *args, **kwargs: None
     jobs_mod._release_project_job_lock = lambda *args, **kwargs: None
     jobs_mod._render_job_logs = lambda job: list(job.get("logs") or [])

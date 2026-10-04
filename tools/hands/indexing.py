@@ -7,6 +7,7 @@ import asyncio
 import threading
 import subprocess
 import time
+import socket
 from typing import Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
@@ -19,6 +20,7 @@ from _jobs import (
     _finalize_job,
     _job_control_paths,
     _persist_job_state,
+    _process_started_at,
     _release_index_capacity_lock,
     _release_project_job_lock,
     _reconcile_job_process_state,
@@ -26,6 +28,7 @@ from _jobs import (
     load_job_record,
     register_main_loop,
     client_session_id,
+    terminate_index_worker,
 )
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from _runtime import resolve_python_runtime
@@ -880,6 +883,9 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 _JOBS[job_id]["sem_proc"] = sem_proc
                 _JOBS[job_id]["struct_pid"] = struct_proc.pid
                 _JOBS[job_id]["sem_pid"] = sem_proc.pid
+                _JOBS[job_id]["worker_host"] = socket.gethostname()
+                _JOBS[job_id]["struct_process_started_at"] = _process_started_at(struct_proc.pid)
+                _JOBS[job_id]["sem_process_started_at"] = _process_started_at(sem_proc.pid)
         _persist_job_state(job_id)
         threading.Thread(
             target=_finalize_job, args=(job_id, manifest_path), daemon=True
@@ -1106,7 +1112,7 @@ async def cancel_index_job(job_id: str, force: bool = False) -> str:
             "admin override."
         )
 
-    if job.get("status") != "running":
+    if job.get("status") not in {"running", "cancelling"}:
         return f"Job {job_id} is not running (status={job.get('status')})."
 
     with _JOBS_LOCK:
@@ -1115,26 +1121,17 @@ async def cancel_index_job(job_id: str, force: bool = False) -> str:
         if job_id in _JOBS:
             _JOBS[job_id]["cancel_requested"] = True
             _JOBS[job_id]["status"] = "cancelling"
-        struct_proc = _JOBS.get(job_id, {}).get("struct_proc")
-        sem_proc = _JOBS.get(job_id, {}).get("sem_proc")
-    struct_pid = job.get("struct_pid")
-    sem_pid = job.get("sem_pid")
+        workers = dict(_JOBS[job_id])
     _persist_job_state(job_id)
 
-    for proc in [struct_proc, sem_proc]:
-        try:
-            if proc and proc.poll() is None:
-                proc.terminate()
-        except Exception:
-            continue
-    for pid in [struct_pid, sem_pid]:
-        try:
-            if pid:
-                os.kill(int(pid), 15)
-        except OSError:
-            continue
+    outcomes = {phase: terminate_index_worker(workers, phase) for phase in ('struct', 'sem')}
+    protected = [phase for phase, outcome in outcomes.items()
+                 if outcome in {'identity_unverified', 'signal_failed'}]
 
     suffix = " Admin override used." if force else ""
+    if protected:
+        return (f"Cancel requested for job {job_id}. Could not safely terminate: "
+                f"{', '.join(protected)}. Worker identity or signal delivery is uncertain.{suffix}")
     return (
         f"Cancel requested for job {job_id}. Processes will terminate shortly.{suffix}"
     )

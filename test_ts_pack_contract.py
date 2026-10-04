@@ -19,6 +19,19 @@ def _ensure_language_available(test_case: unittest.TestCase, language: str) -> N
 
 
 class TsPackContractTests(unittest.TestCase):
+    def test_fetch_methods_do_not_leak_between_requests(self):
+        source = ('fetch("/api/leases", {headers: {Authorization: token}}); '
+                  'fetch("/api/units", {method: "POST"}); '
+                  'fetch("/api/dynamic", options);')
+        for language in ('javascript', 'typescript', 'tsx'):
+            with self.subTest(language=language):
+                _ensure_language_available(self, language)
+                facts = ts_pack.extract_file_facts(source, language)
+                self.assertEqual(
+                    {call['path']: call['method'] for call in facts['http_calls']},
+                    {'/api/leases': 'GET', '/api/units': 'POST', '/api/dynamic': 'ANY'},
+                )
+
     def test_required_symbols_exist(self):
         required = [
             "ProcessConfig",

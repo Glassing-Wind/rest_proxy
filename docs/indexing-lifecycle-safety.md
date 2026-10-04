@@ -16,8 +16,44 @@ deletion; native work or a storage outage can delay them.
 
 Normal completion records `finished`; handled failures record `failed`. Abrupt
 process termination or an uncertain terminal write leaves a protected `running`
-record. A separate administrative procedure for proving abandoned ownership is
-still needed; cleanup offers no override for those records or legacy namespaces.
+record. The separate `scripts/recover_owned_shadow.py` administrative procedure
+now handles proven-dead local owners; remote, live/reused PIDs and uncertain
+inspection remain protected. Cleanup itself offers no ownership override.
+
+## Local interruption and recovery acceptance — October 4 follow-up
+
+Cancellation now signals an owned child once. Persisted jobs require the recorded
+host and worker creation time to match before signalling through psutil's PID-reuse
+checks. Legacy jobs without that identity remain protected, with an explicit
+diagnostic. Process-inspection permission failures no longer establish death.
+
+Restart reconciliation requires structural publication/status completion evidence;
+the native parser's earlier `Done` marker is insufficient. Explicit error logs take
+precedence over success markers. New workers emit an end-of-wrapper completion
+marker; older logs require both promotion and the final structural timing marker.
+
+For owned local abandoned staging, preview first:
+
+```sh
+.venv/bin/python scripts/recover_owned_shadow.py --namespace '<exact namespace>'
+.venv/bin/python scripts/recover_owned_shadow.py --namespace '<exact namespace>' \
+  --apply --expected-digest '<preview_sha256>'
+```
+
+Application is coordinated with the local project lock and transactionally rechecks
+ownership, staging, publication and other writer activity. A private snapshot
+precedes mutation. Recovery records a separate adjudication and marks the proven
+dead owner terminal; it deletes no data. A matching unpromoted project's in-progress
+status becomes failed, preserving active publication IDs. Normal explicit guarded
+cleanup is a subsequent operation. Missing/ambiguous ownership, remote hosts,
+live/reused PIDs, uncertain inspection, changed previews and published runs are
+refused. No heartbeat-expiry override or multi-host lease recovery is introduced.
+
+Disposable live fixtures passed SIGTERM/SIGKILL during staging and SIGKILL after
+canonical deletion inside an uncommitted transaction: published nodes remained
+unchanged. Local adjudication preserved staged data and refused changed staging,
+active publication and another running writer. See
+[the acceptance report](../benchmarks/reports/2026-10-04/reliable-indexing.md).
 
 ## Inspect and clean
 
@@ -95,10 +131,12 @@ The [read-only failure investigation](../benchmarks/reports/2026-10-04/shadow-ru
 traced this namespace to failed job `0b72c1fe`: Neo4j authentication rate limiting
 blocked finalization and then prevented recording the failure status. A later job
 published successfully. The originating bad-authentication client remains unknown.
-Legacy cleanup is still blocked by missing tracked ownership, pending explicit
-adjudication support; no deletion or historical-state reassignment was performed.
+At that read-only checkpoint, legacy cleanup was blocked by missing tracked
+ownership. The subsequent separate legacy adjudication removed the residue while
+preserving published data and historical run status, as linked at the top.
 
-Remaining work: uncertain running/remote-writer recovery, retention for lifecycle
-records, coordinated graph/vector publication, and the existing retrieval golden
-discrepancy. Embedded storage and FIRE persistence/budgeting remain milestones in
+Current remaining work: remote/uncertain-writer recovery, retention for lifecycle
+records, coordinated graph/vector publication and large-repository transaction
+measurements. The current rental retrieval golden is resolved in the October 4
+follow-up report. Embedded storage and FIRE persistence/budgeting remain milestones in
 the [integrated platform plan](integrated-platform-plan.md).

@@ -2,6 +2,19 @@
 
 ## Current checkpoint — October 4, 2026
 
+Latest [reliable-indexing acceptance](../benchmarks/reports/2026-10-04/reliable-indexing.md)
+fixes fetch-method cross-call leakage and resolves the current rental golden to
+78 source-correct route links (paired baseline 80; June's historical 81st edge is
+not reconstructible). Both manifests now pin published fork candidate
+`6fcead43fc13b0049481ea5b5c491e02eab4ac68`; draft fork PR #2 has passed hosted
+validation and Linux/macOS/Windows native wheel acceptance. Interruption fixtures
+preserve published data through staging termination and uncommitted-publication
+SIGKILL. Local owned-writer adjudication, persisted cancellation identity checks
+and publication-aware restart reconciliation are implemented. Multi-host/uncertain
+writers remain protected; coordinated graph/vector publication and embedded
+integration remain next milestones. Earlier pin and pending-golden entries below
+are historical checkpoints.
+
 The [routing/framework review](evidence-routing-framework-research.md) recommends
 an optional evidence router built on the current catalog/read dispatcher, evaluated
 against agent-selected tools before retrieval changes. LangGraph is an optional

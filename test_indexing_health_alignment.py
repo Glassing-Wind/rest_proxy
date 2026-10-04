@@ -174,6 +174,8 @@ def load_indexing_module():
     jobs_mod._finalize_job = lambda *args, **kwargs: None
     jobs_mod._job_control_paths = lambda *args, **kwargs: {}
     jobs_mod._persist_job_state = lambda *args, **kwargs: None
+    jobs_mod._process_started_at = lambda *args, **kwargs: None
+    jobs_mod.terminate_index_worker = lambda *args, **kwargs: 'already_stopped'
     jobs_mod._release_project_job_lock = lambda *args, **kwargs: None
     jobs_mod._reconcile_job_process_state = lambda *args, **kwargs: None
     jobs_mod._render_job_logs = lambda *args, **kwargs: []
@@ -385,6 +387,15 @@ class IndexingHealthAlignmentTests(unittest.TestCase):
             job = module._JOBS["abc12345"]
             self.assertEqual(job["status"], "cancelling")
             self.assertTrue(job["cancel_requested"])
+
+    def test_cancel_explains_protected_identity_and_allows_retry(self):
+        module = load_indexing_module()
+        module._JOBS['protected'] = {'status': 'running', 'struct_pid': 123}
+        module.terminate_index_worker = mock.Mock(return_value='identity_unverified')
+        for _ in range(2):
+            output = asyncio.run(module.cancel_index_job('protected'))
+            self.assertIn('Could not safely terminate', output)
+            self.assertEqual(module._JOBS['protected']['status'], 'cancelling')
 
     def test_semantic_expected_excludes_empty_files(self):
         module = load_indexing_module()
