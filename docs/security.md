@@ -46,3 +46,28 @@ location in a new commit remains subject to scanning. Gitleaks documents this
 Do not reuse this exception for any active or unconfirmed credential.
 The candidate dependency batch is documented under `security/batches/` and is not
 applied to the running environment.
+
+
+## October 4, 2026 merge-check follow-up
+
+Upgrade both manifests to AnyIO 4.14.2, urllib3 2.8.0, HPACK 4.2.0, PyJWT 2.15.1
+and SoupSieve 2.9.0; the full profile also uses Sentence Transformers 5.6.0 and
+Transformers 5.9.0. The new batch resolves 19 unbaselined audit findings. Twelve
+confirmed-resolved existing IDs were removed; no new advisory exemptions were
+added. The resolved full-profile audit still reports 99 existing baseline rows,
+so a green gate does not mean the repository has no dependency security debt.
+Fresh Python 3.14 installation, dependency consistency, full CI, reused JWT-option
+verification, HPACK header-size rejection and an offline local model forward pass
+passed. No remote model or custom code was loaded in the model regression.
+
+Gitleaks classified `grading-key.json`'s 64-character SHA-256 in the saved raw pilot
+manifest as a generic API key. Its value was verified against the retained artifact.
+The exact commit/file/rule/line fingerprint is acknowledged as a false positive;
+no file or rule is broadly excluded. A synthetic new finding at that same file and
+line in another commit remains detected, and the full-history scan passes.
+
+See `security/batches/2026-10-04-merge-checks.json` and retained `.runtime/merge-checks/`
+logs. The upstream advisory for Transformers identifies 5.8.1 as the last affected
+release; PyJWT's options-mutation advisory identifies 2.13.0 as the last affected.
+Sources: [Transformers advisory](https://api.osv.dev/v1/vulns/PYSEC-2026-4174),
+[PyJWT advisory](https://api.osv.dev/v1/vulns/PYSEC-2026-4146).

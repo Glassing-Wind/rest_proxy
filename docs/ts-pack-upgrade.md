@@ -260,3 +260,20 @@ The previous pin and native wheel are preserved; `.runtime/ts-pack-120-cutover/r
 restores both pins, reinstalls the previous wheel and restarts/verifies the daemon.
 
 See [cutover receipt](../benchmarks/reports/2026-10-04/ts-pack-cutover.json).
+
+
+## Merge-check repairs — 2026-10-04
+
+The fork Docker workflow exposed a missing Cargo workspace member: its image builds
+`ts-pack-cli`, which the initial core/index/Python workspace excluded. Follow-up
+`e1c99f71478dd1d2f974cb02e4038424d21a12ce` restores that member and adapts two CLI
+parse calls to the retained fork parser API. Its 26 unit and one integration tests
+pass. Both project manifests now pin this follow-up; a remote-SHA wheel was rebuilt
+and validated before installing it with the audited dependency fixes.
+
+PR metadata validation retains conventional title and attribution checks for new
+fork contributions, while excluding ancestry of the exact imported upstream
+v1.20.0 commit. Original vendor authorship metadata is preserved. A temporary-Git
+regression verifies imported metadata is excluded and new contribution attribution
+remains detectable. The fork validation and all three native wheel jobs pass;
+Docker/all-grammar validation is still running.

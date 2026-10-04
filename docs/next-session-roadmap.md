@@ -333,3 +333,14 @@ on `codex/enterprise-hardening`. Enterprise distribution notices, embedded backe
 query/transaction integration, FIRE persistence/resume and controlled outcome
 improvement remain unfinished. Private environments, native build artifacts and
 rollback runtime remain ignored local data.
+
+
+Merge checks: both manifests now pin fork follow-up
+`e1c99f71478dd1d2f974cb02e4038424d21a12ce`, restoring CLI Docker build membership.
+New audit findings were repaired with isolated dependency upgrades; 12 resolved
+baseline IDs removed, no new advisory exemptions. Full-history secret scan passes
+with an exact recorded-hash false-positive acknowledgement and same-line future
+finding regression. Patched runtime CI/pip checks and refreshed daemon pass.
+See `security/batches/2026-10-04-merge-checks.json`. Fork validation and native
+platform jobs pass; all-grammar Docker and refreshed main hosted checks must finish
+before a merge recommendation. Enterprise packaging notices remain release work.
