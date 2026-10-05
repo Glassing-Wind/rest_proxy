@@ -1,0 +1,84 @@
+{
+  "artifacts_sha256": {
+    "ci.log": "07cce7006238efe86bbbf4fb50b1c86970f01047f48b733ce8909f9743af4f22",
+    "native-tests.log": "77688c365c9b86bee3f69a637ab7ecab532f46a64767b30ac067cd549aeece0a",
+    "transports.json": "09e6159b41a09eae6af69b148f614a9317d9d93790eea2ca25c450c177143242",
+    "transports.log": "f5def9bd7f918cbb14ac49213d0c75a34836a359399361215e907b4fca752f70",
+    "unit-tests.log": "3b0dbb90387b342ccecc50446a0fb5e4385d86a3f467e5b97d63f8924fc08aff"
+  },
+  "bounds": {
+    "adjacency": 20,
+    "depth_max": 5,
+    "output_bytes": 48000,
+    "relationships": 128,
+    "symbols": 64
+  },
+  "date": "2026-10-04",
+  "limitations": [
+    "Static source candidates; incomplete runtime call graph.",
+    "Traversal returns bounded edges, not all paths.",
+    "Transport acceptance reuses the previous frozen 131-file publication, not current HEAD.",
+    "No model lifecycle mutation or coding-outcome/performance claims."
+  ],
+  "scope": "Existing get_call_chain embedded bridge; bounded static candidate traversal",
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 10,
+    "offline_traversal": 4
+  },
+  "transport": {
+    "call_chain_relationships": 2,
+    "dimension": 768,
+    "external_storage_network_allowed": false,
+    "fact_contract_status": "v1",
+    "file_facts_verified": true,
+    "files": 131,
+    "hit_citations": [
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:b0fdf58aab1757",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:b0dc27591e2f57",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      },
+      {
+        "file_path": "graphrag_core/indexing/embedded_repository.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:graphrag_core/indexing/embedded_repository.py:681197231296a4",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:199260fe241f11",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      }
+    ],
+    "model_required": false,
+    "parity": true,
+    "project_listing_verified": true,
+    "relationship_contract_status": "v1",
+    "relationship_count_in_probe": 5,
+    "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+    "sandbox": true,
+    "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+    "standard_call_chain_verified": true,
+    "standard_symbol_context_verified": true,
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "workspace_resolution_verified": true
+  }
+}

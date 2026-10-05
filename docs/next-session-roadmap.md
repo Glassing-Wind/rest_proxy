@@ -7,8 +7,10 @@ scoped file links with callable IDs, source citations and explicit resolution ru
 A fresh 131-file real-model run produced 1,118 call and 186 import candidates;
 all relationship/source/fact hashes and STDIO/HTTP evidence verified. These are
 static source candidates, not runtime guarantees or full query parity. Broader
-resolution and remaining call-chain/reference/import query bridges remain Priority 2
-work. Existing `get_symbol_context` now supports exact published symbols, bounded
+resolution and remaining reference/import query bridges remain Priority 2
+work. Existing `get_call_chain` now traverses bounded published static candidates
+with cycle handling, citations and explicit truncation; native and real transport
+checks pass. Existing `get_symbol_context` now supports exact published symbols, bounded
 original source and static caller/callee pages; ambiguous names return choices.
 
 [Embedded parser facts](embedded-parser-facts.md) now persist hashed imports,

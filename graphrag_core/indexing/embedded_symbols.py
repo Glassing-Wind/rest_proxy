@@ -59,3 +59,72 @@ async def symbol_context(driver, project_id: str, symbol_name: str, *, file_path
     if include_source:
         result['source'] = {key: evidence[key] for key in ('source', 'origin', 'total_lines', 'next_start_line')}
     return bounded(result)
+
+
+async def call_chain(driver, project_id: str, symbol_name: str, *, depth: int = 3,
+                     direction: str = 'down', file_path: str = '', signature: str = ''):
+    """Traverse cited static candidates with bounded work and deterministic cycle handling."""
+    if direction not in {'up', 'down'} or not 1 <= depth <= 5:
+        raise ValueError('Use direction up/down and depth 1..5')
+    root = await symbol_context(driver, project_id, symbol_name, file_path=file_path,
+                                signature=signature, include_source=False)
+    if root['status'] != 'published':
+        return root
+    run_id = root['run_id']
+    result = {'project_id': project_id, 'status': 'published', 'run_id': run_id,
+              'root': root['symbol'], 'source_sha256': root['source_sha256'],
+              'direction': direction, 'depth': depth, 'relationships': [],
+              'semantics': 'static-source-candidates', 'call_graph_complete': False,
+              'call_resolution_scope': root['call_resolution_scope'],
+              'truncated': False, 'truncation_reasons': [], 'expanded_symbols': 0}
+    frontier = [root['symbol']['id']]
+    seen = set(frontier)
+    edges = set()
+    reasons = set()
+    halted = False
+    for hop in range(1, depth + 1):
+        next_frontier = []
+        for symbol_id in frontier:
+            page = await read_relationships(driver, project_id, kind='calls',
+                                            direction='out' if direction == 'down' else 'in',
+                                            limit=20, symbol_id=symbol_id)
+            if page is None or page['run_id'] != run_id:
+                raise RuntimeError('Call chain changed publication during traversal')
+            if page.get('status'):
+                result['status'] = page['status']
+                return bounded(result)
+            result['expanded_symbols'] += 1
+            if page['next_cursor']:
+                reasons.add('adjacency-limit-20')
+            for link in page['relationships']:
+                if link['id'] in edges:
+                    continue
+                target = link['callee_id'] if direction == 'down' else link['caller_id']
+                if target not in seen and len(seen) >= 64:
+                    reasons.add('symbol-limit-64')
+                    continue
+                if len(edges) >= 128:
+                    reasons.add('relationship-limit-128')
+                    halted = True
+                    break
+                candidate = dict(link, hop=hop, revisits_symbol=target in seen)
+                result['relationships'].append(candidate)
+                if len(json.dumps(result, ensure_ascii=False).encode()) > 44000:
+                    result['relationships'].pop()
+                    reasons.add('output-byte-budget')
+                    halted = True
+                    break
+                edges.add(link['id'])
+                if target not in seen:
+                    seen.add(target)
+                    next_frontier.append(target)
+            if halted:
+                break
+        if halted or not next_frontier:
+            break
+        frontier = next_frontier
+    result['truncated'] = bool(reasons)
+    result['truncation_reasons'] = sorted(reasons)
+    result['discovered_symbols'] = len(seen)
+    result['depth_is_horizon'] = True
+    return bounded(result)

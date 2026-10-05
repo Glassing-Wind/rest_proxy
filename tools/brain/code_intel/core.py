@@ -1256,6 +1256,9 @@ def register(mcp: FastMCP) -> None:
         """
         Trace a call chain N hops deep from a starting symbol.
 
+        Embedded mode returns bounded JSON static candidates from one publication,
+        with citations, cycle markers and explicit truncation; it is not a complete runtime graph.
+
         Unlike get_symbol_context (single hop), this recursively follows
         CALLS edges to build a full call tree — ideal for understanding
         execution paths and gRPC handler flows.
@@ -1269,6 +1272,14 @@ def register(mcp: FastMCP) -> None:
             signature:    Optional signature substring to disambiguate symbols.
         """
         try:
+            if os.getenv('LM_PROXY_STORAGE_BACKEND', '').strip().lower() == 'embedded':
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_symbol_context(
+                    workspace_id, symbol_name, call_chain=True, depth=max(1, min(int(depth), 5)),
+                    direction=direction, file_path=file_path or '', signature=signature or '',
+                )
+                return json.dumps(result, ensure_ascii=False)
             project_id = get_project_id(workspace_id)
             depth = min(int(depth), 5)
             import graph_bootstrap

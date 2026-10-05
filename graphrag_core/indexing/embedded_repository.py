@@ -156,6 +156,12 @@ class EmbeddedRepositoryOwner:
             self._require_open()
             return await symbol_context(self.graph, project_id, symbol_name, **bounds)
 
+    async def call_chain(self, project_id: str, symbol_name: str, **bounds):
+        from graphrag_core.indexing.embedded_symbols import call_chain
+        async with self._lock:
+            self._require_open()
+            return await call_chain(self.graph, project_id, symbol_name, **bounds)
+
     async def relationships(self, project_id: str, **bounds):
         from graphrag_core.indexing.embedded_relationships import read_relationships
         async with self._lock:

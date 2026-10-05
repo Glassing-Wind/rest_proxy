@@ -82,6 +82,32 @@ capped at 48,000 bytes. Empty candidate lists do not prove
 absence of runtime callers: the conservative resolver's coverage still applies.
 Older relationship contracts report their reindex requirement explicitly.
 
+## Standard call-chain bridge
+
+Existing `get_call_chain` now routes embedded workspaces through the same owner
+and exact symbol selection as context. Embedded responses remain JSON strings.
+Downward/upward traversal follows published caller/callee IDs breadth first, with
+1..5 hops, 20 candidates per adjacency, 64 discovered symbols, 128 relationships
+and a bounded output budget (44,000 bytes before final metadata; 48,000 total).
+Relationships retain citations, minimum discovery hop and `revisits_symbol`.
+Repeated symbols are expanded once, so cycles terminate; a revisit can also be a
+shared dependency. Depth is a requested horizon, not proof of graph completeness.
+
+`truncated` and `truncation_reasons` report adjacency, symbol, relationship or byte
+limits. These are bounded graph edges, not enumeration of every path. Ambiguous or
+missing roots keep the existing explicit statuses. All reads must match the root
+publication; no mixed-run chain is returned. The owner lock serializes publication
+and traversal. Old relationship contracts report a reindex requirement.
+
+Four offline traversal tests cover directions, horizons, cycles, ambiguity,
+publication changes and every traversal cap. Ten native repository methods pass,
+including cyclic chains and the standard MCP bridge. Real sandboxed STDIO/HTTP
+results match for a nonempty two-edge chain from `build_outline_snapshot` in the
+previous frozen publication. Full local CI passed. This adds no runtime-dispatch,
+full graph coverage or performance claim.
+
+[Call-chain acceptance receipt](../benchmarks/reports/2026-10-04/embedded-call-chain.json).
+
 ## Executed acceptance
 
 A fresh real Jina embedding run on **131 frozen production Python files / 1,629
@@ -113,5 +139,5 @@ attestation and controlled coding outcomes remain acceptance gates.
 [Acceptance receipt](../benchmarks/reports/2026-10-04/embedded-static-relationships.json).
 Private logs/data: `.runtime/embedded-relationships-acceptance/` (mode 700).
 Next: broaden validated symbol/module/route resolution, bridge remaining
-call-chain/reference/import queries, and complete remaining workspace metadata and REST
+reference/import queries, and complete remaining workspace metadata and REST
 integration. Existing standard indexing workers remain guarded.

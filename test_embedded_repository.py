@@ -270,6 +270,38 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.relationships('p'))
 
+    async def test_call_chain_native_cycles_and_standard_bridge(self):
+        from memory.embedded_runtime import EmbeddedRuntime
+        from tools.brain.code_intel import core
+        from mcp.server.fastmcp import FastMCP
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / 'source'
+            root.mkdir()
+            (root / 'a.py').write_text('def first():\n    return second()\ndef second():\n    return first()\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                indexed = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                chain = await owner.call_chain('p', 'first', depth=5)
+                self.assertEqual(chain['run_id'], indexed['run_id'])
+                self.assertEqual(len(chain['relationships']), 2)
+                self.assertTrue(chain['relationships'][1]['revisits_symbol'])
+                self.assertEqual(len((await owner.call_chain('p', 'first', depth=1))['relationships']), 1)
+                self.assertEqual(len((await owner.call_chain('p', 'first', direction='up'))['relationships']), 2)
+                self.assertEqual((await owner.call_chain('p', 'missing'))['status'], 'symbol_not_published')
+            runtime = EmbeddedRuntime(state, 3)
+            try:
+                mcp = FastMCP('call-chain-bridge')
+                core.register(mcp)
+                with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                        mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                        mock.patch.object(core, 'get_project_id', side_effect=AssertionError('legacy hash used')):
+                    result = json.loads(await mcp._tool_manager.get_tool('get_call_chain').run(
+                        {'workspace_id': str(root), 'symbol_name': 'first', 'file_path': str(root / 'a.py')}))
+                    self.assertEqual(result['run_id'], indexed['run_id'])
+                    self.assertEqual(len(result['relationships']), 2)
+            finally:
+                await runtime.close()
+
     async def test_standard_symbol_context_ambiguity_and_snapshot_source(self):
         from memory.embedded_runtime import EmbeddedRuntime
         from tools.brain.code_intel import core

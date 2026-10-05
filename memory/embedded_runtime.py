@@ -88,7 +88,8 @@ class EmbeddedRuntime:
         async with self._lock:
             return await (await self._get_owner()).overview(project_id)
 
-    async def workspace_symbol_context(self, workspace_id: str, symbol_name: str, **bounds):
+    async def workspace_symbol_context(self, workspace_id: str, symbol_name: str,
+                                       *, call_chain: bool = False, **bounds):
         async with self._lock:
             owner = await self._get_owner()
             project = await owner.resolve_project(workspace_id)
@@ -100,7 +101,8 @@ class EmbeddedRuntime:
                     bounds['file_path'] = str(Path(path).resolve().relative_to(project['workspace_path']))
                 except ValueError:
                     raise ValueError('Symbol file path is outside the published workspace') from None
-            return await owner.symbol_context(project['project_id'], symbol_name, **bounds)
+            operation = owner.call_chain if call_chain else owner.symbol_context
+            return await operation(project['project_id'], symbol_name, **bounds)
 
     async def relationships(self, project_id: str, **bounds):
         async with self._lock:

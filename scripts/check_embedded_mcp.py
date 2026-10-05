@@ -56,12 +56,19 @@ async def inspect(session, args):
                                                    {'project_id': args.project_id, 'kind': 'calls', 'limit': 5}))
     assert relationships['run_id'] == overview['run_id']
     symbol_context = None
+    call_chain = None
     if args.symbol:
         symbol_context = decode(await session.call_tool('get_symbol_context',
                                 {'workspace_id': project['workspace_path'], 'symbol_name': args.symbol,
                                  'file_path': args.symbol_file or args.file, 'source_preview_lines': 12}))
         assert symbol_context['status'] == 'published'
         assert symbol_context['run_id'] == overview['run_id']
+        call_chain = decode(await session.call_tool('get_call_chain',
+                            {'workspace_id': project['workspace_path'], 'symbol_name': args.symbol,
+                             'file_path': args.symbol_file or args.file, 'depth': 3}))
+        assert call_chain['status'] == 'published'
+        assert call_chain['run_id'] == overview['run_id']
+        assert call_chain['call_graph_complete'] is False
     hits = decode(await session.call_tool('search_embedded_repository',
                                           {'project_id': args.project_id, 'query': args.query,
                                            'mode': 'text', 'limit': 5}))
@@ -70,7 +77,7 @@ async def inspect(session, args):
         hits = hits['result']
     assert hits and all(hit['run_id'] == overview['run_id'] for hit in hits)
     return {'overview': overview, 'source': source, 'projects': projects,
-            'resolution': resolution, 'workspace_overview': workspace_overview, 'file_facts': facts, 'relationships': relationships, 'symbol_context': symbol_context,
+            'resolution': resolution, 'workspace_overview': workspace_overview, 'file_facts': facts, 'relationships': relationships, 'symbol_context': symbol_context, 'call_chain': call_chain,
             'hit_citations': [{key: hit[key] for key in ('file_path', 'ref_id', 'source_sha256', 'run_id')}
                              for hit in hits]}
 
@@ -130,6 +137,8 @@ async def run(args):
             'relationship_contract_status': stdio['relationships'].get('status', 'v1'),
             'relationship_count_in_probe': len(stdio['relationships'].get('relationships', [])),
             'standard_symbol_context_verified': stdio['symbol_context'] is not None,
+            'standard_call_chain_verified': stdio['call_chain'] is not None,
+            'call_chain_relationships': len((stdio['call_chain'] or {}).get('relationships', [])),
             'sandbox': args.sandbox, 'external_storage_network_allowed': False if args.sandbox else None}
 
 
