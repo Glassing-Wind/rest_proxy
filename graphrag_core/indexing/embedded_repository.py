@@ -156,6 +156,12 @@ class EmbeddedRepositoryOwner:
             self._require_open()
             return await symbol_context(self.graph, project_id, symbol_name, **bounds)
 
+    async def project_metadata(self, project_id: str, **values):
+        from memory.embedded_metadata import project_metadata
+        async with self._lock:
+            self._require_open()
+            return await project_metadata(self.graph, project_id, **values)
+
     async def call_chain(self, project_id: str, symbol_name: str, **bounds):
         from graphrag_core.indexing.embedded_symbols import call_chain
         async with self._lock:
@@ -198,6 +204,7 @@ class EmbeddedRepositoryOwner:
             async def delete(tx):
                 for label in ('File', 'SourceEvidence', *SYMBOL_LABELS):
                     await tx.run(f'MATCH (n:{label} {{project_id:$project}}) DETACH DELETE n', project=project_id)
+                await tx.run('MATCH (m:WorkspaceMetadata {id:$project}) DELETE m', project=project_id)
                 await tx.run('MATCH (p:OutlinePublication {id:$project}) DELETE p', project=project_id)
             async with self.graph.session() as session:
                 await session.execute_write(delete)

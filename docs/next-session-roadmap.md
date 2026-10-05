@@ -1,6 +1,17 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
-## Current checkpoint — October 4, 2026
+## Current checkpoint — October 5, 2026
+
+[Embedded project metadata](embedded-project-metadata.md) adds bounded, revisioned
+user/agent annotations in the shared Ladybug owner. Exact revision and publication
+preconditions prevent stale writes; same-root reindex preserves notes, root changes
+hide old notes, and project deletion removes them atomically. Native persistence,
+conflict/rollback/isolation tests and real transport read parity pass. This is the
+first application metadata slice; sessions, watchers, jobs, retention and REST remain
+pending. GitHub CI review found the active PR #3 head green; reported security
+failures belong to the older enterprise-hardening branch (see the metadata report).
+
+## Prior checkpoint — October 4, 2026
 
 [Embedded static relationships](embedded-static-relationships.md) now publish
 scoped file links with callable IDs, source citations and explicit resolution rules.

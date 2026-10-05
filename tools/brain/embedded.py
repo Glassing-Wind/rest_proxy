@@ -60,8 +60,26 @@ async def get_embedded_relationships(project_id: str, kind: str = 'calls', file_
                                                      direction=direction, limit=limit, after=after, symbol_id=symbol_id)
 
 
+async def get_embedded_project_metadata(project_id: str) -> dict:
+    """Read revisioned user/agent annotations; these are not verified repository evidence."""
+    return await get_embedded_runtime().project_metadata(project_id)
+
+
+async def update_embedded_project_metadata(project_id: str, metadata: dict,
+                                           expected_revision: int, expected_run_id: str) -> dict:
+    """Replace bounded project annotations with exact revision/publication preconditions.
+
+    Read metadata first. Conflict does not write; review current metadata before retrying.
+    An empty object clears annotations while advancing revision. No evidence is changed.
+    """
+    return await get_embedded_runtime().project_metadata(project_id, metadata=metadata,
+                                                       expected_revision=expected_revision,
+                                                       expected_run_id=expected_run_id)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
-                     describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts, get_embedded_relationships):
+                     describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts, get_embedded_relationships,
+                     get_embedded_project_metadata, update_embedded_project_metadata):
             mcp.tool()(tool)

@@ -15,6 +15,9 @@ SCHEMA_STATEMENTS = (
       for label in SYMBOL_LABELS),
     'CREATE NODE TABLE IF NOT EXISTS OutlinePublication('
     'id STRING PRIMARY KEY, run_id STRING, root_path STRING, manifest_json STRING)',
+    'CREATE NODE TABLE IF NOT EXISTS WorkspaceMetadata('
+    'id STRING PRIMARY KEY, revision INT64, root_path STRING, metadata_json STRING, '
+    'updated_ms INT64, run_id STRING)',
     'CREATE NODE TABLE IF NOT EXISTS SourceEvidence('
     'id STRING PRIMARY KEY, project_id STRING, run_id STRING, path STRING, '
     'sha256 STRING, content STRING, language STRING, facts_json STRING)',
@@ -36,6 +39,8 @@ SCHEMA_COLUMNS = {
     'File': {'id': 'STRING', 'path': 'STRING', 'project_id': 'STRING'},
     'OutlinePublication': {'id': 'STRING', 'run_id': 'STRING', 'root_path': 'STRING',
                            'manifest_json': 'STRING'},
+    'WorkspaceMetadata': {'id': 'STRING', 'revision': 'INT64', 'root_path': 'STRING',
+                          'metadata_json': 'STRING', 'updated_ms': 'INT64', 'run_id': 'STRING'},
     'SourceEvidence': {'id': 'STRING', 'project_id': 'STRING', 'run_id': 'STRING',
                        'path': 'STRING', 'sha256': 'STRING', 'content': 'STRING',
                        'language': 'STRING', 'facts_json': 'STRING'},

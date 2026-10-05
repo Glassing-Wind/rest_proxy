@@ -20,6 +20,10 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "get_embedded_project_metadata": ToolCatalogEntry(
+        "primary", "embedded metadata", "Read revisioned user/agent annotations, separate from repository evidence."),
+    "update_embedded_project_metadata": ToolCatalogEntry(
+        "admin", "embedded metadata", "Replace project annotations with revision and publication preconditions."),
     "get_embedded_relationships": ToolCatalogEntry(
         "primary", "embedded investigation", "Inspect published static caller/importer/route candidates and their source citations."),
     "get_embedded_file_facts": ToolCatalogEntry(

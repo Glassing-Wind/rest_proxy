@@ -148,3 +148,10 @@ daemon and background jobs use it by default. Python 3.11 is retained for rollba
 CI and optional container configuration target 3.14. The new native setup command
 builds and load-checks an unstripped pinned ts-pack wheel. Default-path local CI
 passed after cutover. See [runtime setup and rollback](python314-runtime.md).
+
+### October 5, 2026 metadata checkpoint
+
+[Project annotations](embedded-project-metadata.md) now persist in the embedded owner
+with bounded JSON, revision/publication preconditions and atomic scoped deletion.
+Annotations remain separate from repository evidence. Session/watch/job persistence,
+FIRE checkpoint history and REST integration remain outstanding.

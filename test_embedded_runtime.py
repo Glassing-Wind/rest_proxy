@@ -61,7 +61,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
                                              'LM_PROXY_EMBEDDED_STATE': '/unused'}):
             embedded.register(mcp)
-        self.assertEqual(len(mcp._tool_manager.list_tools()), 7)
+        self.assertEqual(len(mcp._tool_manager.list_tools()), 9)
         runtime = mock.AsyncMock()
         runtime.describe_file.return_value = {'run_id': 'r', 'source_sha256': 'hash', 'source': '1: original'}
         with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
@@ -106,6 +106,20 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                 {'workspace_id': '/source', 'symbol_name': 'helper'}))
             self.assertEqual(result['run_id'], 'r')
             runtime.workspace_symbol_context.assert_awaited_once()
+
+    async def test_metadata_mcp_dispatch_preserves_preconditions(self):
+        mcp = FastMCP('metadata-routing')
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
+                                          'LM_PROXY_EMBEDDED_STATE': '/unused'}):
+            embedded.register(mcp)
+        runtime = mock.AsyncMock()
+        runtime.project_metadata.return_value = {'status': 'conflict', 'revision': 2}
+        with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
+            await mcp._tool_manager.get_tool('update_embedded_project_metadata').run(
+                {'project_id': 'p', 'metadata': {'tags': ['code']},
+                 'expected_revision': 1, 'expected_run_id': 'r'})
+            runtime.project_metadata.assert_awaited_once_with(
+                'p', metadata={'tags': ['code']}, expected_revision=1, expected_run_id='r')
 
     async def test_global_close_allows_new_owner(self):
         from memory import embedded_runtime

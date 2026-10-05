@@ -270,6 +270,73 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.relationships('p'))
 
+    async def test_metadata_revision_reopen_reindex_and_scoped_delete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            (root / 'a.py').write_text('def first():\n    return 1\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                pub = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                self.assertEqual((await owner.project_metadata('missing'))['status'], 'not_published')
+                empty = await owner.project_metadata('p')
+                self.assertEqual(empty['revision'], 0)
+                first = await owner.project_metadata('p', metadata={'description': 'fixture', 'tags': ['code']},
+                                                     expected_revision=0, expected_run_id=pub['run_id'])
+                self.assertEqual(first['revision'], 1)
+                self.assertFalse(first['repository_evidence_verified'])
+                results = await asyncio.gather(*[owner.project_metadata('p', metadata={'winner': i},
+                                                expected_revision=1, expected_run_id=pub['run_id']) for i in range(2)])
+                self.assertEqual(sorted(r['status'] for r in results), ['conflict', 'published'])
+                saved = await owner.project_metadata('p')
+                self.assertEqual(saved['revision'], 2)
+                async with owner.graph.session() as session:
+                    async def rollback(tx):
+                        await tx.run('MATCH (m:WorkspaceMetadata {id:$id}) DELETE m', id='p')
+                        raise RuntimeError('injected failure')
+                    with self.assertRaises(RuntimeError):
+                        await session.execute_write(rollback)
+                self.assertEqual(await owner.project_metadata('p'), saved)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.project_metadata('p'), saved)
+                new = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                self.assertEqual((await owner.project_metadata('p'))['metadata'], saved['metadata'])
+                stale = await owner.project_metadata('p', metadata={}, expected_revision=2, expected_run_id=pub['run_id'])
+                self.assertEqual(stale['status'], 'conflict')
+                cleared = await owner.project_metadata('p', metadata={}, expected_revision=2, expected_run_id=new['run_id'])
+                self.assertEqual(cleared['revision'], 3)
+                self.assertEqual(cleared['metadata'], {})
+                await owner.index(str(root), 'q', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                await owner.delete_project('p')
+                self.assertEqual((await owner.project_metadata('p'))['status'], 'not_published')
+                self.assertEqual((await owner.project_metadata('q'))['status'], 'published')
+                again = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                self.assertEqual((await owner.project_metadata('p'))['revision'], 0)
+                # A prior project lifetime's run ID cannot overwrite reused project IDs.
+                self.assertNotEqual(again['run_id'], new['run_id'])
+                self.assertEqual((await owner.project_metadata('p', metadata={}, expected_revision=0,
+                                                              expected_run_id=new['run_id']))['status'], 'conflict')
+
+    async def test_metadata_changed_root_hides_previous_annotations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = str(Path(directory) / 'state')
+            roots = [Path(directory) / name for name in ('old', 'new')]
+            for root in roots:
+                root.mkdir()
+                (root / 'a.py').write_text('def first():\n    return 1\n')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                pub = await owner.index(str(roots[0]), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                await owner.project_metadata('p', metadata={'private': 'old workspace'},
+                                             expected_revision=0, expected_run_id=pub['run_id'])
+                new = await owner.index(str(roots[1]), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                hidden = await owner.project_metadata('p')
+                self.assertEqual(hidden['status'], 'workspace_changed')
+                self.assertEqual(hidden['metadata'], {})
+                replaced = await owner.project_metadata('p', metadata={'new': True},
+                                                       expected_revision=1, expected_run_id=new['run_id'])
+                self.assertEqual(replaced['status'], 'published')
+                self.assertEqual(replaced['metadata'], {'new': True})
+
     async def test_call_chain_native_cycles_and_standard_bridge(self):
         from memory.embedded_runtime import EmbeddedRuntime
         from tools.brain.code_intel import core

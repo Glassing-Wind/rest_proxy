@@ -1,0 +1,100 @@
+{
+  "artifacts_sha256": {
+    "ci.log": "0bd2fccad930124e4b9bea25445639cf2ef996110720a4f165dcbc6fca8a50aa",
+    "native-tests.log": "17d3fa5de28e194532f6c8bf44c6e5c179a67ecaca16cea2622ab0651966d482",
+    "runtime-tests.log": "72b83b10ea5dc5f444360528ff584bf551475a49c3ab83dd3f2380dd3fffeec7",
+    "transports.json": "4f440f252fab452cf740737306bc47c91c3a0f60bfad1f41a18a44c8a753cae0",
+    "transports.log": "2d1136942e45fb4da18e61fe3c397021a8e13157f135f80ae30c2d5ee51d65ed",
+    "unit-tests.log": "cbe4b84d897ac017db0552ccb3a31855ff0fb172bc344c967c4c4c92eb19e624"
+  },
+  "bounds": {
+    "document_utf8_bytes": 16384,
+    "top_level_keys": 50
+  },
+  "date": "2026-10-05",
+  "hosted_ci_review": {
+    "active_pr": 3,
+    "ci_run": 37260584626,
+    "conclusion": "success",
+    "older_branch": "codex/enterprise-hardening",
+    "older_failed_security_run": 37209829259,
+    "older_findings": {
+      "dependency_vulnerabilities_reported": 19,
+      "packages": 7,
+      "secret_scan": 1
+    },
+    "reviewed_head": "ee35c0b21639bc0502b44958e15e26d9556d0452",
+    "security_run": 37260584633
+  },
+  "limitations": [
+    "Annotations are unverified user/agent assertions; no automatic retrieval injection.",
+    "No history, author authentication or automatic retention policy.",
+    "Sessions, watchers, jobs, FIRE checkpoint history and REST integration remain pending.",
+    "Transport reads reuse a previous frozen publication; writes use disposable native fixtures.",
+    "Older branch CI findings were investigated but that branch was not changed."
+  ],
+  "python": "3.14.4",
+  "scope": "Revisioned project annotations separate from repository evidence",
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 12,
+    "offline_validation": 2,
+    "runtime_mcp": 8
+  },
+  "transport": {
+    "call_chain_relationships": 2,
+    "dimension": 768,
+    "external_storage_network_allowed": false,
+    "fact_contract_status": "v1",
+    "file_facts_verified": true,
+    "files": 131,
+    "hit_citations": [
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:b0fdf58aab1757",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:b0dc27591e2f57",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      },
+      {
+        "file_path": "graphrag_core/indexing/embedded_repository.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:graphrag_core/indexing/embedded_repository.py:681197231296a4",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:199260fe241f11",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      }
+    ],
+    "metadata_read_verified": true,
+    "model_required": false,
+    "parity": true,
+    "project_listing_verified": true,
+    "relationship_contract_status": "v1",
+    "relationship_count_in_probe": 5,
+    "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+    "sandbox": true,
+    "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+    "standard_call_chain_verified": true,
+    "standard_symbol_context_verified": true,
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "workspace_resolution_verified": true
+  }
+}

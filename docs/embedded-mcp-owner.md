@@ -113,3 +113,7 @@ file links and callable IDs. Existing Neo4j symbol/call query parity remains inc
 Existing `get_symbol_context` now has an exact published-symbol bridge with bounded
 source and static caller/callee pages. See the static-relationships contract for
 JSON response semantics and unresolved/ambiguous cases.
+
+[Revisioned project annotations](embedded-project-metadata.md) now use the same owner.
+The primary read and admin replacement tools expose explicit provenance and require
+revision/publication preconditions for writes. Session/watch/job registries remain separate.
