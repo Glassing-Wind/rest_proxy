@@ -139,7 +139,7 @@ class LadybugGraphDriver:
         self._closed = False
 
     async def initialize_schema(self) -> None:
-        from memory.embedded_schema import SCHEMA_COLUMNS, SCHEMA_STATEMENTS, SCHEMA_VERSION
+        from memory.embedded_schema import SCHEMA_COLUMNS, SCHEMA_STATEMENTS, SCHEMA_VERSION, RELATION_SCHEMA_COLUMNS
 
         async def initialize(tx):
             for statement in SCHEMA_STATEMENTS:
@@ -151,6 +151,10 @@ class LadybugGraphDriver:
                     column['name'] == 'id' and column['primary key'] for column in columns
                 ):
                     raise RuntimeError(f'Incompatible Ladybug schema table: {table}')
+            for table, expected in RELATION_SCHEMA_COLUMNS.items():
+                columns = await (await tx.run(f"CALL table_info('{table}') RETURN *")).data()
+                if {column['name']: column['type'] for column in columns} != expected:
+                    raise RuntimeError(f'Incompatible Ladybug relationship schema table: {table}')
             rows = await (await tx.run(
                 "MATCH (s:EmbeddedSchema {id:'file_outline'}) RETURN s.version AS version"
             )).data()

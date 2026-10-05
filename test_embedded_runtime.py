@@ -61,7 +61,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
                                              'LM_PROXY_EMBEDDED_STATE': '/unused'}):
             embedded.register(mcp)
-        self.assertEqual(len(mcp._tool_manager.list_tools()), 6)
+        self.assertEqual(len(mcp._tool_manager.list_tools()), 7)
         runtime = mock.AsyncMock()
         runtime.describe_file.return_value = {'run_id': 'r', 'source_sha256': 'hash', 'source': '1: original'}
         with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
@@ -91,6 +91,21 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(json.loads(await overview.run({'workspace_id': '/source'}))['files'], 2)
             runtime.resolve_project.return_value = None
             self.assertIsNone(json.loads(await resolution.run({'workspace_id': '/missing'}))['project_id'])
+
+    async def test_standard_symbol_context_routes_without_legacy_modules(self):
+        import json
+        from tools.brain.code_intel import core
+        mcp = FastMCP('symbol-routing')
+        core.register(mcp)
+        runtime = mock.AsyncMock()
+        runtime.workspace_symbol_context.return_value = {'status': 'published', 'run_id': 'r'}
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                mock.patch.object(core, 'get_memory_modules', side_effect=AssertionError('legacy store imported')):
+            result = json.loads(await mcp._tool_manager.get_tool('get_symbol_context').run(
+                {'workspace_id': '/source', 'symbol_name': 'helper'}))
+            self.assertEqual(result['run_id'], 'r')
+            runtime.workspace_symbol_context.assert_awaited_once()
 
     async def test_global_close_allows_new_owner(self):
         from memory import embedded_runtime

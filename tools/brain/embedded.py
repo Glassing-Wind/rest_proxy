@@ -49,8 +49,19 @@ async def get_embedded_file_facts(project_id: str, file_path: str, limit: int = 
     return await get_embedded_runtime().file_facts(project_id, file_path, limit=limit, offset=offset)
 
 
+async def get_embedded_relationships(project_id: str, kind: str = 'calls', file_path: str = '',
+                                     direction: str = 'out', limit: int = 50, after: str = '', symbol_id: str = '') -> dict | None:
+    """Read scoped static call/import/file-route candidates with endpoint source citations.
+
+    These are static source bindings, not guarantees of runtime dispatch. Use in/out
+    to inspect incoming callers/importers or outgoing candidates for a published file.
+    """
+    return await get_embedded_runtime().relationships(project_id, kind=kind, file_path=file_path,
+                                                     direction=direction, limit=limit, after=after, symbol_id=symbol_id)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
-                     describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts):
+                     describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts, get_embedded_relationships):
             mcp.tool()(tool)

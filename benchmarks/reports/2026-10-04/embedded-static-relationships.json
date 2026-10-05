@@ -1,0 +1,118 @@
+{
+  "date": "2026-10-04",
+  "environment": {
+    "machine": "arm64",
+    "platform": "Darwin",
+    "python": "3.14.4"
+  },
+  "frozen_source_manifest_sha256": "5d3fcda7cad16298ab7b93d2b9d7f12083f8a5b44237879158a54bdc8ce766cb",
+  "index": {
+    "artifact_binding_verified": false,
+    "chunks": 1629,
+    "dimension": 768,
+    "encoder_id": "lmstudio-sha256:913e2f5bb8df30c3754bff1742c5e0f44606355ccc0300eef6c6599962c819c3",
+    "files": 131,
+    "project_id": "rest-proxy-relationships-proof",
+    "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469"
+  },
+  "limitations": [
+    "Static source candidates do not guarantee runtime dispatch or complete call graphs.",
+    "Python-only acceptance corpus produced zero route candidates; route matching is fixture-tested.",
+    "Local model artifact hash does not attest resident weights or runtime version.",
+    "No controlled coding-outcome, latency or token improvement claim.",
+    "Remaining call-chain/reference/import API bridges, broader resolution, application metadata and REST integration are pending."
+  ],
+  "private_artifacts": {
+    "ci.log": "7aaedf3da15753467f0e6836ba0c2d5f29896be7bfc3352a5dbe839cb1832d57",
+    "index.json": "82c84dc30a33e38752804b62aa1bc51464b746156693817029736241b0061718",
+    "index.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-tests.log": "3da764f69c8346caf0e1ff4a8c3448adc3a96825f75681dab39c1b018397f074",
+    "outline-tests.log": "10335c3a1a55d2138f99d74fc59192532945f7c0c1596268fde7b370fb940fc3",
+    "relationship-counts.json": "5607875e294f676c3acdb8893c28ec937d194a52e7d1993e64caf7e9349dcb7c",
+    "resolver-tests.log": "68ed390d20911ea0d419170d91b1adbf760260146a95671bc5f8ce59a6d4c004",
+    "runtime-tests.log": "89dc2fa98bea4424fdca53b867fb871d73fe1afa3bc6d7d8397930e1fe75f4d8",
+    "source-verification.json": "727b9cae0afb41d03424713c82efecf17b1c64f59d74153881ef673876c36a5c",
+    "transaction-tests.log": "ad5825e0a3f021236a3db186dd929cfd092cfe54386d284d9c5d5f4a5f29c8be",
+    "transports.json": "fba20b9cb0a6140cb798a0bdb4808dcee81946389e87069e7a14a0acc94f49c0",
+    "transports.log": "0a394d4cde71167405147dfae398505ba1f43589e6c1e528204687c9a6ea73b3"
+  },
+  "relationship_verification": {
+    "all_relationship_hashes_membership_and_endpoint_citations_verified": true,
+    "files": 131,
+    "relationships": {
+      "calls": 1118,
+      "http_routes": 0,
+      "imports": 186
+    },
+    "semantics": "static-source-candidates; no runtime-dispatch guarantee",
+    "total": 1304
+  },
+  "snapshot_matches_current_head": false,
+  "source_verification": {
+    "calls": 12996,
+    "files": 131,
+    "imports": 806,
+    "source_and_fact_hashes_verified": true
+  },
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 9,
+    "outlines": 4,
+    "resolver": 7,
+    "runtime": 7,
+    "transactions": 4
+  },
+  "transport_verification": {
+    "dimension": 768,
+    "external_storage_network_allowed": false,
+    "fact_contract_status": "v1",
+    "file_facts_verified": true,
+    "files": 131,
+    "hit_citations": [
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:b0fdf58aab1757",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:b0dc27591e2f57",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      },
+      {
+        "file_path": "graphrag_core/indexing/embedded_repository.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:graphrag_core/indexing/embedded_repository.py:681197231296a4",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:199260fe241f11",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      }
+    ],
+    "model_required": false,
+    "parity": true,
+    "project_listing_verified": true,
+    "relationship_contract_status": "v1",
+    "relationship_count_in_probe": 5,
+    "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+    "sandbox": true,
+    "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+    "standard_symbol_context_verified": true,
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "workspace_resolution_verified": true
+  }
+}

@@ -95,12 +95,18 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
                       'content': source, 'language': language, 'symbols': symbols,
                       'facts_json': facts_json,
                       'facts_sha256': hashlib.sha256(facts_json.encode()).hexdigest()})
+    from graphrag_core.indexing.embedded_relationships import build_relationships
+    relationships = build_relationships(files)
     manifest = {'files': [{key: file[key] for key in ('path', 'sha256', 'language', 'facts_sha256')}
                           for file in files], 'symbols': symbol_count,
-                'unsupported_symbols': skipped_count, 'source_bytes': used_bytes}
+                'unsupported_symbols': skipped_count, 'source_bytes': used_bytes,
+                'relationships': {'version': 1, 'count': len(relationships),
+                                  'counts': {kind: sum(link['kind'] == kind for link in relationships)
+                                             for kind in ('calls', 'imports', 'http_routes')},
+                                  'ids': [link['id'] for link in relationships]}}
     manifest['sha256'] = hashlib.sha256(_json(manifest).encode()).hexdigest()
     return {'project_id': project_id, 'root_path': str(root), 'run_id': str(uuid.uuid4()),
-            'files': files, 'manifest': manifest}
+            'files': files, 'relationships': relationships, 'manifest': manifest}
 
 
 async def publish_outline_snapshot(driver, snapshot: dict) -> dict:
@@ -113,6 +119,27 @@ async def publish_outline_snapshot(driver, snapshot: dict) -> dict:
             raise ValueError('File identity is outside the publication scope')
         if any(not symbol['id'].startswith(project + ':symbol:') for symbol in file['symbols']):
             raise ValueError('Symbol identity is outside the publication scope')
+
+    from graphrag_core.indexing.embedded_relationships import canonical
+    files_by_id = {file['id']: file for file in snapshot['files']}
+    relationships = snapshot.get('relationships', [])
+    contract = snapshot['manifest'].get('relationships')
+    if (relationships or contract) and (not contract or contract.get('version') != 1 or contract['count'] != len(relationships)
+                          or contract['ids'] != [link['id'] for link in relationships]):
+        raise ValueError('Relationship manifest does not match the snapshot')
+    for link in relationships:
+        payload = json.loads(link['payload_json'])
+        source = files_by_id.get(link['source_id'])
+        target = files_by_id.get(link['target_id'])
+        if (not source or not target or link['kind'] not in {'calls', 'imports', 'http_routes'}
+                or link['payload_json'] != canonical(payload)
+                or hashlib.sha256(canonical(payload).encode()).hexdigest() != link['id']
+                or payload['source_file'] != source['path'] or payload['target_file'] != target['path']
+                or payload['source_sha256'] != source['sha256'] or payload['target_sha256'] != target['sha256']
+                or payload['kind'] != link['kind']
+                or (payload.get('callee_id') is not None and payload['callee_id'] not in {symbol['id'] for symbol in target['symbols']})
+                or (payload.get('caller_id') is not None and payload['caller_id'] not in {symbol['id'] for symbol in source['symbols']})):
+            raise ValueError('Relationship endpoints/evidence are outside the snapshot')
 
 
     async def publish(tx):
@@ -139,6 +166,14 @@ async def publish_outline_snapshot(driver, snapshot: dict) -> dict:
                              project=project)
                 await tx.run(f'MATCH (f:File {{id:$file}}), (s:{kind} {{id:$symbol}}) '
                              'CREATE (f)-[:CONTAINS]->(s)', file=file['id'], symbol=symbol['id'])
+        for link in snapshot.get('relationships', []):
+            await tx.run(
+                'MATCH (a:File {id:$source}), (b:File {id:$target}) '
+                'CREATE (a)-[:EVIDENCE_LINK {id:$id, kind:$kind, project_id:$project, '
+                'run_id:$run, payload_json:$payload}]->(b)', source=link['source_id'],
+                target=link['target_id'], id=link['id'], kind=link['kind'], project=project,
+                run=snapshot['run_id'], payload=link['payload_json'],
+            )
         await tx.run(
             'MERGE (p:OutlinePublication {id:$project}) '
             'SET p.run_id=$run, p.root_path=$root, p.manifest_json=$manifest',

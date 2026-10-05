@@ -146,7 +146,21 @@ class EmbeddedRepositoryOwner:
                     'symbols': manifest['symbols'],
                     'manifest_sha256': manifest['sha256'],
                     'retrieval': manifest.get('retrieval'),
-                    'capabilities': ['published-source', 'file-outlines', 'text', 'vector', 'hybrid']}
+                    'relationships': {key: value for key, value in manifest.get('relationships', {}).items() if key != 'ids'},
+                    'capabilities': ['published-source', 'file-outlines', 'text', 'vector', 'hybrid']
+                                    + (['static-relationships-v1'] if manifest.get('relationships') else [])}
+
+    async def symbol_context(self, project_id: str, symbol_name: str, **bounds):
+        from graphrag_core.indexing.embedded_symbols import symbol_context
+        async with self._lock:
+            self._require_open()
+            return await symbol_context(self.graph, project_id, symbol_name, **bounds)
+
+    async def relationships(self, project_id: str, **bounds):
+        from graphrag_core.indexing.embedded_relationships import read_relationships
+        async with self._lock:
+            self._require_open()
+            return await read_relationships(self.graph, project_id, **bounds)
 
     async def file_facts(self, project_id: str, file_path: str, *, limit: int = 50, offset: int = 0):
         from graphrag_core.indexing.embedded_facts import read_file_facts

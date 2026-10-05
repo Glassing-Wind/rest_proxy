@@ -1090,6 +1090,17 @@ def register(mcp: FastMCP) -> None:
             full_source_preview: Prefer the indexed symbol's complete source span, within caps.
         """
         try:
+            from memory.storage_config import embedded_graph_selected
+            if embedded_graph_selected():
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_symbol_context(
+                    workspace_id, symbol_name, file_path=file_path or '', signature=signature or '',
+                    include_source=include_source_preview,
+                    max_lines=max(1, min(int(source_preview_lines), 200)),
+                    max_chars=max(256, min(int(source_preview_chars), 16000)), full_source=full_source_preview,
+                )
+                return json.dumps(result, ensure_ascii=False)
             project_id = get_project_id(workspace_id)
             preview_lines = max(1, min(int(source_preview_lines), 400))
             preview_chars = max(200, min(int(source_preview_chars), 16000))

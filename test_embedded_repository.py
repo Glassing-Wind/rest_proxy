@@ -217,6 +217,89 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.file_facts('p', 'a.py'))
 
+    async def test_relationship_publication_queries_rollback_reopen_and_delete(self):
+        from graphrag_core.indexing.embedded_outlines import build_outline_snapshot, publish_outline_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            (root / 'util.py').write_text('def helper():\n    return 1\n')
+            main = root / 'main.py'
+            main.write_text('from util import helper as h\ndef caller():\n    return h() + h()\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                first = await owner.index(str(root), 'p', ['main.py', 'util.py'], embed=fixture_embed, encoder_id='fixture')
+                calls = await owner.relationships('p', kind='calls', file_path='util.py', direction='in', limit=1)
+                self.assertEqual(len(calls['relationships']), 1)
+                self.assertIsNotNone(calls['next_cursor'])
+                second = await owner.relationships('p', kind='calls', file_path='util.py', direction='in',
+                                                   limit=1, after=calls['next_cursor'])
+                self.assertIsNone(second['next_cursor'])
+                self.assertNotEqual(calls['relationships'][0]['start_byte'], second['relationships'][0]['start_byte'])
+                self.assertEqual(calls['run_id'], first['run_id'])
+                context = await owner.symbol_context('p', 'helper', full_source=True)
+                self.assertEqual(context['status'], 'published')
+                self.assertEqual(len(context['callers']['relationships']), 2)
+                self.assertIn('def helper', context['source']['source'])
+                caller = await owner.symbol_context('p', 'caller', include_source=False)
+                self.assertNotIn('source', caller)
+                self.assertEqual(len(caller['callees']['relationships']), 2)
+                self.assertEqual((await owner.symbol_context('p', 'missing'))['status'], 'symbol_not_published')
+                imports = await owner.relationships('p', kind='imports')
+                self.assertEqual(len(imports['relationships']), 1)
+                self.assertEqual(imports['relationships'][0]['target_file'], 'util.py')
+                self.assertIsNone(await owner.relationships('q'))
+                # Actual transaction failure after deleting old data must restore old links/receipt.
+                bad = build_outline_snapshot(str(root), 'p', ['main.py', 'util.py'])
+                bad['files'][0]['symbols'].append(dict(bad['files'][0]['symbols'][0]))
+                with self.assertRaises(Exception):
+                    await publish_outline_snapshot(owner.graph, bad)
+                self.assertEqual(await owner.relationships('p', kind='imports'), imports)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.relationships('p', kind='imports'), imports)
+                async with owner.graph.session() as session:
+                    async def corrupt(tx):
+                        await tx.run('MATCH (:File)-[r:EVIDENCE_LINK]->(:File) '
+                                     'WHERE r.project_id=$project AND r.kind=$kind SET r.payload_json=$payload',
+                                     project='p', kind='calls', payload='{}')
+                    await session.execute_write(corrupt)
+                with self.assertRaises(RuntimeError):
+                    await owner.relationships('p')
+                main.write_text('def caller():\n    return 2\n')
+                await owner.index(str(root), 'p', ['main.py'], embed=fixture_embed, encoder_id='fixture')
+                self.assertEqual((await owner.relationships('p'))['relationships'], [])
+                await owner.delete_project('p')
+                self.assertIsNone(await owner.relationships('p'))
+
+    async def test_standard_symbol_context_ambiguity_and_snapshot_source(self):
+        from memory.embedded_runtime import EmbeddedRuntime
+        from tools.brain.code_intel import core
+        from mcp.server.fastmcp import FastMCP
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / 'source'
+            root.mkdir()
+            for file in ('a.py', 'b.py'):
+                (root / file).write_text('def helper():\n    return 1\n')
+            state = str(Path(directory) / 'state')
+            runtime = EmbeddedRuntime(state, 3)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                await owner.index(str(root), 'p', ['a.py', 'b.py'], embed=fixture_embed, encoder_id='fixture')
+            mcp = FastMCP('symbol-bridge')
+            core.register(mcp)
+            with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                    mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                    mock.patch.object(core, 'get_project_id', side_effect=AssertionError('legacy hash used')):
+                tool = mcp._tool_manager.get_tool('get_symbol_context')
+                args = {'workspace_id': str(root), 'symbol_name': 'helper'}
+                ambiguous = json.loads(await tool.run(args))
+                self.assertEqual(ambiguous['status'], 'ambiguous')
+                self.assertEqual(len(ambiguous['candidates']), 2)
+                (root / 'a.py').write_text('def changed():\n    pass\n')
+                context = json.loads(await tool.run(dict(args, file_path=str(root / 'a.py'))))
+                self.assertEqual(context['status'], 'published')
+                self.assertIn('def helper', context['source']['source'])
+                self.assertEqual(context['semantics'], 'static-source-candidates')
+            await runtime.close()
+
     async def test_kill_after_staging_preserves_published_retrieval(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'

@@ -32,6 +32,7 @@ state directory is required for fixture vectors of another dimension.
 | --- | --- |
 | `index_embedded_repository(source_root, project_id, paths)` | Wait for complete replacement from an explicit relative-path manifest. Omitted files disappear. Return publication/count/encoder metadata. |
 | `list_embedded_projects(limit, after)` | Discover committed project IDs, canonical roots and run IDs with bounded pagination. |
+| `get_embedded_relationships(project_id, kind, file_path, direction, limit, after)` | Read published static call/import/route candidates with endpoint citations and pagination. |
 | `get_embedded_file_facts(project_id, file_path, limit, offset)` | Read paginated hashed import/call/native route observations. Older snapshots explicitly require reindexing for this contract. |
 | `get_embedded_overview(project_id)` | Read run/manifest identity, file/symbol counts and retrieval configuration without a model. |
 | `describe_embedded_file(project_id, file_path, ...)` | Read numbered, bounded original source and outlines from the publication, with run ID and source SHA256. |
@@ -105,3 +106,10 @@ embedded metadata. Other legacy workspace and graph-query workflows remain incom
 
 [Published parser facts](embedded-parser-facts.md) add source/fact hash verification
 and bounded syntactic call/import/route evidence. Target resolution remains incomplete.
+
+[Static relationships](embedded-static-relationships.md) now persist conservative
+file links and callable IDs. Existing Neo4j symbol/call query parity remains incomplete.
+
+Existing `get_symbol_context` now has an exact published-symbol bridge with bounded
+source and static caller/callee pages. See the static-relationships contract for
+JSON response semantics and unresolved/ambiguous cases.

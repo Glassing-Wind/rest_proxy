@@ -2,6 +2,15 @@
 
 ## Current checkpoint — October 4, 2026
 
+[Embedded static relationships](embedded-static-relationships.md) now publish
+scoped file links with callable IDs, source citations and explicit resolution rules.
+A fresh 131-file real-model run produced 1,118 call and 186 import candidates;
+all relationship/source/fact hashes and STDIO/HTTP evidence verified. These are
+static source candidates, not runtime guarantees or full query parity. Broader
+resolution and remaining call-chain/reference/import query bridges remain Priority 2
+work. Existing `get_symbol_context` now supports exact published symbols, bounded
+original source and static caller/callee pages; ambiguous names return choices.
+
 [Embedded parser facts](embedded-parser-facts.md) now persist hashed imports,
 syntactic call observations and native route/HTTP facts with the publication.
 A fresh real-model run on 131 frozen files contains 806 imports and 12,996 calls;

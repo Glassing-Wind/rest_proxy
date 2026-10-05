@@ -52,6 +52,16 @@ async def inspect(session, args):
                                           {'project_id': args.project_id, 'file_path': args.file, 'limit': 5}))
     assert facts['run_id'] == overview['run_id']
     assert facts['source_sha256'] == source['source_sha256']
+    relationships = decode(await session.call_tool('get_embedded_relationships',
+                                                   {'project_id': args.project_id, 'kind': 'calls', 'limit': 5}))
+    assert relationships['run_id'] == overview['run_id']
+    symbol_context = None
+    if args.symbol:
+        symbol_context = decode(await session.call_tool('get_symbol_context',
+                                {'workspace_id': project['workspace_path'], 'symbol_name': args.symbol,
+                                 'file_path': args.symbol_file or args.file, 'source_preview_lines': 12}))
+        assert symbol_context['status'] == 'published'
+        assert symbol_context['run_id'] == overview['run_id']
     hits = decode(await session.call_tool('search_embedded_repository',
                                           {'project_id': args.project_id, 'query': args.query,
                                            'mode': 'text', 'limit': 5}))
@@ -60,7 +70,7 @@ async def inspect(session, args):
         hits = hits['result']
     assert hits and all(hit['run_id'] == overview['run_id'] for hit in hits)
     return {'overview': overview, 'source': source, 'projects': projects,
-            'resolution': resolution, 'workspace_overview': workspace_overview, 'file_facts': facts,
+            'resolution': resolution, 'workspace_overview': workspace_overview, 'file_facts': facts, 'relationships': relationships, 'symbol_context': symbol_context,
             'hit_citations': [{key: hit[key] for key in ('file_path', 'ref_id', 'source_sha256', 'run_id')}
                              for hit in hits]}
 
@@ -117,6 +127,9 @@ async def run(args):
             'hit_citations': stdio['hit_citations'], 'model_required': False, 'workspace_resolution_verified': True,
             'project_listing_verified': True, 'file_facts_verified': True,
             'fact_contract_status': stdio['file_facts'].get('status', 'v1'),
+            'relationship_contract_status': stdio['relationships'].get('status', 'v1'),
+            'relationship_count_in_probe': len(stdio['relationships'].get('relationships', [])),
+            'standard_symbol_context_verified': stdio['symbol_context'] is not None,
             'sandbox': args.sandbox, 'external_storage_network_allowed': False if args.sandbox else None}
 
 
@@ -126,6 +139,8 @@ def main():
     parser.add_argument('--project-id', required=True)
     parser.add_argument('--file', required=True)
     parser.add_argument('--query', required=True)
+    parser.add_argument('--symbol', default='')
+    parser.add_argument('--symbol-file', default='')
     parser.add_argument('--dimension', type=int, default=768)
     parser.add_argument('--sandbox', action='store_true', help='macOS: deny network except local HTTP transport')
     args = parser.parse_args()

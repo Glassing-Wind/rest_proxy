@@ -18,6 +18,8 @@ SCHEMA_STATEMENTS = (
     'CREATE NODE TABLE IF NOT EXISTS SourceEvidence('
     'id STRING PRIMARY KEY, project_id STRING, run_id STRING, path STRING, '
     'sha256 STRING, content STRING, language STRING, facts_json STRING)',
+    'CREATE REL TABLE IF NOT EXISTS EVIDENCE_LINK(FROM File TO File, '
+    'id STRING, kind STRING, project_id STRING, run_id STRING, payload_json STRING)',
     'CREATE REL TABLE IF NOT EXISTS CONTAINS(' +
     ', '.join(f'FROM File TO {label}' for label in SYMBOL_LABELS) + ')',
 )
@@ -40,4 +42,9 @@ SCHEMA_COLUMNS = {
     **{label: {'id': 'STRING', 'name': 'STRING', 'start_line': 'INT64',
                'end_line': 'INT64', 'signature': 'STRING', 'project_id': 'STRING'}
        for label in SYMBOL_LABELS},
+}
+
+RELATION_SCHEMA_COLUMNS = {
+    "EVIDENCE_LINK": {"id": "STRING", "kind": "STRING", "project_id": "STRING",
+                      "run_id": "STRING", "payload_json": "STRING"},
 }

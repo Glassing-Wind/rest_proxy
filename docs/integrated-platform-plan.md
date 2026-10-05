@@ -31,7 +31,8 @@ packaging. Existing server backends remain supported during the transition.
 - One process owns mutable embedded graph storage. The [embedded MCP owner](embedded-mcp-owner.md)
   shares indexing/retrieval ownership; [durable project discovery](embedded-project-discovery.md)
   bridges standard resolution/overview tools. [Parser facts](embedded-parser-facts.md)
-  supply hashed import/call/route observations; target resolution remains incomplete.
+  supply hashed import/call/route observations. [Static relationships](embedded-static-relationships.md)
+  resolve a conservative subset with source citations; broader resolution remains incomplete.
   Full graph queries and remaining application
   metadata/REST integration are still acceptance gates.
 
