@@ -270,6 +270,57 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.relationships('p'))
 
+    async def test_index_attempt_success_failure_cancellation_and_postcommit_error(self):
+        from graphrag_core.indexing.embedded_outlines import publish_outline_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            (root / 'a.py').write_text('def first():\n    return 1\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual((await owner.indexing_attempt('p'))['status'], 'no_attempt')
+                pub = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                success = await owner.indexing_attempt('p')
+                self.assertEqual(success['status'], 'published')
+                self.assertEqual(success['attempt_id'], pub['attempt_id'])
+                self.assertEqual(success['candidate_run_id'], success['published_run_id'])
+                async def failed(texts):
+                    raise ValueError('secret detail must not be journaled')
+                with self.assertRaises(ValueError):
+                    await owner.index(str(root), 'p', ['a.py'], embed=failed, encoder_id='fixture')
+                failure = await owner.indexing_attempt('p')
+                self.assertEqual(failure['status'], 'failed')
+                self.assertEqual(failure['phase'], 'embedding')
+                self.assertEqual(failure['error_type'], 'ValueError')
+                self.assertNotIn('secret detail', json.dumps(failure))
+                self.assertEqual(failure['published_run_id'], pub['run_id'])
+                entered = asyncio.Event()
+                async def blocked(texts):
+                    entered.set()
+                    await asyncio.Event().wait()
+                task = asyncio.create_task(owner.index(str(root), 'p', ['a.py'], embed=blocked, encoder_id='fixture'))
+                await asyncio.wait_for(entered.wait(), 10)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+                cancelled = await owner.indexing_attempt('p')
+                self.assertEqual(cancelled['status'], 'cancelled')
+                self.assertEqual(cancelled['published_run_id'], pub['run_id'])
+                async def committed_then_error(graph, snapshot):
+                    await publish_outline_snapshot(graph, snapshot)
+                    raise RuntimeError('delivery failed after commit')
+                with mock.patch('graphrag_core.indexing.embedded_repository.publish_outline_snapshot', committed_then_error):
+                    with self.assertRaises(RuntimeError):
+                        await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                committed = await owner.indexing_attempt('p')
+                self.assertEqual(committed['status'], 'published')
+                self.assertEqual(committed['candidate_run_id'], committed['published_run_id'])
+                self.assertEqual(committed['error_type'], '')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.indexing_attempt('p'), committed)
+                await owner.delete_project('p')
+                self.assertEqual((await owner.indexing_attempt('p'))['status'], 'no_attempt')
+
     async def test_metadata_revision_reopen_reindex_and_scoped_delete(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'
@@ -437,6 +488,11 @@ asyncio.run(main())
                 await child.communicate()
             async with EmbeddedRepositoryOwner(state, 3) as owner:
                 self.assertEqual((await read_outline_publication(owner.graph, 'p'))['run_id'], first['run_id'])
+                attempt = await owner.indexing_attempt('p')
+                self.assertEqual(attempt['status'], 'interrupted')
+                self.assertEqual(attempt['phase'], 'publishing')
+                self.assertEqual(attempt['candidate_run_id'], staged_run)
+                self.assertEqual(attempt['published_run_id'], first['run_id'])
                 self.assertGreater(await owner.vectors.count('p', staged_run), 0)
                 self.assertTrue(await owner.search('p', encoder_id='fixture-v1', text='authenticate', mode='text'))
                 self.assertEqual(await owner.search('p', encoder_id='fixture-v1', text='updated', mode='text'), [])

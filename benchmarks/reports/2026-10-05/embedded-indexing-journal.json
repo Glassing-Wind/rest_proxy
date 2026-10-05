@@ -1,0 +1,99 @@
+{
+  "artifacts_sha256": {
+    "ci.log": "7c428d59261eba36d383c320bf9f2c5fd71e00f5263e774da836eedf793128cc",
+    "native-tests.log": "1e22b1ca1eb2864f17d3350d51a866783dd07c62796069738363cb559baee73d",
+    "runtime-tests.log": "fb92c40e3ce246676285d7a4dbc64afbccf0398ed5c70e6ce0ab543fce5ca2b4",
+    "transports.json": "6e9873184704d83cdb1fd8b3b1b5f3f25f6c621571a43bb3fe36abb48d5f0336",
+    "transports.log": "755cc92a538edbc213bdb21e0b36bb4d85188589c2ad240000c6913f19cd4981",
+    "unit-tests.log": "24adda79e21044fef19cdc7f0606a9cd7770fc9a99c705a8622ee923c13bce5d"
+  },
+  "date": "2026-10-05",
+  "limitations": [
+    "One latest attempt per project; no history or automatic resume.",
+    "Status reads share owner locks and wait for in-process indexing to finish.",
+    "Old transport publication reports no_attempt; disposable native fixtures exercise lifecycle writes.",
+    "Legacy JSON jobs, IDE sessions and pinned watches are not migrated.",
+    "No coding-outcome, latency or token improvement claim."
+  ],
+  "native_lifecycle_verified": [
+    "published receipt and attempt commit together",
+    "provider failure preserves prior publication",
+    "cancellation records terminal outcome",
+    "post-commit delivery error retains published outcome",
+    "reopen persistence",
+    "scoped deletion",
+    "real SIGKILL leaves interrupted attempt and prior searchable receipt"
+  ],
+  "prior_hosted_head": {
+    "all_seven_jobs": "passed",
+    "ci_run": 37341025163,
+    "commit": "88d6018",
+    "security_run": 37341024715
+  },
+  "python": "3.14.4",
+  "scope": "Latest owned embedded indexing attempt; receipt-authoritative success and recovery",
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 13,
+    "offline_cancellation_and_bounds": 2,
+    "runtime_mcp": 9
+  },
+  "transport": {
+    "call_chain_relationships": 2,
+    "dimension": 768,
+    "external_storage_network_allowed": false,
+    "fact_contract_status": "v1",
+    "file_facts_verified": true,
+    "files": 131,
+    "hit_citations": [
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:b0fdf58aab1757",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:b0dc27591e2f57",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      },
+      {
+        "file_path": "graphrag_core/indexing/embedded_repository.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:graphrag_core/indexing/embedded_repository.py:681197231296a4",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:199260fe241f11",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      }
+    ],
+    "index_attempt_read_verified": true,
+    "index_attempt_status": "no_attempt",
+    "metadata_read_verified": true,
+    "model_required": false,
+    "parity": true,
+    "project_listing_verified": true,
+    "relationship_contract_status": "v1",
+    "relationship_count_in_probe": 5,
+    "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+    "sandbox": true,
+    "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+    "standard_call_chain_verified": true,
+    "standard_symbol_context_verified": true,
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "workspace_resolution_verified": true
+  }
+}

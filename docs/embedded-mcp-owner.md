@@ -117,3 +117,7 @@ JSON response semantics and unresolved/ambiguous cases.
 [Revisioned project annotations](embedded-project-metadata.md) now use the same owner.
 The primary read and admin replacement tools expose explicit provenance and require
 revision/publication preconditions for writes. Session/watch/job registries remain separate.
+
+[Latest indexing attempts](embedded-indexing-journal.md) now persist under the owner.
+The primary status tool reports current publication separately from candidate runs.
+It is an outcome/recovery read; concurrent indexing holds the owner lock.

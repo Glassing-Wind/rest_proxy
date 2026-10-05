@@ -180,6 +180,17 @@ async def publish_outline_snapshot(driver, snapshot: dict) -> dict:
             project=project, run=snapshot['run_id'], root=snapshot['root_path'],
             manifest=_json(snapshot['manifest']),
         )
+        if snapshot.get('attempt_id'):
+            import time
+            rows = await (await tx.run('MATCH (j:EmbeddedIndexAttempt {id:$project}) '
+                                      'WHERE j.attempt_id=$attempt AND j.run_id=$run AND j.status="running" '
+                                      'RETURN j.id AS id', project=project,
+                                      attempt=snapshot['attempt_id'], run=snapshot['run_id'])).data()
+            if not rows:
+                raise RuntimeError('Publication attempt identity no longer matches the journal')
+            await tx.run('MATCH (j:EmbeddedIndexAttempt {id:$project}) '
+                         'SET j.status="published", j.phase="published", j.error_type="", j.updated_ms=$updated',
+                         project=project, updated=time.time_ns() // 1000000)
 
     async with driver.session() as session:
         await session.execute_write(publish)

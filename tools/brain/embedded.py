@@ -15,7 +15,7 @@ async def index_embedded_repository(source_root: str, project_id: str, paths: li
     """
     result = await get_embedded_runtime().index(source_root, project_id, paths)
     return {'project_id': result['project_id'], 'run_id': result['run_id'],
-            'files': len(result['manifest']['files']), 'retrieval': result['manifest']['retrieval']}
+            'attempt_id': result['attempt_id'], 'files': len(result['manifest']['files']), 'retrieval': result['manifest']['retrieval']}
 
 
 async def search_embedded_repository(project_id: str, query: str, mode: str = 'hybrid',
@@ -77,9 +77,17 @@ async def update_embedded_project_metadata(project_id: str, metadata: dict,
                                                        expected_run_id=expected_run_id)
 
 
+async def get_embedded_indexing_attempt(project_id: str) -> dict:
+    """Read the latest durable owned attempt, last phase and current publication identity.
+
+    Reopen marks unfinished work interrupted; no automatic resume or legacy job/PID control.
+    """
+    return await get_embedded_runtime().indexing_attempt(project_id)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
                      describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts, get_embedded_relationships,
-                     get_embedded_project_metadata, update_embedded_project_metadata):
+                     get_embedded_project_metadata, update_embedded_project_metadata, get_embedded_indexing_attempt):
             mcp.tool()(tool)

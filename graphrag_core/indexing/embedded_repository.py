@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import uuid
 from pathlib import Path
 
 from graphrag_core.indexing.embedded_outlines import (
@@ -18,6 +19,7 @@ from graphrag_core.indexing.embedded_outlines import (
 from memory.embedded_ladybug import LadybugGraphDriver
 from memory.embedded_lance_runs import LanceRunStore
 from memory.embedded_schema import SYMBOL_LABELS
+from memory import embedded_jobs
 
 
 class EmbeddedRepositoryOwner:
@@ -35,6 +37,7 @@ class EmbeddedRepositoryOwner:
         self.graph = LadybugGraphDriver(str(self.root / 'graph'))
         try:
             await self.graph.initialize_schema()
+            await embedded_jobs.recover_attempts(self.graph)
             self.vectors = LanceRunStore(str(self.root / 'vectors'), self.dimension)
         except BaseException:
             await self.graph.close()
@@ -63,50 +66,76 @@ class EmbeddedRepositoryOwner:
             if not isinstance(encoder_metadata, dict) or len(encoded.encode()) > 8192:
                 raise ValueError('Encoder metadata must be a bounded JSON object')
             encoder_metadata = json.loads(encoded)
+        if not project_id or len(project_id) > 128 or ':' in project_id:
+            raise ValueError('A nonempty project ID without colons is required')
         if not encoder_id or len(encoder_id) > 512:
             raise ValueError('An explicit embedding encoder identity is required')
         async with self._lock:
             self._require_open()
-            snapshot = await asyncio.to_thread(build_outline_snapshot, source_root, project_id, paths)
+            attempt_id = str(uuid.uuid4())
+            try:
+                await embedded_jobs.start_attempt(self.graph, project_id, attempt_id, str(Path(source_root).resolve()))
+                return await self._index_attempt(source_root, project_id, paths, embed=embed,
+                                                 encoder_id=encoder_id, encoder_metadata=encoder_metadata,
+                                                 attempt_id=attempt_id)
+            except BaseException as error:
+                try:
+                    await embedded_jobs.drain(embedded_jobs.finish_failed_attempt(
+                        self.graph, project_id, attempt_id, cancelled=isinstance(error, asyncio.CancelledError),
+                        error_type=type(error).__name__))
+                except Exception:
+                    # Preserve the indexing error; reopen reconciles an unfinished journal entry.
+                    pass
+                raise
 
-            def chunk_sources():
-                import tree_sitter_language_pack as ts_pack
+    async def _index_attempt(self, source_root, project_id, paths, *, embed, encoder_id,
+                             encoder_metadata, attempt_id):
+        snapshot = await asyncio.to_thread(build_outline_snapshot, source_root, project_id, paths)
+        snapshot['attempt_id'] = attempt_id
+        await embedded_jobs.update_attempt(self.graph, project_id, attempt_id, phase='chunking', run_id=snapshot['run_id'])
 
-                chunks = []
-                for file in snapshot['files']:
-                    payload = ts_pack.build_semantic_payload(
-                        file['content'], file['language'], file['path'], project_id, chunk_max_size=2048,
-                    )
-                    for chunk in payload['chunks']:
-                        metadata = dict(chunk['metadata'])
-                        metadata['content_sha256'] = hashlib.sha256(chunk['text'].encode()).hexdigest()
-                        chunks.append({'ref_id': chunk['ref_id'], 'file_path': file['path'],
-                                       'content': chunk['text'], 'source_sha256': file['sha256'],
-                                       'metadata': metadata})
-                if len(chunks) > 50000:
-                    raise ValueError('Snapshot exceeds 50000 chunks')
-                return chunks
+        def chunk_sources():
+            import tree_sitter_language_pack as ts_pack
 
-            chunks = await asyncio.to_thread(chunk_sources)
-            # Bound embed calls; callers choose the actual provider and model.
-            for offset in range(0, len(chunks), 64):
-                batch = chunks[offset:offset + 64]
-                vectors = await embed([chunk['content'] for chunk in batch])
-                if len(vectors) != len(batch):
-                    raise ValueError('Embedding provider returned the wrong row count')
-                for chunk, vector in zip(batch, vectors):
-                    self.vectors.validate_vector(vector)
-                    chunk['vector'] = vector
-            count = await self.vectors.stage_run(project_id, snapshot['run_id'], chunks)
-            snapshot['manifest']['retrieval'] = {'run_id': snapshot['run_id'], 'chunks': count,
-                                                  'dimension': self.dimension, 'encoder_id': encoder_id}
-            if encoder_metadata is not None:
-                snapshot['manifest']['retrieval']['encoder_metadata'] = encoder_metadata
-            snapshot['manifest'].pop('sha256')
-            canonical = json.dumps(snapshot['manifest'], sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-            snapshot['manifest']['sha256'] = hashlib.sha256(canonical.encode()).hexdigest()
-            # The graph receipt is the sole visibility switch after durable vector staging.
-            return await publish_outline_snapshot(self.graph, snapshot)
+            chunks = []
+            for file in snapshot['files']:
+                payload = ts_pack.build_semantic_payload(
+                    file['content'], file['language'], file['path'], project_id, chunk_max_size=2048,
+                )
+                for chunk in payload['chunks']:
+                    metadata = dict(chunk['metadata'])
+                    metadata['content_sha256'] = hashlib.sha256(chunk['text'].encode()).hexdigest()
+                    chunks.append({'ref_id': chunk['ref_id'], 'file_path': file['path'],
+                                   'content': chunk['text'], 'source_sha256': file['sha256'],
+                                   'metadata': metadata})
+            if len(chunks) > 50000:
+                raise ValueError('Snapshot exceeds 50000 chunks')
+            return chunks
+
+        chunks = await asyncio.to_thread(chunk_sources)
+        await embedded_jobs.update_attempt(self.graph, project_id, attempt_id, phase='embedding', run_id=snapshot['run_id'])
+        # Bound embed calls; callers choose the actual provider and model.
+        for offset in range(0, len(chunks), 64):
+            batch = chunks[offset:offset + 64]
+            vectors = await embed([chunk['content'] for chunk in batch])
+            if len(vectors) != len(batch):
+                raise ValueError('Embedding provider returned the wrong row count')
+            for chunk, vector in zip(batch, vectors):
+                self.vectors.validate_vector(vector)
+                chunk['vector'] = vector
+        await embedded_jobs.update_attempt(self.graph, project_id, attempt_id, phase='staging', run_id=snapshot['run_id'])
+        count = await self.vectors.stage_run(project_id, snapshot['run_id'], chunks)
+        snapshot['manifest']['retrieval'] = {'run_id': snapshot['run_id'], 'chunks': count,
+                                              'dimension': self.dimension, 'encoder_id': encoder_id}
+        if encoder_metadata is not None:
+            snapshot['manifest']['retrieval']['encoder_metadata'] = encoder_metadata
+        snapshot['manifest'].pop('sha256')
+        canonical = json.dumps(snapshot['manifest'], sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        snapshot['manifest']['sha256'] = hashlib.sha256(canonical.encode()).hexdigest()
+        # The graph receipt is the sole visibility switch after durable vector staging.
+        await embedded_jobs.update_attempt(self.graph, project_id, attempt_id, phase='publishing', run_id=snapshot['run_id'])
+        result = await publish_outline_snapshot(self.graph, snapshot)
+        return dict(result, attempt_id=attempt_id)
 
     async def search(self, project_id: str, *, encoder_id: str, text: str = '', vector=None,
                      mode: str = 'hybrid', limit: int = 10) -> list[dict]:
@@ -156,6 +185,11 @@ class EmbeddedRepositoryOwner:
             self._require_open()
             return await symbol_context(self.graph, project_id, symbol_name, **bounds)
 
+    async def indexing_attempt(self, project_id: str):
+        async with self._lock:
+            self._require_open()
+            return await embedded_jobs.read_attempt(self.graph, project_id)
+
     async def project_metadata(self, project_id: str, **values):
         from memory.embedded_metadata import project_metadata
         async with self._lock:
@@ -204,6 +238,7 @@ class EmbeddedRepositoryOwner:
             async def delete(tx):
                 for label in ('File', 'SourceEvidence', *SYMBOL_LABELS):
                     await tx.run(f'MATCH (n:{label} {{project_id:$project}}) DETACH DELETE n', project=project_id)
+                await tx.run('MATCH (j:EmbeddedIndexAttempt {id:$project}) DELETE j', project=project_id)
                 await tx.run('MATCH (m:WorkspaceMetadata {id:$project}) DELETE m', project=project_id)
                 await tx.run('MATCH (p:OutlinePublication {id:$project}) DELETE p', project=project_id)
             async with self.graph.session() as session:

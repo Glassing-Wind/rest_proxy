@@ -20,6 +20,8 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "get_embedded_indexing_attempt": ToolCatalogEntry(
+        "primary", "embedded indexing", "Inspect the latest durable embedded attempt and its publication identity."),
     "get_embedded_project_metadata": ToolCatalogEntry(
         "primary", "embedded metadata", "Read revisioned user/agent annotations, separate from repository evidence."),
     "update_embedded_project_metadata": ToolCatalogEntry(

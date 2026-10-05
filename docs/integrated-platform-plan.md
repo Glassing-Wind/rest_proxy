@@ -155,3 +155,7 @@ passed after cutover. See [runtime setup and rollback](python314-runtime.md).
 with bounded JSON, revision/publication preconditions and atomic scoped deletion.
 Annotations remain separate from repository evidence. Session/watch/job persistence,
 FIRE checkpoint history and REST integration remain outstanding.
+
+[Embedded indexing journal](embedded-indexing-journal.md) adds durable latest-attempt
+metadata, atomic success and recovery without automatically resuming work.
+IDE session and watch-intent migration remain separate integration tasks.

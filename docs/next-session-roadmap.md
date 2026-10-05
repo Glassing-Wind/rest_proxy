@@ -2,6 +2,14 @@
 
 ## Current checkpoint — October 5, 2026
 
+[Embedded indexing journal](embedded-indexing-journal.md) now persists the latest
+owned attempt and its phases/outcome. Success commits with the publication receipt;
+reopen marks unmatched unfinished work interrupted. Cancellation, post-commit error,
+SIGKILL recovery and prior publication preservation are verified. The primary status
+read is bounded and model-independent; it waits for the owner lock rather than
+providing live phase polling. Sessions/watch intent, history/resume and REST remain
+pending. All seven hosted checks passed for the prior metadata commit `88d6018`.
+
 [Embedded project metadata](embedded-project-metadata.md) adds bounded, revisioned
 user/agent annotations in the shared Ladybug owner. Exact revision and publication
 preconditions prevent stale writes; same-root reindex preserves notes, root changes

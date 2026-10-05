@@ -61,7 +61,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
                                              'LM_PROXY_EMBEDDED_STATE': '/unused'}):
             embedded.register(mcp)
-        self.assertEqual(len(mcp._tool_manager.list_tools()), 9)
+        self.assertEqual(len(mcp._tool_manager.list_tools()), 10)
         runtime = mock.AsyncMock()
         runtime.describe_file.return_value = {'run_id': 'r', 'source_sha256': 'hash', 'source': '1: original'}
         with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
@@ -120,6 +120,17 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                  'expected_revision': 1, 'expected_run_id': 'r'})
             runtime.project_metadata.assert_awaited_once_with(
                 'p', metadata={'tags': ['code']}, expected_revision=1, expected_run_id='r')
+
+    async def test_index_attempt_mcp_read_dispatch(self):
+        mcp = FastMCP('attempt-routing')
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
+                                          'LM_PROXY_EMBEDDED_STATE': '/unused'}):
+            embedded.register(mcp)
+        runtime = mock.AsyncMock()
+        runtime.indexing_attempt.return_value = {'status': 'interrupted'}
+        with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
+            await mcp._tool_manager.get_tool('get_embedded_indexing_attempt').run({'project_id': 'p'})
+            runtime.indexing_attempt.assert_awaited_once_with('p')
 
     async def test_global_close_allows_new_owner(self):
         from memory import embedded_runtime
