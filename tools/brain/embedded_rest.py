@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse, Response
 
 READ_TOOLS = frozenset({
+    'assemble_context_bundle',
     'list_embedded_projects', 'get_embedded_overview', 'describe_embedded_file',
     'get_embedded_file_facts', 'get_embedded_relationships', 'search_embedded_repository',
 })

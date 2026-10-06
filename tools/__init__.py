@@ -18,6 +18,8 @@ def register_all(mcp: FastMCP) -> None:
     embedded.register(mcp)
     from tools.brain import fire
     fire.register(mcp)
+    from tools.brain import context
+    context.register(mcp)
     memory.register(mcp)
     tool_catalog.register(mcp)
     code_search.register(mcp)

@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Shared supplied-request context bundles](context-bundle-contract.md) now preserve
+citations and complete text messages while accounting canonical request JSON plus
+reserves. Deterministic selection, omissions, local tokenizer mode and real MCP/REST
+parity pass. This is not verified provider serialization or usage. Next work: scoped
+FIRE checkpoint-to-bundle adaptation, then an explicit provider formatting/forwarding
+slice with actual usage and continuation-deduplication acceptance.
+
 [Explicit durable FIRE continuity](fire-durable-continuity.md) now stores scoped
 checkpoints and hashed originals with correction, expiry/purge and deletion. Real
 STDIO save to fresh HTTP resume recovers state after removing fixture conversation

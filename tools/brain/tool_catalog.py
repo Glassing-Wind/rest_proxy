@@ -20,6 +20,7 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    'assemble_context_bundle': ToolCatalogEntry('primary', 'bounded context', 'Pack supplied instructions/messages/tools and cited evidence against a complete declared request budget.'),
     'save_fire_checkpoint': ToolCatalogEntry('admin', 'FIRE continuity', 'Persist explicit scoped task state and supporting originals before compaction.'),
     'resume_fire_checkpoint': ToolCatalogEntry('primary', 'FIRE continuity', 'Recover scoped task state while disclosing historical evidence freshness.'),
     'get_fire_original': ToolCatalogEntry('primary', 'FIRE continuity', 'Retrieve a hashed historical original supporting the current checkpoint.'),

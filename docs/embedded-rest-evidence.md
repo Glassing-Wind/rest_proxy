@@ -48,3 +48,9 @@ Priority 2 gains a REST read surface. Priority 4 still needs a shared context-bu
 contract, tokenizer-aware whole-request budgeting, freshness/omissions and duplicate
 history handling. Calling an inference model with an assembled bundle and durable
 FIRE checkpoint recovery remain separate acceptance gates.
+
+## October 6 bundle extension
+
+The [shared context-bundle tool](context-bundle-contract.md) is now an additional
+allowlisted read when `LM_PROXY_CONTEXT_ENABLED=1`. It accepts caller-supplied
+requests/evidence and does not forward inference. REST request/response caps still apply.

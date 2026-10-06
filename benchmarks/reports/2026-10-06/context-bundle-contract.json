@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "aa4c8c0",
+  "scope": "Shared provider-neutral supplied-request bundle packing and declared canonical accounting",
+  "tests": {
+    "contract_and_tool_methods": 7,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http",
+      "rest"
+    ],
+    "parity": true,
+    "bundle_id": "b0f5a2e29dc0b770f22239c7402303e9975aae5d5ee87788fa4ec1b70d1d7ef8",
+    "selected_items": 1,
+    "fits_accounted_budget": true,
+    "method": "utf8-byte-estimate",
+    "single_http_owner": true,
+    "write_tool_refused": true,
+    "embedding_model_required_for_reads": false,
+    "synthetic_vectors": true,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "whole canonical payload counting for instructions/goal/messages/tools/evidence/citations",
+    "output/framing/safety/provider-held reserves and mandatory overflow disclosure",
+    "unknown provider-held context blocks evidence addition",
+    "deterministic rank/ID selection and whole-item omissions",
+    "scope/freshness and citation preservation with distinct excerpt hashes",
+    "exact history and explicit ID/equivalent-content/bundle deduplication",
+    "complete tool-call/result preservation and malformed exchanges rejected",
+    "actual local tokenizer counting with truncation/padding disabled; artifact fingerprint; no silent configured fallback",
+    "real indexed-source fixture parity across STDIO, Streamable HTTP and REST"
+  ],
+  "limits": [
+    "Canonical supplied payload accounting, not verified provider serialization or actual usage.",
+    "Local tokenizer/model correspondence and framing reserves remain caller responsibilities.",
+    "Default UTF-8 byte method is a labeled estimate, not measured model tokens.",
+    "Freshness hashes and hidden provider-state usage are supplied by the caller.",
+    "Candidate IDs must be version-specific; no hidden client history discovery or reliable partial-overlap detection.",
+    "No automatic retrieval, FIRE adaptation or inference forwarding implemented.",
+    "Text only; resource byte caps remain distinct from token budgeting.",
+    "Synthetic indexed fixture; no semantic quality, latency or savings claim.",
+    "Local validation only; no operational provider/index changes, deployment or push."
+  ],
+  "artifacts_sha256": {
+    "contracts.log": "f3b8d86231e040c13919d6cd4ebdaf5e6c646ad864acdc5d15607005e05f29e4",
+    "transport.json": "066b460708a23886b665b39f3421903c97c5e875264d59ab1bb98d62a8204fb0",
+    "stdio.log": "b2f1aa728c9aa6d1ce452478e95c639f3f9e24b1b775f58e49e28f01f2fdce20",
+    "http.log": "7793b0726acb1b0bfbe7169375b30b7043fc713a94e0414510824e3e255da1ad",
+    "ci.log": "6e64c8f8ff897e99fa98fd1535782eb49962d8518d7ba297261e6a3980da3da2"
+  },
+  "source_sha256": {
+    "memory/context_bundle.py": "9b33e369069fde71e847c6a9aa046498a4a793a70046ae96df2e2e053d67ede5",
+    "tools/brain/context.py": "ab0d21b30bf28f7aceec4e96ed06e73b862d6ed9befdd5ae82455cf902596bee",
+    "tools/brain/embedded_rest.py": "8dcbde4b5469f5fa325d7285c3a06ec8aef5e575e4bd5d7dbbe405921bb2ad7b",
+    "tools/__init__.py": "f99e21368c8836fd6a458004542ce5739a98849b61106550327f26c77b799761",
+    "tools/brain/tool_catalog.py": "762134c90bb262dfb57bd21aca52a85df9d3244ed8b9945530dec011948b0a9c",
+    "test_context_bundle.py": "5c55dcc3aeb4eafe76b78a9a1d0d27c6c097b73c7cae294ee64ea52d78480d87",
+    "scripts/run_ci_checks.sh": "38db82d638d7d8eb6d691a4a21fa5e5ba81a2faaf99a1320f958d0ef6631c073",
+    ".env.example": "864739d4583283bc46c071c6849c1a224b968c70081f021b476cf11d9a763df5"
+  }
+}
