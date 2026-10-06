@@ -10,6 +10,12 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Observed grammar notices](grammar-notice-reconciliation.md) now bind ten cached
+macOS libraries to the verified release bundle and retain nine declared-source root
+notices. Their SBOM and local CI pass. Coverage excludes the other 361 bundle files
+and independent binary source builds. Next: exact native dependency closure and
+remaining release validation, then installed-model/paired coding acceptance.
+
 [Namespace notice reconciliation](namespace-notice-reconciliation.md) now verifies
 exact PyPI artifacts, installed files and immutable release-tree package blobs, and
 collects a bound supplemental license for both namespace packages. Original upstream

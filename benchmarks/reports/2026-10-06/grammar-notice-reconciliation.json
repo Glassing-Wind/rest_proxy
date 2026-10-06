@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "2effd73",
+  "release_commit": "f4b24ece538efed9ab2c4e6db9409fbfc4cc3a67",
+  "observed_libraries": 10,
+  "source_repositories": 9,
+  "retained_root_notices": 9,
+  "bundle_library_files": 371,
+  "bundle_notice_files": [],
+  "bundle_sha256": "34f92d9cf4f3ad42d9514b30feba2fcaeddca0d4af06454380fd9e063427a09c",
+  "focused_tests": 3,
+  "local_ci": "All gated checks passed",
+  "schema_validation": "CycloneDX 1.6 passed; incomplete composition",
+  "limitations": [
+    "Observed binaries match bundle; their source build is not independently reproduced.",
+    "Notices match declared source revisions, not an attestation of every linked native dependency.",
+    "Selected grammar coverage does not cover the complete cached bundle or other platforms.",
+    "No complete native dependency closure or legal approval",
+    "No other platforms, model terms or paired coding outcomes validated",
+    "No cache, dependency pin, service/model lifecycle, push, merge or deployment changes"
+  ],
+  "sha256": {
+    "scripts/reconcile_grammar_assets.py": "b959c992f5cdebd7c57f8e912f513c1aa0f8966a20dcc32eb1331237fc93122b",
+    "test_grammar_assets.py": "e158050437bb7b9a31b66f657b498254f664d97b9e65c5b3865ae776724d1b1a",
+    ".runtime/grammar-notice-reconciliation/source-notices.json": "a36fb4d4f920f66bf0ce8ba4b015755d48f6e0c6546510a614e4ee552f908b6c",
+    ".runtime/grammar-notice-reconciliation/release-language-definitions.json": "c67e5f900f6f4458646e371132892639287e9adbec006e226b4c1821eae65401",
+    ".runtime/grammar-notice-reconciliation/reconciled-assets.json": "8787f6d5285c1503142a199967047323c7d71b5dbf9a5e94ffa643907468a200",
+    ".runtime/grammar-notice-reconciliation/contracts.log": "372ee57a30b8a8b17bb056a0814266786a922da7dcf4139f4f9a2457745d6424",
+    ".runtime/grammar-notice-reconciliation/ci.log": "b6255704955289c2c6575f2720675ee75a610ea958d57fd72502b84c0d74532e",
+    ".runtime/grammar-notice-reconciliation/schema-validation.log": "02683329171d0a6800bcc182ac96beddedbbbf1ff0b5535bbf948e12679c1663",
+    "benchmarks/reports/2026-10-06/grammar-notices/go-LICENSE": "2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1",
+    "benchmarks/reports/2026-10-06/grammar-notices/javascript-LICENSE": "2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1",
+    "benchmarks/reports/2026-10-06/grammar-notices/json-LICENSE": "2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1",
+    "benchmarks/reports/2026-10-06/grammar-notices/kotlin-LICENSE": "948495f61768f7de26bcc61113d8cd95f50bbc15adb678c28c941c6c8fcd5903",
+    "benchmarks/reports/2026-10-06/grammar-notices/properties-LICENSE": "3297073719030b7261afd78b7267931ccc03a27f7a65ca6fc644316180f71bf6",
+    "benchmarks/reports/2026-10-06/grammar-notices/python-LICENSE": "d724405ce238a22c0d35769c5a36b386ad5958192efe8bbb304fb2896254575f",
+    "benchmarks/reports/2026-10-06/grammar-notices/rust-LICENSE": "31d5b6f4243d5c7c6e1c4ebbbb9f6407bd1457a08bcc4f706521710341acba36",
+    "benchmarks/reports/2026-10-06/grammar-notices/swift-LICENSE": "3533cec129bb4bba015c0d61d86dd7c3b7e82110e4d2ff7837a01eff5bad5ccc",
+    "benchmarks/reports/2026-10-06/grammar-notices/tsx-LICENSE": "49bf33cf78ef5897e4e161ce1517df7de1ae5042a65b6bcfd44401e0fc606559"
+  }
+}

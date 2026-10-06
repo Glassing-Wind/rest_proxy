@@ -52,3 +52,7 @@ files are evidence for review; the original metadata fields were not rewritten.
 Native bundled dependencies, individual grammar source/notice closure, model terms,
 exact-pin source builds/platform installs and controlled paired outcomes remain open.
 No application dependency, operational service, model or parser cache was changed.
+
+Subsequent [observed grammar reconciliation](grammar-notice-reconciliation.md) adds
+ten binary/bundle bindings and nine declared-source notices. Complete bundle/native
+closure and independently reproduced source builds remain open.

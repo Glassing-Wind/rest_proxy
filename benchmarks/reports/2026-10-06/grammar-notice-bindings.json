@@ -1,0 +1,186 @@
+{
+  "version": "1.20.0",
+  "platform": "macos-arm64",
+  "bundle_sha256": "34f92d9cf4f3ad42d9514b30feba2fcaeddca0d4af06454380fd9e063427a09c",
+  "bundle_file_count": 371,
+  "bundle_notice_files": [],
+  "release_commit": "f4b24ece538efed9ab2c4e6db9409fbfc4cc3a67",
+  "definitions_sha256": "c67e5f900f6f4458646e371132892639287e9adbec006e226b4c1821eae65401",
+  "grammars": [
+    {
+      "language": "go",
+      "repository": "https://github.com/tree-sitter/tree-sitter-go",
+      "declared_revision": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "go-LICENSE",
+          "sha256": "2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1",
+          "git_blob_sha1": "4b52d191cead337b11e274b79459a86f1b5a7779",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-go/2346a3ab1bb3857b48b29d779a1ef9799a248cd7/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_go.dylib",
+      "binary_sha256": "02a737efd613324bfa3670be20cb43e58a6afd445995288e962d19b23828ed74",
+      "binary_bytes": 249176
+    },
+    {
+      "language": "javascript",
+      "repository": "https://github.com/tree-sitter/tree-sitter-javascript",
+      "declared_revision": "58404d8cf191d69f2674a8fd507bd5776f46cb11",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "javascript-LICENSE",
+          "sha256": "2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1",
+          "git_blob_sha1": "4b52d191cead337b11e274b79459a86f1b5a7779",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-javascript/58404d8cf191d69f2674a8fd507bd5776f46cb11/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_javascript.dylib",
+      "binary_sha256": "330096a0a3d4c98a77f389fbb43e3aa5a3934209597342b270ee7fcd5feb718b",
+      "binary_bytes": 780496
+    },
+    {
+      "language": "json",
+      "repository": "https://github.com/tree-sitter/tree-sitter-json",
+      "declared_revision": "254c42a6476413b776221e03982ac8ae159eeb72",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "json-LICENSE",
+          "sha256": "2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1",
+          "git_blob_sha1": "4b52d191cead337b11e274b79459a86f1b5a7779",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-json/254c42a6476413b776221e03982ac8ae159eeb72/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_json.dylib",
+      "binary_sha256": "cf5dc365af2586031500fade59c7c404f274a0107ac7d54e1fea14d63bef9e8f",
+      "binary_bytes": 34008
+    },
+    {
+      "language": "kotlin",
+      "repository": "https://github.com/fwcd/tree-sitter-kotlin",
+      "declared_revision": "1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "kotlin-LICENSE",
+          "sha256": "948495f61768f7de26bcc61113d8cd95f50bbc15adb678c28c941c6c8fcd5903",
+          "git_blob_sha1": "777756371d981380e00992bed77f52d220d7d6f5",
+          "source_url": "https://raw.githubusercontent.com/fwcd/tree-sitter-kotlin/1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_kotlin.dylib",
+      "binary_sha256": "d214c719a0aa503ea359aa5dd3593e89d7c688d58677e0cfbad582b9a8578129",
+      "binary_bytes": 6213640
+    },
+    {
+      "language": "properties",
+      "repository": "https://github.com/tree-sitter-grammars/tree-sitter-properties",
+      "declared_revision": "6310671b24d4e04b803577b1c675d765cbd5773b",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "properties-LICENSE",
+          "sha256": "3297073719030b7261afd78b7267931ccc03a27f7a65ca6fc644316180f71bf6",
+          "git_blob_sha1": "7094a20529cd00436ad0cab177e635308982b1ef",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-properties/6310671b24d4e04b803577b1c675d765cbd5773b/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_properties.dylib",
+      "binary_sha256": "1a9b485b24385fbc5cbcbaef6e71797968f6172e5837b1c5b8d6211bbc28c350",
+      "binary_bytes": 383616
+    },
+    {
+      "language": "python",
+      "repository": "https://github.com/tree-sitter/tree-sitter-python",
+      "declared_revision": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "python-LICENSE",
+          "sha256": "d724405ce238a22c0d35769c5a36b386ad5958192efe8bbb304fb2896254575f",
+          "git_blob_sha1": "ff8ed93cb0dd57d68feeefe4829dbc9083584b5e",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-python/26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_python.dylib",
+      "binary_sha256": "a0aca809ab8a578209f465128464b561ed0fd124088c12a49f08777fed76bd53",
+      "binary_bytes": 829640
+    },
+    {
+      "language": "rust",
+      "repository": "https://github.com/tree-sitter/tree-sitter-rust",
+      "declared_revision": "77a3747266f4d621d0757825e6b11edcbf991ca5",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "rust-LICENSE",
+          "sha256": "31d5b6f4243d5c7c6e1c4ebbbb9f6407bd1457a08bcc4f706521710341acba36",
+          "git_blob_sha1": "ceaf3c9adca54f7d3242593dd4db8065b1611699",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-rust/77a3747266f4d621d0757825e6b11edcbf991ca5/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_rust.dylib",
+      "binary_sha256": "f3d3dc688311258248dbc9fb76edaac233120288fb2cce18f1fac069cbebf399",
+      "binary_bytes": 1491144
+    },
+    {
+      "language": "swift",
+      "repository": "https://github.com/alex-pinkus/tree-sitter-swift",
+      "declared_revision": "00bbb0a2550f8bc0023a2a4992922d51ae045626",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "swift-LICENSE",
+          "sha256": "3533cec129bb4bba015c0d61d86dd7c3b7e82110e4d2ff7837a01eff5bad5ccc",
+          "git_blob_sha1": "f158d7005311344ac316830fe68492214e1645e6",
+          "source_url": "https://raw.githubusercontent.com/alex-pinkus/tree-sitter-swift/00bbb0a2550f8bc0023a2a4992922d51ae045626/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_swift.dylib",
+      "binary_sha256": "d439e58a91e4ffcafaec096e42c9ed73c6df8de6ff861b3c5f4288a757823e4e",
+      "binary_bytes": 4170152
+    },
+    {
+      "language": "tsx",
+      "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+      "declared_revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "tsx-LICENSE",
+          "sha256": "49bf33cf78ef5897e4e161ce1517df7de1ae5042a65b6bcfd44401e0fc606559",
+          "git_blob_sha1": "aa9f858db5722d9576104726471b11cc0e31f131",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/75b3874edb2dc714fb1fd77a32013d0f8699989f/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_tsx.dylib",
+      "binary_sha256": "e0c946fb56d8a10c8664c6a0d9f6c4d441647a1cd693eefa658f65ea4245c69e",
+      "binary_bytes": 1837336
+    },
+    {
+      "language": "typescript",
+      "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+      "declared_revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+      "files": [
+        {
+          "path": "LICENSE",
+          "local_file": "tsx-LICENSE",
+          "sha256": "49bf33cf78ef5897e4e161ce1517df7de1ae5042a65b6bcfd44401e0fc606559",
+          "git_blob_sha1": "aa9f858db5722d9576104726471b11cc0e31f131",
+          "source_url": "https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/75b3874edb2dc714fb1fd77a32013d0f8699989f/LICENSE"
+        }
+      ],
+      "binary": "libtree_sitter_typescript.dylib",
+      "binary_sha256": "6966cb024d24a85290fba333b9dc0da21c6f77f117c810e36d9b2354d1804eb2",
+      "binary_bytes": 1787792
+    }
+  ],
+  "limitations": [
+    "Observed binaries match bundle; their source build is not independently reproduced.",
+    "Notices match declared source revisions, not an attestation of every linked native dependency.",
+    "Selected grammar coverage does not cover the complete cached bundle or other platforms."
+  ]
+}
