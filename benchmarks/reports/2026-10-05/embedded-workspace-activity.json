@@ -1,0 +1,109 @@
+{
+  "artifacts_sha256": {
+    "ci.log": "27fd50bcd0413be7031fc18a10c0419620bde8b9183ab594f0811c01ee6e1cc1",
+    "native-tests.log": "83e40108e271480978a50d437e777ef336b8a654b96bcde1120fac3f24200aa5",
+    "runtime-tests.log": "f111ceacf226cf88aa9cc494371777d54b49497aaabf27875aed7c23a018e30a",
+    "transports.json": "9aff48ea990fb3f35333275b021cc7b8152ffdf35d66639ebc7862d42832d643",
+    "transports.log": "31b9dafd779011cfb5570c896bb60246da132672a6ed0b35b1cc377b4ded90dc",
+    "unit-tests.log": "cbe4b84d897ac017db0552ccb3a31855ff0fb172bc344c967c4c4c92eb19e624"
+  },
+  "bounds": {
+    "active_leases_per_project": 32,
+    "lease_seconds_max": 3600,
+    "lease_seconds_min": 60,
+    "session_id_characters": 128
+  },
+  "date": "2026-10-05",
+  "limitations": [
+    "Leases are caller assertions, not authenticated identities or verified process liveness.",
+    "Watch intent does not activate a worker.",
+    "Standalone IDE registrar/discovery and legacy JSON registries are not migrated.",
+    "Reads share owner locks; no live index-phase polling.",
+    "Expiry uses wall-clock time; expired bytes are pruned on successful writes or deletion.",
+    "No historical activity log, retention scheduler, REST integration or FIRE checkpoint history.",
+    "Transport reads reuse frozen corpus; mutations are tested in disposable native fixtures."
+  ],
+  "prior_hosted_head": {
+    "all_seven_jobs": "passed",
+    "ci_run": 37342133926,
+    "commit": "fc92c90",
+    "security_run": 37342134119
+  },
+  "python": "3.14.4",
+  "scope": "Typed durable watch intent and expiring client leases; no worker activation",
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 14,
+    "offline_validation": 2,
+    "runtime_mcp": 10
+  },
+  "transport": {
+    "call_chain_relationships": 2,
+    "dimension": 768,
+    "external_storage_network_allowed": false,
+    "fact_contract_status": "v1",
+    "file_facts_verified": true,
+    "files": 131,
+    "hit_citations": [
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "local_embeddings/strict_lmstudio.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:local_embeddings/strict_lmstudio.py:b0fdf58aab1757",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:b0dc27591e2f57",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      },
+      {
+        "file_path": "graphrag_core/indexing/embedded_repository.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:graphrag_core/indexing/embedded_repository.py:681197231296a4",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f"
+      },
+      {
+        "file_path": "memory/embedded_lance_runs.py",
+        "ref_id": "rest-proxy-relationships-proof:v6:memory/embedded_lance_runs.py:199260fe241f11",
+        "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+        "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      }
+    ],
+    "index_attempt_read_verified": true,
+    "index_attempt_status": "no_attempt",
+    "metadata_read_verified": true,
+    "model_required": false,
+    "parity": true,
+    "project_listing_verified": true,
+    "relationship_contract_status": "v1",
+    "relationship_count_in_probe": 5,
+    "run_id": "1737da68-f3e0-4052-8d59-424f2cf34469",
+    "sandbox": true,
+    "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+    "standard_call_chain_verified": true,
+    "standard_symbol_context_verified": true,
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "workspace_activity_read_verified": true,
+    "workspace_resolution_verified": true
+  },
+  "verified": [
+    "revision/run preconditions",
+    "reopen and same-root reindex",
+    "intent does not activate legacy watcher",
+    "expiry without revision mutation",
+    "release and renewal at capacity",
+    "overflow rollback",
+    "changed-root hiding",
+    "atomic scoped deletion"
+  ]
+}

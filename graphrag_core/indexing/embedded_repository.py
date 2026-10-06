@@ -185,6 +185,12 @@ class EmbeddedRepositoryOwner:
             self._require_open()
             return await symbol_context(self.graph, project_id, symbol_name, **bounds)
 
+    async def workspace_activity(self, project_id: str, **values):
+        from memory.embedded_activity import workspace_activity
+        async with self._lock:
+            self._require_open()
+            return await workspace_activity(self.graph, project_id, **values)
+
     async def indexing_attempt(self, project_id: str):
         async with self._lock:
             self._require_open()
@@ -238,6 +244,7 @@ class EmbeddedRepositoryOwner:
             async def delete(tx):
                 for label in ('File', 'SourceEvidence', *SYMBOL_LABELS):
                     await tx.run(f'MATCH (n:{label} {{project_id:$project}}) DETACH DELETE n', project=project_id)
+                await tx.run('MATCH (a:WorkspaceActivity {id:$project}) DELETE a', project=project_id)
                 await tx.run('MATCH (j:EmbeddedIndexAttempt {id:$project}) DELETE j', project=project_id)
                 await tx.run('MATCH (m:WorkspaceMetadata {id:$project}) DELETE m', project=project_id)
                 await tx.run('MATCH (p:OutlinePublication {id:$project}) DELETE p', project=project_id)

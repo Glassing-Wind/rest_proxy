@@ -121,3 +121,7 @@ revision/publication preconditions for writes. Session/watch/job registries rema
 [Latest indexing attempts](embedded-indexing-journal.md) now persist under the owner.
 The primary status tool reports current publication separately from candidate runs.
 It is an outcome/recovery read; concurrent indexing holds the owner lock.
+
+[Workspace activity](embedded-workspace-activity.md) adds a primary intent/lease read
+and admin-classified watch/lease updates. No watcher is activated; IDE registry
+migration and dispatch remain pending.

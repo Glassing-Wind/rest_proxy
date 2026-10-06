@@ -61,7 +61,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
                                              'LM_PROXY_EMBEDDED_STATE': '/unused'}):
             embedded.register(mcp)
-        self.assertEqual(len(mcp._tool_manager.list_tools()), 10)
+        self.assertEqual(len(mcp._tool_manager.list_tools()), 13)
         runtime = mock.AsyncMock()
         runtime.describe_file.return_value = {'run_id': 'r', 'source_sha256': 'hash', 'source': '1: original'}
         with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
@@ -131,6 +131,20 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime):
             await mcp._tool_manager.get_tool('get_embedded_indexing_attempt').run({'project_id': 'p'})
             runtime.indexing_attempt.assert_awaited_once_with('p')
+
+    async def test_activity_mcp_dispatch_does_not_call_legacy_watcher(self):
+        mcp = FastMCP('activity-routing')
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
+                                          'LM_PROXY_EMBEDDED_STATE': '/unused'}):
+            embedded.register(mcp)
+        runtime = mock.AsyncMock()
+        runtime.workspace_activity.return_value = {'status': 'published', 'revision': 1}
+        with mock.patch.object(embedded, 'get_embedded_runtime', return_value=runtime), \
+                mock.patch('graphrag_core.indexing.watcher.add_watch', side_effect=AssertionError('legacy worker intent')):
+            await mcp._tool_manager.get_tool('set_embedded_watch_intent').run(
+                {'project_id': 'p', 'requested': True, 'expected_revision': 0, 'expected_run_id': 'r'})
+            runtime.workspace_activity.assert_awaited_once_with(
+                'p', watch_requested=True, expected_revision=0, expected_run_id='r')
 
     async def test_global_close_allows_new_owner(self):
         from memory import embedded_runtime

@@ -85,9 +85,34 @@ async def get_embedded_indexing_attempt(project_id: str) -> dict:
     return await get_embedded_runtime().indexing_attempt(project_id)
 
 
+async def get_embedded_workspace_activity(project_id: str) -> dict:
+    """Read durable watch intent and unexpired client leases; no worker/process liveness claim."""
+    return await get_embedded_runtime().workspace_activity(project_id)
+
+
+async def set_embedded_watch_intent(project_id: str, requested: bool,
+                                    expected_revision: int, expected_run_id: str) -> dict:
+    """Persist desired watch state; does not activate an indexing worker."""
+    return await get_embedded_runtime().workspace_activity(project_id, watch_requested=requested,
+        expected_revision=expected_revision, expected_run_id=expected_run_id)
+
+
+async def refresh_embedded_session(project_id: str, session_id: str,
+                                   expected_revision: int, expected_run_id: str, lease_seconds: int = 900) -> dict:
+    """Refresh an explicit client lease (60..3600 seconds); zero releases it.
+
+    Session IDs are caller-supplied identifiers, not authenticated identities or process handles.
+    """
+    if not session_id:
+        raise ValueError('Use a nonempty explicit session ID')
+    return await get_embedded_runtime().workspace_activity(project_id, session_id=session_id,
+        lease_seconds=lease_seconds, expected_revision=expected_revision, expected_run_id=expected_run_id)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
                      describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts, get_embedded_relationships,
-                     get_embedded_project_metadata, update_embedded_project_metadata, get_embedded_indexing_attempt):
+                     get_embedded_project_metadata, update_embedded_project_metadata, get_embedded_indexing_attempt, get_embedded_workspace_activity,
+                     set_embedded_watch_intent, refresh_embedded_session):
             mcp.tool()(tool)

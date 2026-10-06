@@ -2,6 +2,14 @@
 
 ## Current checkpoint — October 5, 2026
 
+[Embedded workspace activity](embedded-workspace-activity.md) now persists typed
+watch intent and bounded expiring client leases under revision/publication
+preconditions. Reopen, same-root reindex, root changes, expiry/limits and deletion
+are verified. This records desired state, not worker activation or process liveness.
+IDE registrar/discovery migration and embedded watcher dispatch remain pending;
+legacy JSON registries are not redirected. All seven hosted checks passed for
+the prior journal commit `fc92c90`.
+
 [Embedded indexing journal](embedded-indexing-journal.md) now persists the latest
 owned attempt and its phases/outcome. Success commits with the publication receipt;
 reopen marks unmatched unfinished work interrupted. Cancellation, post-commit error,

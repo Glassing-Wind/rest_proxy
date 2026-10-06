@@ -18,6 +18,8 @@ SCHEMA_STATEMENTS = (
     'CREATE NODE TABLE IF NOT EXISTS EmbeddedIndexAttempt('
     'id STRING PRIMARY KEY, attempt_id STRING, root_path STRING, run_id STRING, '
     'status STRING, phase STRING, error_type STRING, updated_ms INT64)',
+    'CREATE NODE TABLE IF NOT EXISTS WorkspaceActivity('
+    'id STRING PRIMARY KEY, revision INT64, root_path STRING, payload_json STRING)',
     'CREATE NODE TABLE IF NOT EXISTS WorkspaceMetadata('
     'id STRING PRIMARY KEY, revision INT64, root_path STRING, metadata_json STRING, '
     'updated_ms INT64, run_id STRING)',
@@ -45,6 +47,7 @@ SCHEMA_COLUMNS = {
     'EmbeddedIndexAttempt': {'id': 'STRING', 'attempt_id': 'STRING', 'root_path': 'STRING',
                              'run_id': 'STRING', 'status': 'STRING', 'phase': 'STRING',
                              'error_type': 'STRING', 'updated_ms': 'INT64'},
+    'WorkspaceActivity': {'id': 'STRING', 'revision': 'INT64', 'root_path': 'STRING', 'payload_json': 'STRING'},
     'WorkspaceMetadata': {'id': 'STRING', 'revision': 'INT64', 'root_path': 'STRING',
                           'metadata_json': 'STRING', 'updated_ms': 'INT64', 'run_id': 'STRING'},
     'SourceEvidence': {'id': 'STRING', 'project_id': 'STRING', 'run_id': 'STRING',

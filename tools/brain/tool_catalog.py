@@ -20,6 +20,12 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "get_embedded_workspace_activity": ToolCatalogEntry(
+        "primary", "embedded metadata", "Read watch intent and unexpired client leases."),
+    "set_embedded_watch_intent": ToolCatalogEntry(
+        "admin", "embedded metadata", "Persist desired watch state without activating a worker."),
+    "refresh_embedded_session": ToolCatalogEntry(
+        "admin", "embedded metadata", "Refresh or release an explicit client lease with revision preconditions."),
     "get_embedded_indexing_attempt": ToolCatalogEntry(
         "primary", "embedded indexing", "Inspect the latest durable embedded attempt and its publication identity."),
     "get_embedded_project_metadata": ToolCatalogEntry(

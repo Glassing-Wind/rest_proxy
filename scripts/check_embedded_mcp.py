@@ -55,6 +55,9 @@ async def inspect(session, args):
     relationships = decode(await session.call_tool('get_embedded_relationships',
                                                    {'project_id': args.project_id, 'kind': 'calls', 'limit': 5}))
     assert relationships['run_id'] == overview['run_id']
+    activity = decode(await session.call_tool('get_embedded_workspace_activity', {'project_id': args.project_id}))
+    assert activity['run_id'] == overview['run_id']
+    assert activity['embedded_watch_worker_active'] is False
     attempt = decode(await session.call_tool('get_embedded_indexing_attempt', {'project_id': args.project_id}))
     assert attempt['published_run_id'] == overview['run_id']
     assert attempt['automatic_resume'] is False
@@ -83,7 +86,7 @@ async def inspect(session, args):
         hits = hits['result']
     assert hits and all(hit['run_id'] == overview['run_id'] for hit in hits)
     return {'overview': overview, 'source': source, 'projects': projects,
-            'resolution': resolution, 'workspace_overview': workspace_overview, 'file_facts': facts, 'relationships': relationships, 'symbol_context': symbol_context, 'call_chain': call_chain, 'metadata': metadata, 'attempt': attempt,
+            'resolution': resolution, 'workspace_overview': workspace_overview, 'file_facts': facts, 'relationships': relationships, 'symbol_context': symbol_context, 'call_chain': call_chain, 'metadata': metadata, 'attempt': attempt, 'activity': activity,
             'hit_citations': [{key: hit[key] for key in ('file_path', 'ref_id', 'source_sha256', 'run_id')}
                              for hit in hits]}
 
@@ -143,6 +146,7 @@ async def run(args):
             'relationship_contract_status': stdio['relationships'].get('status', 'v1'),
             'relationship_count_in_probe': len(stdio['relationships'].get('relationships', [])),
             'standard_symbol_context_verified': stdio['symbol_context'] is not None,
+            'workspace_activity_read_verified': True,
             'index_attempt_read_verified': True,
             'index_attempt_status': stdio['attempt']['status'],
             'metadata_read_verified': stdio['metadata']['status'] == 'published',

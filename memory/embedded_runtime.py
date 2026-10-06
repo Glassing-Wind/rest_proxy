@@ -104,6 +104,10 @@ class EmbeddedRuntime:
             operation = owner.call_chain if call_chain else owner.symbol_context
             return await operation(project['project_id'], symbol_name, **bounds)
 
+    async def workspace_activity(self, project_id: str, **values):
+        async with self._lock:
+            return await (await self._get_owner()).workspace_activity(project_id, **values)
+
     async def indexing_attempt(self, project_id: str):
         async with self._lock:
             return await (await self._get_owner()).indexing_attempt(project_id)

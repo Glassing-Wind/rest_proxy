@@ -270,6 +270,59 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.relationships('p'))
 
+    async def test_activity_leases_intent_conflicts_expiry_reopen_and_delete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            (root / 'a.py').write_text('def first():\n    return 1\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                pub = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                empty = await owner.workspace_activity('p')
+                self.assertEqual(empty['revision'], 0)
+                self.assertFalse(empty['watch_requested'])
+                with mock.patch('memory.embedded_activity.time.time_ns', return_value=1000000000000):
+                    intent = await owner.workspace_activity('p', watch_requested=True,
+                        expected_revision=0, expected_run_id=pub['run_id'])
+                    self.assertFalse(intent['embedded_watch_worker_active'])
+                    lease = await owner.workspace_activity('p', session_id='client', lease_seconds=60,
+                        expected_revision=1, expected_run_id=pub['run_id'])
+                    self.assertEqual(lease['sessions'], {'client': 1060000})
+                    stale = await owner.workspace_activity('p', watch_requested=False,
+                        expected_revision=1, expected_run_id=pub['run_id'])
+                    self.assertEqual(stale['status'], 'conflict')
+                with mock.patch('memory.embedded_activity.time.time_ns', return_value=1060000000000):
+                    expired = await owner.workspace_activity('p')
+                    self.assertEqual(expired['sessions'], {})
+                    self.assertTrue(expired['watch_requested'])
+                    self.assertEqual(expired['revision'], 2)
+                    released = await owner.workspace_activity('p', session_id='client', lease_seconds=0,
+                        expected_revision=2, expected_run_id=pub['run_id'])
+                    self.assertEqual(released['revision'], 3)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertTrue((await owner.workspace_activity('p'))['watch_requested'])
+                for i in range(32):
+                    activity = await owner.workspace_activity('p', session_id=str(i),
+                        expected_revision=3+i, expected_run_id=pub['run_id'])
+                self.assertEqual(len(activity['sessions']), 32)
+                renewed = await owner.workspace_activity('p', session_id='0',
+                    expected_revision=35, expected_run_id=pub['run_id'])
+                self.assertEqual(len(renewed['sessions']), 32)
+                with self.assertRaises(ValueError):
+                    await owner.workspace_activity('p', session_id='overflow',
+                        expected_revision=36, expected_run_id=pub['run_id'])
+                self.assertEqual((await owner.workspace_activity('p'))['revision'], 36)
+                replacement = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                self.assertTrue((await owner.workspace_activity('p'))['watch_requested'])
+                stale = await owner.workspace_activity('p', watch_requested=False,
+                    expected_revision=35, expected_run_id=pub['run_id'])
+                self.assertEqual(stale['status'], 'conflict')
+                self.assertNotEqual(replacement['run_id'], pub['run_id'])
+                await owner.index(str(root), 'q', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                await owner.delete_project('p')
+                self.assertEqual((await owner.workspace_activity('p'))['status'], 'not_published')
+                self.assertEqual((await owner.workspace_activity('q'))['sessions'], {})
+
     async def test_index_attempt_success_failure_cancellation_and_postcommit_error(self):
         from graphrag_core.indexing.embedded_outlines import publish_outline_snapshot
         with tempfile.TemporaryDirectory() as directory:
@@ -377,9 +430,15 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 (root / 'a.py').write_text('def first():\n    return 1\n')
             async with EmbeddedRepositoryOwner(state, 3) as owner:
                 pub = await owner.index(str(roots[0]), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                await owner.workspace_activity('p', watch_requested=True, expected_revision=0, expected_run_id=pub['run_id'])
+                await owner.workspace_activity('p', session_id='old-client', expected_revision=1, expected_run_id=pub['run_id'])
                 await owner.project_metadata('p', metadata={'private': 'old workspace'},
                                              expected_revision=0, expected_run_id=pub['run_id'])
                 new = await owner.index(str(roots[1]), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                activity = await owner.workspace_activity('p')
+                self.assertEqual(activity['status'], 'workspace_changed')
+                self.assertFalse(activity['watch_requested'])
+                self.assertEqual(activity['sessions'], {})
                 hidden = await owner.project_metadata('p')
                 self.assertEqual(hidden['status'], 'workspace_changed')
                 self.assertEqual(hidden['metadata'], {})

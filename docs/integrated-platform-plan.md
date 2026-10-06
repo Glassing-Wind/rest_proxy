@@ -159,3 +159,7 @@ FIRE checkpoint history and REST integration remain outstanding.
 [Embedded indexing journal](embedded-indexing-journal.md) adds durable latest-attempt
 metadata, atomic success and recovery without automatically resuming work.
 IDE session and watch-intent migration remain separate integration tasks.
+
+[Workspace activity](embedded-workspace-activity.md) now provides typed durable watch
+intent and client leases. Legacy IDE registry migration, process liveness validation
+and worker dispatch remain separate integration gates.
