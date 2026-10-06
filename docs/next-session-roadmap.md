@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 5, 2026
 
+[Embedded declared-import overview](embedded-import-overview.md) now routes the
+standard summary through the shared owner. Named declaration rankings, source/fact
+citations, wildcard counts and scan/output bounds are verified; implicit imports
+and resolved symbol edges remain unsupported. Native persistence/corruption checks
+and real STDIO/HTTP parity pass. Full reference/binding/route-summary parity remains
+unfinished; use the five-priority table for current scope.
+
 [Embedded related files](embedded-related-files.md) now connects the existing
 standard tool to the shared owner's published import/call/route file candidates.
 Reads are cited, model-independent and bounded; native reopen/reindex/deletion,

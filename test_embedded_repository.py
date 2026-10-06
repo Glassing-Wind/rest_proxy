@@ -217,6 +217,65 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.file_facts('p', 'a.py'))
 
+    async def test_import_overview_native_citations_reopen_reindex_and_corruption(self):
+        from mcp.server.fastmcp import FastMCP
+        from memory.embedded_runtime import EmbeddedRuntime
+        from tools.brain.search import tools
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            main = root / 'main.py'
+            main.write_text('from util import helper as h, other\nimport os as system\nfrom util import *\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                publication = await owner.index(str(root), 'p', ['main.py'], embed=fixture_embed,
+                                                encoder_id='fixture')
+                first = await owner.import_overview('p', include_implicit=True)
+                self.assertEqual(first['run_id'], publication['run_id'])
+                self.assertEqual(first['declarations'], 3)
+                self.assertEqual(first['named_items'], 2)
+                self.assertEqual(first['wildcard_declarations'], 1)
+                self.assertEqual({row['name'] for row in first['top_named_imports']}, {'helper', 'other'})
+                self.assertEqual(first['implicit']['status'], 'unsupported')
+                citation = first['top_named_imports'][0]['citations'][0]
+                self.assertEqual(citation['start_line'], 1)
+                self.assertEqual(citation['source_sha256'], publication['manifest']['files'][0]['sha256'])
+                self.assertFalse(first['resolved_symbol_edges'])
+                runtime = EmbeddedRuntime(state, 3)
+                runtime._owner = owner
+                mcp = FastMCP('imports-native')
+                tools.register(mcp)
+                with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                        mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime):
+                    response = await mcp._tool_manager.get_tool('get_symbol_imports_overview').run(
+                        {'project_path': str(root), 'include_implicit': True})
+                    self.assertEqual(json.loads(response), first)
+                main.write_text('from somewhere import replacement\n')
+                self.assertEqual(await owner.import_overview('p', include_implicit=True), first)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.import_overview('p', include_implicit=True), first)
+                with mock.patch('graphrag_core.indexing.embedded_imports.MAX_FILES', 0):
+                    partial = await owner.import_overview('p')
+                    self.assertTrue(partial['truncated'])
+                    self.assertEqual(partial['scan_next_file'], 'main.py')
+                with mock.patch('graphrag_core.indexing.embedded_imports.MAX_READ_BYTES', 1):
+                    partial = await owner.import_overview('p')
+                    self.assertIn('read-byte-budget', partial['truncation_reasons'])
+                    self.assertEqual(partial['scanned_files'], 0)
+                await owner.index(str(root), 'p', ['main.py'], embed=fixture_embed, encoder_id='fixture')
+                current = await owner.import_overview('p')
+                self.assertNotEqual(current['run_id'], first['run_id'])
+                self.assertEqual(current['top_named_imports'][0]['name'], 'replacement')
+                async with owner.graph.session() as session:
+                    async def corrupt(tx):
+                        await tx.run('MATCH (s:SourceEvidence {id:$id}) SET s.facts_json=$facts',
+                                     id='p:file:main.py', facts='{}')
+                    await session.execute_write(corrupt)
+                with self.assertRaisesRegex(RuntimeError, 'publication hash'):
+                    await owner.import_overview('p')
+                await owner.delete_project('p')
+                self.assertEqual((await owner.import_overview('p'))['status'], 'not_published')
+
     async def test_related_files_native_bridge_reopen_snapshot_and_reindex(self):
         from mcp.server.fastmcp import FastMCP
         from memory.embedded_runtime import EmbeddedRuntime

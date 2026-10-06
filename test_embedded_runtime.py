@@ -130,6 +130,24 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             runtime._owner.resolve_project.return_value = None
             self.assertEqual((await runtime.workspace_related_files('/missing', 'main.py'))['status'], 'not_published')
 
+    async def test_import_summary_routes_without_legacy_driver_or_encoder(self):
+        import json
+        from tools.brain.search import tools
+        mcp = FastMCP('import-routing')
+        tools.register(mcp)
+        runtime = EmbeddedRuntime('/unused', 3)
+        runtime._owner = mock.AsyncMock()
+        runtime._owner.resolve_project.return_value = {'project_id': 'p'}
+        runtime._owner.import_overview.return_value = {'status': 'published', 'run_id': 'r'}
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                mock.patch('graph_bootstrap.require_driver', side_effect=AssertionError('legacy driver')), \
+                mock.patch.object(runtime, '_get_encoder', side_effect=AssertionError('encoder loaded')):
+            result = json.loads(await mcp._tool_manager.get_tool('get_symbol_imports_overview').run(
+                {'project_path': '/source', 'limit': 3, 'include_implicit': True}))
+            self.assertEqual(result['run_id'], 'r')
+            runtime._owner.import_overview.assert_awaited_once_with('p', limit=3, include_implicit=True)
+
     async def test_metadata_mcp_dispatch_preserves_preconditions(self):
         mcp = FastMCP('metadata-routing')
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',

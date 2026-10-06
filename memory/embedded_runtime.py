@@ -125,6 +125,14 @@ class EmbeddedRuntime:
                     raise ValueError('File path is outside the published workspace') from None
             return await owner.related_files(project['project_id'], file_path)
 
+    async def workspace_import_overview(self, workspace_id: str, **bounds):
+        async with self._lock:
+            owner = await self._get_owner()
+            project = await owner.resolve_project(workspace_id)
+            if project is None:
+                return {'workspace_id': workspace_id, 'status': 'not_published'}
+            return await owner.import_overview(project['project_id'], **bounds)
+
     async def workspace_activity(self, project_id: str, **values):
         async with self._lock:
             result = await (await self._get_owner()).workspace_activity(project_id, **values)
