@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "03d411e",
+  "scope": "Explicit durable scoped FIRE checkpoints, hashed paged originals and current-state corrections",
+  "tests": {
+    "store_and_tool_methods": 6,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "process_reopen": true,
+    "conversation_and_source_removed": true,
+    "goal_constraints_decisions_questions_actions_recovered": true,
+    "original_recovered": true,
+    "freshness": "historical-unvalidated",
+    "scope_isolation": true,
+    "correction_and_deletion": true,
+    "external_storage_or_model_required": false,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "private directory/database permissions and opt-in registration",
+    "exact project/session/task isolation",
+    "goal/constraints/decisions/questions/actions recovery without original conversation",
+    "full original hash verification and paged Unicode retrieval",
+    "explicit missing originals and caller-supplied freshness/deletion markers",
+    "revision CAS conflicts with concurrent writers",
+    "current correction excludes superseded decisions",
+    "expiry/purge cannot revive an older decision",
+    "scoped all-version deletion and stale-writer revision protection",
+    "sanitized best-effort storage outages",
+    "real STDIO save followed by fresh HTTP process recovery/correction/deletion"
+  ],
+  "limits": [
+    "Explicit operations only; no interception of compaction or periodic client checkpoint scheduling.",
+    "Private plaintext SQLite adjunct, independent from Ladybug/LanceDB publications.",
+    "Current source is not automatically fetched or attested; hashes supplied by the caller.",
+    "Expiry blocks reads immediately; physical purge requires explicit invocation.",
+    "Hashed-scope revision tombstones remain after payload deletion; independent backups/client exports unaffected.",
+    "Historical version inspection, operational backup/restore and paired coding outcome evaluation remain open.",
+    "Character/byte limits do not establish whole-request token budgeting.",
+    "Local validation only; no deployed personal data, push or hosted CI claim."
+  ],
+  "artifacts_sha256": {
+    "store.log": "fcc79679fd61f1821d24f3ba295f934745f885f074c5b2c3ab08cb808510d5e9",
+    "transport.json": "96e9a4b2f5e8e9fea9ba4ccb6e3acdf63634a5bc00abe1c59aa47bf539b2a276",
+    "stdio.log": "9fe8b87c5dcc4080f93733682d7875f2603b0cdcee501922ebfc2cb3cf20fed7",
+    "http.log": "16f72c7002f5a2976557b0da9450c85454bdcefda0d2bde0c5e4228cb2c1d346",
+    "ci.log": "e3f2170ff1f06d58f0a45cf0772487f534095b990b92397a0afdec50b1de3569"
+  },
+  "source_sha256": {
+    "memory/fire_store.py": "b04458e2d75e1272e472ea313b6fa62febee4ba188bd29cf0439def4fa0f29da",
+    "tools/brain/fire.py": "16a7c4065703ec30335bd2660b61fd5980a367a79865d8908dd43ad7b554d752",
+    "tools/__init__.py": "afe8d9f0ba9fd681d11b4c0bb55b892dd88fcbc0afd297bcb73928dd8460beec",
+    "tools/brain/tool_catalog.py": "10df338b93d5f349c7ad66d80e629f9d3759f20150b2d8cd63f95a2ee08a6be1",
+    "test_fire_store.py": "e06eafdf045f91bbfcca1791557549e68effde27d6e74351e26f882f7a47dab5",
+    "scripts/run_ci_checks.sh": "7eb35f38a30aefb441a4579401b38b559969a7814c16174ae0201939cf7e6b7a",
+    ".env.example": "c22a2c5090ec7dc113bd7472cbece2a7e819ad7f6a3555bf4de378c970d64696"
+  }
+}

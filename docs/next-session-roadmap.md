@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Explicit durable FIRE continuity](fire-durable-continuity.md) now stores scoped
+checkpoints and hashed originals with correction, expiry/purge and deletion. Real
+STDIO save to fresh HTTP resume recovers state after removing fixture conversation
+and source. Current-source validation remains explicit caller work. Next milestone:
+shared context-bundle contracts and whole-request budgeting; client cadence, history
+inspection and operational restore/outcome work remain open.
+
 [Shared-owner REST evidence reads](embedded-rest-evidence.md) now expose an opt-in
 read endpoint on the existing HTTP daemon. Tools, citations and storage ownership
 are shared with MCP; body/result bounds, mutation refusal and flag/backend gating

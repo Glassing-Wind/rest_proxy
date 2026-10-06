@@ -121,3 +121,12 @@ tasks without FIRE. Passing contract tests alone does not prove better outcomes.
 See [context contracts](context-platform-direction.md),
 [integrated implementation plan](integrated-platform-plan.md) and
 [session roadmap](next-session-roadmap.md).
+
+## October 6 durable continuity implementation
+
+The [explicit checkpoint/original store](fire-durable-continuity.md) implements scoped
+MCP save/resume, hashed paged originals, revision-checked corrections, retention and
+deletion. A real STDIO-to-fresh-HTTP drill recovers fixture task state and originals
+after removing the conversation/source. Earlier contract-only descriptions remain
+historical; client compaction integration and automatic current-source validation
+are not implemented.

@@ -187,3 +187,10 @@ preconditions. Global service permission remains an explicit deployment choice.
 [REST evidence reads](embedded-rest-evidence.md) now share the HTTP MCP daemon’s
 owner and existing tool contracts through a bounded opt-in endpoint. This is a read
 surface; whole-request context bundles and inference-proxy integration remain gates.
+
+## October 6 explicit FIRE recovery
+
+[Durable task/original recovery](fire-durable-continuity.md) now has a private local
+store and opt-in MCP tools with real process-reopen acceptance. Client cadence,
+current-source validation and operational restore/outcome gates remain; whole-request
+bundle budgeting is the next coordinated implementation slice.

@@ -20,6 +20,11 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    'save_fire_checkpoint': ToolCatalogEntry('admin', 'FIRE continuity', 'Persist explicit scoped task state and supporting originals before compaction.'),
+    'resume_fire_checkpoint': ToolCatalogEntry('primary', 'FIRE continuity', 'Recover scoped task state while disclosing historical evidence freshness.'),
+    'get_fire_original': ToolCatalogEntry('primary', 'FIRE continuity', 'Retrieve a hashed historical original supporting the current checkpoint.'),
+    'delete_fire_task': ToolCatalogEntry('admin', 'FIRE continuity', 'Delete scoped task state and originals with a revision precondition.'),
+    'purge_expired_fire_versions': ToolCatalogEntry('admin', 'FIRE continuity', 'Remove expired scoped checkpoint versions and originals.'),
     "resolve_embedded_session": ToolCatalogEntry(
         "primary", "embedded metadata", "Resolve a unique unexpired client lease against current published roots."),
     "configure_embedded_project_watch": ToolCatalogEntry(
