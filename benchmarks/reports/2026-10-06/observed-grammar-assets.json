@@ -1,0 +1,80 @@
+{
+  "scope": "Observed macOS ARM64 ts-pack 1.20.0 cache; read-only, no downloads",
+  "manifest_sha256": "bad1eec2b1406c9d1359d53991249e99940dbfc5f36fd1bc7070874ca5d86a0f",
+  "manifest_platform_bundle_sha256": "34f92d9cf4f3ad42d9514b30feba2fcaeddca0d4af06454380fd9e063427a09c",
+  "bundles": [
+    {
+      "name": "macos-arm64-34f92d9cf4f3ad42d9514b30feba2fcaeddca0d4af06454380fd9e063427a09c.tar.zst",
+      "bytes": 25646014,
+      "sha256": "34f92d9cf4f3ad42d9514b30feba2fcaeddca0d4af06454380fd9e063427a09c"
+    }
+  ],
+  "manifest_bundle_hash_matches_cached_bundle": true,
+  "grammar_binaries": [
+    {
+      "name": "libtree_sitter_go.dylib",
+      "bytes": 249176,
+      "sha256": "02a737efd613324bfa3670be20cb43e58a6afd445995288e962d19b23828ed74",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_javascript.dylib",
+      "bytes": 780496,
+      "sha256": "330096a0a3d4c98a77f389fbb43e3aa5a3934209597342b270ee7fcd5feb718b",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_json.dylib",
+      "bytes": 34008,
+      "sha256": "cf5dc365af2586031500fade59c7c404f274a0107ac7d54e1fea14d63bef9e8f",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_kotlin.dylib",
+      "bytes": 6213640,
+      "sha256": "d214c719a0aa503ea359aa5dd3593e89d7c688d58677e0cfbad582b9a8578129",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_properties.dylib",
+      "bytes": 383616,
+      "sha256": "1a9b485b24385fbc5cbcbaef6e71797968f6172e5837b1c5b8d6211bbc28c350",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_python.dylib",
+      "bytes": 829640,
+      "sha256": "a0aca809ab8a578209f465128464b561ed0fd124088c12a49f08777fed76bd53",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_rust.dylib",
+      "bytes": 1491144,
+      "sha256": "f3d3dc688311258248dbc9fb76edaac233120288fb2cce18f1fac069cbebf399",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_swift.dylib",
+      "bytes": 4170152,
+      "sha256": "d439e58a91e4ffcafaec096e42c9ed73c6df8de6ff861b3c5f4288a757823e4e",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_tsx.dylib",
+      "bytes": 1837336,
+      "sha256": "e0c946fb56d8a10c8664c6a0d9f6c4d441647a1cd693eefa658f65ea4245c69e",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    },
+    {
+      "name": "libtree_sitter_typescript.dylib",
+      "bytes": 1787792,
+      "sha256": "6966cb024d24a85290fba333b9dc0da21c6f77f117c810e36d9b2354d1804eb2",
+      "notice_status": "Not shipped beside this observed cache binary; exact grammar source/notice reconciliation remains open"
+    }
+  ],
+  "limitations": [
+    "Hashes identify observed assets; they do not attest grammar source commits or complete licenses.",
+    "Only Python grammar is used by this cold fixture drill; the other nine are observed cache assets.",
+    "No model assets included or changed."
+  ]
+}

@@ -83,3 +83,7 @@ Remaining gates: fresh exact-pin native source builds and supported-platform ins
 exact dependency/grammar/model notices and SBOM, backup/restore drills, real embedding
 acceptance from this installed profile and controlled paired coding outcomes.
 Synthetic vectors establish wiring, not model quality or token/latency savings.
+
+Subsequent [inventory and cold restore acceptance](release-inventory-and-restore.md)
+adds a schema-valid incomplete SBOM, shipped notices and native/FIRE recovery drill.
+Exact notice closure and operational backup/deletion policy remain open.

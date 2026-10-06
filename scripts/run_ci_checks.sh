@@ -83,6 +83,8 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_fire_context_bundle.py
 "$PYTHON_BIN" test_context_forwarding.py
 "$PYTHON_BIN" test_distribution.py
+"$PYTHON_BIN" test_release_inventory.py
+"$PYTHON_BIN" test_embedded_restore.py
 "$PYTHON_BIN" test_embedded_facts.py
 "$PYTHON_BIN" test_embedded_relationships.py
 "$PYTHON_BIN" test_embedded_call_chain.py

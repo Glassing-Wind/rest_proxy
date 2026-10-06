@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "d39c931",
+  "target": "Previously accepted minimal installed environment and exact wheels from its receipt",
+  "inventory": {
+    "components": 48,
+    "notices": 72,
+    "gaps": [
+      {
+        "component": "pkg:pypi/lance-namespace@0.13.0",
+        "gap": "No shipped license/notice files discovered"
+      },
+      {
+        "component": "pkg:pypi/lance-namespace-urllib3-client@0.13.0",
+        "gap": "No shipped license/notice files discovered"
+      },
+      {
+        "component": "pkg:pypi/lancedb@0.39.0",
+        "gap": "No concise machine-readable license metadata"
+      },
+      {
+        "component": "pkg:pypi/tree-sitter@0.26.0",
+        "gap": "No concise machine-readable license metadata"
+      }
+    ],
+    "artifacts": [
+      {
+        "name": "rest_proxy-0.1.0-py3-none-any.whl",
+        "sha256": "10e31d7f3e45bf64964db0cf3dea696731825a8662aa63f8d1c0d53ba52980b4",
+        "bytes": 556708
+      },
+      {
+        "name": "tree_sitter_language_pack-1.20.0-cp310-abi3-macosx_11_0_arm64.whl",
+        "sha256": "3cbb22e637cc1c7fa650c9fa54683586711863d5654f42e97c5f234230043027",
+        "bytes": 5433399
+      }
+    ]
+  },
+  "schema_validation": {
+    "format": "CycloneDX 1.6",
+    "passed": true,
+    "composition": "incomplete",
+    "schema_source": "https://raw.githubusercontent.com/CycloneDX/specification/1.6/schema/bom-1.6.schema.json"
+  },
+  "restore": {
+    "cold_copy_hashes_verified": true,
+    "files_copied": 16,
+    "source_and_live_state_removed": true,
+    "published_source_and_vectors_equal": true,
+    "publication_identity_preserved": true,
+    "fire_revision_and_original_preserved": true,
+    "deletion_tombstone_and_expiry_preserved": true,
+    "scope_isolation_preserved": true,
+    "embedding": "Synthetic vectors; no quality claims",
+    "limitations": [
+      "Cold fixture drill only, not online or coordinated multi-host backup.",
+      "Backups can contain sensitive originals and pre-deletion data.",
+      "Restored evidence remains historical until current-source validation."
+    ],
+    "seconds": 0.751
+  },
+  "focused_tests": 4,
+  "local_ci": "All gated checks passed",
+  "limitations": [
+    "No complete native/grammar/model dependency-license closure or legal approval",
+    "No vulnerability assessment or resolved dependency graph",
+    "Cold synthetic fixture, not online/production-scale backup or RPO/RTO guarantee",
+    "No operational storage, models, services or cached grammar assets changed",
+    "No push, merge, deployment or hosted CI claimed"
+  ],
+  "sha256": {
+    "scripts/build_release_inventory.py": "96cf2e90504cf0aedb324805a7be1eb8d19b2a4c31d190df333e9fa3f85360d2",
+    "scripts/check_embedded_restore.py": "88a632591611c9ae2598af991d4e0170ad875196e77884d72d366c0e9b3c2749",
+    "test_release_inventory.py": "f5e3c1d54c0d88f65a8d35ba83feea78bd57ca5a27734c155874bec7cfa47bb5",
+    "test_embedded_restore.py": "a86d89f8c4947bab1c6a13446a80232925ea15bf6319196a35b3dfb59c30caef",
+    ".runtime/release-evidence/minimal-inventory/bom.cdx.json": "df66b43ad0d41ec5a0e4a3de3e8ea2a8d7fd791b1d322483dd29671771743334",
+    ".runtime/release-evidence/minimal-inventory/inventory.json": "e75ac111ba76921e08648079a369201eb570c557dd41f456caefb99899d5d19a",
+    ".runtime/release-evidence/third-party-notices.tar.gz": "8de83581db3d923aab0cbd2e1f275eed590ee78bdbd009db01b3ae9504075ff6",
+    ".runtime/release-evidence/grammar-assets.json": "545ec140ed37787043d9efbc2ba3a1141fb02eca288a51388028645addc88075",
+    ".runtime/release-evidence/inventory-summary.json": "fcd44f6b49a6fcab9fa18f18d5c9aff57ea167418b0efb72ada3847902e8f844",
+    ".runtime/release-evidence/restore.json": "553f8f1e2008c846d799f3aec1508a815c115143fb195afa93f2b6a55ed1d9bb",
+    ".runtime/release-evidence/restore.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".runtime/release-evidence/contracts.log": "0c0f2386325f1f3c2a221e1115c976e1a2a47bd36b5f435d075de298541de456",
+    ".runtime/release-evidence/ci.log": "ccbcb9c7590e76566221076feb30fbb026df37cd00aa2e81f74856aee7269fd9",
+    ".runtime/release-evidence/schema-validation.log": "714ebfdbf067e4faf93fad4615f7524a9acf45af2547b8fc5c699d48668e66b9",
+    ".runtime/release-evidence/bom-1.6.schema.json": "3e92dddbc30cf7f6a02b80f0942b1a4cfd4fb1c26f1dfc4310afa9d613cafb93",
+    ".runtime/release-evidence/spdx.schema.json": "baa9d3bd1ed57b6751b0887edead6b5063ff53ff7429cf85d476c6c94af0166e",
+    ".runtime/release-evidence/jsf-0.82.schema.json": "8bae002c25e723db7ee1f26afde680ae1a2b1a8f6b4b4b0fd65dc3becb090aae"
+  }
+}

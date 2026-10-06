@@ -10,6 +10,12 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Release inventory and cold restore](release-inventory-and-restore.md) now passes
+a schema-valid incomplete SBOM and graph/vector/FIRE cold-copy fixture recovery.
+Four explicit package metadata/notice gaps and native/grammar/model closure remain
+release work. Next: reconcile those exact artifacts, then installed real-model and
+controlled paired coding outcomes; operational backup/deletion policy stays open.
+
 [Minimal embedded installed acceptance](minimal-embedded-install.md) now separates
 core/embedded/full extras, packages the missing parser diagnostics module and
 configures writable runtime paths outside installed modules. Fresh environment
