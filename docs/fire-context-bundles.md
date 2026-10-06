@@ -77,3 +77,6 @@ bundle identity and deletion leaves explicit missing-state context. See the
 The next gate is one explicit provider request adapter with serializer/tokenizer/
 framing verification, actual usage and continuation handling. Operational restore
 drills and paired investigation outcomes remain release gates.
+
+See [opt-in stateless LM Studio context forwarding](context-provider-forwarding.md)
+for the implemented provider adapter, actual usage acceptance and remaining limits.

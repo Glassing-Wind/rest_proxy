@@ -102,3 +102,6 @@ flow and paired coding outcomes require end-to-end measurements.
 state and original excerpts to this contract through one historical-data snapshot.
 Earlier pending-adaptation statements are historical; provider forwarding and actual
 usage remain unimplemented.
+
+See [opt-in stateless LM Studio context forwarding](context-provider-forwarding.md)
+for the implemented provider adapter, actual usage acceptance and remaining limits.

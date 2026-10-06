@@ -188,3 +188,6 @@ formatting. [LM Studio gpt-oss integration](https://lmstudio.ai/blog/gpt-oss),
 See [cockpit worker/supervisor direction](clarity-cockpit-direction.md) for the
 proposed bounded local-worker role, disclosure controls and evaluation requirements.
 No automatic delegation or model replacement is enabled by this documentation.
+
+See [opt-in stateless LM Studio context forwarding](context-provider-forwarding.md)
+for the implemented provider adapter, actual usage acceptance and remaining limits.

@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Opt-in LM Studio context forwarding](context-provider-forwarding.md) now formats
+and recounts the serialized request, requires a resident model and forwards a
+stateless bundle from the shared owner. Real Qwen usage was 807 prompt/15 completion
+tokens in one disposable FIRE case; focused tests and local CI pass. Exact template
+attestation, provider continuation and controlled paired outcomes remain open.
+Next: controlled coding-task acceptance and minimal release packaging.
+
 [FIRE snapshot-to-bundle integration](fire-context-bundles.md) now recovers one
 scoped state/original snapshot into historical candidates without replacing caller
 instructions or goal. Corrections, expiry/deletion and degradation are explicit;

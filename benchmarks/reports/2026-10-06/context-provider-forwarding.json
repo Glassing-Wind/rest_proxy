@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "70e73c2",
+  "focused_tests": 4,
+  "local_ci": "All gated checks passed",
+  "live_trial": {
+    "model": "qwen3.6-35b-a3b-splash",
+    "seconds": 1.212,
+    "proxy_transport": "in-process ASGI route",
+    "owner_transport": "real loopback REST",
+    "provider_transport": "real LM Studio chat/completions",
+    "actual_usage": {
+      "prompt_tokens": 807,
+      "completion_tokens": 15,
+      "total_tokens": 822,
+      "completion_tokens_details": {
+        "reasoning_tokens": 0
+      }
+    },
+    "formatting": {
+      "method": "utf8-byte-estimate",
+      "serialized_input": 2194,
+      "total_reserved": 2834,
+      "context_capacity": 8192,
+      "chat_template_verified": false
+    },
+    "fire_revision": 1,
+    "selected_items": 2,
+    "answer_cites_source_and_return_value": true,
+    "observed_usage_fits": true,
+    "loaded_instances_unchanged": true,
+    "memory_injection_bypassed": true,
+    "continuation": "rejected; stateless only",
+    "chat_template_attested": false,
+    "operational_services_changed": false,
+    "synthetic_source_fixture": true
+  },
+  "limitations": [
+    "One synthetic fixture; no paired outcome or token-savings claim.",
+    "Chat template not attested; continuation unsupported.",
+    "Proxy exercised through ASGI, owner through TCP REST.",
+    "No hosted CI, push, deployment or merge claimed."
+  ],
+  "sha256": {
+    "proxy/context_forwarding.py": "68de2f3526a832bdbb0ab0c369ff25dab3ab99a40c3f659f83886d115d9186bd",
+    "test_context_forwarding.py": "65df9b9e760a4b435b4733b41406972c578e9182015c56fff86faaa18522ae80",
+    ".runtime/context-forwarding-acceptance/ci.log": "a9bb5c5b9de196d1634b56dddec4abeffa78be61a919743da0825430281adcdd",
+    ".runtime/context-forwarding-acceptance/contracts.log": "13375b9e4d67c4f0c5f38104e2ded58642c6cca773c6e4876f4c0b15ff68e87c",
+    ".runtime/context-forwarding-acceptance/trial.json": "89f57f70dc62cf23ceb40a69a8b0b2dc01117a43b4be547b4bcb4cfa471039f4"
+  }
+}
