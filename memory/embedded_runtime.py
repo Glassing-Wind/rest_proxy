@@ -112,6 +112,19 @@ class EmbeddedRuntime:
         async with self._lock:
             return await (await self._get_owner()).resolve_session(session_id)
 
+    async def workspace_related_files(self, workspace_id: str, file_path: str):
+        async with self._lock:
+            owner = await self._get_owner()
+            project = await owner.resolve_project(workspace_id)
+            if project is None:
+                return {'workspace_id': workspace_id, 'status': 'not_published'}
+            if Path(file_path).is_absolute():
+                try:
+                    file_path = str(Path(file_path).resolve().relative_to(project['workspace_path']))
+                except ValueError:
+                    raise ValueError('File path is outside the published workspace') from None
+            return await owner.related_files(project['project_id'], file_path)
+
     async def workspace_activity(self, project_id: str, **values):
         async with self._lock:
             result = await (await self._get_owner()).workspace_activity(project_id, **values)

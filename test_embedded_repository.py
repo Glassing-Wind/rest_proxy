@@ -217,6 +217,51 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.file_facts('p', 'a.py'))
 
+    async def test_related_files_native_bridge_reopen_snapshot_and_reindex(self):
+        from mcp.server.fastmcp import FastMCP
+        from memory.embedded_runtime import EmbeddedRuntime
+        from tools.brain.code_intel import core
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            (root / 'util.py').write_text('def helper():\n    return 1\n')
+            main = root / 'main.py'
+            main.write_text('from util import helper\ndef caller():\n    return helper()\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                publication = await owner.index(str(root), 'p', ['main.py', 'util.py'],
+                                                embed=fixture_embed, encoder_id='fixture')
+                first = await owner.related_files('p', 'main.py')
+                self.assertEqual(first['run_id'], publication['run_id'])
+                self.assertFalse(first['coverage_complete'])
+                edges = [edge for group in first['groups'] for edge in group['relationships']]
+                self.assertEqual({edge['kind'] for edge in edges}, {'imports', 'calls'})
+                self.assertTrue(all(edge['target_file'] == 'util.py' for edge in edges))
+                self.assertTrue(all(edge['source_sha256'] == first['source_sha256'] for edge in edges))
+                inbound = await owner.related_files('p', 'util.py')
+                self.assertTrue(any(g['relationships'] for g in inbound['groups'] if g['direction'] == 'in'))
+                self.assertEqual((await owner.related_files('p', 'absent.py'))['status'], 'file_not_published')
+                main.write_text('def caller():\n    return 1\n')
+                self.assertEqual(await owner.related_files('p', 'main.py'), first)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.related_files('p', 'main.py'), first)
+                runtime = EmbeddedRuntime(state, 3)
+                runtime._owner = owner
+                mcp = FastMCP('related-native')
+                core.register(mcp)
+                with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                        mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                        mock.patch.object(core, 'get_workspace_path', side_effect=AssertionError('legacy path')):
+                    response = await mcp._tool_manager.get_tool('get_related_files').run(
+                        {'project_path': str(root), 'file_path': 'main.py'})
+                    self.assertEqual(json.loads(response), first)
+                await owner.index(str(root), 'p', ['main.py', 'util.py'], embed=fixture_embed, encoder_id='fixture')
+                current = await owner.related_files('p', 'main.py')
+                self.assertNotEqual(current['run_id'], first['run_id'])
+                self.assertTrue(all(not group['relationships'] for group in current['groups']))
+                await owner.delete_project('p')
+                self.assertEqual((await owner.related_files('p', 'main.py'))['status'], 'file_not_published')
+
     async def test_relationship_publication_queries_rollback_reopen_and_delete(self):
         from graphrag_core.indexing.embedded_outlines import build_outline_snapshot, publish_outline_snapshot
         with tempfile.TemporaryDirectory() as directory:

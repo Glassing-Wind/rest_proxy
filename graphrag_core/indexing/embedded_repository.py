@@ -185,6 +185,12 @@ class EmbeddedRepositoryOwner:
             self._require_open()
             return await symbol_context(self.graph, project_id, symbol_name, **bounds)
 
+    async def related_files(self, project_id: str, file_path: str):
+        from graphrag_core.indexing.embedded_related import related_files
+        async with self._lock:
+            self._require_open()
+            return await related_files(self.graph, project_id, file_path)
+
     async def watch_setup(self, project_id: str):
         from memory.embedded_activity import workspace_activity
         async with self._lock:

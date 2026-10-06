@@ -10,6 +10,12 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 5, 2026
 
+[Embedded related files](embedded-related-files.md) now connects the existing
+standard tool to the shared owner's published import/call/route file candidates.
+Reads are cited, model-independent and bounded; native reopen/reindex/deletion,
+publication guards and real STDIO/HTTP parity pass. This file-level bridge leaves
+symbol-reference/import summaries and full graph parity incomplete.
+
 The [Qwen worker trial](../benchmarks/reports/2026-10-05/qwen-worker-trial.md) now
 demonstrates one local known-file investigation, patch proposal and Codex review.
 The first attempt truncated; the accepted attempt required supervisor corrections.

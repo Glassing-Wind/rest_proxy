@@ -2195,6 +2195,9 @@ def register(mcp: FastMCP) -> None:
         """
         Find files that are structurally related to the target file.
 
+        Embedded mode returns bounded cited static import/call/route candidates
+        as JSON, with explicit incomplete coverage and continuation cursors.
+
         Args:
             project_path: Absolute path to the project root.
             file_path: Relative path to the file in the project.
@@ -2206,6 +2209,12 @@ def register(mcp: FastMCP) -> None:
                 return "Workspace path is required."
             if not str(file_path or "").strip():
                 return "File path is required."
+            from memory.storage_config import embedded_graph_selected
+            if embedded_graph_selected():
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_related_files(workspace_key, file_path)
+                return json.dumps(result, ensure_ascii=False)
             project_path = get_workspace_path(workspace_key)
             project_id = get_project_id(workspace_key)
             file_id = f"{project_id}:file:{file_path}"

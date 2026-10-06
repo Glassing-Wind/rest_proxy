@@ -107,6 +107,29 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result['run_id'], 'r')
             runtime.workspace_symbol_context.assert_awaited_once()
 
+    async def test_related_file_routes_and_path_scope_without_encoder(self):
+        import json
+        from tools.brain.code_intel import core
+        mcp = FastMCP('related-routing')
+        core.register(mcp)
+        runtime = EmbeddedRuntime('/unused', 3)
+        runtime._owner = mock.AsyncMock()
+        runtime._owner.resolve_project.return_value = {'project_id': 'p', 'workspace_path': '/source'}
+        runtime._owner.related_files.return_value = {'status': 'published', 'run_id': 'r'}
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                mock.patch.object(core, 'get_memory_modules', side_effect=AssertionError('legacy import')), \
+                mock.patch.object(core, 'get_workspace_path', side_effect=AssertionError('legacy path')), \
+                mock.patch.object(runtime, '_get_encoder', side_effect=AssertionError('encoder loaded')):
+            result = json.loads(await mcp._tool_manager.get_tool('get_related_files').run(
+                {'workspace_id': '/source', 'file_path': '/source/main.py'}))
+            self.assertEqual(result['run_id'], 'r')
+            runtime._owner.related_files.assert_awaited_once_with('p', 'main.py')
+            with self.assertRaisesRegex(ValueError, 'outside'):
+                await runtime.workspace_related_files('/source', '/elsewhere/main.py')
+            runtime._owner.resolve_project.return_value = None
+            self.assertEqual((await runtime.workspace_related_files('/missing', 'main.py'))['status'], 'not_published')
+
     async def test_metadata_mcp_dispatch_preserves_preconditions(self):
         mcp = FastMCP('metadata-routing')
         with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded',
