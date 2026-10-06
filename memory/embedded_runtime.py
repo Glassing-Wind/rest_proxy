@@ -134,6 +134,14 @@ class EmbeddedRuntime:
                 return {'workspace_id': workspace_id, 'status': 'not_published'}
             return await owner.import_overview(project['project_id'], **bounds)
 
+    async def workspace_route_overview(self, workspace_id: str, **bounds):
+        async with self._lock:
+            owner = await self._get_owner()
+            project = await owner.resolve_project(workspace_id)
+            if project is None:
+                return {'workspace_id': workspace_id, 'status': 'not_published'}
+            return await owner.route_overview(project['project_id'], **bounds)
+
     async def workspace_references(self, workspace_id: str | list[str], symbol_name: str):
         """Return bounded static call candidates; never claim exhaustive references."""
         works = [workspace_id] if isinstance(workspace_id, str) else workspace_id

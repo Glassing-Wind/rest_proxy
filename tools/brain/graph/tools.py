@@ -152,8 +152,24 @@ def register(mcp: FastMCP) -> None:
     ) -> str:
         """
         Summarize API → Service → DB paths for a project.
+
+        Embedded mode returns cited native route declarations as JSON. Service/DB
+        hops and their filters are unsupported; as_table is unsupported in this mode.
         """
         try:
+            from memory.storage_config import embedded_graph_selected
+            if embedded_graph_selected():
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                unsupported = [name for name, value in (
+                    ('crate_contains', crate_contains), ('model_contains', model_contains),
+                    ('service_contains', service_contains), ('as_table', as_table)) if value]
+                if unsupported:
+                    return json.dumps({'status': 'unsupported-options', 'options': unsupported,
+                                       'coverage_complete': False})
+                return json.dumps(await get_embedded_runtime().workspace_route_overview(
+                    workspace_id, limit=limit, api_contains=api_contains,
+                    include_tests=include_tests), ensure_ascii=False)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()

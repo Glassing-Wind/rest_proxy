@@ -17,6 +17,39 @@ async def fixture_embed(texts):
 
 
 class PublishedRepository(unittest.IsolatedAsyncioTestCase):
+    async def test_route_overview_native_publication_filters_reopen_and_reindex(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            route = root / 'app/api/health/route.ts'
+            route.parent.mkdir(parents=True)
+            route.write_text('export async function GET() { return Response.json({ok:true}); }')
+            test_route = root / 'app/api/__tests__/check/route.ts'
+            test_route.parent.mkdir(parents=True)
+            test_route.write_text('export async function POST() { return Response.json({}); }')
+            paths = [str(path.relative_to(root)) for path in (route, test_route)]
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                await owner.index(str(root), 'p', paths, embed=fixture_embed, encoder_id='fixture')
+                first = await owner.route_overview('p')
+                self.assertEqual(first['matched_observations'], 1)
+                self.assertEqual(first['routes'][0]['observation']['path'], '/api/health')
+                self.assertIsNone(first['routes'][0]['start_line'])
+                self.assertTrue(first['routes'][0]['facts_sha256'])
+                self.assertEqual((await owner.route_overview('p', include_tests=True))['matched_observations'], 2)
+                self.assertEqual((await owner.route_overview('p', api_contains='absent'))['routes'], [])
+                limited = await owner.route_overview('p', include_tests=True, limit=1)
+                self.assertTrue(limited['truncated'])
+                route.write_text('export async function POST() { return Response.json({}); }')
+                self.assertEqual(await owner.route_overview('p'), first)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.route_overview('p'), first)
+                await owner.index(str(root), 'p', paths, embed=fixture_embed, encoder_id='fixture')
+                current = await owner.route_overview('p')
+                self.assertEqual(current['routes'][0]['observation']['method'], 'POST')
+                self.assertNotEqual(current['run_id'], first['run_id'])
+                await owner.delete_project('p')
+                self.assertEqual((await owner.route_overview('p'))['status'], 'not_published')
+
     async def test_publication_failures_reopen_and_deletion(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'

@@ -9,6 +9,32 @@ from mcp.server.fastmcp import FastMCP
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_backend_route_summary_dispatch_and_unsupported_options(self):
+        import json
+        from tools.brain.graph import tools
+        mcp = FastMCP('route-routing')
+        tools.register(mcp)
+        runtime = EmbeddedRuntime('/unused', 3)
+        runtime._owner = mock.AsyncMock()
+        runtime._owner.resolve_project.return_value = {'project_id': 'p'}
+        runtime._owner.route_overview.return_value = {'status': 'published', 'run_id': 'r'}
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                mock.patch('graph_bootstrap.require_driver', side_effect=AssertionError('legacy')), \
+                mock.patch.object(runtime, '_get_encoder', side_effect=AssertionError('encoder')):
+            tool = mcp._tool_manager.get_tool('get_backend_flow_summary')
+            result = json.loads(await tool.run({'workspace_id': '/source', 'api_contains': 'api', 'limit': 3}))
+            self.assertEqual(result['run_id'], 'r')
+            runtime._owner.route_overview.assert_awaited_once_with(
+                'p', limit=3, api_contains='api', include_tests=False)
+            for option, value in [('model_contains', 'Model'), ('service_contains', 'svc'),
+                                  ('crate_contains', 'crate'), ('as_table', True)]:
+                rejected = json.loads(await tool.run({'workspace_id': '/source', option: value}))
+                self.assertEqual(rejected['status'], 'unsupported-options')
+                self.assertEqual(rejected['options'], [option])
+            runtime._owner.resolve_project.return_value = None
+            self.assertEqual((await runtime.workspace_route_overview('missing'))['status'], 'not_published')
+
     async def test_reference_routes_scope_ambiguity_and_bounds_without_encoder(self):
         import json
         from tools.brain.code_intel.references import find_references_impl

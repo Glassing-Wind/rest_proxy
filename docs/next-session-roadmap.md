@@ -10,6 +10,12 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 5, 2026
 
+[Embedded backend route overview](embedded-route-overview.md) now returns verified
+native route declarations through the explicit backend tool. Source/fact hashes,
+filters, bounds, persistence and real STDIO/HTTP parity pass. This does not supply
+service/database hops, broad framework coverage or auto/UI flow parity. Next work
+should address resolved imports or remaining owner integrations using the priority table.
+
 [Embedded symbol references](embedded-symbol-references.md) now routes the standard
 tool to verified static callers with bounded multi-workspace results and explicit
 partial coverage. Native snapshot/reindex/ambiguity and real STDIO/HTTP parity pass.

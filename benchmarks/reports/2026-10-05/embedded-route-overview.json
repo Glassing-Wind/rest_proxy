@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-05",
+  "base_commit": "691aaec",
+  "scope": "Explicit backend summary bridge to cited native route declarations",
+  "tests": {
+    "native_repository": 22,
+    "runtime_mcp": 14,
+    "offline_route_bounds": 2,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "parity": true,
+    "run_id": "572ca2fe-ce26-4442-854b-0b69bdab3cba",
+    "route_observations": 1,
+    "embedding_model_required_for_reads": false,
+    "synthetic_vectors": true,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "source and fact hashes/publication matching",
+    "path/test filters and row/output/read/file bounds",
+    "native live-edit snapshot stability/reopen/reindex/deletion",
+    "missing/old fact statuses and corrupted fact refusal",
+    "unsupported service/model/crate/table options explicit",
+    "dispatch without legacy graph or encoder",
+    "real STDIO and Streamable HTTP parity"
+  ],
+  "limits": [
+    "Native declared routes only; no service/database hops or runtime routing.",
+    "Tested Next.js-style file route; FastAPI decorator probe emitted no native routes.",
+    "No verified route line spans; null lines do not invent citations.",
+    "Counts cover scanned files only: 100-file and 8 MiB source/fact retrieval ceilings.",
+    "General auto/UI flow dispatcher and resolved frontend-to-backend chains remain open.",
+    "Synthetic vectors; no semantic quality, latency or token savings claim.",
+    "Local validation only; no hosted CI or deployment claimed."
+  ],
+  "artifacts_sha256": {
+    "native.log": "a1a443a115f26e418eef14bee195f898361bb5b71ec00fff4aa73810871bdc17",
+    "runtime.log": "60c40b3f5dbc123a2683642a1535a694857eebc4cf6dc467f370506050326dfe",
+    "bounds.log": "ca79dcdf51b9c5da7857508bc8d19bbe59c2caa461f0158153993999cb469bb6",
+    "transport.json": "9de72d08841204a962b7b2cdf06bdcb480ec34751fa32230940882b80d41f0a4",
+    "stdio.log": "786eea7ea7a16f88a103d54bcc75f11b6d45a164bef80c47be7786734140029f",
+    "http.log": "35e4dcfbf565406ab8ecfbfd71b20062d00a9c1f4be62071359894502cb98c41",
+    "ci.log": "cd6cd595a2583dbe6fde4b96fccac0336a2d99c46676651620d4eed41c2562b9"
+  },
+  "source_sha256": {
+    "graphrag_core/indexing/embedded_routes.py": "b45270f05f755fe88568f96b2d39c4a3876cfce3638d250152cc55e18172a24c",
+    "graphrag_core/indexing/embedded_repository.py": "5fbbe5a3d3d04a869bc797f93568ed38555c299da8437838f269f60cb24272b0",
+    "memory/embedded_runtime.py": "d652a03448ab9ecc48de4a17c52e26dddcb8f2040c8bb2b4c44616ee3d387b0a",
+    "tools/brain/graph/tools.py": "046ecaa6e5e2ed990cca7b22dff7b031985b4caf027643523c9b942553bcadcd",
+    "test_embedded_route_overview.py": "fdac5b87d718eb39244fda6c5fa8dca5ff3b819bb5db2bd5b7575a2c27ced49c",
+    "test_embedded_repository.py": "7ec908e5feee1161e33baee2d820f2ae8db0ea144dc78558d2c74dd1b63e1eab",
+    "test_embedded_runtime.py": "ec35525fe84dcc06708830a4ec7cef6c90f03b27f7a4b725a84dba8838e33760",
+    "scripts/run_ci_checks.sh": "6f28af2de5a0cebbe01113bdceb84d778d9c38e5ca74cadff36e54d456bae026"
+  }
+}
