@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "f199d7e",
+  "scope": "One scoped FIRE snapshot adapted into historical context-bundle candidates",
+  "tests": {
+    "adapter_methods": 6,
+    "durable_store_methods": 6,
+    "base_builder_methods": 7,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http",
+      "rest"
+    ],
+    "process_reopen": true,
+    "bundle_parity": true,
+    "bundle_id": "4916d4ced097ed9ab361462ad0bebf55a33d80165a24f7eac93e0047e188847e",
+    "selected_items": 2,
+    "fits_accounted_budget": true,
+    "conversation_and_source_removed": true,
+    "goal_constraints_decisions_questions_actions_recovered": true,
+    "original_recovered": true,
+    "freshness": "historical-unvalidated",
+    "scope_isolation": true,
+    "correction_and_deletion": true,
+    "external_storage_or_model_required": false,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "single snapshot checkpoint/original consistency under concurrent correction",
+    "current corrected state only; caller instructions and goal preserved",
+    "exact scope and optional expected-revision boundaries",
+    "original full hashes and separate excerpt hashes/continuation notices",
+    "missing/changed/count/budget omissions disclosed",
+    "provider-history and bundle/ID deduplication reused",
+    "expired/deleted/outage state yields caller-only context",
+    "combined oversized candidate contract degrades without replacing caller context",
+    "real STDIO save/bundle to fresh HTTP MCP/REST bundle parity after fixture conversation/source removal",
+    "correction changes bundle identity; deletion removes recovered candidates"
+  ],
+  "limits": [
+    "Recovered state and originals remain historical data, not new authoritative instructions.",
+    "Freshness hashes are caller-supplied; no live-file/editor validation.",
+    "Snapshot is current at read time; later inference requires caller revision/expiry revalidation.",
+    "Provider continuation suppresses all recovered history candidates; fresh source must be requested separately.",
+    "Whole-request accounting remains canonical payload/tokenizer-or-byte-estimate accounting, not verified provider usage.",
+    "No inference forwarding, checkpoint scheduling or provider lifecycle changes.",
+    "Local validation only; no operational data/provider/index change, push or deployment."
+  ],
+  "artifacts_sha256": {
+    "contracts.log": "1b249dc4854fd88ba4c5093fbb6ccd2ccd1e115d79e4a7dc252a2cf005d7e761",
+    "store.log": "1a5eea5c0b37bca09e33403d67f3c80a2e8543ad0339f036be7bfc2893e691f0",
+    "builder.log": "3bdee38cf78ee7c86ff81da31210d01a5e410a255677b362230aac711b64a4ac",
+    "transport.json": "e7eac9473bd207d840cb412d042caf79b7ac85a872caa854c2b2c3461caff59a",
+    "stdio.log": "1d3e1dba413cd7a1250d4848cc6f7e6d17d2c98f6235f9ff2c924a44fb040ec3",
+    "http.log": "dd95736116f000d1d126f6b9bb4e4f9c6a2557e2157c659137aa9c7f208202d7",
+    "ci.log": "336b18a706310da6c1bfc533983e0bd707e49bd4aa1169ff4bd66235ac1edf4b"
+  },
+  "source_sha256": {
+    "memory/fire_context.py": "0a0edeef97a1d2b2a1f338a1d44777d51d04ea2617b77f89af1c86c581dc45eb",
+    "memory/fire_store.py": "4230a31adc926dbf206aef83d22eb6b53d6f52a4518bb0712500295551392c6e",
+    "tools/brain/context.py": "dc82967a81abf641aab0a67fc7593743a16fb82ab16b9ef1a8e432aa05a1ebd6",
+    "tools/brain/embedded_rest.py": "743d7b48e9f4341d5f591da2064cb13d85c294390ce4a3b7eb47ad8eb17265eb",
+    "tools/brain/tool_catalog.py": "4eb0a4e95d175aac1d3935212537a249449e3576725a04bf16516193f3b4df76",
+    "test_fire_context_bundle.py": "e778806f9279511060b713f189ba3186bbe6cb0e8ff3d091ae96aff9ad32b21e",
+    "scripts/run_ci_checks.sh": "e7595050f6f1890a0011036d33efc396776af3ecdcf110ed2fc6af67b480c33e"
+  }
+}

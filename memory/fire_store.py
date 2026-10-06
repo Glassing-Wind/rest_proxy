@@ -56,6 +56,8 @@ class FireStore:
             raise ValueError('At most 100 evidence references')
         task = TaskCheckpoint(**data)
         task.created_at = time.time()
+        if not isinstance(task.id, str) or not task.id or len(task.id) > 128:
+            raise ValueError('Checkpoint ID must be a nonempty string of at most 128 characters')
         scope = self.scope(task.project_id, task.session_id, task.task_id)
         if type(task.schema_version) is not int or task.schema_version != 1 or not isinstance(task.goal, str) or not task.goal.strip():
             raise ValueError('Require a version 1 checkpoint with a goal')
@@ -128,7 +130,7 @@ class FireStore:
             db.close()
 
     def resume(self, project_id, session_id, task_id, *, source_id=None, current_hashes=None,
-               offset=0, max_chars=8000):
+               offset=0, max_chars=8000, _include_originals=False):
         if type(offset) is not int or not 0 <= offset <= 128000 or type(max_chars) is not int or not 1 <= max_chars <= 8000:
             raise ValueError('Original pages require offset 0..128000 and max_chars 1..8000')
         if current_hashes is not None and (not isinstance(current_hashes, dict) or any(
@@ -170,9 +172,12 @@ class FireStore:
             return {'status': 'historical-original', 'revision': revision, 'reference': refs[0],
                     'original': page, 'offset': offset, 'total_chars': len(original),
                     'next_offset': next_offset, 'original_complete': offset == 0 and next_offset is None}
-        return {'status': 'resumed', 'revision': revision, 'expires_at': expires,
+        result = {'status': 'resumed', 'revision': revision, 'expires_at': expires,
                 'checkpoint': checkpoint, 'correction': data['correction'],
                 'originals_included': False, 'source_revalidation': 'caller-supplied-hashes-only'}
+        if _include_originals:
+            result['_originals'] = data['originals']
+        return result
 
     def delete(self, project_id, session_id, task_id, expected_revision):
         scope = self.scope(project_id, session_id, task_id)

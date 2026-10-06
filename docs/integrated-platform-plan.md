@@ -194,3 +194,9 @@ surface; whole-request context bundles and inference-proxy integration remain ga
 store and opt-in MCP tools with real process-reopen acceptance. Client cadence,
 current-source validation and operational restore/outcome gates remain; whole-request
 bundle budgeting is the next coordinated implementation slice.
+
+## October 6 FIRE-backed context bundles
+
+The [snapshot adapter](fire-context-bundles.md) now connects scoped checkpoint/original
+recovery to the shared budgeted contract through MCP/REST. Provider formatting,
+forwarding, actual usage and continuation measurements remain the next gate.

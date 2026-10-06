@@ -54,3 +54,7 @@ FIRE checkpoint recovery remain separate acceptance gates.
 The [shared context-bundle tool](context-bundle-contract.md) is now an additional
 allowlisted read when `LM_PROXY_CONTEXT_ENABLED=1`. It accepts caller-supplied
 requests/evidence and does not forward inference. REST request/response caps still apply.
+
+[Scoped FIRE context bundles](fire-context-bundles.md) are also allowlisted when
+both context and FIRE configuration are enabled. They restore historical candidates
+from one snapshot; no checkpoint writes are exposed through this read endpoint.

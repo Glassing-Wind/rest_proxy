@@ -95,3 +95,10 @@ serialization and model/tokenizer/framing verification, automatic retrieval/live
 freshness, FIRE checkpoint-to-bundle adaptation and inference-proxy forwarding remain
 unfinished. Exact provider usage, duplicate-injection behavior in a real continuation
 flow and paired coding outcomes require end-to-end measurements.
+
+## October 6 FIRE adaptation
+
+[Scoped FIRE snapshot adaptation](fire-context-bundles.md) now supplies checkpoint
+state and original excerpts to this contract through one historical-data snapshot.
+Earlier pending-adaptation statements are historical; provider forwarding and actual
+usage remain unimplemented.

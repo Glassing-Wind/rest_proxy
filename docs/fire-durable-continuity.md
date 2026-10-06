@@ -101,3 +101,9 @@ checkpoint history inspection, operational backup/restore drills and controlled
 paired outcome measurements remain incomplete. Shared bounded-context assembly and
 inference-proxy integration remain Priority 4 work. Passing this drill establishes
 recoverability for the fixture, not better coding outcomes or lower token usage.
+
+## October 6 bundle integration
+
+[Checkpoint-to-bundle adaptation](fire-context-bundles.md) now reads one validated
+snapshot and supplies historical candidates to the shared builder. It does not
+replace caller instructions, assert live-source freshness or forward inference.

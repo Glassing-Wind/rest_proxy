@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[FIRE snapshot-to-bundle integration](fire-context-bundles.md) now recovers one
+scoped state/original snapshot into historical candidates without replacing caller
+instructions or goal. Corrections, expiry/deletion and degradation are explicit;
+real fresh-process STDIO/HTTP/REST parity passes. Next milestone: one explicit
+provider request formatter/forwarder with serializer, tokenizer/framing, actual
+usage and continuation handling verified.
+
 [Shared supplied-request context bundles](context-bundle-contract.md) now preserve
 citations and complete text messages while accounting canonical request JSON plus
 reserves. Deterministic selection, omissions, local tokenizer mode and real MCP/REST
