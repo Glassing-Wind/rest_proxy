@@ -207,3 +207,10 @@ forwarding, actual usage and continuation measurements remain the next gate.
 workers, source-archive contents and isolated continuity imports. This repairs a
 reproduced wheel omission; minimal dependencies and installed native runtime
 acceptance remain release gates.
+
+## October 6 minimal installed runtime
+
+[Core/native dependency separation](minimal-embedded-install.md), explicit writable
+runtime paths and installed fixture indexing/fresh-daemon REST acceptance now pass
+on macOS ARM64 / Python 3.14. Exact-pin rebuilds, artifact notices/SBOM, restore and
+controlled coding outcomes remain required.

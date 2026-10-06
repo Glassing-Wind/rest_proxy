@@ -26,9 +26,10 @@ from proxy.config import (
 )
 
 import os
-from pathlib import Path
 
-_RUNTIME_DIR = Path(__file__).resolve().parents[1] / ".runtime"
+from graphrag_core.app_state import get_runtime_dir
+
+_RUNTIME_DIR = get_runtime_dir()
 _PROXY_PID_FILE = _RUNTIME_DIR / "proxy.pid"
 
 app = FastAPI(title="LM Studio Stateful Chat Proxy")

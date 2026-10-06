@@ -17,6 +17,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from _semantic_contract import SEMANTIC_CONTRACT_VERSION
+from graphrag_core.app_state import get_runtime_dir
 
 # Context for session-scoped operations in multi-client Brain server
 client_session_id: ContextVar[str | None] = ContextVar(
@@ -26,8 +27,8 @@ client_session_id: ContextVar[str | None] = ContextVar(
 _JOBS: Dict[str, Dict[str, Any]] = {}
 _JOBS_LOCK = threading.Lock()
 _MAX_LOG_LINES = 200  # ring-buffer size per job
-_RUNTIME_JOBS_DIR = Path(__file__).resolve().parent / ".runtime" / "jobs"
-_PROJECT_LOCKS_DIR = Path(__file__).resolve().parent / ".runtime" / "project_locks"
+_RUNTIME_JOBS_DIR = get_runtime_dir() / "jobs"
+_PROJECT_LOCKS_DIR = get_runtime_dir() / "project_locks"
 _PROJECT_LOCK_STALE_S = 6 * 60 * 60
 _GLOBAL_INDEX_LOCK_ID = "__global_index__"
 

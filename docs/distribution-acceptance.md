@@ -35,3 +35,7 @@ source archive, start the owner daemon from that installation, index and investi
 a disposable repository with external storage disabled, and exercise restore.
 Controlled paired coding outcomes and provider-template budgeting remain separate
 gates; these artifact checks make no quality, token-savings or latency claim.
+
+The subsequent [minimal installed profile](minimal-embedded-install.md) supersedes
+the dependency-profile and installed-native-fixture gaps above. Real model, restore,
+exact artifact notices and platform coverage remain release gates.

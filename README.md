@@ -36,6 +36,14 @@ Individual indexed features naturally require their corresponding service.
 
 You can run the HTTP proxy without enabling every indexed or memory feature.
 
+## Embedded installation
+
+A [minimal embedded profile](docs/minimal-embedded-install.md) uses LadybugDB and
+LanceDB with the modified parser fork, explicit writable state paths and optional
+LM Studio embeddings. The core package installs separately from `embedded`, `full`
+and `dev` extras. Installed native fixture acceptance passes on macOS ARM64 / Python
+3.14; broader platform, restore and outcome gates remain open.
+
 ## Quick start
 
 Create an environment and install dependencies:

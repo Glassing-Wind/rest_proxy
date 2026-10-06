@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Minimal embedded installed acceptance](minimal-embedded-install.md) now separates
+core/embedded/full extras, packages the missing parser diagnostics module and
+configures writable runtime paths outside installed modules. Fresh environment
+dependency checks and native fixture/fresh-daemon REST acceptance pass. Next:
+exact artifact notices/SBOM and backup/restore, then real installed-model and paired
+coding outcomes. Exact-pin rebuild/platform coverage remains open.
+
 [Distribution layout acceptance](distribution-acceptance.md) now includes both
 subprocess indexing workers in wheel/source archives and checks an offline isolated
 artifact install. Baseline omission is reproduced; local CI passes. Next release

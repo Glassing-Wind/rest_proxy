@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rest-proxy"
 version = "0.1.0"
-dynamic = ["dependencies"]
+dynamic = ["dependencies", "optional-dependencies"]
 description = "FastAPI inference proxy and indexed GraphRAG tooling for AI coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,11 +13,11 @@ classifiers = ["Programming Language :: Python :: 3.11", "Programming Language :
 license = "MIT"
 license-files = ["LICENSE"]
 
-[project.optional-dependencies]
-dev = ["ruff==0.15.7"]
-
 [tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
+dependencies = { file = ["requirements-core.txt"] }
+optional-dependencies.embedded = { file = ["requirements-embedded.txt"] }
+optional-dependencies.full = { file = ["requirements.txt"] }
+optional-dependencies.dev = { file = ["requirements-dev.txt"] }
 
 [tool.setuptools]
 py-modules = [
@@ -34,6 +34,7 @@ py-modules = [
   "mcp_server",
   "runtime_logging",
   "tool_choice_eval",
+  "ts_diagnostics",
 ]
 
 [tool.setuptools.packages.find]
