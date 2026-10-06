@@ -1,0 +1,902 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/annotated-doc@0.0.5",
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "purl": "pkg:pypi/annotated-doc@0.0.5",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "f0844a9a95ff9cd3170a597abd2da17a51e50668f301e62c92ed4ccf049095c5"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/annotated-types@0.8.0",
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "purl": "pkg:pypi/annotated-types@0.8.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "7d28edf6a09d550893b2b4ab3acbbdd157b8c239aae4f46108772562a3a8afca"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/anyio@4.15.1",
+      "name": "anyio",
+      "version": "4.15.1",
+      "purl": "pkg:pypi/anyio@4.15.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "01d12867ebd2f09188dc31fdcc3338d4339a0b986ec90237c250378ae8495472"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/attrs@26.1.0",
+      "name": "attrs",
+      "version": "26.1.0",
+      "purl": "pkg:pypi/attrs@26.1.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "79087b2d95583c01f8789624a1c41bddf61be3f694828b1bd0d386232d00af90"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/certifi@2026.7.22",
+      "name": "certifi",
+      "version": "2026.7.22",
+      "purl": "pkg:pypi/certifi@2026.7.22",
+      "licenses": [
+        {
+          "license": {
+            "name": "MPL-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "4f27226d397261afa4b5f5fd21d70452a0eb60bd1995774664fa513d3e4e950f"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/cffi@2.1.1",
+      "name": "cffi",
+      "version": "2.1.1",
+      "purl": "pkg:pypi/cffi@2.1.1",
+      "licenses": [
+        {
+          "expression": "MIT-0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "524afa97cc713e101bce5c0c2341124bd77e01acc2be05d497744f33b75a4b35"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/click@8.5.0",
+      "name": "click",
+      "version": "8.5.0",
+      "purl": "pkg:pypi/click@8.5.0",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "a125d5633af2b90433f9a6ece5143d7fd2bed2429db15f364ed1915be0b6f498"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/cryptography@50.0.2",
+      "name": "cryptography",
+      "version": "50.0.2",
+      "purl": "pkg:pypi/cryptography@50.0.2",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "6498c943fb789d7a094452a7694f01917600d8a14d970e96d50ba3d54d10becc"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/deprecation@2.1.0",
+      "name": "deprecation",
+      "version": "2.1.0",
+      "purl": "pkg:pypi/deprecation@2.1.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache 2"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "7a866266fe784549d69b211f3e2139c4eac95252a9aaf89322536242711b5dd4"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/fastapi@0.135.1",
+      "name": "fastapi",
+      "version": "0.135.1",
+      "purl": "pkg:pypi/fastapi@0.135.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "be00e7dc68eaf9f085dd367ea112caefcb7719fca4814c6f72fd3cd353bf432c"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/h11@0.16.0",
+      "name": "h11",
+      "version": "0.16.0",
+      "purl": "pkg:pypi/h11@0.16.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "960b9c3d1c32ee2f09a5551d25873ca649e2d2d182edc8cc3b37fb9cbaa86b11"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httpcore@1.0.9",
+      "name": "httpcore",
+      "version": "1.0.9",
+      "purl": "pkg:pypi/httpcore@1.0.9",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "021d4b74d785fff25b89b093c7150526be348f1757d4ad9ee32f5fed0261b75c"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httpx@0.28.1",
+      "name": "httpx",
+      "version": "0.28.1",
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "b5a69615ad0a2775579033a49b30eac0d1cde3a9b747d823ce8250ca9e198372"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/httpx-sse@0.4.3",
+      "name": "httpx-sse",
+      "version": "0.4.3",
+      "purl": "pkg:pypi/httpx-sse@0.4.3",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "7925db34423d78c8256b44b2d8b44216029b8d4f1730077b04d5afe9a53fa984"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/idna@3.20",
+      "name": "idna",
+      "version": "3.20",
+      "purl": "pkg:pypi/idna@3.20",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "f8e420cad1844ecb1677f2c0a0a786d818b8e7dd158ee2c4418043ea0e17553f"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/jsonschema@4.26.0",
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "purl": "pkg:pypi/jsonschema@4.26.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "52cfe15fb866f6ffba5037218dafec52675b03b887d72dc9c2ea3a245e4fb20c"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/jsonschema-specifications@2025.9.1",
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "purl": "pkg:pypi/jsonschema-specifications@2025.9.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "40b567ae3b9b5bb4c8d9189dbe9216c89655f7d2bdf41883b4e8f62d1bc628c8"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/ladybug@0.21.2",
+      "name": "ladybug",
+      "version": "0.21.2",
+      "purl": "pkg:pypi/ladybug@0.21.2",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "6562d7bfe76648c7861de3b5d31ffcf46e9876f59bf0137f55dd2422a64421c8"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/lance-namespace@0.13.0",
+      "name": "lance-namespace",
+      "version": "0.13.0",
+      "purl": "pkg:pypi/lance-namespace@0.13.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "7f3624f7599f5cbc8b83708b404d6e8252ee0d7fe8f8dec41284d5e01090da7c"
+        },
+        {
+          "name": "rest-proxy:supplemental-notice-sha256",
+          "value": "03c4e02af8cbe96dd3a9bfaac9ee27ec6a8e9a3ee38ed7b290d50495c11eea48"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/lance-namespace-urllib3-client@0.13.0",
+      "name": "lance-namespace-urllib3-client",
+      "version": "0.13.0",
+      "purl": "pkg:pypi/lance-namespace-urllib3-client@0.13.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "a3eb99429a5eefb3448c60ccf06f3accae94e4d019c1a9b653b7b7b02b98fe7f"
+        },
+        {
+          "name": "rest-proxy:supplemental-notice-sha256",
+          "value": "03c4e02af8cbe96dd3a9bfaac9ee27ec6a8e9a3ee38ed7b290d50495c11eea48"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/lancedb@0.39.0",
+      "name": "lancedb",
+      "version": "0.39.0",
+      "purl": "pkg:pypi/lancedb@0.39.0",
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "8707ada67ba707796710095db1d44113bf3976d420c667223eb00e1acb01de2e"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/mcp@1.26.0",
+      "name": "mcp",
+      "version": "1.26.0",
+      "purl": "pkg:pypi/mcp@1.26.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "9ea9899baae11e1d27af5bcff8e4152c190b0f2a86885f41862b464f38600396"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/neo4j@6.1.0",
+      "name": "neo4j",
+      "version": "6.1.0",
+      "purl": "pkg:pypi/neo4j@6.1.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 AND Python-2.0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "d616a2fcf458e96d40eb0517b3183d5deb622618ea222d6584b29c3181c8f9cf"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/numpy@2.5.3",
+      "name": "numpy",
+      "version": "2.5.3",
+      "purl": "pkg:pypi/numpy@2.5.3",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "15506ee15d24249104273a4f4b925d7fab78fcee39e8d56ff136c07733cc0254"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/packaging@26.3",
+      "name": "packaging",
+      "version": "26.3",
+      "purl": "pkg:pypi/packaging@26.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR BSD-2-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "668c93aa45f692d8df4eaad0fff82bb22f3950977c7733acd88aeb7f7f363f00"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyarrow@25.0.1",
+      "name": "pyarrow",
+      "version": "25.0.1",
+      "purl": "pkg:pypi/pyarrow@25.0.1",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "776c5f0c91f495e904dee5bb69d8bf7f2efcf6699a9ce88a6530620a9f0b45af"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pycparser@3.0",
+      "name": "pycparser",
+      "version": "3.0",
+      "purl": "pkg:pypi/pycparser@3.0",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "0f9555dfb11e61df8f80cebd6d487191e5205ffa5d86badc2f2d8191ce257cf2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic@2.13.5",
+      "name": "pydantic",
+      "version": "2.13.5",
+      "purl": "pkg:pypi/pydantic@2.13.5",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "f6e54cfd62359a7e79c90f80233da97dd6ea6db15bb49868fadc218c43bfff2e"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic-settings@2.15.0",
+      "name": "pydantic-settings",
+      "version": "2.15.0",
+      "purl": "pkg:pypi/pydantic-settings@2.15.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "d90c74a85d17f0a01222c14815c7800d07edd443710013c2f261a3e252839498"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic-core@2.46.5",
+      "name": "pydantic_core",
+      "version": "2.46.5",
+      "purl": "pkg:pypi/pydantic-core@2.46.5",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "4fe0735e7d4483644ec49bcb37e72e664476cec3a786ba5a7d78afcb2cfbd228"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyjwt@2.15.1",
+      "name": "PyJWT",
+      "version": "2.15.1",
+      "purl": "pkg:pypi/pyjwt@2.15.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "4db4fe4450d87cdfd62b1799ae464ad59e0afa631b929d1c0b69a6eb5b66e9c6"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/python-dateutil@2.9.0.post0",
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "purl": "pkg:pypi/python-dateutil@2.9.0.post0",
+      "licenses": [
+        {
+          "license": {
+            "name": "Dual License"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "dc2e66e0b539b146c7389cff91e1093f86a15d17bb156ca69669b9494ca034e1"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/python-dotenv@1.2.2",
+      "name": "python-dotenv",
+      "version": "1.2.2",
+      "purl": "pkg:pypi/python-dotenv@1.2.2",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "db32a447ebd45f8fd535e21efc9b9693ed72c506b11eaf86b39a08ceb68bc366"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/python-multipart@0.0.32",
+      "name": "python-multipart",
+      "version": "0.0.32",
+      "purl": "pkg:pypi/python-multipart@0.0.32",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "3bb7195861589e6a3aed86cce9bd18b0a419185520bca6852bc53a17882a56e0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pytz@2026.5",
+      "name": "pytz",
+      "version": "2026.5",
+      "purl": "pkg:pypi/pytz@2026.5",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "72f1fe2ba9ef34f980576aac7aec545aeedb8edae82ea8671b93f62bb0b96706"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/referencing@0.37.0",
+      "name": "referencing",
+      "version": "0.37.0",
+      "purl": "pkg:pypi/referencing@0.37.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "5ab26112f431d3a76e10fd2d53717a2758af80d6f4cc817f2a9b188287b3bdc0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/rest-proxy@0.1.0",
+      "name": "rest-proxy",
+      "version": "0.1.0",
+      "purl": "pkg:pypi/rest-proxy@0.1.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "2f208df099838532d60da43fc015545610ea56cce0147d5a2ccc2e78a58227af"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/rpds-py@2026.9.1",
+      "name": "rpds-py",
+      "version": "2026.9.1",
+      "purl": "pkg:pypi/rpds-py@2026.9.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "539d9435b907d106cbcb4d0cfa7ba075d26d8468f60d9ccdb1b6861e0fcecd90"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/six@1.17.0",
+      "name": "six",
+      "version": "1.17.0",
+      "purl": "pkg:pypi/six@1.17.0",
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "b60a5277d6696f3c2582758d1cc7f3f4bf7970472f15846a32350feef168ba74"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/sse-starlette@3.5.0",
+      "name": "sse-starlette",
+      "version": "3.5.0",
+      "purl": "pkg:pypi/sse-starlette@3.5.0",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "90c1a0ff873ab67436afbe2cdcbd5a0e98e638a6a152dfac86cd7525c5df25a3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/starlette@1.7.0",
+      "name": "starlette",
+      "version": "1.7.0",
+      "purl": "pkg:pypi/starlette@1.7.0",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "2fd8b2e32749f5b75bfbb301ad0b3d3ba78eb8b9cfd024d12f8efd6fbcb010ba"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/tqdm@4.70.1",
+      "name": "tqdm",
+      "version": "4.70.1",
+      "purl": "pkg:pypi/tqdm@4.70.1",
+      "licenses": [
+        {
+          "license": {
+            "name": "MPL-2.0 AND MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "2e30f6a3623d7736d229d274782e4c03e0fba7306cfa84f7b5d12a75df053cc8"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/tree-sitter@0.26.0",
+      "name": "tree-sitter",
+      "version": "0.26.0",
+      "purl": "pkg:pypi/tree-sitter@0.26.0",
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "85188022957c6b408e1ecba2dfb2c7965db5b83707f071d2912bf19a1c5931cd"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/tree-sitter-language-pack@1.20.0",
+      "name": "tree-sitter-language-pack",
+      "version": "1.20.0",
+      "purl": "pkg:pypi/tree-sitter-language-pack@1.20.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "038a133aca72864681bb30d0f5ade6e0d9009d11e0b35719bcdd31fc059fb6c9"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/typing-inspection@0.4.4",
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "purl": "pkg:pypi/typing-inspection@0.4.4",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "7a0755de79f9748916beffcb4b4492db37d01ac0726ed47d87fb3579d5f65073"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/typing-extensions@4.16.0",
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "purl": "pkg:pypi/typing-extensions@4.16.0",
+      "licenses": [
+        {
+          "expression": "PSF-2.0"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "e84bca3254b9d9f6e1cdaccf293478278947483da6c9852e0b7faaf6bcf8a3ff"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/urllib3@2.8.0",
+      "name": "urllib3",
+      "version": "2.8.0",
+      "purl": "pkg:pypi/urllib3@2.8.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "a8ea0454461cb95b4cb6c106b9ef0d79f55e54c7edd0126770fc98156304d40b"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/uvicorn@0.41.0",
+      "name": "uvicorn",
+      "version": "0.41.0",
+      "purl": "pkg:pypi/uvicorn@0.41.0",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:installed-file-manifest-sha256",
+          "value": "1263d978b55d178a1558f9f52f2825c628e3d672d7d74bba43ff116c6f9937bb"
+        }
+      ]
+    }
+  ],
+  "compositions": [
+    {
+      "aggregate": "incomplete"
+    }
+  ]
+}

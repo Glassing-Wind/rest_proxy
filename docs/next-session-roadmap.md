@@ -10,6 +10,12 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Namespace notice reconciliation](namespace-notice-reconciliation.md) now verifies
+exact PyPI artifacts, installed files and immutable release-tree package blobs, and
+collects a bound supplemental license for both namespace packages. Original upstream
+notice omissions remain recorded. Next: native/grammar notice reconciliation; real
+installed-model and paired coding outcomes, backup policy and platform gates remain.
+
 [Release inventory and cold restore](release-inventory-and-restore.md) now passes
 a schema-valid incomplete SBOM and graph/vector/FIRE cold-copy fixture recovery.
 Four explicit package metadata/notice gaps and native/grammar/model closure remain

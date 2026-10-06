@@ -92,3 +92,7 @@ Still open: automated coordinated or online backup, encrypted off-host retention
 post-backup deletion reconciliation, production-scale restore/RPO/RTO measurements,
 fresh exact-pin native builds/platform installs, notice reconciliation, real model
 acceptance from the installed profile and controlled paired coding outcomes.
+
+The subsequent [namespace notice reconciliation](namespace-notice-reconciliation.md)
+adds source-bound supplemental notices for the two missing-file findings. Original
+upstream artifacts are unchanged; native/grammar/model closure remains incomplete.

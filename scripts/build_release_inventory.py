@@ -19,7 +19,7 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def generate(output: Path, artifacts: list[Path], distributions=None, prefix=None) -> dict:
+def generate(output: Path, artifacts: list[Path], distributions=None, prefix=None, supplements=None) -> dict:
     """Create a new private evidence directory, with no metadata URL fetches."""
     output = output.resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -75,11 +75,35 @@ def generate(output: Path, artifacts: list[Path], distributions=None, prefix=Non
                                  'Downloaded grammars and model assets are outside this inventory.',
                                  'License metadata and copied notices are evidence, not legal approval.',
                                  'Installed-file hashes are not original download artifact hashes.']}
+    inventory['supplemental_notices'] = []
+    by_component = {record['component']: record for record in records}
+    for item in supplements or []:
+        component = item['component']
+        if component not in by_component:
+            raise ValueError('Supplement refers to an absent installed component')
+        path = Path(item['notice_path']).resolve()
+        expected = item['sha256']
+        if not re.fullmatch(r'[0-9a-f]{64}', expected) or digest(path) != expected:
+            raise ValueError('Supplement notice hash does not match')
+        destination = output / 'supplemental-notices' / (expected + '.txt')
+        destination.parent.mkdir(mode=0o700, exist_ok=True)
+        destination.write_bytes(path.read_bytes())
+        destination.chmod(0o600)
+        evidence = {key: value for key, value in item.items() if key != 'notice_path'}
+        evidence['copied_to'] = str(destination.relative_to(output))
+        inventory['supplemental_notices'].append(evidence)
+        next(value for value in components if value['bom-ref'] == component)['properties'].append({
+            'name': 'rest-proxy:supplemental-notice-sha256', 'value': expected})
+        # Preserve original findings instead of pretending the upstream wheel changed.
+        for gap in gaps:
+            if gap['component'] == component and gap['gap'] == 'No shipped license/notice files discovered':
+                gap['supplement'] = 'Separate source-bound notice collected; upstream artifact unchanged'
     for name, value in [('bom.cdx.json', bom), ('inventory.json', inventory)]:
         path = output / name
         path.write_text(json.dumps(value, indent=2) + '\n')
         path.chmod(0o600)
     return {'components': len(components), 'notices': sum(len(row['notices']) for row in records),
+            'supplemental_notices': len(inventory['supplemental_notices']),
             'gaps': gaps, 'artifacts': artifact_rows}
 
 
@@ -87,5 +111,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--artifact', action='append', default=[], type=Path)
+    parser.add_argument('--supplements', type=Path, help='Locally reviewed JSON notice evidence list')
     args = parser.parse_args()
-    print(json.dumps(generate(args.output, args.artifact), indent=2))
+    supplements = None
+    if args.supplements:
+        supplements = json.loads(args.supplements.read_text())
+        for item in supplements:
+            item['notice_path'] = str((args.supplements.parent / item['notice_path']).resolve())
+    print(json.dumps(generate(args.output, args.artifact, supplements=supplements), indent=2))

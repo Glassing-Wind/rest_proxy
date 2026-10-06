@@ -1,5 +1,6 @@
 """Offline inventory contracts; no services, downloads or legal inference."""
 from pathlib import Path
+import hashlib
 import tempfile
 import unittest
 
@@ -56,6 +57,22 @@ class InventoryContracts(unittest.TestCase):
             result = generate(root / 'inventory', [], [value], prefix)
             self.assertEqual(result['notices'], 0)
             self.assertEqual(len(result['gaps']), 2)
+
+    def test_supplement_is_hashed_and_original_gap_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notice = root / 'LICENSE'
+            notice.write_text('Supplemental fixture notice\n')
+            value = Distribution(root, 'MIT')
+            value.files = []
+            supplement = {'component': 'pkg:pypi/fixture-pkg@1.0', 'notice_path': str(notice),
+                          'sha256': hashlib.sha256(notice.read_bytes()).hexdigest()}
+            result = generate(root / 'inventory', [], [value], root, [supplement])
+            self.assertEqual(result['supplemental_notices'], 1)
+            self.assertTrue(any(item.get('supplement') for item in result['gaps']))
+            supplement['sha256'] = '0' * 64
+            with self.assertRaises(ValueError):
+                generate(root / 'invalid', [], [value], root, [supplement])
 
 
 if __name__ == '__main__':
