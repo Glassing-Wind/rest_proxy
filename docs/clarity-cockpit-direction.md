@@ -23,6 +23,46 @@ public-network support. Preserve the standalone
 Reuse bounded context, provenance and storage-owner interfaces after independent
 acceptance; do not merge their data into repository indexes.
 
+
+## Relationships, direction, team, contacts, gates and keys
+
+Direction added October 6, 2026. These concepts describe a consent-aware relationship
+map and the controls around it, not a claim that a social graph or glasses app is
+already implemented.
+
+| Concept | Proposed role | Required distinction |
+| --- | --- | --- |
+| Relationship | Link people, events, places, claims and originals with time and source. | A reported or inferred connection is not a verified identity or fact. |
+| Direction | User-stated goals and interests determine relevance and what help is wanted. | The assistant must not infer life priorities from passive capture. |
+| Team | Trusted participants contribute evidence and coordinate useful work. | Membership, task role and access permissions are explicit and separate. |
+| Contacts / Facebook contacts | User-entered contacts, invitations and permitted imports can seed collaboration. | A contact is not automatically a participant or permission to access their information. |
+| Gates | Policy checks control capture, retrieval, sharing, notification and actions. | Check purpose, audience, freshness and user approval at the action boundary. |
+| Keys | Identities and credentials grant bounded capabilities with expiry/revocation. | An authentication credential is not proof of trust, consent or evidentiary truth. |
+| Smart glasses | An optional capture/audio interface for selected observations and assistance. | SDK/device access does not grant access to a person's social contacts. |
+
+Start with synthetic people/events and manually entered contacts. Every relationship
+should carry source, when it applied, whether observed/reported/inferred/confirmed,
+and who may view or correct it. Invitations are voluntary; never use proximity or
+face similarity to turn an observation into an identified person.
+
+A proposed gate sequence is: permitted input → scope/purpose check → bounded
+retrieval → evidence review → action/disclosure check → optional user confirmation.
+Keys need scoped access, expiration and revocation; they are not stored in evidence
+or exposed in transcripts. Private, team and public scopes stay separate. These
+are future product requirements, not implemented team authorization in rest_proxy.
+
+Facebook connectivity is an unimplemented candidate. Verify current supported APIs,
+permissions and terms before selecting an import method. Do not assume access to
+an entire friend list, messages, private profiles or contact network, and do not
+make the first prototype or income plan depend on such access. User-controlled
+manual entries and voluntary invitations are sufficient for the first model.
+
+Income is now an explicit constraint. The recommended near-term commercial track is
+[a supervised FIRE investigation pilot](commercial-direction.md), while CLARITY,
+personal memory and smart glasses remain separate longer-term directions. Useful
+paid delivery/support could fund development; selling private contact graphs is
+outside the proposed operating model. No revenue or customer demand is established.
+
 ## Personal assistant loop
 
 ```text

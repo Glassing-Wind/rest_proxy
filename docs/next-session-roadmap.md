@@ -10,6 +10,19 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+**Direction change: near-term income validation.** Follow the
+[commercial direction](commercial-direction.md) and prepare a source-graded FIRE
+pilot demonstration plus reusable report template as the next milestone. The
+[draft paid offer](paid-investigation-pilot.md) needs a demonstrated delivery scope,
+then user-led buyer interviews and one paid pilot. The user targets $3,000/month and reports 10,000+ unqualified contacts plus
+rental-platform/rental-law repositories. Confirm repository paths, then prefer a
+rental-domain demonstration and a manual shortlist of 15–20 relevant contacts.
+TurboTenant is one potential prospect; Meta SDK exploration stays separate and
+bounded. No outreach, qualified buyer access or revenue is established. Keep the five engineering priorities and exact release
+gates; resolve packaging work according to the intended delivery rather than
+letting broad unused-grammar work postpone testing customer demand. CLARITY/glasses
+remain independent longer-term directions.
+
 [Observed grammar notices](grammar-notice-reconciliation.md) now bind ten cached
 macOS libraries to the verified release bundle and retain nine declared-source root
 notices. Their SBOM and local CI pass. Coverage excludes the other 361 bundle files

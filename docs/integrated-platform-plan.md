@@ -8,7 +8,7 @@ Updated October 4, 2026. This is the coordinating implementation plan; linked
 research and evidence retain their detailed findings.
 
 For current delivery status rather than the original milestone sequence, consult
-[the October 5 five-priority table](five-priority-status.md). It distinguishes
+[the October 6 five-priority table](five-priority-status.md). It distinguishes
 validated slices from incomplete end-to-end acceptance and supersedes earlier
 pending-work statements in this plan.
 
@@ -214,3 +214,12 @@ acceptance remain release gates.
 runtime paths and installed fixture indexing/fresh-daemon REST acceptance now pass
 on macOS ARM64 / Python 3.14. Exact-pin rebuilds, artifact notices/SBOM, restore and
 controlled coding outcomes remain required.
+
+## October 6 commercial sequencing
+
+The [commercial direction](commercial-direction.md) now prioritizes a source-graded
+repository-investigation demo and validation of a bounded paid service. The user's
+need for income favors testing a delivery outcome before expanding the platform.
+CLARITY relationships/team/contact/access concepts and smart glasses remain distinct
+longer-term applications. All installed-product release gates remain in effect;
+no outreach, paid engagement or income has been established.

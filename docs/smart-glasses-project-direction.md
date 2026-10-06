@@ -22,9 +22,9 @@ user-selected retention scope. Then retrieve that capture in response to a simpl
 question and return its supporting evidence. Continuous recording is a separate
 product decision, outside this initial experiment.
 
-Meta's published toolkit documentation currently describes developer-preview
-access; its iOS documentation marks synchronized camera-stream audio as
-experimental and unavailable for production publishing. Record actual camera,
+The October 4 documentation check described developer-preview access and marked
+synchronized camera-stream audio experimental/unavailable for production publishing.
+Those findings are dated and need rechecking for the chosen current SDK. Record actual camera,
 microphone, audio-output and background-session capabilities for the chosen SDK
 and hardware rather than assuming built-in Meta AI capabilities are exposed to
 third-party apps. Check SDK terms and distribution restrictions separately from
@@ -157,3 +157,17 @@ graphs and retrieval. Keep it separate from personal memory and dementia support
 agency access, case authorization, evidence preservation and vendor restrictions
 require their own product decisions. See the
 [authorized incident-investigation direction](incident-investigation-project-direction.md).
+
+## October 6 sequencing and current platform reference
+
+The [commercial direction](commercial-direction.md) recommends validating a paid
+repository-investigation service before making wearable development an income
+dependency. Relationships, team membership, contacts, permission gates and keys are
+specified in [the CLARITY direction](clarity-cockpit-direction.md); none is a deployed
+personal-data or social-network integration.
+
+Meta's [current developer overview](https://developers.meta.com/wearables/) describes
+mobile toolkit, web-app and AI-connector paths. This updates platform discovery;
+it does not attest this project's hardware, synchronized audio, publishing rights
+or a chosen SDK version. Preserve the original dated capability findings above
+and reverify them when implementing a specific capture prototype.
