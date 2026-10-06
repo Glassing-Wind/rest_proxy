@@ -15,6 +15,10 @@ rental-applicant browser demonstration: one reproduced submission blocker, a nar
 working-tree fix and 13 passing focused tests. Backend fixture responses do not
 establish database/payment/email acceptance. Next: a disposable full journey and
 structured finding/review handoff; no persistent multi-agent runner is implemented.
+A [filled, source-bound report](../benchmarks/reports/2026-10-06/rental-user-qa/investigation-report.md)
+now answers three questions with four retained snapshots and a machine-readable
+handoff. Four offline integrity checks pass; independent review remains open.
+Full database journey awaits an explicitly isolated disposable test configuration.
 
 
 **Direction change: near-term income validation.** Follow the

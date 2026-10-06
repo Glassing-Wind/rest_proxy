@@ -50,3 +50,19 @@ was run. Existing rental changes were not staged or committed. Fix remains in
 `src/public/assets/application-apply.js`, regression in `tests/application-apply-ui.test.ts`.
 The patch is relative to this session's starting file, not rental HEAD: do not
 apply it blindly to a different revision. No claim of independent agent review.
+
+## Structured investigation handoff — subsequent October 6 milestone
+
+[Filled demonstration report](investigation-report.md) answers three bounded
+questions and records observed versus source-derived findings. [Structured finding](finding.json)
+binds four retained source snapshots by SHA-256 and records source ranges, mocked
+behavior, reviewer identity and unavailable cost/usage metrics. Run
+`python3 verify_receipt.py` and `python3 test_receipt.py` here: source binding passes;
+four offline tests reject source drift, escaped paths and invalid citation ranges.
+Hash validation is not semantic grading or independent review.
+
+Full database acceptance is deferred: inspected shared Prisma config reads
+DATABASE_URL without a test-isolation guard; no dedicated disposable test database
+configuration was identified in the searched tests. No existing database or dotenv
+credentials were accessed. Configure an isolated test target before backend writes.
+The structured report/validation milestone proceeds independently of that blocker.

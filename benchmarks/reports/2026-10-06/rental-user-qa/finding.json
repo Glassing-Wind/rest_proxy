@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "finding_id": "rental-applicant-inactive-validation-001",
+  "date": "2026-10-06",
+  "repository": "/Users/michaelmarler/Projects/rental",
+  "head": "4b501b7145ce3706e3d54289743f2c51aa4f4cdb",
+  "source_identity": "uncommitted working-tree snapshots; HEAD alone does not identify these files",
+  "roles": {
+    "tester": "current coding agent",
+    "implementer": "same agent",
+    "review": "same-agent replay; independent review pending"
+  },
+  "sources": [
+    {
+      "repository_path": "src/public/assets/application-apply.js",
+      "snapshot": "source/application-apply.js",
+      "sha256": "86bbb724e3f94c02e560300906a05236aa6f14354326443f19a1de3314d1072b",
+      "line_count": 281
+    },
+    {
+      "repository_path": "src/public/apply.html",
+      "snapshot": "source/apply.html",
+      "sha256": "33d9cf0e00867c854daeb1177db645827de95b49ba8ed286431672454f3c5859",
+      "line_count": 109
+    },
+    {
+      "repository_path": "tests/application-apply-ui.test.ts",
+      "snapshot": "source/application-apply-ui.test.ts",
+      "sha256": "adf74255f5910d7dfee006fe331ae3ecb074e98f886f2a10ddfe554dce226610",
+      "line_count": 79
+    },
+    {
+      "repository_path": "src/db/prisma.ts",
+      "snapshot": "source/prisma.ts",
+      "sha256": "924581394cd4a6daab31297e7c249c4752ed4b78bb239d3f86adcc92e7a1403d",
+      "line_count": 17
+    }
+  ],
+  "findings": [
+    {
+      "question": "Can removed co-applicant fields block submission?",
+      "answer": "Yes before the fix; reproduced in Chromium. Inactive inputs now disabled.",
+      "classification": "observed browser fixture behavior",
+      "citations": [
+        {
+          "snapshot": "source/application-apply.js",
+          "start_line": 161,
+          "end_line": 167
+        },
+        {
+          "snapshot": "source/application-apply.js",
+          "start_line": 272,
+          "end_line": 277
+        }
+      ],
+      "verification": "Before invalid false/disabled false/INVITED; after valid true/disabled true/SUBMITTED; selected invalid email still blocked.",
+      "limits": [
+        "API response mocked",
+        "No database persistence acceptance",
+        "No independent reviewer"
+      ]
+    },
+    {
+      "question": "Does restored submitted data remain read-only?",
+      "answer": "DOM regression verifies co-applicant email disabled for SUBMITTED and enabled for DRAFT.",
+      "classification": "tested DOM-state fixture",
+      "citations": [
+        {
+          "snapshot": "source/application-apply.js",
+          "start_line": 177,
+          "end_line": 200
+        }
+      ],
+      "verification": "Three focused DOM tests passed; these do not validate database restore.",
+      "limits": [
+        "Native browser restore with persisted data remains open"
+      ]
+    },
+    {
+      "question": "What blocks a full database-backed journey?",
+      "answer": "No disposable database configuration or isolation guard identified in inspected tests/config; shared client reads DATABASE_URL. No connection or migration attempted.",
+      "classification": "bounded source inspection; not proof no configuration exists elsewhere",
+      "citations": [
+        {
+          "snapshot": "source/prisma.ts",
+          "start_line": 1,
+          "end_line": 17
+        }
+      ],
+      "verification": "Inspected shared Prisma configuration and searched tests for test database settings.",
+      "limits": [
+        "Do not infer production availability or use an existing database for test writes"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "command": "node --check src/public/assets/application-apply.js",
+      "result": "passed"
+    },
+    {
+      "command": "npm test -- tests/application-apply-ui.test.ts tests/routes.access-and-applications.test.ts",
+      "result": "passed",
+      "test_files": 2,
+      "tests": 13
+    }
+  ],
+  "metrics": {
+    "actual_model_usage": null,
+    "elapsed_delivery_hours": null,
+    "direct_cost": null,
+    "indexed_mcp_calls": 0,
+    "native_tools_used": [
+      "source reads",
+      "Playwright CLI",
+      "Vitest"
+    ],
+    "native_fallback_count": null,
+    "paired_comparison": false
+  },
+  "client_acceptance": null,
+  "outreach_sent": false,
+  "next_action": "Configure an explicit disposable test database and mocked external services, then replay draft/save/refresh/submit. Prepare structured worker handoff without claiming independent agent review."
+}

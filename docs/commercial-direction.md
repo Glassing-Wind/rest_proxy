@@ -12,8 +12,9 @@ hardware purchase, public network launch or hosted SaaS deployment is required.
 The stated target is $3,000/month. Whether that means gross revenue or take-home,
 the deadline and available weekly delivery time remain unknown. The user reports
 10,000+ contacts, but buyer needs are unqualified, and owns rental-platform and
-rental-law repositories whose paths, implementation and rights have not been
-reviewed here. Actual outreach, prices, contracts and invoicing are user decisions.
+rental-law repositories. Local paths have been identified; the rental applicant
+UI now has a bounded demonstration. Broader implementation and redistribution
+rights remain unassessed. Actual outreach, prices, contracts and invoicing are user decisions.
 
 ## Why this direction first
 
