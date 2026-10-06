@@ -69,3 +69,28 @@ async def run_session_operation(url: str, session_id: str, workspace_path: str |
             async with ClientSession(*streams[:2]) as session:
                 await session.initialize()
                 return await session_operation(session, session_id, workspace_path, lease_seconds)
+
+
+async def refresh_loop(url: str, session_id: str, workspace_path: str, lease_seconds: int,
+                       stop: asyncio.Event, interval: float | None = None) -> dict:
+    """Explicit foreground refresh; stop on failed renewal and best-effort release on exit."""
+    interval = lease_seconds / 3 if interval is None else interval
+    if not 60 <= lease_seconds <= 3600 or not 0 < interval <= lease_seconds / 3:
+        raise ValueError('Refresh interval must be positive and at most one third of a valid lease')
+    result = None
+    released = False
+    try:
+        while not stop.is_set():
+            result = await run_session_operation(url, session_id, workspace_path, lease_seconds)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+            except TimeoutError:
+                pass
+    finally:
+        if result is not None:
+            try:
+                response = await run_session_operation(url, session_id, workspace_path, 0)
+                released = response.get('status') == 'published'
+            except Exception:
+                pass
+    return {'status': 'stopped', 'session_id': session_id, 'lease_release_confirmed': released}

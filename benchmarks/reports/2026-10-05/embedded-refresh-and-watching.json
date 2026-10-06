@@ -1,0 +1,56 @@
+{
+  "artifacts_sha256": {
+    "ci.log": "6350abdf04894dc23cc8967e2dbe2509d810c6dee76c992cf571d853248cbbc6",
+    "native-tests.log": "92bff152f25d976fc551a5468362945bdd476b9b7d0007ea76dc31a065cf53d6",
+    "registrar.json": "fae66c7d435c25caf1dee78b14b03a448a1ee5c78aadc8fb73726796841dc8e3",
+    "registrar.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "session-tests.log": "464e0ee629edf74de09ef21e4232fbcedc26588ff7cc23c470f47fe2da88c255",
+    "watch-tests.log": "82e6aa80926086b192e1c363d80225ddd8ee1f1e21f5575a3d491df9fd1b6bfd"
+  },
+  "date": "2026-10-05",
+  "limits": [
+    "No real IDE process or workspace watcher enabled.",
+    "Foreground refresh requires client lifecycle integration; leases are not authenticated process liveness.",
+    "Only current published manifest paths are watched; new/recreated omitted files require explicit reindex.",
+    "Configured encoder identity must match publication; no model load/unload or fallback.",
+    "Watcher status cache is bounded/volatile; attempt and publication records remain durable.",
+    "Owner locks serialize scans/indexing/metadata; slow indexing can cause renewal timeouts.",
+    "Native acceptance uses explicit synthetic fixture encoder; no production semantic/performance claim."
+  ],
+  "native_watcher_verified": [
+    "actual background task publication",
+    "unchanged sources avoid embedding",
+    "outside-manifest files ignored",
+    "provider failure retains prior publication",
+    "file deletion and empty publication",
+    "task singleton",
+    "shutdown during active embedding records cancellation and retains publication"
+  ],
+  "prior_hosted_checks": "all seven passed",
+  "prior_hosted_head": "53ca2a5",
+  "python": "3.14.4",
+  "registrar_subprocess": {
+    "automatic_refresh_verified": true,
+    "discovery_verified": true,
+    "legacy_registries_unchanged": true,
+    "missing_and_released_sessions_refused": true,
+    "missing_workspace_refused": true,
+    "model_required": false,
+    "owner_service_remained_usable": true,
+    "registration_verified": true,
+    "release_verified": true,
+    "run_id": "d9f4025d-6cb6-4748-a4e7-d57572092902",
+    "sigterm_release_verified": true,
+    "synthetic_vectors": true,
+    "transports": [
+      "streamable-http"
+    ]
+  },
+  "scope": "Foreground automatic IDE lease renewal and opt-in embedded owner watch dispatch",
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 17,
+    "offline_watch_routing_and_scan": 2,
+    "session_client": 5
+  }
+}

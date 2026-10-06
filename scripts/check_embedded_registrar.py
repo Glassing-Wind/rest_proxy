@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import signal
 from pathlib import Path
 import socket
 import sys
@@ -70,6 +71,25 @@ async def run():
                 assert released['sessions'] == {}
                 await cli('--discover', success=False)
                 await cli(str(base / 'missing'), success=False)
+                refresh = await asyncio.create_subprocess_exec(sys.executable, str(ROOT / 'scripts/register_session.py'),
+                    str(source), '--embedded', '--mcp-url', url, '--session-id', 'acceptance-ide',
+                    '--refresh', '--lease-seconds', '60', '--refresh-interval', '1',
+                    cwd=base, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                try:
+                    await asyncio.sleep(1.5)
+                    first = await cli('--discover')
+                    await asyncio.sleep(1.5)
+                    renewed = await cli('--discover')
+                    assert renewed['expires_ms'] > first['expires_ms']
+                    refresh.send_signal(signal.SIGTERM)
+                    await asyncio.wait_for(refresh.communicate(), 25)
+                    assert refresh.returncode == 0
+                    await cli('--discover', success=False)
+                finally:
+                    if refresh.returncode is None:
+                        refresh.kill()
+                        await refresh.communicate()
+
             finally:
                 if server.returncode is None:
                     server.terminate()
@@ -80,7 +100,7 @@ async def run():
                         await server.wait()
         assert all((config / name).read_text() == '{"sentinel":"unchanged"}'
                    for name in ('sessions.json', 'active_sessions.json', 'pinned_watches.json'))
-        return {'registration_verified': True, 'discovery_verified': True, 'release_verified': True,
+        return {'automatic_refresh_verified': True, 'sigterm_release_verified': True, 'registration_verified': True, 'discovery_verified': True, 'release_verified': True,
                 'missing_and_released_sessions_refused': True, 'missing_workspace_refused': True,
                 'legacy_registries_unchanged': True, 'owner_service_remained_usable': True,
                 'synthetic_vectors': True, 'model_required': False, 'transports': ['streamable-http'],

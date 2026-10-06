@@ -270,6 +270,87 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.relationships('p'))
 
+    async def test_watcher_shutdown_cancels_active_index_and_preserves_receipt(self):
+        from memory.embedded_runtime import EmbeddedRuntime
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / 'source'
+            root.mkdir()
+            file = root / 'a.py'
+            file.write_text('def first():\n    return 1\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                pub = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                await owner.workspace_activity('p', watch_requested=True, expected_revision=0, expected_run_id=pub['run_id'])
+            file.write_text('def changed():\n    return 2\n')
+            entered = asyncio.Event()
+            async def blocked(texts):
+                entered.set()
+                await asyncio.Event().wait()
+            runtime = EmbeddedRuntime(state, 3)
+            encoder = mock.Mock(encoder_id='fixture', descriptor={'model': 'fixture'})
+            encoder.embed_texts = blocked
+            encoder.close = mock.AsyncMock()
+            runtime._encoder = encoder
+            task = await runtime.start_watch(interval=1)
+            try:
+                await asyncio.wait_for(entered.wait(), 10)
+            finally:
+                await runtime.close()
+            self.assertTrue(task.done())
+            encoder.close.assert_awaited_once()
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual((await owner.overview('p'))['run_id'], pub['run_id'])
+                self.assertEqual((await owner.indexing_attempt('p'))['status'], 'cancelled')
+
+    async def test_owned_watcher_content_changes_deletion_failure_and_shutdown(self):
+        from memory.embedded_runtime import EmbeddedRuntime
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / 'source'
+            root.mkdir()
+            file = root / 'a.py'
+            file.write_text('def first():\n    return 1\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                pub = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                await owner.workspace_activity('p', watch_requested=True, expected_revision=0, expected_run_id=pub['run_id'])
+            runtime = EmbeddedRuntime(state, 3)
+            encoder = mock.Mock(encoder_id='fixture', descriptor={'model': 'fixture'})
+            encoder.embed_texts = mock.AsyncMock(side_effect=fixture_embed)
+            encoder.close = mock.AsyncMock()
+            runtime._encoder = encoder
+            try:
+                await runtime.watch_tick()
+                encoder.embed_texts.assert_not_called()
+                (root / 'outside.py').write_text('def ignored():\n    pass\n')
+                file.write_text('def changed():\n    return 2\n')
+                await runtime.watch_tick()
+                updated = await runtime.overview('p')
+                self.assertNotEqual(updated['run_id'], pub['run_id'])
+                self.assertEqual(updated['files'], 1)
+                self.assertEqual((await runtime.indexing_attempt('p'))['status'], 'published')
+                file.write_text('def failure():\n    return 3\n')
+                encoder.embed_texts.side_effect = ValueError('fixture failure')
+                await runtime.watch_tick()
+                self.assertEqual((await runtime.overview('p'))['run_id'], updated['run_id'])
+                self.assertEqual((await runtime.workspace_activity('p'))['last_watch_result'], 'ValueError')
+                encoder.embed_texts.side_effect = fixture_embed
+                task = await runtime.start_watch(interval=1)
+                self.assertIs(task, await runtime.start_watch(interval=1))
+                for _ in range(50):
+                    if (await runtime.overview('p'))['run_id'] != updated['run_id']:
+                        break
+                    await asyncio.sleep(0.1)
+                else:
+                    self.fail('Background watcher did not publish changed content')
+                self.assertTrue((await runtime.workspace_activity('p'))['embedded_watch_worker_active'])
+                file.unlink()
+                await runtime.watch_tick()
+                self.assertEqual((await runtime.overview('p'))['files'], 0)
+            finally:
+                await runtime.close()
+            self.assertTrue(task.done())
+            encoder.close.assert_awaited_once()
+
     async def test_session_discovery_expiry_ambiguity_root_changes_and_deletion(self):
         with tempfile.TemporaryDirectory() as directory:
             roots = [Path(directory) / name for name in ('one', 'two')]

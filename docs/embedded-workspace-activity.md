@@ -43,8 +43,9 @@ state for that root. Old root-bound bytes remain until replacement/deletion.
 Project deletion removes activity atomically with annotations, attempt metadata
 and publication visibility. No state is silently restored for a reused project.
 
-`embedded_watch_worker_active` is always false for this slice. Persisted intent is
-not wired to a polling worker. Reads and writes share owner/runtime locks, so they
+`embedded_watch_worker_active` now reflects the opt-in owner polling task;
+[watch dispatch](embedded-refresh-and-watching.md) describes its flags and scope.
+Persisted intent alone does not start a polling worker. Reads and writes share owner/runtime locks, so they
 wait for active owned indexing to release its lock. No model lifecycle, legacy
 watcher mutation or external storage connection is performed.
 

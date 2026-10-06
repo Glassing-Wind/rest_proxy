@@ -167,3 +167,8 @@ and worker dispatch remain separate integration gates.
 [IDE registrar/discovery](embedded-ide-registration.md) now uses the existing HTTP
 MCP owner through explicit CLI commands. Lease expiry, ambiguity and published-root
 matching are enforced. Automatic IDE refresh and watcher dispatch remain pending.
+
+[Automatic IDE refresh and embedded watch dispatch](embedded-refresh-and-watching.md)
+now renew leases through the existing HTTP owner and poll current manifest paths
+inside the shared runtime. Both are opt-in; broader enrollment/deployment and
+controlled outcome validation remain pending.

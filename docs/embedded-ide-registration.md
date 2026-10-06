@@ -33,7 +33,8 @@ available when embedded mode is not selected.
 
 Refresh lasts 900 seconds by default; the existing 60..3,600 second bounds apply.
 The IDE/client must explicitly refresh before expiry or release when finished.
-No heartbeat scheduler is installed. Registration first resolves the canonical
+The optional foreground `--refresh` loop now provides renewal; see
+[automatic refresh](embedded-refresh-and-watching.md). Registration first resolves the canonical
 published workspace, verifies the activity root, reads revision/run preconditions,
 and writes once. A conflict requires reviewing state before retrying. A 15-second
 operation deadline bounds waiting for the owner; a timeout/disconnection does not
@@ -75,6 +76,7 @@ No real IDE mapping or watch is registered by acceptance.
 Private logs: `.runtime/embedded-registrar-acceptance/` (mode 700).
 
 Next: integrate a chosen IDE adapter/supervisor transport and explicit lease refresh
-policy; implement owned embedded watcher dispatch with manifest selection and
-cancellation/recovery. Watch intent still does not activate a worker. Reference/import
+policy; validate broader watch scope and deployment policies.
+[Owned polling](embedded-refresh-and-watching.md) now dispatches current-manifest
+changes when explicitly enabled. Reference/import
 query parity, REST ownership, historical jobs and FIRE checkpoints remain pending.

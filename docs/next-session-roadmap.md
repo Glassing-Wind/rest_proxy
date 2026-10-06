@@ -2,6 +2,14 @@
 
 ## Current checkpoint — October 5, 2026
 
+[Automatic refresh and owned watch dispatch](embedded-refresh-and-watching.md) now
+provide foreground IDE lease renewal and opt-in owner polling. Polling hashes current
+published manifest paths and republishes changes through the existing owned pipeline,
+with matching encoder identity and prior-publication preservation on failure. Native
+background task and real HTTP registrar/SIGTERM checks pass. New-file enrollment,
+chosen IDE adapter deployment, richer retry/history and controlled outcomes remain
+pending. All seven hosted checks passed for registrar commit `53ca2a5`.
+
 [Embedded IDE registration](embedded-ide-registration.md) now connects the existing
 registrar CLI to an explicit owning HTTP MCP endpoint, with registration/release and
 unique unexpired lease discovery. Real owner/subprocess acceptance verifies no

@@ -1,4 +1,5 @@
 """Offline owner-only registrar contracts; no native storage or network required."""
+import asyncio
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -28,6 +29,29 @@ class SessionClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.call_tool.await_count, 3)
         self.assertEqual(client.call_tool.call_args.args[1]['expected_revision'], 3)
         self.assertEqual(client.call_tool.call_args.args[1]['expected_run_id'], 'r')
+
+    async def test_automatic_refresh_and_stop_releases(self):
+        from graphrag_core.embedded_session_client import refresh_loop
+        stop = asyncio.Event()
+        calls = []
+        async def operation(url, session, root, seconds):
+            calls.append(seconds)
+            if len(calls) == 2:
+                stop.set()
+            return {'status': 'published'}
+        with mock.patch('graphrag_core.embedded_session_client.run_session_operation', side_effect=operation):
+            result = await refresh_loop('url', 'ide', '/source', 60, stop, interval=0.001)
+        self.assertEqual(result['status'], 'stopped')
+        self.assertTrue(result['lease_release_confirmed'])
+        self.assertEqual(calls, [60, 60, 0])
+
+    async def test_failed_renewal_stops_and_attempts_release(self):
+        from graphrag_core.embedded_session_client import refresh_loop
+        with mock.patch('graphrag_core.embedded_session_client.run_session_operation',
+                        side_effect=[{'status': 'published'}, ValueError('conflict'), {'status': 'published'}]) as operation:
+            with self.assertRaises(ValueError):
+                await refresh_loop('url', 'ide', '/source', 60, asyncio.Event(), interval=0.001)
+            self.assertEqual([call.args[3] for call in operation.call_args_list], [60, 60, 0])
 
     async def test_missing_wrong_root_and_ambiguous_discovery(self):
         client = mock.AsyncMock()

@@ -106,26 +106,43 @@ def main() -> int:
     parser.add_argument('workspace_path', nargs='?')
     parser.add_argument('--embedded', action='store_true')
     parser.add_argument('--discover', action='store_true')
+    parser.add_argument('--refresh', action='store_true', help='Run foreground lease renewal until SIGINT/SIGTERM')
     parser.add_argument('--mcp-url', default=os.getenv('LM_PROXY_EMBEDDED_OWNER_MCP_URL', ''))
     parser.add_argument('--session-id', default=os.getenv('LM_PROXY_EMBEDDED_SESSION_ID', ''))
     parser.add_argument('--lease-seconds', type=int, default=900)
+    parser.add_argument('--refresh-interval', type=float, default=None)
     args = parser.parse_args()
     embedded = args.embedded or os.getenv('LM_PROXY_STORAGE_BACKEND', '').strip().lower() == 'embedded'
     if embedded:
         from graphrag_core.embedded_session_client import run_session_operation
         if not args.mcp_url or not args.session_id or (not args.discover and not args.workspace_path):
             parser.error('Embedded mode requires owner MCP URL, explicit session ID and workspace (unless --discover)')
+        if args.refresh_interval is not None and (not args.refresh or not 1 <= args.refresh_interval <= args.lease_seconds / 3):
+            parser.error('Refresh interval requires --refresh and must be 1 second..one third of the lease')
+        if args.refresh and (args.discover or not args.workspace_path or not 60 <= args.lease_seconds <= 3600):
+            parser.error('Refresh requires a workspace and lease 60..3600 seconds')
         if args.discover and args.workspace_path:
             parser.error('Discovery takes no workspace path')
         try:
-            result = asyncio.run(run_session_operation(args.mcp_url, args.session_id,
+            if args.refresh:
+                from graphrag_core.embedded_session_client import refresh_loop
+                async def run_refresh():
+                    import signal
+                    stop = asyncio.Event()
+                    loop = asyncio.get_running_loop()
+                    for sig in (signal.SIGINT, signal.SIGTERM):
+                        loop.add_signal_handler(sig, stop.set)
+                    return await refresh_loop(args.mcp_url, args.session_id, args.workspace_path, args.lease_seconds, stop, interval=args.refresh_interval)
+                result = asyncio.run(run_refresh())
+            else:
+                result = asyncio.run(run_session_operation(args.mcp_url, args.session_id,
                 None if args.discover else args.workspace_path, args.lease_seconds))
         except Exception as error:
             print(f'Embedded session operation failed ({type(error).__name__}); no legacy fallback.', file=sys.stderr)
             return 1
         print(json.dumps(result, sort_keys=True))
         return 0
-    if args.discover or args.mcp_url or args.session_id:
+    if args.refresh or args.discover or args.mcp_url or args.session_id:
         parser.error('Embedded session options require --embedded or embedded storage selection')
     if not args.workspace_path:
         parser.error('A workspace path is required')

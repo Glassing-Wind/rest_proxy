@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import os
 from pathlib import Path
 
@@ -20,6 +21,9 @@ class EmbeddedRuntime:
         self._owner = None
         self._encoder = None
         self._closed = False
+        self._watch_task = None
+        self._watch_cursor = ""
+        self._watch_results = {}
 
     async def _get_owner(self):
         if self._closed:
@@ -110,7 +114,11 @@ class EmbeddedRuntime:
 
     async def workspace_activity(self, project_id: str, **values):
         async with self._lock:
-            return await (await self._get_owner()).workspace_activity(project_id, **values)
+            result = await (await self._get_owner()).workspace_activity(project_id, **values)
+            result['embedded_watch_worker_active'] = bool(self._watch_task and not self._watch_task.done()
+                and result.get('status') == 'published' and result.get('watch_requested'))
+            result['last_watch_result'] = self._watch_results.get(project_id)
+            return result
 
     async def indexing_attempt(self, project_id: str):
         async with self._lock:
@@ -149,7 +157,61 @@ class EmbeddedRuntime:
         async with self._lock:
             return (await self._get_owner()).graph
 
+    async def watch_tick(self):
+        from memory.embedded_watch import changed_paths
+        async with self._lock:
+            owner = await self._get_owner()
+            page = await owner.list_projects(limit=100, after=self._watch_cursor)
+            self._watch_cursor = page['next_cursor'] or ''
+            for project in page['projects']:
+                pid = project['project_id']
+                try:
+                    plan = await owner.watch_plan(pid)
+                    if plan is None:
+                        continue
+                    changed, paths = await asyncio.to_thread(changed_paths, plan['root_path'], plan['manifest']['files'])
+                    status = 'unchanged'
+                    if changed:
+                        encoder = await self._get_encoder()
+                        if plan['manifest'].get('retrieval', {}).get('encoder_id') != encoder.encoder_id:
+                            raise ValueError('Watcher encoder must match publication identity')
+                        await owner.index(plan['root_path'], pid, paths, embed=encoder.embed_texts,
+                                          encoder_id=encoder.encoder_id, encoder_metadata=encoder.descriptor)
+                        status = 'published'
+                    self._watch_results[pid] = status
+                except Exception as error:
+                    self._watch_results[pid] = type(error).__name__
+                if len(self._watch_results) > 100:
+                    self._watch_results.pop(next(iter(self._watch_results)))
+
+    async def start_watch(self, interval: float = 30):
+        if not 1 <= interval <= 3600:
+            raise ValueError('Watch interval must be 1..3600 seconds')
+        if self._closed:
+            raise RuntimeError('Embedded runtime is closed')
+        if self._watch_task and not self._watch_task.done():
+            return self._watch_task
+        async def poll():
+            while True:
+                try:
+                    await self.watch_tick()
+                except Exception as error:
+                    logging.getLogger(__name__).warning('Embedded watch cycle failed: %s', type(error).__name__)
+                await asyncio.sleep(interval)
+        self._watch_task = asyncio.create_task(poll())
+        return self._watch_task
+
+    async def stop_watch(self):
+        task, self._watch_task = self._watch_task, None
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
     async def close(self):
+        await self.stop_watch()
         async with self._lock:
             self._closed = True
             try:
