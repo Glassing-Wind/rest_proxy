@@ -200,3 +200,10 @@ bundle budgeting is the next coordinated implementation slice.
 The [snapshot adapter](fire-context-bundles.md) now connects scoped checkpoint/original
 recovery to the shared budgeted contract through MCP/REST. Provider formatting,
 forwarding, actual usage and continuation measurements remain the next gate.
+
+## October 6 distribution layout
+
+[Artifact acceptance](distribution-acceptance.md) now verifies packaged indexing
+workers, source-archive contents and isolated continuity imports. This repairs a
+reproduced wheel omission; minimal dependencies and installed native runtime
+acceptance remain release gates.

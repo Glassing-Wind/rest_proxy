@@ -10,6 +10,12 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Distribution layout acceptance](distribution-acceptance.md) now includes both
+subprocess indexing workers in wheel/source archives and checks an offline isolated
+artifact install. Baseline omission is reproduced; local CI passes. Next release
+slice: minimal embedded dependency profile and installed-daemon/native indexing
+acceptance, including writable state/runtime paths. Paired outcomes remain open.
+
 [Opt-in LM Studio context forwarding](context-provider-forwarding.md) now formats
 and recounts the serialized request, requires a resident model and forwards a
 stateless bundle from the shared owner. Real Qwen usage was 807 prompt/15 completion

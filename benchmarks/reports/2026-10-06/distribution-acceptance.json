@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "f443f6a",
+  "python": "3.14.4",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "baseline": {
+    "base_commit": "f443f6a",
+    "missing_workers": [
+      "scripts/run_struct_index.py",
+      "scripts/index_workspace.py"
+    ]
+  },
+  "checks": [
+    "wheel and source archive contain required runtime modules and workers",
+    "wheel contains MIT license",
+    "offline no-dependency target install",
+    "isolated stdlib continuity imports and runtime compilation",
+    "full local CI passed"
+  ],
+  "limitations": [
+    "No clean dependency resolution or minimal dependency profile",
+    "No installed worker execution, daemon startup or native indexing",
+    "No supported-platform matrix, full SBOM or restore drill",
+    "No paired coding outcome or token/latency savings claim",
+    "No push, deployment or merge"
+  ],
+  "sha256": {
+    "pyproject.toml": "dc9c323b28b7add4467cd73fd0f582ff1f6f79b98b416d650ec66012720f1657",
+    "scripts/__init__.py": "49debf4680cf0de83eba0df603a20b100150ea1320af412ea45ab97ba9055372",
+    "test_distribution.py": "a432cdcf3bd14b05f9f86346efc0be056e20db590d5420c59e8e0dd1b458a966",
+    ".runtime/distribution-acceptance/contracts.log": "1277b5ba7516ff8964274fc75ce6c120dc3d783be2c4b40d2acc106f5ca3098e",
+    ".runtime/distribution-acceptance/ci.log": "24799584967e3b1199d0067272895df57fda882dcaf0cad43ae6b048635e485c",
+    ".runtime/distribution-acceptance/baseline.json": "3a24e512afb63c1f0c723dc461daaeb7045fc14cdf9b10e2d3ceb02df8ab9a9d"
+  }
+}
