@@ -2,6 +2,13 @@
 
 ## Current checkpoint — October 5, 2026
 
+[Dependency audit repair](../benchmarks/reports/2026-10-05/dependency-refresh.md)
+updates multidict/fsspec in both manifests after two new active-branch findings.
+The audit passes with its existing exclusions unchanged; Python 3.14 install,
+dependency consistency, native repository checks and local CI pass. This newer
+failure supersedes earlier green-check observations for subsequent heads.
+IDE registrar/discovery and embedded watcher dispatch remain next work.
+
 [Embedded workspace activity](embedded-workspace-activity.md) now persists typed
 watch intent and bounded expiring client leases under revision/publication
 preconditions. Reopen, same-root reindex, root changes, expiry/limits and deletion
