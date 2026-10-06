@@ -75,7 +75,9 @@ and document a reproducible defect or maintenance question with source citations
 The rental-law repository can demonstrate evidence provenance: jurisdiction,
 effective date, primary authority, conflicting sources and explicit unknowns.
 It must not turn retrieved text into an unreviewed promise of legal compliance.
-Neither repository has been assessed in this milestone.
+The rental platform now has an initial local UI assessment and fix; see
+[the user-testing milestone](agent-team-user-testing.md). Rental-law source and
+full backend user journeys remain unassessed.
 
 TurboTenant is a possible prospect, not an established buyer or partner. Its
 published product includes applications, rent collection, maintenance and

@@ -15,6 +15,13 @@ the whole priority or enterprise release is complete.
 
 ## Commercial sequencing — October 6
 
+[Agent-team user testing](agent-team-user-testing.md) now has its first local
+rental-applicant browser demonstration: one reproduced submission blocker, a narrow
+working-tree fix and 13 passing focused tests. Backend fixture responses do not
+establish database/payment/email acceptance. Next: a disposable full journey and
+structured finding/review handoff; no persistent multi-agent runner is implemented.
+
+
 The user's income requirement adds a customer-validation track; it does not change
 which technical acceptance gates have passed. Next prepare a source-graded pilot
 report and delivery template using authorized source, then validate the

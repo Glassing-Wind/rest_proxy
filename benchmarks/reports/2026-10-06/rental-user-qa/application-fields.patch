@@ -1,0 +1,48 @@
+--- a/src/public/assets/application-apply.js
++++ b/src/public/assets/application-apply.js
+@@ -158,6 +158,14 @@
+     if (field(`${prefix}-current-landlord-phone`)) field(`${prefix}-current-landlord-phone`).value = applicant.currentLandlordPhone || "";
+   }
+ 
++  function syncCoApplicantFields() {
++    const enabled = hasCoApplicantInput.checked;
++    coApplicantSection.classList.toggle("hidden", !enabled);
++    coApplicantSection.querySelectorAll("input").forEach((input) => {
++      input.disabled = !enabled || hasCoApplicantInput.disabled;
++    });
++  }
++
+   function hydrateApplication(application) {
+     setStatus(application.status);
+     applicantNotesInput.value = application.applicantNotes || "";
+@@ -173,8 +181,9 @@
+     }
+     if (coApplicant) {
+       hasCoApplicantInput.checked = true;
+-      coApplicantSection.classList.remove("hidden");
+       hydrateApplicant("co", coApplicant);
++    } else {
++      hasCoApplicantInput.checked = false;
+     }
+ 
+     if (!["DRAFT", "INVITED", "IN_PROGRESS"].includes(application.status)) {
+@@ -188,6 +197,7 @@
+       hasCoApplicantInput.disabled = true;
+       applicationForm.querySelector('button[type="submit"]').disabled = true;
+     }
++    syncCoApplicantFields();
+   }
+ 
+   function buildApplicant(prefix, role) {
+@@ -259,9 +269,8 @@
+     showBanner(submit ? "Submitted application." : "Saved application.");
+   }
+ 
+-  hasCoApplicantInput.addEventListener("change", () => {
+-    coApplicantSection.classList.toggle("hidden", !hasCoApplicantInput.checked);
+-  });
++  hasCoApplicantInput.addEventListener("change", syncCoApplicantFields);
++  syncCoApplicantFields();
+ 
+   applicationForm.addEventListener("submit", (event) => {
+     event.preventDefault();

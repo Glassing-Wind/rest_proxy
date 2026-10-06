@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Agent-team user testing](agent-team-user-testing.md) now has its first local
+rental-applicant browser demonstration: one reproduced submission blocker, a narrow
+working-tree fix and 13 passing focused tests. Backend fixture responses do not
+establish database/payment/email acceptance. Next: a disposable full journey and
+structured finding/review handoff; no persistent multi-agent runner is implemented.
+
+
 **Direction change: near-term income validation.** Follow the
 [commercial direction](commercial-direction.md) and prepare a source-graded FIRE
 pilot demonstration plus reusable report template as the next milestone. The
