@@ -1,5 +1,7 @@
 import importlib
+import json
 import os
+from dataclasses import asdict
 import unittest
 from unittest import mock
 
@@ -47,6 +49,74 @@ class LMStudioProviderTests(unittest.IsolatedAsyncioTestCase):
     def _load_module(self):
         mod = importlib.import_module("local_embeddings.lmstudio")
         return importlib.reload(mod)
+
+    async def test_optional_bearer_auth_covers_lifecycle_and_embeddings(self):
+        import httpx
+
+        client_type = httpx.AsyncClient
+        for token in (" trial-token ", "", "   "):
+            with self.subTest(token_present=bool(token.strip())), mock.patch.dict(
+                os.environ, {"LMSTUDIO_API_KEY": token, "OPENAI_API_KEY": "cloud-only"},
+            ):
+                mod = self._load_module()
+                provider = mod.LMStudioEmbeddingProvider()
+                seen = []
+
+                def respond(request):
+                    seen.append((request.url.path, request.headers.get("Authorization")))
+                    if request.url.path == "/api/v1/models":
+                        payload = {"models": [{"key": provider.config.embed_model,
+                                               "type": "embedding", "loaded_instances": []}]}
+                    elif request.url.path == "/api/v1/models/load":
+                        payload = {"type": "embedding", "status": "loaded"}
+                    elif request.url.path == "/v1/embeddings":
+                        payload = {"data": [{"index": 0, "embedding": [1., 0.]}]}
+                    else:
+                        payload = {}
+                    return httpx.Response(200, json=payload)
+
+                def factory(**kwargs):
+                    return client_type(transport=httpx.MockTransport(respond), **kwargs)
+
+                with mock.patch.object(mod.httpx, "AsyncClient", side_effect=factory):
+                    try:
+                        await provider.list_models()
+                        await provider.load_model()
+                        await provider._embed_request(["fixture"])
+                        await provider.unload_model()
+                    finally:
+                        await provider.close()
+                self.assertEqual({path for path, _ in seen}, {
+                    "/api/v1/models", "/api/v1/models/load", "/api/v1/models/unload",
+                    "/v1/embeddings",
+                })
+                expected = f"Bearer {token.strip()}" if token.strip() else None
+                self.assertTrue(all(header == expected for _, header in seen))
+                self.assertNotIn("trial-token", repr(provider.config))
+                self.assertNotIn("trial-token", json.dumps(asdict(provider.config)))
+                self.assertNotIn("cloud-only", repr(provider.config))
+
+    async def test_auth_errors_redact_echoed_credentials(self):
+        import httpx
+
+        with mock.patch.dict(os.environ, {"LMSTUDIO_API_KEY": "fixture-secret"}):
+            mod = self._load_module()
+            provider = mod.LMStudioEmbeddingProvider()
+            client_type = httpx.AsyncClient
+
+            def respond(request):
+                return httpx.Response(401, text="Unauthorized Bearer fixture-secret", request=request)
+
+            with mock.patch.object(mod.httpx, "AsyncClient", side_effect=lambda **kwargs:
+                                   client_type(transport=httpx.MockTransport(respond), **kwargs)):
+                try:
+                    with self.assertRaises(mod.ModelLoadError) as raised:
+                        await provider.list_models()
+                    self.assertIn("401", str(raised.exception))
+                    self.assertIn("[redacted]", str(raised.exception))
+                    self.assertNotIn("fixture-secret", str(raised.exception))
+                finally:
+                    await provider.close()
 
     async def test_embedding_indices_must_cover_every_input_once(self):
         mod = self._load_module()

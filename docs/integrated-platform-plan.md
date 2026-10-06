@@ -7,6 +7,11 @@ and compaction/resumption acceptance scenarios.
 Updated October 4, 2026. This is the coordinating implementation plan; linked
 research and evidence retain their detailed findings.
 
+For current delivery status rather than the original milestone sequence, consult
+[the October 5 five-priority table](five-priority-status.md). It distinguishes
+validated slices from incomplete end-to-end acceptance and supersedes earlier
+pending-work statements in this plan.
+
 ## Outcome
 
 Deliver a native, permissively licensed code intelligence and persistent-context

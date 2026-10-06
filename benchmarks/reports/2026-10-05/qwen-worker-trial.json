@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-05",
+  "base_commit": "1228a9b",
+  "model": "qwen3.6-35b-a3b-splash",
+  "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+  "transport": "direct LM Studio HTTP, not rest_proxy or MCP",
+  "attempts": [
+    {
+      "complete": false,
+      "elapsed_s": 35.107,
+      "turns": 5,
+      "native_source_reads": 4,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "length"
+      ],
+      "usage": {
+        "prompt_tokens": 18106,
+        "completion_tokens": 3810,
+        "total_tokens": 21916
+      },
+      "reasoning_tokens": 3319,
+      "raw_receipt_sha256": "27fef71939c5daa93dc663447dfd19300c1fe589c385fd365d68e45c2a72dbc2"
+    },
+    {
+      "complete": true,
+      "elapsed_s": 29.38,
+      "turns": 7,
+      "native_source_reads": 6,
+      "finish_reasons": [
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "tool_calls",
+        "stop"
+      ],
+      "usage": {
+        "prompt_tokens": 33463,
+        "completion_tokens": 2411,
+        "total_tokens": 35874
+      },
+      "reasoning_tokens": 0,
+      "raw_receipt_sha256": "a952e7dadd62865a1c013359a010c171f8a1b6270bd9504b827ad7aaa5f78c68"
+    }
+  ],
+  "jina_loaded_instances_unchanged": true,
+  "worker_cloud_api_calls": 0,
+  "supervisor_token_usage": "not available; no savings comparison",
+  "supervisor_review": {
+    "diagnosis": "accepted: shared client lacks bearer headers",
+    "patch": "accepted with supervisor edits",
+    "unmodified_patch_applied": false,
+    "test_plan": "corrected: fake client does not capture headers; use actual httpx MockTransport requests",
+    "citation_quality": "core client location correct; some endpoint lines imprecise and config field count incorrect",
+    "missed_case": "server error body may echo a token; supervisor added redaction and regression",
+    "encoder_inspection": "worker did not read strict encoder; supervisor independently verified identity/descriptor exclusion"
+  },
+  "validation": {
+    "provider_tests": 11,
+    "strict_encoder_tests": 5,
+    "full_local_ci": "passed",
+    "worker_guard_tests": 3
+  },
+  "limits": [
+    "One guided known-file task, not unfamiliar-repository discovery or paired model evaluation.",
+    "Worker final completion is protocol completion, not correctness acceptance.",
+    "Runtime/model resident bytes not attested.",
+    "No savings or automatic delegation claim; supervisor usage unavailable.",
+    "No worker shell or write tool; supervisor applied and tested final patch.",
+    "Authentication header tests offline; shared server enforcement unchanged.",
+    "Final runner adds loaded-model preflight and forced final tool-choice; unloaded refusal verified offline."
+  ],
+  "original_source_sha256": {
+    "local_embeddings/lmstudio.py": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+    "test_lmstudio_provider.py": "13ad547af5b3c21f1167376e7dba9f811f775ea2a19b97b624a91400856a2a29"
+  },
+  "artifacts_sha256": {
+    "provider-tests.log": "c080ad7b4e54ef826f86016fe3a0cd829c0e5b16816e2f6652cd4645f518499f",
+    "strict-tests.log": "464e0ee629edf74de09ef21e4232fbcedc26588ff7cc23c470f47fe2da88c255",
+    "ci-final.log": "219f97ddcc19b01075d8aba7bfb57f9a3cf9af1bbaaf3faaf91fd61315e8d41e",
+    "models-before.json": "35b96bef948cdc51805737a226bddc26d9b228949385c28aa396b30c04b4ec3d",
+    "models-after.json": "35b96bef948cdc51805737a226bddc26d9b228949385c28aa396b30c04b4ec3d"
+  },
+  "final_source_sha256": {
+    "local_embeddings/lmstudio.py": "152b02656e33e409818eae3823a64dc1687cb81cf383143248aecc43095e45fa",
+    "scripts/run_qwen_worker_trial.py": "f19e3e2cee3491dcc9a743a1236343c414fd961d7cbb3282acf8fb46d6bb4195",
+    "test_lmstudio_provider.py": "0a7a347c80beb06e67ae3e1f601ad0c5192632ac8faa203a73e85ff463bb5dac",
+    "test_strict_lmstudio_encoder.py": "ae3c13006744e8ce91b5c777dfde3ecabb3403f3c790f4100f373ad59e0dd187",
+    "test_qwen_worker_trial.py": "0a421992223154464160c12918ff1f66e5160c32eddfaad9d11c0dfe2096a3f6"
+  }
+}

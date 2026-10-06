@@ -1,6 +1,22 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Current five-priority status
+
+Use [the October 5 completion table](five-priority-status.md) for current completed
+slices, remaining gates and evidence. The dated entries below are historical
+checkpoints; later entries at the top supersede pending work in older paragraphs.
+In particular, IDE lease renewal, owned watcher dispatch and guarded watch setup
+are implemented; deployment of a chosen IDE adapter and new-file enrollment remain.
+
 ## Current checkpoint — October 5, 2026
+
+The [Qwen worker trial](../benchmarks/reports/2026-10-05/qwen-worker-trial.md) now
+demonstrates one local known-file investigation, patch proposal and Codex review.
+The first attempt truncated; the accepted attempt required supervisor corrections.
+Optional `LMSTUDIO_API_KEY` support is implemented for the embedding adapter with
+credential exclusion from encoder identity and error redaction. Direct LM Studio
+HTTP was tested; automatic local/cloud routing, rest_proxy worker-route acceptance
+and token savings remain unverified. Use the five-priority table above for scope.
 
 [Watch this project setup](embedded-watch-setup.md) now previews service/model/source
 readiness and current manifest scope, then enables intent using exact revision/run

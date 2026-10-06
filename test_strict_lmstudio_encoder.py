@@ -1,5 +1,6 @@
 """Offline strict-provider tests; no LM Studio service or model assets required."""
 from dataclasses import replace
+import json
 import unittest
 from unittest import mock
 
@@ -75,6 +76,22 @@ class StrictEncoder(unittest.IsolatedAsyncioTestCase):
                 self.assertNotEqual(one.encoder_id, three.encoder_id)
             finally:
                 await three.close()
+        finally:
+            await one.close()
+            await two.close()
+
+    async def test_credentials_do_not_change_encoder_identity_or_descriptor(self):
+        with mock.patch.dict('os.environ', {'LMSTUDIO_API_KEY': 'first-fixture-secret'}):
+            one, _ = self.encoder()
+        with mock.patch.dict('os.environ', {'LMSTUDIO_API_KEY': 'second-fixture-secret'}):
+            two, _ = self.encoder()
+        try:
+            await one.connect()
+            await two.connect()
+            self.assertEqual(one.encoder_id, two.encoder_id)
+            rendered = json.dumps(one.descriptor) + one._configuration
+            self.assertNotIn('first-fixture-secret', rendered)
+            self.assertNotIn('second-fixture-secret', rendered)
         finally:
             await one.close()
             await two.close()

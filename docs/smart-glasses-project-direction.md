@@ -146,6 +146,12 @@ or clinical evaluation has been started by this direction document.
 
 ## Separate adjacent direction: incident investigation
 
+The October 5 [CLARITY and cockpit direction](clarity-cockpit-direction.md) adds
+relevant spoken assistance and a voluntary public-interest evidence network as
+separate applications. Personal captures remain private until explicitly selected
+for sharing. Device capture/audio capability checks and initial deliberate-capture
+acceptance still precede background or proactive operation.
+
 Flock camera integration was raised as another potential application of evidence
 graphs and retrieval. Keep it separate from personal memory and dementia support:
 agency access, case authorization, evidence preservation and vendor restrictions
