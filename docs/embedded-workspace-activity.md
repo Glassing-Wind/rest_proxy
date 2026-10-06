@@ -78,3 +78,7 @@ dispatch must use the owned embedded indexing path with explicit manifest select
 model requirements and cancellation/recovery semantics. The legacy index worker
 remains guarded. REST integration, historical jobs, automatic resume/retention and
 FIRE checkpoint history remain pending.
+
+[Owner-backed IDE registration and discovery](embedded-ide-registration.md) now
+provides explicit CLI operations over Streamable HTTP. Legacy synchronous
+config/supervisor discovery and automatic refresh/worker dispatch remain pending.

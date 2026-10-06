@@ -2,6 +2,14 @@
 
 ## Current checkpoint — October 5, 2026
 
+[Embedded IDE registration](embedded-ide-registration.md) now connects the existing
+registrar CLI to an explicit owning HTTP MCP endpoint, with registration/release and
+unique unexpired lease discovery. Real owner/subprocess acceptance verifies no
+legacy registry writes and no second graph owner. Native ambiguity/expiry/root-change
+checks pass. Synchronous config/supervisor migration, chosen IDE adapter heartbeat
+policy and owned watcher dispatch remain pending. All seven hosted checks passed
+for the dependency repair commit `d360367`.
+
 [Dependency audit repair](../benchmarks/reports/2026-10-05/dependency-refresh.md)
 updates multidict/fsspec in both manifests after two new active-branch findings.
 The audit passes with its existing exclusions unchanged; Python 3.14 install,

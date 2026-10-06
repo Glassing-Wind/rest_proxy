@@ -54,3 +54,30 @@ async def workspace_activity(driver, project_id: str, *, expected_revision: int 
                 **state, 'embedded_watch_worker_active': False, 'session_process_liveness_verified': False}
     async with driver.session() as session:
         return await (session.execute_write(operation) if writing else session.execute_read(operation))
+
+
+async def resolve_session(driver, session_id: str) -> dict:
+    """Resolve only one unexpired lease bound to the current published workspace root."""
+    if not session_id or len(session_id) > 128:
+        raise ValueError('Use an explicit session ID of at most 128 characters')
+    needle = json.dumps(session_id) + ':'
+    async def read(tx):
+        return await (await tx.run('MATCH (a:WorkspaceActivity), (p:OutlinePublication) '
+                                  'WHERE a.id=p.id AND a.root_path=p.root_path AND a.payload_json CONTAINS $needle '
+                                  'RETURN p.id AS project_id, p.root_path AS workspace_path, p.run_id AS run_id, '
+                                  'a.payload_json AS payload ORDER BY project_id LIMIT 33', needle=needle)).data()
+    async with driver.session() as session:
+        rows = await session.execute_read(read)
+    if len(rows) > 32:
+        return {'status': 'selection_limit', 'session_id': session_id}
+    now = time.time_ns() // 1000000
+    matches = []
+    for row in rows:
+        expiry = json.loads(row.pop('payload'))['sessions'].get(session_id, 0)
+        if expiry > now:
+            matches.append(dict(row, expires_ms=expiry))
+    if len(matches) != 1:
+        return {'status': 'ambiguous' if matches else 'not_found', 'session_id': session_id,
+                'candidates': matches[:20], 'more_candidates': len(matches) > 20}
+    return {'status': 'resolved', 'session_id': session_id, **matches[0],
+            'session_process_liveness_verified': False}

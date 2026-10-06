@@ -20,6 +20,8 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "resolve_embedded_session": ToolCatalogEntry(
+        "primary", "embedded metadata", "Resolve a unique unexpired client lease against current published roots."),
     "get_embedded_workspace_activity": ToolCatalogEntry(
         "primary", "embedded metadata", "Read watch intent and unexpired client leases."),
     "set_embedded_watch_intent": ToolCatalogEntry(

@@ -99,9 +99,39 @@ def register_session(workspace_path: str):
     return True
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python register_session.py <workspace_path>")
-        sys.exit(1)
+def main() -> int:
+    import argparse
+    import asyncio
+    parser = argparse.ArgumentParser(description='Register a legacy IDE mapping or an explicit embedded owner lease')
+    parser.add_argument('workspace_path', nargs='?')
+    parser.add_argument('--embedded', action='store_true')
+    parser.add_argument('--discover', action='store_true')
+    parser.add_argument('--mcp-url', default=os.getenv('LM_PROXY_EMBEDDED_OWNER_MCP_URL', ''))
+    parser.add_argument('--session-id', default=os.getenv('LM_PROXY_EMBEDDED_SESSION_ID', ''))
+    parser.add_argument('--lease-seconds', type=int, default=900)
+    args = parser.parse_args()
+    embedded = args.embedded or os.getenv('LM_PROXY_STORAGE_BACKEND', '').strip().lower() == 'embedded'
+    if embedded:
+        from graphrag_core.embedded_session_client import run_session_operation
+        if not args.mcp_url or not args.session_id or (not args.discover and not args.workspace_path):
+            parser.error('Embedded mode requires owner MCP URL, explicit session ID and workspace (unless --discover)')
+        if args.discover and args.workspace_path:
+            parser.error('Discovery takes no workspace path')
+        try:
+            result = asyncio.run(run_session_operation(args.mcp_url, args.session_id,
+                None if args.discover else args.workspace_path, args.lease_seconds))
+        except Exception as error:
+            print(f'Embedded session operation failed ({type(error).__name__}); no legacy fallback.', file=sys.stderr)
+            return 1
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    if args.discover or args.mcp_url or args.session_id:
+        parser.error('Embedded session options require --embedded or embedded storage selection')
+    if not args.workspace_path:
+        parser.error('A workspace path is required')
+    register_session(args.workspace_path)
+    return 0
 
-    register_session(sys.argv[1])
+
+if __name__ == '__main__':
+    raise SystemExit(main())

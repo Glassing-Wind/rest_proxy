@@ -163,3 +163,7 @@ IDE session and watch-intent migration remain separate integration tasks.
 [Workspace activity](embedded-workspace-activity.md) now provides typed durable watch
 intent and client leases. Legacy IDE registry migration, process liveness validation
 and worker dispatch remain separate integration gates.
+
+[IDE registrar/discovery](embedded-ide-registration.md) now uses the existing HTTP
+MCP owner through explicit CLI commands. Lease expiry, ambiguity and published-root
+matching are enforced. Automatic IDE refresh and watcher dispatch remain pending.

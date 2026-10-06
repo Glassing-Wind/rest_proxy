@@ -125,3 +125,6 @@ It is an outcome/recovery read; concurrent indexing holds the owner lock.
 [Workspace activity](embedded-workspace-activity.md) adds a primary intent/lease read
 and admin-classified watch/lease updates. No watcher is activated; IDE registry
 migration and dispatch remain pending.
+
+[IDE registrar integration](embedded-ide-registration.md) uses the existing HTTP
+owner and primary lease-discovery read; standalone clients never open the graph.

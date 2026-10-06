@@ -270,6 +270,34 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.relationships('p'))
 
+    async def test_session_discovery_expiry_ambiguity_root_changes_and_deletion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            roots = [Path(directory) / name for name in ('one', 'two')]
+            for root in roots:
+                root.mkdir()
+                (root / 'a.py').write_text('def first():\n    return 1\n')
+            async with EmbeddedRepositoryOwner(str(Path(directory) / 'state'), 3) as owner:
+                pubs = [await owner.index(str(root), name, ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                        for root, name in zip(roots, ('p', 'q'))]
+                session_id = 'ide"quoted-é'
+                with mock.patch('memory.embedded_activity.time.time_ns', return_value=1000000000000):
+                    self.assertEqual((await owner.resolve_session(session_id))['status'], 'not_found')
+                    await owner.workspace_activity('p', session_id=session_id, lease_seconds=60,
+                        expected_revision=0, expected_run_id=pubs[0]['run_id'])
+                    resolved = await owner.resolve_session(session_id)
+                    self.assertEqual(resolved['project_id'], 'p')
+                    self.assertEqual(resolved['workspace_path'], str(roots[0].resolve()))
+                    await owner.workspace_activity('q', session_id=session_id, lease_seconds=60,
+                        expected_revision=0, expected_run_id=pubs[1]['run_id'])
+                    self.assertEqual((await owner.resolve_session(session_id))['status'], 'ambiguous')
+                    await owner.delete_project('q')
+                    self.assertEqual((await owner.resolve_session(session_id))['status'], 'resolved')
+                with mock.patch('memory.embedded_activity.time.time_ns', return_value=1060000000000):
+                    self.assertEqual((await owner.resolve_session(session_id))['status'], 'not_found')
+                with mock.patch('memory.embedded_activity.time.time_ns', return_value=1000000000000):
+                    await owner.index(str(roots[1]), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+                    self.assertEqual((await owner.resolve_session(session_id))['status'], 'not_found')
+
     async def test_activity_leases_intent_conflicts_expiry_reopen_and_delete(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'

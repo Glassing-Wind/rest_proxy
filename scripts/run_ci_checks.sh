@@ -78,6 +78,7 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_embedded_metadata.py
 "$PYTHON_BIN" test_embedded_jobs.py
 "$PYTHON_BIN" test_embedded_activity.py
+"$PYTHON_BIN" test_embedded_session_client.py
 "$PYTHON_BIN" test_nltk_security.py
 "$PYTHON_BIN" test_dependency_security_batch.py
 "$PYTHON_BIN" test_mcp_tool_parity_selection.py

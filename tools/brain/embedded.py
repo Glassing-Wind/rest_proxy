@@ -109,10 +109,15 @@ async def refresh_embedded_session(project_id: str, session_id: str,
         lease_seconds=lease_seconds, expected_revision=expected_revision, expected_run_id=expected_run_id)
 
 
+async def resolve_embedded_session(session_id: str) -> dict:
+    """Discover a unique unexpired client lease in a current published root; refuse ambiguity."""
+    return await get_embedded_runtime().resolve_session(session_id)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
                      describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts, get_embedded_relationships,
                      get_embedded_project_metadata, update_embedded_project_metadata, get_embedded_indexing_attempt, get_embedded_workspace_activity,
-                     set_embedded_watch_intent, refresh_embedded_session):
+                     set_embedded_watch_intent, refresh_embedded_session, resolve_embedded_session):
             mcp.tool()(tool)

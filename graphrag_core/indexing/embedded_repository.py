@@ -185,6 +185,12 @@ class EmbeddedRepositoryOwner:
             self._require_open()
             return await symbol_context(self.graph, project_id, symbol_name, **bounds)
 
+    async def resolve_session(self, session_id: str):
+        from memory.embedded_activity import resolve_session
+        async with self._lock:
+            self._require_open()
+            return await resolve_session(self.graph, session_id)
+
     async def workspace_activity(self, project_id: str, **values):
         from memory.embedded_activity import workspace_activity
         async with self._lock:

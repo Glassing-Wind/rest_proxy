@@ -15,7 +15,7 @@ PRIMARY_TOOL_NAMES: frozenset[str] = frozenset({
 
 OPTIONAL_PRIMARY_TOOL_NAMES = frozenset({
     "search_embedded_repository", "describe_embedded_file", "get_embedded_overview",
-    "get_embedded_workspace_activity", "get_embedded_indexing_attempt", "get_embedded_project_metadata", "list_embedded_projects", "get_embedded_file_facts", "get_embedded_relationships",
+    "resolve_embedded_session", "get_embedded_workspace_activity", "get_embedded_indexing_attempt", "get_embedded_project_metadata", "list_embedded_projects", "get_embedded_file_facts", "get_embedded_relationships",
 })
 
 # Keep write/admin tools and the dispatcher itself outside this route.
