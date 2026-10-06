@@ -101,8 +101,9 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
                           for file in files], 'symbols': symbol_count,
                 'unsupported_symbols': skipped_count, 'source_bytes': used_bytes,
                 'relationships': {'version': 1, 'count': len(relationships),
+                                  'symbol_import_resolution': 'python-unique-imported-function-v1',
                                   'counts': {kind: sum(link['kind'] == kind for link in relationships)
-                                             for kind in ('calls', 'imports', 'http_routes')},
+                                             for kind in ('calls', 'imports', 'symbol_imports', 'http_routes')},
                                   'ids': [link['id'] for link in relationships]}}
     manifest['sha256'] = hashlib.sha256(_json(manifest).encode()).hexdigest()
     return {'project_id': project_id, 'root_path': str(root), 'run_id': str(uuid.uuid4()),
@@ -131,7 +132,11 @@ async def publish_outline_snapshot(driver, snapshot: dict) -> dict:
         payload = json.loads(link['payload_json'])
         source = files_by_id.get(link['source_id'])
         target = files_by_id.get(link['target_id'])
-        if (not source or not target or link['kind'] not in {'calls', 'imports', 'http_routes'}
+        if (not source or not target or link['kind'] not in {'calls', 'imports', 'symbol_imports', 'http_routes'}
+                or (link['kind'] == 'symbol_imports' and (
+                    contract.get('symbol_import_resolution') != 'python-unique-imported-function-v1'
+                    or not payload.get('callee_id') or not payload.get('imported_name')
+                    or not payload.get('local_name')))
                 or link['payload_json'] != canonical(payload)
                 or hashlib.sha256(canonical(payload).encode()).hexdigest() != link['id']
                 or payload['source_file'] != source['path'] or payload['target_file'] != target['path']

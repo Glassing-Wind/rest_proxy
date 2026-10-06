@@ -68,3 +68,9 @@ Private logs and fixture code: `.runtime/embedded-import-overview-acceptance/` (
 Priority 2 still needs symbol-reference investigation, resolved symbol bindings and
 route summaries, broader resolver coverage, REST owner integration and IDE deployment.
 See [five-priority status](five-priority-status.md).
+
+## October 6 extension
+
+The [function-import binding extension](embedded-symbol-imports.md) now adds a
+separate bounded resolved-candidate page. Declaration rankings retain their original
+semantics; full bindings and implicit imports remain unsupported.

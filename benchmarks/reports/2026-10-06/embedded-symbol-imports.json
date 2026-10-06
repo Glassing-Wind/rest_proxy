@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "5cb7e9c",
+  "scope": "Conservative Python function-import relationships and separate standard-overview page",
+  "tests": {
+    "native_repository": 23,
+    "runtime_mcp": 14,
+    "offline_binding_methods": 2,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "parity": true,
+    "run_id": "f784194e-43c8-4db8-a7bd-8e21d9dd7afb",
+    "named_items": 1,
+    "resolved_bindings": 1,
+    "embedding_model_required_for_reads": false,
+    "synthetic_vectors": true,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "alias and relative function imports with source/run/target-symbol citations",
+    "unsafe rebinding/wildcard/dynamic/decorated/reexport/ambiguous targets excluded",
+    "match-capture rebinding excluded for imports and calls",
+    "identifier/expression bounds and truncation reporting",
+    "incoming symbol-ID filter and outgoing paging",
+    "native snapshot/reopen/reindex/old-capability/deletion behavior",
+    "separate bounded overview page under owner lock",
+    "real STDIO and Streamable HTTP parity"
+  ],
+  "limits": [
+    "Python snapshot-root module-level from-imports to unique undecorated functions only.",
+    "Static source candidates do not guarantee runtime dispatch.",
+    "Declared rankings remain observations; no implicit or full-language binding coverage.",
+    "Standard find_references remains static callers only; importing files require symbol_imports query.",
+    "Older indexes require explicit reindexing for the new kind; no automatic schema reset.",
+    "Synthetic vectors; no semantic quality, performance or token savings claim.",
+    "Local checks only; not pushed or deployed."
+  ],
+  "artifacts_sha256": {
+    "native.log": "a795964447bd4691e8b75d30cbddec3b73bff3f3176879b01f800e49c6f145e8",
+    "runtime.log": "2061719892099466c2f8ce7fd1463bf33d57ce439f8ec654c6eeda0ec0f76401",
+    "bindings.log": "6f283ee6225d2cef4c0127d95456a6f954c45141c92b97dd89016cb1c630e8f4",
+    "transport.json": "03a134186f41bc1b42f7177389cdaee6c7405f4ba83afedee847c54b45c5afdf",
+    "stdio.log": "8ada26b372b49dc595515fb58133d372992bdd17adbece019ae7f2cee8bd1869",
+    "http.log": "f96893c7d219c1c4cc7397b4b1a5d483426ce77c05e37820d35223dfbd4314e8",
+    "ci.log": "28786a98af41feef14fb23c6ed8924245f002d6da11b788552d8565d39bef1f5"
+  },
+  "source_sha256": {
+    "graphrag_core/indexing/embedded_relationships.py": "b80d862f56633583a1141ee105bf7f097e42945cbb10fccc1e7f51545cffd02d",
+    "graphrag_core/indexing/embedded_outlines.py": "6eb0a80a8370f59d3e637e738b705b4188d12b60bcc7c9668ebcb5d0477ed328",
+    "graphrag_core/indexing/embedded_repository.py": "4fccd852780593531618b50356cbad3c071ea5f1f7d8b9c939d2139b02060487",
+    "tools/brain/embedded.py": "4390fd673f24240ab096e41159bbd2186e8cdcf6ab010f974a47b915bd2c7005",
+    "tools/brain/search/tools.py": "5188ce368fcd505b076b3e40a11c1b42260b8362f8689bd6ea4b3154323f16b0",
+    "test_embedded_symbol_imports.py": "547772cbf18cf96dd18e7eebb86aa0c69be5e03f49410cf38a8b1867e348aed5",
+    "test_embedded_repository.py": "a4c8d79ce1a739389ebcdc75ecc136e175af4c7b248d8bb5b77686f938aee4da",
+    "scripts/run_ci_checks.sh": "717bd7e013549a4a7be352f43fc57d58e98b89a163958244d83ae38fafb82f4d"
+  }
+}

@@ -15,8 +15,9 @@ def register(mcp: FastMCP) -> None:
         Summarize explicit (IMPORTS_SYMBOL) and implicit (IMPLICIT_IMPORTS_SYMBOL)
         symbol import edges for a project.
 
-        Embedded mode returns cited declared-import observations as JSON; it does
-        not claim resolved symbol bindings or implicit import edges.
+        Embedded mode returns cited declared-import rankings plus a separately
+        paged set of conservative Python function-import bindings. Rankings remain
+        declarations; full binding coverage and implicit import edges are unsupported.
 
         Args:
             project_path: Absolute path to the project root.

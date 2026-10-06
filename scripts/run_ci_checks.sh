@@ -76,6 +76,7 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_embedded_related_files.py
 "$PYTHON_BIN" test_embedded_import_overview.py
 "$PYTHON_BIN" test_embedded_route_overview.py
+"$PYTHON_BIN" test_embedded_symbol_imports.py
 "$PYTHON_BIN" test_embedded_facts.py
 "$PYTHON_BIN" test_embedded_relationships.py
 "$PYTHON_BIN" test_embedded_call_chain.py

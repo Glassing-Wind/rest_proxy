@@ -51,10 +51,12 @@ async def get_embedded_file_facts(project_id: str, file_path: str, limit: int = 
 
 async def get_embedded_relationships(project_id: str, kind: str = 'calls', file_path: str = '',
                                      direction: str = 'out', limit: int = 50, after: str = '', symbol_id: str = '') -> dict | None:
-    """Read scoped static call/import/file-route candidates with endpoint source citations.
+    """Read calls/imports/symbol_imports/http_routes candidates with endpoint source citations.
 
     These are static source bindings, not guarantees of runtime dispatch. Use in/out
     to inspect incoming callers/importers or outgoing candidates for a published file.
+    symbol_imports binds conservative Python from-imports to local module functions;
+    use direction in with symbol_id to inspect that function's importing files.
     """
     return await get_embedded_runtime().relationships(project_id, kind=kind, file_path=file_path,
                                                      direction=direction, limit=limit, after=after, symbol_id=symbol_id)

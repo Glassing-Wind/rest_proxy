@@ -2,13 +2,22 @@
 
 ## Current five-priority status
 
-Use [the October 5 completion table](five-priority-status.md) for current completed
+Use [the October 6 completion table](five-priority-status.md) for current completed
 slices, remaining gates and evidence. The dated entries below are historical
 checkpoints; later entries at the top supersede pending work in older paragraphs.
 In particular, IDE lease renewal, owned watcher dispatch and guarded watch setup
 are implemented; deployment of a chosen IDE adapter and new-file enrollment remain.
 
-## Current checkpoint — October 5, 2026
+## Current checkpoint — October 6, 2026
+
+[Python function-import bindings](embedded-symbol-imports.md) are now published as
+a distinct cited relationship kind and included as a bounded import-overview page.
+Aliases, relative imports, conservative exclusions, old-index status and native
+persistence/paging are verified with real STDIO/HTTP parity. Next work should address
+remaining owner integrations or the scoped FIRE checkpoint store; broader binding
+and general flow coverage remain incomplete.
+
+## Previous checkpoint — October 5, 2026
 
 [Embedded backend route overview](embedded-route-overview.md) now returns verified
 native route declarations through the explicit backend tool. Source/fact hashes,

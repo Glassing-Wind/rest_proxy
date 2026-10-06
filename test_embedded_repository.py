@@ -17,6 +17,54 @@ async def fixture_embed(texts):
 
 
 class PublishedRepository(unittest.IsolatedAsyncioTestCase):
+    async def test_symbol_import_bindings_publication_paging_reopen_and_reindex(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            (root / 'util.py').write_text('def helper():\n return 1\n')
+            main = root / 'main.py'
+            main.write_text('from util import helper as h\n')
+            (root / 'other.py').write_text('from util import helper\n')
+            paths = ['main.py', 'other.py', 'util.py']
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                await owner.index(str(root), 'p', paths, embed=fixture_embed, encoder_id='fixture')
+                first = await owner.import_overview('p', limit=1)
+                self.assertFalse(first['binding_coverage_complete'])
+                page = first['resolved_import_bindings']
+                self.assertEqual(len(page['relationships']), 1)
+                self.assertTrue(page['next_cursor'])
+                second = await owner.relationships('p', kind='symbol_imports', after=page['next_cursor'])
+                self.assertEqual(len(second['relationships']), 1)
+                context = await owner.symbol_context('p', 'helper', include_source=False)
+                incoming = await owner.relationships('p', kind='symbol_imports', direction='in',
+                                                     symbol_id=context['symbol']['id'])
+                self.assertEqual(len(incoming['relationships']), 2)
+                self.assertEqual({link['local_name'] for link in incoming['relationships']}, {'h', 'helper'})
+                self.assertTrue(all(link['target_file'] == 'util.py' for link in incoming['relationships']))
+                main.write_text('from util import helper as h\nh=2\n')
+                self.assertEqual(await owner.import_overview('p', limit=1), first)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                self.assertEqual(await owner.import_overview('p', limit=1), first)
+                await owner.index(str(root), 'p', paths, embed=fixture_embed, encoder_id='fixture')
+                current = await owner.relationships('p', kind='symbol_imports')
+                self.assertEqual(len(current['relationships']), 1)
+                self.assertEqual(current['relationships'][0]['source_file'], 'other.py')
+                self.assertNotEqual(current['run_id'], first['run_id'])
+                async with owner.graph.session() as session:
+                    async def remove_capability(tx):
+                        rows = await (await tx.run('MATCH (p:OutlinePublication {id:$id}) '
+                            'RETURN p.manifest_json AS manifest', id='p')).data()
+                        manifest = json.loads(rows[0]['manifest'])
+                        del manifest['relationships']['symbol_import_resolution']
+                        await tx.run('MATCH (p:OutlinePublication {id:$id}) SET p.manifest_json=$manifest',
+                                     id='p', manifest=json.dumps(manifest))
+                    await session.execute_write(remove_capability)
+                self.assertEqual((await owner.relationships('p', kind='symbol_imports'))['status'],
+                                 'reindex-required-for-symbol-imports-v1')
+                await owner.delete_project('p')
+                self.assertIsNone(await owner.relationships('p', kind='symbol_imports'))
+
     async def test_route_overview_native_publication_filters_reopen_and_reindex(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'source'

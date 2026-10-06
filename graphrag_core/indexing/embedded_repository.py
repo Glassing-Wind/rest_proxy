@@ -193,9 +193,26 @@ class EmbeddedRepositoryOwner:
 
     async def import_overview(self, project_id: str, **bounds):
         from graphrag_core.indexing.embedded_imports import import_overview
+        from graphrag_core.indexing.embedded_relationships import read_relationships
         async with self._lock:
             self._require_open()
-            return await import_overview(self.graph, project_id, **bounds)
+            result = await import_overview(self.graph, project_id, **bounds)
+            if result['status'] != 'published':
+                return result
+            page = await read_relationships(self.graph, project_id, kind='symbol_imports',
+                                            limit=min(bounds.get('limit', 20), 20))
+            if page is None or page['run_id'] != result['run_id']:
+                raise RuntimeError('Import bindings do not match their publication')
+            result['resolved_import_bindings'] = page
+            result['binding_resolution_scope'] = 'python-unique-imported-function-v1'
+            result['binding_coverage_complete'] = False
+            if page.get('next_cursor'):
+                result['binding_continuation'] = {'tool': 'get_embedded_relationships',
+                    'project_id': project_id, 'kind': 'symbol_imports', 'direction': 'out',
+                    'limit': 20, 'after': page['next_cursor']}
+            if len(json.dumps(result, ensure_ascii=False).encode()) > 48000:
+                raise ValueError('Import overview and bindings exceed output budget; reduce limit')
+            return result
 
     async def route_overview(self, project_id: str, **bounds):
         from graphrag_core.indexing.embedded_routes import route_overview

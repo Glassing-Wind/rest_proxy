@@ -50,6 +50,18 @@ class Bindings(ast.NodeVisitor):
             self.names[node.name] += 1
         self.generic_visit(node)
 
+    def visit_MatchAs(self, node):
+        if node.name:
+            self.names[node.name] += 1
+        self.generic_visit(node)
+
+    visit_MatchStar = visit_MatchAs
+
+    def visit_MatchMapping(self, node):
+        if node.rest:
+            self.names[node.rest] += 1
+        self.generic_visit(node)
+
 
 class Calls(ast.NodeVisitor):
     def __init__(self):
@@ -86,12 +98,16 @@ def build_relationships(files: list[dict]) -> list[dict]:
     by_path = {file['path']: file for file in files}
     links = {}
 
-    def emit(kind, source, target, *, rule, line=None, caller=None, callee=None, expression=None, start_byte=None, end_byte=None):
+    def emit(kind, source, target, *, rule, line=None, caller=None, callee=None, expression=None, start_byte=None, end_byte=None,
+             imported_name=None, local_name=None, expression_truncated=False):
         payload = {'kind': kind, 'source_file': source['path'], 'target_file': target['path'],
                    'source_sha256': source['sha256'], 'target_sha256': target['sha256'],
                    'rule': rule, 'line': line, 'caller_id': caller, 'callee_id': callee,
                    'expression': expression, 'start_byte': start_byte, 'end_byte': end_byte,
                    'semantics': 'static-source-candidate'}
+        if kind == 'symbol_imports':
+            payload.update(imported_name=imported_name, local_name=local_name,
+                           expression_truncated=expression_truncated)
         digest = hashlib.sha256(canonical(payload).encode()).hexdigest()
         links[digest] = {'id': digest, 'source_id': source['id'], 'target_id': target['id'],
                          'kind': kind, 'payload_json': canonical(payload)}
@@ -187,6 +203,19 @@ def build_relationships(files: list[dict]) -> list[dict]:
                             if alias.name != '*':
                                 imported[alias.asname or alias.name] = (target, alias.name)
                                 declared_at[alias.asname or alias.name] = (node.end_lineno, node.end_col_offset)
+                                local = alias.asname or alias.name
+                                callee = infos.get(target['path'], {}).get('defs', {}).get(alias.name)
+                                if (callee and len(local) <= 512 and len(alias.name) <= 512
+                                        and info['bindings'][local] == 1 and local not in info['globals']
+                                        and not info['wildcard'] and not info['dynamic']
+                                        and local not in info['modified_bindings']
+                                        and (target['path'], alias.name) not in blocked_exports):
+                                    expression = ast.get_source_segment(file['content'], node) or ''
+                                    emit('symbol_imports', file, target,
+                                         rule='python-unique-imported-function-v1', line=node.lineno,
+                                         callee=callee['id'], expression=expression[:2000],
+                                         expression_truncated=len(expression) > 2000,
+                                         imported_name=alias.name, local_name=local)
             scopes = [(None, info['tree'].body)] + [(node, node.body) for node in info['tree'].body
                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
             line_offsets = [0]
@@ -280,8 +309,8 @@ def build_relationships(files: list[dict]) -> list[dict]:
 
 async def read_relationships(driver, project_id: str, *, kind: str = 'calls', file_path: str = '',
                              direction: str = 'out', limit: int = 50, after: str = '', symbol_id: str = '') -> dict | None:
-    if kind not in {'calls', 'imports', 'http_routes'} or direction not in {'out', 'in'} or not 1 <= limit <= 100:
-        raise ValueError('Use calls/imports/http_routes, out/in and limit 1..100')
+    if kind not in {'calls', 'imports', 'symbol_imports', 'http_routes'} or direction not in {'out', 'in'} or not 1 <= limit <= 100:
+        raise ValueError('Use calls/imports/symbol_imports/http_routes, out/in and limit 1..100')
     if after and (len(after) != 64 or any(char not in '0123456789abcdef' for char in after)):
         raise ValueError('Relationship cursor must be a lowercase SHA256')
 
@@ -319,6 +348,9 @@ async def read_relationships(driver, project_id: str, *, kind: str = 'calls', fi
     contract = manifest.get('relationships')
     if not contract or contract.get('version') != 1:
         return {'project_id': project_id, 'run_id': publication['run_id'], 'status': 'reindex-required-for-relationships-v1'}
+    if kind == 'symbol_imports' and contract.get('symbol_import_resolution') != 'python-unique-imported-function-v1':
+        return {'project_id': project_id, 'run_id': publication['run_id'],
+                'status': 'reindex-required-for-symbol-imports-v1'}
     hashes = {file['path']: file['sha256'] for file in manifest['files']}
     identities = set(contract['ids'])
     links = []
