@@ -2,6 +2,13 @@
 
 ## Current checkpoint — October 5, 2026
 
+[Watch this project setup](embedded-watch-setup.md) now previews service/model/source
+readiness and current manifest scope, then enables intent using exact revision/run
+preconditions. Blocked or stale requests do not enable watching. CLI and MCP setup
+keep global service permission separate; no real watch was enabled. Native ready/
+blocked cases and real blocked-CLI acceptance pass. All seven hosted checks passed
+for automatic refresh/watch dispatch commit `1d3d6d7`.
+
 [Automatic refresh and owned watch dispatch](embedded-refresh-and-watching.md) now
 provide foreground IDE lease renewal and opt-in owner polling. Polling hashes current
 published manifest paths and republishes changes through the existing owned pipeline,

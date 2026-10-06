@@ -172,3 +172,7 @@ matching are enforced. Automatic IDE refresh and watcher dispatch remain pending
 now renew leases through the existing HTTP owner and poll current manifest paths
 inside the shared runtime. Both are opt-in; broader enrollment/deployment and
 controlled outcome validation remain pending.
+
+[Watch this project setup](embedded-watch-setup.md) now checks service/model/source
+readiness, shows current-manifest scope and enables project intent with preview
+preconditions. Global service permission remains an explicit deployment choice.

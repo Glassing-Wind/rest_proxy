@@ -185,6 +185,14 @@ class EmbeddedRepositoryOwner:
             self._require_open()
             return await symbol_context(self.graph, project_id, symbol_name, **bounds)
 
+    async def watch_setup(self, project_id: str):
+        from memory.embedded_activity import workspace_activity
+        async with self._lock:
+            self._require_open()
+            activity = await workspace_activity(self.graph, project_id)
+            publication = await read_outline_publication(self.graph, project_id)
+            return None if publication is None else dict(publication, activity=activity)
+
     async def watch_plan(self, project_id: str):
         from memory.embedded_activity import workspace_activity
         async with self._lock:

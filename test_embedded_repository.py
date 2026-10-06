@@ -270,6 +270,48 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertIsNone(await owner.relationships('p'))
 
+    async def test_watch_setup_preview_readiness_preconditions_and_enable(self):
+        from memory.embedded_runtime import EmbeddedRuntime
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / 'source'
+            root.mkdir()
+            (root / 'a.py').write_text('def first():\n    return 1\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                pub = await owner.index(str(root), 'p', ['a.py'], embed=fixture_embed, encoder_id='fixture')
+            runtime = EmbeddedRuntime(state, 3)
+            try:
+                with mock.patch.dict('os.environ', {'LM_PROXY_EMBEDDED_WATCH_ENABLED': '0'}):
+                    blocked = await runtime.configure_project_watch('p', enable=True,
+                        expected_revision=0, expected_run_id=pub['run_id'])
+                    self.assertEqual(blocked['status'], 'blocked')
+                    self.assertEqual(blocked['scope']['paths'], ['a.py'])
+                    self.assertFalse((await runtime.workspace_activity('p'))['watch_requested'])
+                encoder = mock.Mock(encoder_id='wrong', descriptor={'model': 'fixture'})
+                encoder.embed_texts = mock.AsyncMock(side_effect=fixture_embed)
+                encoder.close = mock.AsyncMock()
+                runtime._encoder = encoder
+                await runtime.start_watch(interval=30)
+                with mock.patch.dict('os.environ', {'LM_PROXY_EMBEDDED_WATCH_ENABLED': '1'}):
+                    mismatch = await runtime.configure_project_watch('p')
+                    self.assertFalse(mismatch['ready'])
+                    encoder.encoder_id = 'fixture'
+                    preview = await runtime.configure_project_watch('p')
+                    self.assertTrue(preview['ready'])
+                    self.assertFalse((await runtime.workspace_activity('p'))['watch_requested'])
+                    conflict = await runtime.configure_project_watch('p', enable=True,
+                        expected_revision=1, expected_run_id=pub['run_id'])
+                    self.assertEqual(conflict['status'], 'conflict')
+                    enabled = await runtime.configure_project_watch('p', enable=True,
+                        expected_revision=preview['revision'], expected_run_id=preview['run_id'])
+                    self.assertEqual(enabled['status'], 'enabled')
+                    self.assertTrue((await runtime.workspace_activity('p'))['watch_requested'])
+                self.assertTrue(encoder.embed_texts.await_count > 0)
+                self.assertTrue(all(call.args[0] == ['FIRE watch readiness probe']
+                                    for call in encoder.embed_texts.call_args_list))
+            finally:
+                await runtime.close()
+
     async def test_watcher_shutdown_cancels_active_index_and_preserves_receipt(self):
         from memory.embedded_runtime import EmbeddedRuntime
         with tempfile.TemporaryDirectory() as directory:

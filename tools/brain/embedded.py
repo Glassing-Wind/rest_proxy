@@ -114,10 +114,21 @@ async def resolve_embedded_session(session_id: str) -> dict:
     return await get_embedded_runtime().resolve_session(session_id)
 
 
+async def configure_embedded_project_watch(project_id: str, enable: bool = False,
+                                           expected_revision: int | None = None, expected_run_id: str = '') -> dict:
+    """Watch this project: preview model/service readiness and current manifest scope.
+
+    Enable requires the preview revision/run. Blocked setup does not change project intent.
+    This action does not enable global service permission, load a model or expand the manifest.
+    """
+    return await get_embedded_runtime().configure_project_watch(project_id, enable=enable,
+        expected_revision=expected_revision, expected_run_id=expected_run_id)
+
+
 def register(mcp):
     if embedded_graph_selected() and os.getenv('LM_PROXY_EMBEDDED_STATE', '').strip():
         for tool in (index_embedded_repository, search_embedded_repository,
                      describe_embedded_file, get_embedded_overview, list_embedded_projects, get_embedded_file_facts, get_embedded_relationships,
                      get_embedded_project_metadata, update_embedded_project_metadata, get_embedded_indexing_attempt, get_embedded_workspace_activity,
-                     set_embedded_watch_intent, refresh_embedded_session, resolve_embedded_session):
+                     set_embedded_watch_intent, refresh_embedded_session, resolve_embedded_session, configure_embedded_project_watch):
             mcp.tool()(tool)

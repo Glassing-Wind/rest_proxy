@@ -157,6 +157,62 @@ class EmbeddedRuntime:
         async with self._lock:
             return (await self._get_owner()).graph
 
+    async def configure_project_watch(self, project_id: str, *, enable: bool = False,
+                                      expected_revision: int | None = None, expected_run_id: str = ''):
+        from memory.embedded_watch import changed_paths
+        async with self._lock:
+            owner = await self._get_owner()
+            setup = await owner.watch_setup(project_id)
+            if setup is None:
+                return {'project_id': project_id, 'status': 'not_published'}
+            activity, manifest = setup['activity'], setup['manifest']
+            permitted = os.getenv('LM_PROXY_EMBEDDED_WATCH_ENABLED', '0').strip().lower() in {'1', 'true', 'yes', 'on'}
+            active = bool(self._watch_task and not self._watch_task.done())
+            result = {'project_id': project_id, 'status': 'preview', 'run_id': setup['run_id'],
+                      'revision': activity['revision'], 'workspace_path': activity['workspace_path'],
+                      'service_permission': permitted, 'service_running': active, 'model_ready': False,
+                      'scope': {'selection': 'current-published-manifest', 'total_files': len(manifest['files']),
+                                'paths': [file['path'] for file in manifest['files'][:20]],
+                                'more_paths': len(manifest['files']) > 20,
+                                'new_files_enrolled': False}, 'blockers': []}
+            if not permitted:
+                result['blockers'].append('Enable LM_PROXY_EMBEDDED_WATCH_ENABLED on the owning service')
+            if not active:
+                result['blockers'].append('Restart the owning service with embedded watching enabled')
+            try:
+                changed, paths = await asyncio.to_thread(changed_paths, activity['workspace_path'], manifest['files'])
+                result['scope']['changes_pending'] = changed
+                result['scope']['missing_files'] = len(manifest['files']) - len(paths)
+            except Exception as error:
+                result['blockers'].append('Source scan failed: ' + type(error).__name__)
+            if not manifest['files']:
+                result['blockers'].append('Current manifest is empty; index the intended files first')
+            try:
+                if self._encoder is None and not self.artifact:
+                    result['blockers'].append('Set LM_PROXY_EMBEDDED_MODEL_ARTIFACT on the owning service')
+                    raise RuntimeError('Model artifact not configured')
+                encoder = await self._get_encoder()
+                result['model_ready'] = encoder.encoder_id == manifest.get('retrieval', {}).get('encoder_id')
+                if not result['model_ready']:
+                    result['blockers'].append('Configured encoder does not match the publication')
+                else:
+                    await encoder.embed_texts(['FIRE watch readiness probe'])
+            except Exception as error:
+                result['model_ready'] = False
+                result['blockers'].append('Model readiness failed: ' + type(error).__name__)
+            result['ready'] = not result['blockers']
+            if enable:
+                if not result['ready']:
+                    result['status'] = 'blocked'
+                elif expected_revision != activity['revision'] or expected_run_id != setup['run_id']:
+                    result['status'] = 'conflict'
+                else:
+                    updated = await owner.workspace_activity(project_id, watch_requested=True,
+                        expected_revision=expected_revision, expected_run_id=expected_run_id)
+                    result['status'] = 'enabled' if updated['status'] == 'published' else updated['status']
+                    result['revision'] = updated['revision']
+            return result
+
     async def watch_tick(self):
         from memory.embedded_watch import changed_paths
         async with self._lock:

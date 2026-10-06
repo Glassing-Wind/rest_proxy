@@ -37,7 +37,8 @@ async def run():
         env = dict(os.environ, LM_PROXY_STORAGE_BACKEND='embedded', LM_PROXY_GRAPH_BACKEND='ladybug',
                    LM_PROXY_EMBEDDED_STATE=str(base / 'state'), LM_PROXY_MEMORY_EMBEDDING_DIM='3',
                    LM_PROXY_MEMORY_ENABLED='0', LM_PROXY_WATCHER_ENABLED='0', LM_PROXY_TOOL_PROFILE='primary',
-                   LM_PROXY_CONFIG_DIR=str(config), PYTHONPATH=str(ROOT))
+                   LM_PROXY_CONFIG_DIR=str(config), PYTHONPATH=str(ROOT),
+                   LM_PROXY_EMBEDDED_MODEL_ARTIFACT='', LM_PROXY_EMBEDDED_WATCH_ENABLED='0')
         with tempfile.TemporaryFile() as logs:
             server = await asyncio.create_subprocess_exec(sys.executable, '-m', 'uvicorn', 'brain_server:app',
                 '--host', '127.0.0.1', '--port', str(port), cwd=base, env=env, stdout=logs, stderr=logs)
@@ -60,8 +61,16 @@ async def run():
                         await asyncio.sleep(0.1)
                 else:
                     raise AssertionError('Owner service readiness timed out')
+                watch = await asyncio.create_subprocess_exec(sys.executable, str(ROOT / 'scripts/watch_embedded_project.py'),
+                    'fixture', '--mcp-url', url, '--enable', cwd=base, env=env,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                watch_output, _ = await asyncio.wait_for(watch.communicate(), 35)
+                blocked_watch = json.loads(watch_output)
+                assert watch.returncode == 1 and not blocked_watch['ready']
+                assert blocked_watch['scope']['paths'] == ['a.py']
                 await cli('--discover', success=False)
                 registered = await cli(str(source))
+                assert registered['watch_requested'] is False
                 assert registered['sessions'].get('acceptance-ide')
                 assert registered['run_id'] == publication['run_id']
                 discovered = await cli('--discover')
@@ -100,7 +109,7 @@ async def run():
                         await server.wait()
         assert all((config / name).read_text() == '{"sentinel":"unchanged"}'
                    for name in ('sessions.json', 'active_sessions.json', 'pinned_watches.json'))
-        return {'automatic_refresh_verified': True, 'sigterm_release_verified': True, 'registration_verified': True, 'discovery_verified': True, 'release_verified': True,
+        return {'watch_setup_blocked_without_intent_change': True, 'automatic_refresh_verified': True, 'sigterm_release_verified': True, 'registration_verified': True, 'discovery_verified': True, 'release_verified': True,
                 'missing_and_released_sessions_refused': True, 'missing_workspace_refused': True,
                 'legacy_registries_unchanged': True, 'owner_service_remained_usable': True,
                 'synthetic_vectors': True, 'model_required': False, 'transports': ['streamable-http'],

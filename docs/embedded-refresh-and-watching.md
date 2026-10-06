@@ -92,3 +92,6 @@ or inference provider is changed. Controlled outcome/resource evaluation remains
 
 [Acceptance receipt](../benchmarks/reports/2026-10-05/embedded-refresh-and-watching.json).
 Private logs: `.runtime/embedded-automation-acceptance/` (mode 700).
+
+[Watch this project setup](embedded-watch-setup.md) now provides the readiness/scope
+preview and guarded enable action for a published project.

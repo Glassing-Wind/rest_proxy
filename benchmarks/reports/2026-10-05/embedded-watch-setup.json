@@ -1,0 +1,52 @@
+{
+  "artifacts_sha256": {
+    "ci.log": "b910ee974c6a01318727bbed13b2393ad83750ec32f9a3bf97cbaa5a6b032bf7",
+    "cli.json": "4d32d515d7144f850f42d91b67bc8c6e36e8d074676ebd3af0d09c19a689246d",
+    "cli.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-tests.log": "ecbd06b72368a71fae76eb859e1dfed9737d27c32970e91e7fc72b85d4bcb01f",
+    "runtime-tests.log": "9253c2c604761420c3a833401c46fd7ae439614831bad9340fa8a1d718d11a44"
+  },
+  "cli_acceptance": {
+    "automatic_refresh_verified": true,
+    "discovery_verified": true,
+    "legacy_registries_unchanged": true,
+    "missing_and_released_sessions_refused": true,
+    "missing_workspace_refused": true,
+    "model_required": false,
+    "owner_service_remained_usable": true,
+    "registration_verified": true,
+    "release_verified": true,
+    "run_id": "2b9662be-e0d2-4418-9908-fbbdb7139578",
+    "sigterm_release_verified": true,
+    "synthetic_vectors": true,
+    "transports": [
+      "streamable-http"
+    ],
+    "watch_setup_blocked_without_intent_change": true
+  },
+  "date": "2026-10-05",
+  "limits": [
+    "No real project intent or global service permission changed.",
+    "Readiness can use a small non-private embedding probe; no model load/unload.",
+    "Ready native test uses explicit synthetic fixture encoder, not production fallback.",
+    "CLI subprocess uses service permission disabled and model artifact unset.",
+    "Scope remains the current published manifest; no new-file enrollment.",
+    "Model compatibility/availability checks do not attest resident weights/runtime or coding outcomes."
+  ],
+  "prior_hosted_checks": "all seven passed",
+  "prior_hosted_head": "1d3d6d7",
+  "python": "3.14.4",
+  "scope": "Watch this project setup action; readiness/scope preview and guarded project enable",
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 18,
+    "runtime_mcp": 10
+  },
+  "verified": [
+    "preview shows manifest scope without changing intent",
+    "disabled service and absent/mismatched model block activation",
+    "non-private model readiness probe",
+    "stale revision/run conflict does not enable",
+    "ready action enables durable project intent"
+  ]
+}

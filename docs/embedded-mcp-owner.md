@@ -132,3 +132,6 @@ owner and primary lease-discovery read; standalone clients never open the graph.
 [Automatic refresh and watcher dispatch](embedded-refresh-and-watching.md) now use
 the existing HTTP registrar and shared runtime, respectively. Embedded polling is
 opt-in and replaces legacy watcher startup; scope remains the published manifest.
+
+[Watch setup](embedded-watch-setup.md) provides an admin-classified readiness/scope
+preview and revision/publication-guarded project enable action.
