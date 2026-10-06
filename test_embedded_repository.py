@@ -276,6 +276,45 @@ class PublishedRepository(unittest.IsolatedAsyncioTestCase):
                 await owner.delete_project('p')
                 self.assertEqual((await owner.import_overview('p'))['status'], 'not_published')
 
+    async def test_reference_bridge_native_snapshot_reopen_and_reindex(self):
+        from memory.embedded_runtime import EmbeddedRuntime
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            root.mkdir()
+            (root / 'util.py').write_text('def helper():\n    return 1\n')
+            main = root / 'main.py'
+            main.write_text('from util import helper\ndef caller():\n    return helper()\n')
+            state = str(Path(directory) / 'state')
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                await owner.index(str(root), 'p', ['main.py', 'util.py'],
+                                  embed=fixture_embed, encoder_id='fixture')
+                runtime = EmbeddedRuntime(state, 3)
+                runtime._owner = owner
+                first = await runtime.workspace_references(str(root), 'helper')
+                project = first['projects'][0]
+                self.assertEqual(project['status'], 'published')
+                self.assertEqual(len(project['callers']['relationships']), 1)
+                self.assertTrue(project['source_sha256'])
+                self.assertFalse(first['coverage_complete'])
+                main.write_text('def caller():\n    return 1\n')
+                self.assertEqual(await runtime.workspace_references(str(root), 'helper'), first)
+            async with EmbeddedRepositoryOwner(state, 3) as owner:
+                runtime = EmbeddedRuntime(state, 3)
+                runtime._owner = owner
+                self.assertEqual(await runtime.workspace_references(str(root), 'helper'), first)
+                await owner.index(str(root), 'p', ['main.py', 'util.py'],
+                                  embed=fixture_embed, encoder_id='fixture')
+                current = await runtime.workspace_references(str(root), 'helper')
+                self.assertEqual(current['projects'][0]['callers']['relationships'], [])
+                self.assertNotEqual(current['projects'][0]['run_id'], project['run_id'])
+                self.assertEqual((await runtime.workspace_references(str(root), 'missing'))[
+                    'projects'][0]['status'], 'symbol_not_published')
+                main.write_text('def helper():\n    return 2\n')
+                await owner.index(str(root), 'p', ['main.py', 'util.py'],
+                                  embed=fixture_embed, encoder_id='fixture')
+                self.assertEqual((await runtime.workspace_references(str(root), 'helper'))[
+                    'projects'][0]['status'], 'ambiguous')
+
     async def test_related_files_native_bridge_reopen_snapshot_and_reindex(self):
         from mcp.server.fastmcp import FastMCP
         from memory.embedded_runtime import EmbeddedRuntime

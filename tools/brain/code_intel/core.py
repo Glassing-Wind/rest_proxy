@@ -3165,16 +3165,17 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def find_references(workspace_id: str | list[str], symbol_name: str) -> str:
         """
-        Find all locations that reference a symbol — function calls, type usages,
-        and any code chunk that mentions the name.
+        Find reference evidence for an exact symbol name.
 
-        Combines two sources:
+        Legacy storage combines two sources:
         1. Neo4j [:CALLS|CALLS_INFERRED] edges (precise + inferred call graph hits)
         2. Postgres full-text search over codebase_embeddings (catches type references,
            field accesses, generic bounds, and string literals that the graph misses)
 
-        Use this before renaming or deleting a symbol to find every location that
-        must be updated.
+        Embedded mode returns bounded cited static callers as JSON, with explicit
+        partial coverage and ambiguity reporting. It does not resolve type/field
+        usages, string mentions, symbol imports or dynamic calls. Review additional
+        source evidence before renaming or deleting a symbol on either backend.
 
         Args:
             workspace_id:  Logical workspace name or absolute project path (or list).

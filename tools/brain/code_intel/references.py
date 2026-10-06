@@ -203,6 +203,12 @@ def _render_semantic_reference_groups(entries: list[tuple[int, int, str, str]]) 
 
 async def find_references_impl(workspace_id: str | list[str], symbol_name: str) -> str:
     try:
+        from memory.storage_config import embedded_graph_selected
+        if embedded_graph_selected():
+            import json
+            from memory.embedded_runtime import get_embedded_runtime
+            result = await get_embedded_runtime().workspace_references(workspace_id, symbol_name)
+            return json.dumps(result, ensure_ascii=False)
         works = [workspace_id] if isinstance(workspace_id, str) else workspace_id
         pids = [get_project_id(workspace) for workspace in works]
         workspace_roots = {

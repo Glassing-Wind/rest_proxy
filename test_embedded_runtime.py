@@ -9,6 +9,38 @@ from mcp.server.fastmcp import FastMCP
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reference_routes_scope_ambiguity_and_bounds_without_encoder(self):
+        import json
+        from tools.brain.code_intel.references import find_references_impl
+        runtime = EmbeddedRuntime('/unused', 3)
+        runtime._owner = mock.AsyncMock()
+        runtime._owner.resolve_project.side_effect = [
+            {'project_id': 'p'}, {'project_id': 'p'}, {'project_id': 'q'}, None]
+        runtime._owner.symbol_context.side_effect = [
+            {'project_id': 'p', 'status': 'published', 'symbol': {'id': 's', 'file_path': 'a.py'},
+             'callers': {'next_cursor': 'cursor'}, 'callees': {'unused': True}},
+            {'project_id': 'q', 'status': 'ambiguous', 'candidates': []}]
+        with mock.patch.dict('os.environ', {'LM_PROXY_STORAGE_BACKEND': 'embedded'}), \
+                mock.patch('memory.embedded_runtime.get_embedded_runtime', return_value=runtime), \
+                mock.patch('graph_bootstrap.require_driver', side_effect=AssertionError('legacy')), \
+                mock.patch.object(runtime, '_get_encoder', side_effect=AssertionError('encoder')):
+            result = json.loads(await find_references_impl(['a', 'alias', 'b', 'missing'], 'helper'))
+        self.assertFalse(result['coverage_complete'])
+        self.assertEqual(len(result['projects']), 3)
+        self.assertNotIn('callees', result['projects'][0])
+        self.assertEqual(result['projects'][0]['continuation']['after'], 'cursor')
+        self.assertEqual(result['projects'][1]['status'], 'ambiguous')
+        self.assertEqual(result['projects'][2]['status'], 'not_published')
+        for works in ([], ['a'] * 9, [None]):
+            with self.assertRaises(ValueError):
+                await runtime.workspace_references(works, 'helper')
+        runtime._owner.resolve_project.side_effect = None
+        runtime._owner.resolve_project.return_value = {'project_id': 'p'}
+        runtime._owner.symbol_context.side_effect = None
+        runtime._owner.symbol_context.return_value = {'status': 'published', 'candidates': ['x' * 48000]}
+        with self.assertRaises(ValueError):
+            await runtime.workspace_references('a', 'helper')
+
     async def test_reads_without_encoder_and_matching_identity(self):
         runtime = EmbeddedRuntime('/unused', 3)
         owner = mock.AsyncMock()

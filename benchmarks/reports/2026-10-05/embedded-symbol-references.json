@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-05",
+  "base_commit": "b8dcad6",
+  "scope": "Standard find_references bridge to bounded cited static callers",
+  "tests": {
+    "native_repository": 21,
+    "runtime_mcp": 13,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "parity": true,
+    "run_id": "2c5a7c2b-fc6d-442e-b7df-435a8daf5d48",
+    "reference_count": 1,
+    "embedding_model_required_for_reads": false,
+    "synthetic_vectors": true,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "native published snapshot/live-edit/reopen/reindex/ambiguity",
+    "workspace alias deduplication and independent project statuses",
+    "continuation arguments and workspace/output bounds",
+    "dispatch without legacy driver or embedding encoder",
+    "real STDIO and Streamable HTTP parity"
+  ],
+  "limits": [
+    "Partial Python module/function static call candidates; not exhaustive references or safe rename proof.",
+    "At most eight workspaces, twenty callers per project and 48000 serialized bytes; underlying symbol-context bounds also apply.",
+    "Independent project publications are not an atomic multi-project snapshot.",
+    "Continuation cursors require publication-run comparison across pages.",
+    "Synthetic fixture; no semantic quality, latency or token savings claim.",
+    "Local validation only; no hosted CI result or deployment claimed."
+  ],
+  "artifacts_sha256": {
+    "native.log": "fae8090310caf51e9f3e7b6f70bd8d9b82397aa6b7dbffc44fc2f06af30962cc",
+    "runtime.log": "e21013456b3a063aa637e97c8fdbb7f7af0a90835f963ab41e3a27783519ac3d",
+    "transport.json": "6f821bb2597ba024a73e736f15c7136bfeae1044ee66f223bed8e5e8f36907a8",
+    "stdio.log": "83bae32dc80881077a6bfdf03c4dfba662d7df0e1e55f0f2fa99fa1c64d837fa",
+    "http.log": "c386655461afe12dbf937e8110797b9c107fb2491ecaba5118254c9c645f6778",
+    "ci.log": "04b4bdaca994214d623e9b2a5ad15d5812289b835946497dcc1f554ee6b66e8e"
+  },
+  "source_sha256": {
+    "memory/embedded_runtime.py": "f069d2b17f1699d456cf1c0cf2d614b8b100328088c40f0926e4cf41d7564d71",
+    "tools/brain/code_intel/references.py": "daee4bff3d0cac639edc5e88b02e6c59d907e0f6539ac516a8664aa86ada2316",
+    "tools/brain/code_intel/core.py": "9a500604209d9dbd9aaf069ba360d2fc55f19ad43616c0ee38986b73774133e9",
+    "test_embedded_runtime.py": "24c262b05d1a85b2b2b0e0224a2ef194571e1b733527fd40c5561cdced59d942",
+    "test_embedded_repository.py": "7cc3d118b866359bab8d8d30f8c5be9fa63d50517a107c19beb96e24acc19e81"
+  }
+}

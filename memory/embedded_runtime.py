@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 from pathlib import Path
@@ -132,6 +133,47 @@ class EmbeddedRuntime:
             if project is None:
                 return {'workspace_id': workspace_id, 'status': 'not_published'}
             return await owner.import_overview(project['project_id'], **bounds)
+
+    async def workspace_references(self, workspace_id: str | list[str], symbol_name: str):
+        """Return bounded static call candidates; never claim exhaustive references."""
+        works = [workspace_id] if isinstance(workspace_id, str) else workspace_id
+        if not isinstance(works, list) or not 1 <= len(works) <= 8 or any(
+                not isinstance(work, str) or not work.strip() for work in works):
+            raise ValueError('Use one to eight nonempty workspace names or paths')
+        if not isinstance(symbol_name, str) or not symbol_name or len(symbol_name) > 512:
+            raise ValueError('Use an exact symbol name of at most 512 characters')
+        result = {'symbol_name': symbol_name, 'coverage_complete': False,
+                  'semantics': 'static-source-candidates', 'projects': [],
+                  'unsupported': ['type-usages', 'field-accesses', 'string-mentions',
+                                  'resolved-symbol-imports', 'dynamic-calls']}
+        async with self._lock:
+            owner = await self._get_owner()
+            seen = set()
+            for work in works:
+                project = await owner.resolve_project(work)
+                key = project['project_id'] if project else ('missing', work)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if project is None:
+                    entry = {'workspace_id': work, 'status': 'not_published'}
+                else:
+                    context = await owner.symbol_context(
+                        project['project_id'], symbol_name, include_source=False)
+                    entry = {k: v for k, v in context.items() if k != 'callees'}
+                    page = entry.get('callers', {})
+                    if page.get('status'):
+                        entry['status'] = page['status']
+                    if page.get('next_cursor'):
+                        entry['continuation'] = {'tool': 'get_embedded_relationships',
+                            'project_id': project['project_id'], 'kind': 'calls',
+                            'direction': 'in', 'symbol_id': context['symbol']['id'],
+                            'file_path': context['symbol']['file_path'],
+                            'after': page['next_cursor'], 'limit': 20}
+                result['projects'].append(entry)
+                if len(json.dumps(result, ensure_ascii=False).encode()) > 48000:
+                    raise ValueError('Reference output exceeds byte budget; request fewer workspaces')
+        return result
 
     async def workspace_activity(self, project_id: str, **values):
         async with self._lock:

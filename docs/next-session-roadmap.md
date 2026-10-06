@@ -10,6 +10,12 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 5, 2026
 
+[Embedded symbol references](embedded-symbol-references.md) now routes the standard
+tool to verified static callers with bounded multi-workspace results and explicit
+partial coverage. Native snapshot/reindex/ambiguity and real STDIO/HTTP parity pass.
+Next bridge work: resolved imports and route summaries; broader reference coverage
+and remaining owner integrations still prevent full Priority 2 completion.
+
 [Embedded declared-import overview](embedded-import-overview.md) now routes the
 standard summary through the shared owner. Named declaration rankings, source/fact
 citations, wildcard counts and scan/output bounds are verified; implicit imports
