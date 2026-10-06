@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "3827b58",
+  "scope": "Opt-in REST evidence read surface on the existing HTTP MCP owner",
+  "tests": {
+    "offline_contract_methods": 4,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http",
+      "rest"
+    ],
+    "parity": true,
+    "run_id": "00b0e849-8ee2-4086-8ecd-95f4cb62f524",
+    "source_sha256": "f761a050942f2476ab46de5e8f69a9c0deba37f594fbafc69df08745243b2763",
+    "single_http_owner": true,
+    "write_tool_refused": true,
+    "embedding_model_required_for_reads": false,
+    "synthetic_vectors": true,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "flag/backend gating; route absent when disabled or legacy backend selected",
+    "existing tool schema validation and unknown-argument rejection",
+    "allowlisted reads with mutation refusal and text-only search",
+    "request/result byte caps and sanitized outages",
+    "real source parity across STDIO, Streamable HTTP and REST",
+    "HTTP MCP and REST share one running daemon and storage runtime"
+  ],
+  "limits": [
+    "REST evidence reads only; no inference-proxy bundle assembly or request injection.",
+    "Existing daemon deployment access controls; no new authentication system.",
+    "Source/text reads require no embedding model; REST vector/hybrid modes intentionally unavailable.",
+    "Underlying MCP-wrapped read/limit failures can return generic 503.",
+    "Synthetic fixture; no quality, latency or token savings claim.",
+    "No operational inference provider, index or watch setting changed.",
+    "Local validation only; not pushed or deployed."
+  ],
+  "artifacts_sha256": {
+    "contracts.log": "03fb632f161d2c04067b5f5269ff70c34661ffede613ee162681086e832b8f43",
+    "transport.json": "94e24516606ff8c0301e14a03a3b40feb8efbe8f36b0e854ba195a91238aaa47",
+    "stdio.log": "18caefe30f4e110ef81039168109c77813fda187751de02835dcbcd46f9e3ac9",
+    "http.log": "ddd382ae16f523f20cb6b9f8f4a0d6072e8891a78de817b021bc58ef56fad553",
+    "ci.log": "451dd34c48209897aeb15334f2146595f0acc765d5d18c0181c5af64ac459ba5"
+  },
+  "source_sha256": {
+    "tools/brain/embedded_rest.py": "2869a2f9af182d912c3e4e6ad61b339e9a40d35470c830a3eb25894959305450",
+    "brain_server.py": "f149b8c397e53a65220b1ae878e21760f276aa258d3a5ff93efbec65dcfd959e",
+    "test_embedded_rest.py": "5abe3a601a7aee6a614e1be7ac8bf7092424f23d0fa30ff039beef9a4eeda1a1",
+    "scripts/run_ci_checks.sh": "d1cd4112319be6d509eccebb134ea32d9533b77f62666e3a684b022e665df72c",
+    ".env.example": "559b65857729c3ecde295cdfc909d48fb8c9b7ee823e699b4fc487b94cbad083"
+  }
+}

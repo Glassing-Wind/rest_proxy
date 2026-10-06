@@ -10,6 +10,13 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+[Shared-owner REST evidence reads](embedded-rest-evidence.md) now expose an opt-in
+read endpoint on the existing HTTP daemon. Tools, citations and storage ownership
+are shared with MCP; body/result bounds, mutation refusal and flag/backend gating
+are tested with real transport parity. Inference-proxy bundle injection is unfinished.
+Next coordinated milestone: scoped durable FIRE checkpoints and original evidence,
+then shared whole-request context budgeting. Remaining Priority 2 coverage stays open.
+
 [Python function-import bindings](embedded-symbol-imports.md) are now published as
 a distinct cited relationship kind and included as a bounded import-overview page.
 Aliases, relative imports, conservative exclusions, old-index status and native

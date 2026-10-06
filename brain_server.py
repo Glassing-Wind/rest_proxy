@@ -333,11 +333,19 @@ async def server_fingerprint(request: Request) -> JSONResponse:
 
 _mcp_starlette = mcp.streamable_http_app()
 
+_evidence_routes = []
+if os.getenv('LM_PROXY_EMBEDDED_REST_ENABLED', '0').strip().lower() in {'1', 'true', 'yes', 'on'}:
+    from memory.storage_config import embedded_graph_selected
+    if embedded_graph_selected():
+        from tools.brain.embedded_rest import make_read_endpoint
+        _evidence_routes.append(Route('/evidence/read', make_read_endpoint(mcp), methods=['POST']))
+
 app = Starlette(
     routes=[
         Route("/", health),          # health check — matched first
         Route("/health", health),    # also at /health
         Route("/fingerprint", server_fingerprint),
+        *_evidence_routes,
         Mount("/", app=_mcp_starlette),  # pass-through; MCP handles /mcp
     ],
     lifespan=lifespan,

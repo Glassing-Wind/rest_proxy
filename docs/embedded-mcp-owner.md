@@ -135,3 +135,9 @@ opt-in and replaces legacy watcher startup; scope remains the published manifest
 
 [Watch setup](embedded-watch-setup.md) provides an admin-classified readiness/scope
 preview and revision/publication-guarded project enable action.
+
+## October 6 REST extension
+
+[Opt-in REST evidence reads](embedded-rest-evidence.md) now reuse this HTTP owner’s
+registered tools. The inference proxy does not open another embedded database;
+context-bundle assembly and inference integration remain unfinished.

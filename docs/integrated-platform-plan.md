@@ -181,3 +181,9 @@ controlled outcome validation remain pending.
 [Watch this project setup](embedded-watch-setup.md) now checks service/model/source
 readiness, shows current-manifest scope and enables project intent with preview
 preconditions. Global service permission remains an explicit deployment choice.
+
+## October 6 shared-owner REST read surface
+
+[REST evidence reads](embedded-rest-evidence.md) now share the HTTP MCP daemon’s
+owner and existing tool contracts through a bounded opt-in endpoint. This is a read
+surface; whole-request context bundles and inference-proxy integration remain gates.
