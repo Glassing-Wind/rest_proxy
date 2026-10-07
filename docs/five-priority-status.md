@@ -21,8 +21,10 @@ the whole priority or enterprise release is complete.
 now verifies a constrained one-request chat adapter through the worker to retained
 findings/review_pending. Three HTTP fixture tests pass; no real model contacted.
 Exact returned-model identity and malformed/tool-call responses now have rejection
-fixtures (five provider tests). Next persist usage provenance and validate missing/
-invalid counters and HTTP timeouts before an opt-in real-model trial. Authentication and cross-chat coordination remain open.
+fixtures (five provider tests). Sanitized generation provenance now persists separately from findings, and missing/
+invalid counters plus HTTP timeout fixtures pass (41 focused tests total).
+Next verify an explicitly identified already-running local model in an opt-in trial;
+no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
 
 
 ## Structured finding contract — October 7 acceptance

@@ -37,6 +37,11 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             result = await run_worker(registry, 'fixture', task['id'], 1, 'worker',
                                       'fixture.py', provider, enabled=True, end_line=1)
             self.assertEqual(result['status'], 'review_pending')
+            saved = TaskRegistry(str(Path(directory) / 'state')).get('fixture', task['id'])
+            provenance = saved['submissions'][0]['generation']
+            self.assertEqual(provenance['usage'], {'prompt_tokens': 90, 'completion_tokens': 30})
+            self.assertEqual(provenance['usage_source'], 'provider-reported')
+            self.assertEqual(result['generation'], provenance)
         self.assertEqual(provider.receipt['usage']['prompt_tokens'], 90)
 
     async def test_disabled_and_endpoint_rejections(self):
@@ -80,6 +85,24 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 await provider({})
             self.assertIsNone(provider.receipt)
+
+    async def test_missing_or_invalid_usage_remains_unavailable(self):
+        for usage in [None, {}, {'prompt_tokens': True, 'completion_tokens': 3},
+                      {'prompt_tokens': -1, 'completion_tokens': 3}]:
+            payload = dict(model='fixture-model', choices=[dict(finish_reason='stop',
+                           message={'content': '{}'})], usage=usage)
+            provider = self.provider(lambda request: httpx.Response(200, json=payload))
+            await provider({})
+            self.assertIsNone(provider.receipt['usage'])
+            self.assertEqual(provider.receipt['usage_source'], 'unavailable')
+
+    async def test_http_timeout_has_no_receipt(self):
+        def handler(request):
+            raise httpx.ReadTimeout('Synthetic timeout', request=request)
+        provider = self.provider(handler)
+        with self.assertRaises(httpx.ReadTimeout):
+            await provider({})
+        self.assertIsNone(provider.receipt)
 
 
 if __name__ == '__main__':

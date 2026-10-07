@@ -168,8 +168,10 @@ class TaskRegistry:
         return self._update(project, task_id, revision, edit)
 
     def submit(self, project: str, task_id: str, revision: int,
-               claim_token: str, finding: dict) -> dict:
+               claim_token: str, finding: dict, generation: dict | None = None) -> dict:
         """Retain a worker finding and relinquish its claim for explicit review."""
+        if generation is not None and not isinstance(generation, dict):
+            raise ValueError('Generation provenance must be an object')
         if not isinstance(finding, dict) or not finding:
             raise ValueError('Require nonempty finding object')
 
@@ -180,7 +182,7 @@ class TaskRegistry:
             if claim['expires_at'] <= time.time():
                 raise ValueError('Claim expired')
             task.setdefault('submissions', []).append(dict(
-                finding=finding, worker=claim['worker'], at=time.time()))
+                finding=finding, worker=claim['worker'], at=time.time(), generation=generation))
             task['status'] = 'review_pending'
             task['claim'] = None
         return self._update(project, task_id, revision, edit)

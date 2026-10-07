@@ -34,3 +34,20 @@ fixtures exercise missing/wrong model and empty choice/null message/tool-call/no
 failures without creating a successful usage receipt. No live provider contacted.
 Alias mapping is not configured. Next persist validated usage provenance and cover
 missing/invalid counters and HTTP timeouts before real-model acceptance.
+
+## Durable generation provenance — subsequent October 7 acceptance
+
+Worker now attaches sanitized adapter provenance to the submission separately from
+model-authored findings: requested/returned model, one request, tools disabled and
+provider-reported prompt/completion counters. Record survives registry reopen in
+HTTP fixture test. Missing/invalid/boolean/negative counters remain unavailable.
+No claim of independently measured usage; worker usage_measured remains false.
+Trusted local raw submit accepts optional provenance, not authenticated attestation.
+
+Seven provider tests plus 34 task/FIRE regressions pass (41 total), including two
+new invalid/missing usage and synthetic HTTP timeout cases. Lint/diff checks pass.
+The prior f19cb89 PR revision's eight hosted checks passed before this update;
+new revision requires its own CI. Timeout leaves no successful adapter receipt.
+No real provider contacted, model loaded or lifecycle changed. Next run an opt-in
+trial only against an explicitly identified already-running local model, preserving
+operator control; real model identity/JSON compliance and costs remain unverified.
