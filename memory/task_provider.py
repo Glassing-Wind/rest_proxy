@@ -46,7 +46,7 @@ class ProviderHTTPError(httpx.HTTPStatusError):
 class LocalTaskProvider:
     """Callable structured generator for run_worker, disabled unless opted in."""
 
-    def __init__(self, endpoint: str, model: str, *, enabled: bool = False,
+    def __init__(self, endpoint: str, model: str, *, enabled: bool = False, max_tokens: int = 1024,
                  transport: httpx.AsyncBaseTransport | None = None):
         parsed = urlsplit(endpoint)
         if (parsed.scheme != 'http' or parsed.hostname not in {'127.0.0.1', '::1'} or
@@ -55,6 +55,9 @@ class LocalTaskProvider:
             raise ValueError('Require explicit numeric loopback chat endpoint')
         if not isinstance(model, str) or not model.strip() or len(model) > 128:
             raise ValueError('Require explicit bounded model identity')
+        if type(max_tokens) is not int or not 256 <= max_tokens <= 4096:
+            raise ValueError('Output budget must be an integer between 256 and 4096')
+        self.max_tokens = max_tokens
         self.endpoint = endpoint
         self.model = model
         self.enabled = enabled
@@ -70,7 +73,7 @@ class LocalTaskProvider:
         supplied = encoded(prompt)
         if len(supplied.encode()) > 8192:
             raise ValueError('Prompt exceeds 8 KiB')
-        body = dict(model=self.model, stream=False, temperature=0, max_tokens=1024,
+        body = dict(model=self.model, stream=False, temperature=0, max_tokens=self.max_tokens,
                     response_format={'type': 'json_schema', 'json_schema': {
                         'name': 'task_finding', 'strict': True, 'schema': finding_schema()}}, messages=[
                         {'role': 'system', 'content': 'Return only the structured JSON finding requested. '
@@ -118,7 +121,7 @@ class LocalTaskProvider:
                 requested_model=self.model, model_identity_matches=payload.get('model') == self.model,
                 finish_reason=reason, usage=observed,
                 usage_source='provider-reported' if observed is not None else 'unavailable',
-                requests=1, tools_enabled=False, accepted=False)
+                requests=1, tools_enabled=False, max_tokens=self.max_tokens, accepted=False)
         if not isinstance(payload, dict) or payload.get('model') != self.model:
             raise ProviderValidationError('model_identity')
         choices = payload.get('choices')

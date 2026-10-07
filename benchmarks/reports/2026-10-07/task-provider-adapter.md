@@ -148,3 +148,20 @@ counters, not savings or quality measurements. No model/service lifecycle change
 See [attempt evidence](task-attempt-metadata.json). Prior commit 739b9c8 passed all
 eight hosted checks. Next test an explicit bounded output-budget option while retaining
 stop-only acceptance and source validation; reasoning/output allocation is still unknown.
+
+## Explicit bounded output budget — October 7
+
+LocalTaskProvider accepts an explicit integer max_tokens from 256 through 4096;
+default remains 1024. Booleans, nonintegers and out-of-range values fail before a
+request. Attempt diagnostics include the configured budget. Twelve provider and
+five worker tests plus focused Ruff pass; unfinished output remains rejected even
+when it parses as JSON. Previous revision 47fdee1 passed all eight hosted checks.
+
+One synthetic trial using an explicit 4096-token budget reached review_pending in
+10.669 seconds with 449 prompt and 2194 completion tokens reported by Qwen Splash.
+The source citation/hash passed validation and the finding survived registry reopen.
+[Receipt](task-output-budget.json). This demonstrates one functional model handoff,
+not independent semantic approval, persistence after fixture cleanup, savings or
+real-repository investigation quality. No automatic retry or model/service changes.
+Next extend disposable live acceptance through an explicit human review decision
+and retained evidence after source deletion; authenticated coordination stays open.

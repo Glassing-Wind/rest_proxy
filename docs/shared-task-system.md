@@ -1,5 +1,17 @@
 # Shared task system — direction and first acceptance milestone
 
+## Explicit output budget and live handoff — October 7
+
+The optional adapter now accepts a bounded explicit 256–4096-token budget, default
+1024. Twelve provider and five worker tests pass. One synthetic trial at 4096
+reached review_pending with source-validated evidence and registry reopen equality
+(449 prompt / 2194 completion tokens, provider-reported; 10.669 seconds).
+[Evidence](../benchmarks/reports/2026-10-07/task-output-budget.json).
+Semantic review remains pending; this is no quality or savings comparison. Next
+extend disposable live acceptance through explicit review and source-deletion
+recovery. Authentication, cross-chat coordination and overall priority gates remain.
+
+
 ## Bounded rejected-attempt diagnostics — October 7
 
 The optional adapter now separates allowlisted attempt metadata from accepted

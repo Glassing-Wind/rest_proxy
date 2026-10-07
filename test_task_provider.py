@@ -48,6 +48,23 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result['generation'], provenance)
         self.assertEqual(provider.receipt['usage']['prompt_tokens'], 90)
 
+    async def test_explicit_output_budget_and_invalid_bounds(self):
+        def handler(request):
+            self.assertEqual(json.loads(request.content)['max_tokens'], 4096)
+            return httpx.Response(200, json=dict(model='fixture-model',
+                choices=[dict(finish_reason='length', message={'content': '{}'})]))
+        provider = LocalTaskProvider('http://127.0.0.1:1234/v1/chat/completions',
+            'fixture-model', enabled=True, max_tokens=4096, transport=httpx.MockTransport(handler))
+        with self.assertRaises(ProviderValidationError):
+            await provider({})
+        self.assertIsNone(provider.receipt)
+        self.assertEqual(provider.attempt_receipt['max_tokens'], 4096)
+        for budget in [True, 255, 4097, 1024.0, '1024', None]:
+            with self.assertRaises(ValueError):
+                LocalTaskProvider('http://127.0.0.1:1234/v1/chat/completions',
+                                  'fixture-model', max_tokens=budget)
+        self.assertEqual(self.provider(handler).max_tokens, 1024)
+
     async def test_disabled_and_endpoint_rejections(self):
         provider = self.provider(lambda r: self.fail('Unexpected request'), enabled=False)
         with self.assertRaises(ValueError):
