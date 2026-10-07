@@ -20,8 +20,9 @@ the whole priority or enterprise release is complete.
 [Loopback adapter receipt](../benchmarks/reports/2026-10-07/task-provider-adapter.md)
 now verifies a constrained one-request chat adapter through the worker to retained
 findings/review_pending. Three HTTP fixture tests pass; no real model contacted.
-Next validate malformed/tool-call/timeout/provider identity and usage handling before
-an opt-in real-model trial. Authentication and cross-chat coordination remain open.
+Exact returned-model identity and malformed/tool-call responses now have rejection
+fixtures (five provider tests). Next persist usage provenance and validate missing/
+invalid counters and HTTP timeouts before an opt-in real-model trial. Authentication and cross-chat coordination remain open.
 
 
 ## Structured finding contract — October 7 acceptance

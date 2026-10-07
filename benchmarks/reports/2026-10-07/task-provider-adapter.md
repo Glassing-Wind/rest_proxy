@@ -23,3 +23,14 @@ operator must know which local service owns the endpoint. Returned model identit
 is recorded but not enforced. Next expand error/model/usage acceptance and persist
 usage provenance before a real opt-in trial. Review still requires separate action;
 no persistent scheduler, authenticated task API or automatic chat coordination.
+
+## Provider identity and malformed response guards — subsequent acceptance
+
+Returned model must now exactly match the requested explicit model; missing identity
+and aliases are rejected rather than silently accepted. Require exactly one choice,
+a message object and valid JSON object content. Tool-call messages remain rejected.
+Five provider fixtures and five worker tests pass; lint/diff checks pass. Two new
+fixtures exercise missing/wrong model and empty choice/null message/tool-call/non-JSON
+failures without creating a successful usage receipt. No live provider contacted.
+Alias mapping is not configured. Next persist validated usage provenance and cover
+missing/invalid counters and HTTP timeouts before real-model acceptance.

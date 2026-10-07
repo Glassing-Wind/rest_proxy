@@ -59,6 +59,28 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
                 await provider({})
             self.assertIsNone(provider.receipt)
 
+    async def test_model_identity_missing_or_wrong_rejected(self):
+        for model in [None, 'different-model']:
+            payload = dict(model=model, choices=[dict(finish_reason='stop',
+                           message={'content': '{}'})])
+            provider = self.provider(lambda request: httpx.Response(200, json=payload))
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                await provider({})
+            self.assertIsNone(provider.receipt)
+
+    async def test_malformed_messages_and_tools_rejected(self):
+        payloads = [dict(model='fixture-model', choices=[]),
+                    dict(model='fixture-model', choices=[dict(finish_reason='stop', message=None)]),
+                    dict(model='fixture-model', choices=[dict(finish_reason='stop',
+                         message={'content': '{}', 'tool_calls': [{'id': 'fixture'}]})]),
+                    dict(model='fixture-model', choices=[dict(finish_reason='stop',
+                         message={'content': 'not json'})])]
+        for payload in payloads:
+            provider = self.provider(lambda request: httpx.Response(200, json=payload))
+            with self.assertRaises(ValueError):
+                await provider({})
+            self.assertIsNone(provider.receipt)
+
 
 if __name__ == '__main__':
     unittest.main()

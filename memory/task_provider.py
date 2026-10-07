@@ -49,13 +49,20 @@ class LocalTaskProvider:
                     if len(data) > 65536:
                         raise ValueError('Provider response exceeds 64 KiB')
         payload = json.loads(data)
-        choice = payload['choices'][0]
+        if not isinstance(payload, dict) or payload.get('model') != self.model:
+            raise ValueError('Provider model identity mismatch')
+        choices = payload.get('choices')
+        if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+            raise ValueError('Require exactly one chat choice')
+        choice = choices[0]
         if choice.get('finish_reason') != 'stop':
             raise ValueError('Reject truncated or tool-call response')
-        message = choice['message']
+        message = choice.get('message')
+        if not isinstance(message, dict):
+            raise ValueError('Require chat message object')
         if message.get('tool_calls') or message.get('function_call'):
             raise ValueError('Provider tools are disabled')
-        content = message['content']
+        content = message.get('content')
         if not isinstance(content, str) or len(content.encode()) > 16384:
             raise ValueError('Require bounded JSON content')
         finding = json.loads(content)
