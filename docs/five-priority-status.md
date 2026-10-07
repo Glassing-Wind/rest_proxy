@@ -23,8 +23,10 @@ evidence through submission. Twenty-nine focused tests pass. Legacy raw submit s
 unvalidated; source identity checks do not establish semantic correctness or later
 freshness. Structured submission now passes a nine-process handoff including reopen after
 source deletion; original evidence survives both acceptance and correction cases.
-Next design a bounded optional worker adapter with explicit review and inference
-disabled by default. Authentication and cross-chat coordination remain open.
+An [optional one-shot worker boundary](../benchmarks/reports/2026-10-07/task-worker-boundary.md)
+now passes injected-generator acceptance (34 focused tests total), disabled by
+default with explicit review. No actual model has been connected. Next implement
+a constrained optional loopback provider adapter and HTTP fixture acceptance. Authentication and cross-chat coordination remain open.
 
 
 ## Local registry foundation — October 6 acceptance
