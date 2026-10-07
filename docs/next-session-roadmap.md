@@ -1,5 +1,22 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Revised local advisory trials — October 7
+
+Both v2 synthetic trials completed, preserving raw outputs and provider-reported usage.
+Full source: 17.718 s, 327 prompt/3356 completion tokens. Missing definition: 16.138 s,
+282/3289 tokens. Both separated supplied read_source from execution guarantees and
+identified the raw-byte error, but still accepted the task-type claim (full response
+conflated task/project; missing-definition response guessed type). Full response did
+not cite source for its Qwen absence judgment. Manual supervision remains required.
+[Dated responses and qualitative grading](../benchmarks/reports/2026-10-07/local-advisory-calibration-v2.json).
+
+These small synthetic trials do not establish accuracy gains, savings or commercial
+readiness. Seven calibration/export tests pass; all eight CI checks for f441773 passed.
+No live task or service/model lifecycle changes. Next prioritize explicit expired-claim
+recovery for the timed-out Siri task, with retained partial evidence and bounded retries;
+further prompt tuning must not substitute for the shared-task recovery milestone.
+
+
 ## Calibration source-line inspection — October 7
 
 A bounded fixture citation resolver now returns the exact numbered source behind a
