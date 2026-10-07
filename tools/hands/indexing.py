@@ -7,6 +7,7 @@ import asyncio
 import threading
 import subprocess
 import time
+import socket
 from typing import Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
@@ -19,6 +20,7 @@ from _jobs import (
     _finalize_job,
     _job_control_paths,
     _persist_job_state,
+    _process_started_at,
     _release_index_capacity_lock,
     _release_project_job_lock,
     _reconcile_job_process_state,
@@ -26,6 +28,7 @@ from _jobs import (
     load_job_record,
     register_main_loop,
     client_session_id,
+    terminate_index_worker,
 )
 from _helpers import get_memory_modules, get_project_id, get_workspace_path
 from _runtime import resolve_python_runtime
@@ -381,9 +384,14 @@ async def _get_shadow_graph_health(session) -> dict[str, int]:
     rel_rows = await _execute_read(
         session,
         """
-        MATCH ()-[r]->()
+        MATCH (a)-[r]->(b)
         WHERE r.project_id CONTAINS '::shadow::'
-        RETURN count(r) AS rels, count(DISTINCT r.project_id) AS rel_projects
+           OR a.project_id CONTAINS '::shadow::'
+           OR b.project_id CONTAINS '::shadow::'
+        RETURN count(r) AS rels,
+               count(DISTINCT CASE WHEN a.project_id CONTAINS '::shadow::' THEN a.project_id
+                                  WHEN b.project_id CONTAINS '::shadow::' THEN b.project_id
+                                  ELSE r.project_id END) AS rel_projects
         """,
         op="get_shadow_graph_rel_health",
     )
@@ -422,6 +430,71 @@ async def _list_shadow_project_ids(session, limit: int) -> list[str]:
         for row in project_rows
         if isinstance(row.get("pid"), str) and row.get("pid")
     ]
+
+
+def stable_shadow_owner(owner: dict) -> str:
+    fields = ("status", "project_id", "run_id", "host", "pid", "heartbeat_at", "reason")
+    return ", ".join(f"{key}={owner[key]}" for key in fields if owner.get(key) is not None)
+
+
+async def _inspect_shadow_run(session, namespace: str) -> dict:
+    """Report tracked ownership; absence or duplicate records means unknown ownership."""
+    rows = await _execute_read(
+        session,
+        "MATCH (s:ShadowRun {namespace:$namespace}) "
+        "OPTIONAL MATCH (p:Project {id:s.project_id}) "
+        "RETURN s.project_id AS project_id, s.run_id AS run_id, s.owner AS owner, "
+        "s.host AS host, s.pid AS pid, s.status AS status, "
+        "s.heartbeat_at AS heartbeat_at, s.finished_at AS finished_at, "
+        "p.struct_index_status AS project_status ORDER BY s.started_at",
+        namespace=namespace, op="inspect_shadow_owner",
+    )
+    if len(rows) != 1:
+        return {"status": "unknown", "reason": "ownership absent or ambiguous"}
+    owner = rows[0]
+    owner["eligible"] = bool(
+        owner.get("status") in {"finished", "failed"}
+        and owner.get("owner") and owner.get("finished_at") is not None
+        and f"{owner.get('project_id')}::shadow::{owner.get('run_id')}" == namespace
+        and owner.get("project_status") not in {"in_progress", "running", "cancelling"}
+    )
+    owner["reason"] = "terminal tracked run" if owner["eligible"] else "protected; activity or ownership uncertain"
+    return owner
+
+
+async def _preview_shadow_relationships(session, namespace: str) -> dict:
+    rows = await _execute_read(
+        session,
+        "MATCH (a)-[r]->(b) "
+        "WHERE a.project_id=$ns OR b.project_id=$ns OR r.project_id=$ns "
+        "RETURN count(r) AS total, "
+        "sum(CASE WHEN r.project_id=$ns THEN 1 ELSE 0 END) AS tagged, "
+        "sum(CASE WHEN a.project_id=$ns AND b.project_id=$ns THEN 1 ELSE 0 END) AS internal",
+        ns=namespace, op="preview_shadow_relationships",
+    )
+    counts = rows[0] if rows else {}
+    total = int(counts.get("total") or 0)
+    internal = int(counts.get("internal") or 0)
+    return {"total": total, "tagged": int(counts.get("tagged") or 0),
+            "internal": internal, "boundary_or_tagged_external": total - internal}
+
+
+# Acquire the ownership-record lock before checking eligibility in every deletion
+# transaction. Running/expired/unknown writers are never automatically reclaimed.
+_SHADOW_DELETE_GUARD = """
+MATCH (s:ShadowRun {namespace:$pid})
+SET s.cleanup_lock = coalesce(s.cleanup_lock, 0) + 1
+WITH collect(s) AS owners
+WHERE size(owners) = 1
+WITH owners[0] AS s
+WHERE s.status IN ['finished', 'failed']
+  AND s.owner IS NOT NULL AND s.finished_at IS NOT NULL
+  AND s.project_id + '::shadow::' + s.run_id = $pid
+  AND NOT EXISTS {
+    MATCH (p:Project {id:s.project_id})
+    WHERE p.struct_index_status IN ['in_progress', 'running', 'cancelling']
+  }
+"""
 
 
 def _describe_apple_graph_health(coverage: dict[str, int]) -> list[str]:
@@ -810,6 +883,9 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
                 _JOBS[job_id]["sem_proc"] = sem_proc
                 _JOBS[job_id]["struct_pid"] = struct_proc.pid
                 _JOBS[job_id]["sem_pid"] = sem_proc.pid
+                _JOBS[job_id]["worker_host"] = socket.gethostname()
+                _JOBS[job_id]["struct_process_started_at"] = _process_started_at(struct_proc.pid)
+                _JOBS[job_id]["sem_process_started_at"] = _process_started_at(sem_proc.pid)
         _persist_job_state(job_id)
         threading.Thread(
             target=_finalize_job, args=(job_id, manifest_path), daemon=True
@@ -1036,7 +1112,7 @@ async def cancel_index_job(job_id: str, force: bool = False) -> str:
             "admin override."
         )
 
-    if job.get("status") != "running":
+    if job.get("status") not in {"running", "cancelling"}:
         return f"Job {job_id} is not running (status={job.get('status')})."
 
     with _JOBS_LOCK:
@@ -1045,26 +1121,17 @@ async def cancel_index_job(job_id: str, force: bool = False) -> str:
         if job_id in _JOBS:
             _JOBS[job_id]["cancel_requested"] = True
             _JOBS[job_id]["status"] = "cancelling"
-        struct_proc = _JOBS.get(job_id, {}).get("struct_proc")
-        sem_proc = _JOBS.get(job_id, {}).get("sem_proc")
-    struct_pid = job.get("struct_pid")
-    sem_pid = job.get("sem_pid")
+        workers = dict(_JOBS[job_id])
     _persist_job_state(job_id)
 
-    for proc in [struct_proc, sem_proc]:
-        try:
-            if proc and proc.poll() is None:
-                proc.terminate()
-        except Exception:
-            continue
-    for pid in [struct_pid, sem_pid]:
-        try:
-            if pid:
-                os.kill(int(pid), 15)
-        except OSError:
-            continue
+    outcomes = {phase: terminate_index_worker(workers, phase) for phase in ('struct', 'sem')}
+    protected = [phase for phase, outcome in outcomes.items()
+                 if outcome in {'identity_unverified', 'signal_failed'}]
 
     suffix = " Admin override used." if force else ""
+    if protected:
+        return (f"Cancel requested for job {job_id}. Could not safely terminate: "
+                f"{', '.join(protected)}. Worker identity or signal delivery is uncertain.{suffix}")
     return (
         f"Cancel requested for job {job_id}. Processes will terminate shortly.{suffix}"
     )
@@ -1711,7 +1778,9 @@ async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
         )
     if shadow_nodes or shadow_rels:
         recommendations.append(
-            "- Stale shadow graph data exists. Run `cleanup_stale_shadow_graph(dry_run=False)` during a quiet indexing window."
+            "- Shadow graph data exists. Inspect ownership with `cleanup_stale_shadow_graph()`; "
+            "deletion via `cleanup_stale_shadow_graph(dry_run=False)` also requires exact namespaces "
+            "and tracked terminal ownership."
         )
 
     if audit:
@@ -1746,9 +1815,10 @@ async def cleanup_stale_shadow_graph(
     node_batch: int = 5000,
     rel_batch: int = 5000,
     max_project_ids: int = 1000,
+    namespaces: Optional[List[str]] = None,
 ) -> str:
     """
-    Inspect or remove stale Neo4j shadow project namespaces.
+    Inspect shadow namespaces or remove explicitly selected, completed staging runs.
 
     Shadow project IDs are used while structural indexing stages a replacement
     graph. Successful promotions remove them. Residue usually means an index
@@ -1759,10 +1829,17 @@ async def cleanup_stale_shadow_graph(
         node_batch: Max nodes to delete per transaction when dry_run is False.
         rel_batch: Max relationships to delete per transaction when dry_run is False.
         max_project_ids: Safety cap for the number of shadow project IDs to process.
+        namespaces: Exact namespace IDs required for deletion; unknown owners are protected.
     """
     node_batch = max(1, int(node_batch or 5000))
     rel_batch = max(1, int(rel_batch or 5000))
     max_project_ids = max(1, int(max_project_ids or 1000))
+
+    if not dry_run and not namespaces:
+        return "Cleanup refused: supply exact namespaces from a dry-run inspection."
+    selected = sorted(set(namespaces or []))
+    if any("::shadow::" not in pid for pid in selected):
+        return "Cleanup refused: every selected namespace must be a shadow project ID."
 
     import graph_bootstrap
 
@@ -1785,9 +1862,18 @@ async def cleanup_stale_shadow_graph(
             lines.append(f"- Shadow nodes: {int(before.get('nodes') or 0)}")
             lines.append(f"- Shadow relationships: {int(before.get('rels') or 0)}")
             if project_ids:
+                for pid in project_ids:
+                    owner = await _inspect_shadow_run(session, pid)
+                    lines.append(f"- Namespace: {pid}; ownership: {stable_shadow_owner(owner)}")
+                    edges = await _preview_shadow_relationships(session, pid)
+                    lines.append(
+                        f"  - Relationships: total={edges['total']}; namespace-tagged={edges['tagged']}; "
+                        f"internal={edges['internal']}; boundary/tagged-external="
+                        f"{edges['boundary_or_tagged_external']}"
+                    )
                 lines.append(
-                    "- To clean: run `cleanup_stale_shadow_graph(dry_run=False)` "
-                    "during a quiet indexing window."
+                    "- Cleanup requires dry_run=False and an explicit namespaces list. "
+                    "Only tracked terminal runs are eligible; active and unknown owners are protected."
                 )
             elif int(before.get("nodes") or 0) or int(before.get("rels") or 0):
                 lines.append(
@@ -1806,14 +1892,19 @@ async def cleanup_stale_shadow_graph(
         deleted_nodes = 0
         deleted_rels = 0
         processed = 0
-        for pid in project_ids:
+        protected = []
+        for pid in selected[:max_project_ids]:
+            owner = await _inspect_shadow_run(session, pid)
+            if not owner.get("eligible"):
+                protected.append(pid)
+                continue
             processed += 1
             while True:
                 count = await _execute_write_scalar(
                     session,
-                    """
-                    MATCH ()-[r]->()
-                    WHERE r.project_id = $pid
+                    _SHADOW_DELETE_GUARD + """
+                    MATCH (a)-[r]->(b)
+                    WHERE r.project_id = $pid OR a.project_id = $pid OR b.project_id = $pid
                     WITH r LIMIT $limit
                     DELETE r
                     RETURN count(r) AS deleted
@@ -1829,10 +1920,10 @@ async def cleanup_stale_shadow_graph(
             while True:
                 count = await _execute_write_scalar(
                     session,
-                    """
+                    _SHADOW_DELETE_GUARD + """
                     MATCH (n {project_id: $pid})
                     WITH n LIMIT $limit
-                    DETACH DELETE n
+                    DELETE n
                     RETURN count(n) AS deleted
                     """,
                     op="cleanup_shadow_nodes",
@@ -1848,6 +1939,7 @@ async def cleanup_stale_shadow_graph(
 
     lines = ["## Stale Shadow Graph Cleanup"]
     lines.append(f"- Shadow project IDs processed: {processed}")
+    lines.append(f"- Protected active/unknown namespaces: {len(protected)}")
     lines.append(f"- Relationships deleted: {deleted_rels}")
     lines.append(f"- Nodes deleted: {deleted_nodes}")
     lines.append(

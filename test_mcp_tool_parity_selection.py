@@ -1,9 +1,16 @@
 import unittest
+from unittest import mock
 
-from scripts.check_mcp_tool_parity import _select_parity_inputs
+from scripts.check_mcp_tool_parity import _normalized_expected_variants, _select_parity_inputs
 
 
 class McpToolParitySelectionTests(unittest.TestCase):
+    def test_branch_contract_uses_current_native_branch(self):
+        with mock.patch('scripts.check_mcp_tool_parity.subprocess.check_output',
+                        return_value='codex/example\n'):
+            self.assertIn('**Branch:** `codex/example`',
+                          _normalized_expected_variants('**Branch:** `$current_branch`'))
+
     def test_selects_direct_parity_case_id(self):
         checks, cases = _select_parity_inputs(["mcp_tool_catalog_natural_docs_intent"])
 

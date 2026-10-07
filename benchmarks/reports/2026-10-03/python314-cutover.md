@@ -44,3 +44,19 @@ aligned. It also reports one global shadow namespace (582 nodes / 71 relationshi
 A read-only cleanup inspection confirmed the counts; ownership and activity were
 not established, so no deletion was performed. This warning is separate from the
 completed runtime cutover.
+
+## Follow-up inspection — October 4, 2026
+
+A later read-only inspection confirmed 582 code-indexing nodes and 71 `IMPORTS`
+relationships in the same residue namespace. The nodes represent functions,
+imports, files, sections, classes and clone groups. The canonical project reported
+`done`, while its IndexRun reported `struct_written`; legacy writer ownership is
+still unknown and no cleanup was performed. See the
+[lifecycle safety report and exact counts](../../../docs/indexing-lifecycle-safety.md#verification-and-observed-legacy-residue).
+This follow-up does not change the original cutover measurements.
+
+Further [run investigation](../2026-10-04/shadow-run-investigation.md) confirmed
+authentication rate limiting blocked finalization and the failure-status write.
+The 71 relationship count is namespace-property scoped; 1,639 relationships touch
+the staging nodes when counted by endpoints. The source of the invalid-credential
+attempts remains unresolved, and no legacy cleanup was performed.

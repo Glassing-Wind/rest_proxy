@@ -1,5 +1,18 @@
 # ts-pack fork upgrade investigation — October 3, 2026
 
+## October 4 follow-up: source-correct fetch methods
+
+The current manifests pin `6fcead43fc13b0049481ea5b5c491e02eab4ac68`, published
+on draft [fork PR #2](https://github.com/Zmaroo/tree-sitter-language-pack/pull/2).
+It scopes HTTP methods to their own fetch AST call, correcting the rental graph
+golden against a frozen source snapshot. Native Python 3.14 acceptance passed on
+Linux, macOS and Windows; the local wheel, binding contracts and paired repository
+indexing also passed. This candidate retains existing fork APIs. Earlier upgrade
+pins and the unresolved 81/80 discrepancy below describe historical checkpoints.
+See [the acceptance evidence](../benchmarks/reports/2026-10-04/reliable-indexing.md).
+
+## Original investigation (historical)
+
 Recommendation: evaluate an upstream integration while retaining the working fork
 pin. Upstream v1.20.0 is not a drop-in replacement for this project's parser and
 native indexing dependency. The initial investigation below did not merge code or

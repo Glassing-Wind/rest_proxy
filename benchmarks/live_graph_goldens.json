@@ -331,7 +331,7 @@
       "required_substrings": [
         "Use this to decide which UI entrypoints reach real APIs or services and which path to inspect first.",
         "Coverage: ui_files=15",
-        "api_route_links=81",
+        "api_route_links=78",
         "UI: src/public/assets/financials.js",
         "POST /api/financials/accounting-sync/quickbooks/export-batch",
         "src/api/routes/accountingSyncRoutes.ts",

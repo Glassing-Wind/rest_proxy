@@ -1,5 +1,65 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Current checkpoint — October 4, 2026
+
+Latest [reliable-indexing acceptance](../benchmarks/reports/2026-10-04/reliable-indexing.md)
+fixes fetch-method cross-call leakage and resolves the current rental golden to
+78 source-correct route links (paired baseline 80; June's historical 81st edge is
+not reconstructible). Both manifests now pin published fork candidate
+`6fcead43fc13b0049481ea5b5c491e02eab4ac68`; draft fork PR #2 has passed hosted
+validation and Linux/macOS/Windows native wheel acceptance. Interruption fixtures
+preserve published data through staging termination and uncommitted-publication
+SIGKILL. Local owned-writer adjudication, persisted cancellation identity checks
+and publication-aware restart reconciliation are implemented. Multi-host/uncertain
+writers remain protected; coordinated graph/vector publication and embedded
+integration remain next milestones. Earlier pin and pending-golden entries below
+are historical checkpoints.
+
+The [routing/framework review](evidence-routing-framework-research.md) recommends
+an optional evidence router built on the current catalog/read dispatcher, evaluated
+against agent-selected tools before retrieval changes. LangGraph is an optional
+workflow runtime; LightRAG/Fast GraphRAG are document-retrieval benchmark candidates.
+Graphiti's temporal-memory experiment belongs to the separate personal-memory
+direction, with synthetic incident timelines considered independently. No framework
+adoption or Ladybug/LanceDB compatibility is established. Existing recovery,
+publication, embedded-storage and FIRE continuity work remains the implementation
+priority; routing is a bounded follow-up evaluation.
+
+Latest implementation: [legacy cleanup and authentication isolation](legacy-shadow-adjudication.md)
+removed the abandoned 582 nodes / 1,639 incident relationships without changing
+the live canonical graph fingerprint or publication IDs. No shadow residue remains.
+Monitored CI traced a reproducible authentication burst to late Neo4j imports in
+`test_index_workspace.py`; keeping the stub active throughout tests eliminated new
+invalid-credential/rate-limit events in graph regressions and full CI. Local
+redacted failure evidence now survives graph status-write outages. Legacy
+adjudication is implemented; uncertain running/remote-writer recovery remains.
+The entries below retain the preceding investigation checkpoints.
+
+Fork PR #1 and rest_proxy PR #1 are merged. Post-merge hosted CI and Security
+passed; both requirements files retain fork SHA
+`e1c99f71478dd1d2f974cb02e4038424d21a12ce`. Earlier pending/draft entries below
+describe historical checkpoints.
+
+The next implementation adds tracked shadow ownership/heartbeats, explicit
+namespace selection and terminal-state cleanup guards, atomic structural graph
+replacement, and nonzero finalization failure exits. Six focused checks (including
+disposable live Neo4j fixtures), the 21 indexing-health regressions and full local
+CI passed. See [indexing lifecycle safety](indexing-lifecycle-safety.md).
+Legacy 582-node residue remains protected because its ownership is unknown.
+
+The [legacy run investigation](../benchmarks/reports/2026-10-04/shadow-run-investigation.md)
+now confirms authentication rate limiting blocked finalization and failure-status
+recording; a subsequent run published successfully. Identify the bad-authentication
+client, add explicit legacy adjudication, and fix relationship previews: 71 edges
+carry the namespace property, but 1,639 touch its staging nodes.
+
+Next: abandoned-run adjudication/recovery and coordinated graph/vector publication;
+resolve the existing 80-versus-81 retrieval golden discrepancy; complete owned
+Ladybug/LanceDB indexing and retrieval; implement FIRE persistence/resume and
+whole-request budgeting; finish distribution notices and controlled outcome
+evaluations. The [smart-glasses direction](smart-glasses-project-direction.md) is
+a separate project and does not extend this application's implementation scope.
+
 ## Decision and scope
 
 Keep retrieval behavior fixed until paired investigations reveal a reproducible weakness.

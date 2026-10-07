@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import json
+import socket
 from typing import Dict, Any
 from contextvars import ContextVar
 from pathlib import Path
@@ -198,6 +199,9 @@ def _job_runtime_fields(job: dict[str, Any]) -> dict[str, Any]:
         "logs": list(job.get("logs") or []),
         "struct_pid": job.get("struct_pid"),
         "sem_pid": job.get("sem_pid"),
+        "worker_host": job.get("worker_host"),
+        "struct_process_started_at": job.get("struct_process_started_at"),
+        "sem_process_started_at": job.get("sem_process_started_at"),
         "struct_log_path": job.get("struct_log_path"),
         "semantic_log_path": job.get("semantic_log_path"),
         "manifest_path": job.get("manifest_path"),
@@ -482,8 +486,48 @@ def _process_alive(pid: int | None) -> bool:
     try:
         os.kill(int(pid), 0)
         return True
-    except OSError:
+    except ProcessLookupError:
         return False
+    except OSError:
+        # Permission/inspection failures do not establish that a worker died.
+        return True
+
+
+def _process_started_at(pid: int) -> float | None:
+    """Capture restart-safe identity when process inspection is available."""
+    try:
+        import psutil
+        return psutil.Process(pid).create_time()
+    except Exception:
+        return None
+
+
+def terminate_index_worker(job: dict, phase: str) -> str:
+    """Terminate an owned child or an exactly identified persisted local worker."""
+    proc = job.get(f'{phase}_proc')
+    if proc is not None:
+        try:
+            if proc.poll() is not None:
+                return 'already_stopped'
+            proc.terminate()
+            return 'signalled'
+        except Exception:
+            return 'signal_failed'
+    pid = job.get(f'{phase}_pid')
+    if not pid:
+        return 'already_stopped'
+    if job.get('worker_host') != socket.gethostname() or not job.get(f'{phase}_process_started_at'):
+        return 'identity_unverified'
+    try:
+        import psutil
+        worker = psutil.Process(pid)
+        if worker.create_time() != job[f'{phase}_process_started_at']:
+            return 'identity_unverified'
+        # psutil rechecks PID reuse before sending the signal.
+        worker.terminate()
+        return 'signalled'
+    except Exception:
+        return 'signal_failed'
 
 
 def _infer_return_code_from_log(
@@ -495,10 +539,21 @@ def _infer_return_code_from_log(
         text = Path(log_path).read_text(encoding="utf-8", errors="replace")
     except Exception:
         return None
+    if re.search(r'(?m)^(?:\[[^\]\n]+\]\s*)?ERROR(?:\s|:)', text) or re.search(r'(?m)^Traceback', text):
+        return 1
+    if done_re is _STRUCT_DONE_RE:
+        # Native parsing completes before finalization/publication. A dead
+        # wrapper with only that early marker must never be recovered as done.
+        completed = "[ts-pack:struct] Completed — publication and status recorded." in text
+        legacy_completed = (
+            "[ts-pack:shadow] Promoted —" in text
+            and "[ts-pack:timing] struct_total" in text
+        )
+        if completed or legacy_completed:
+            return 0
+        return None
     if done_re.search(text):
         return 0
-    if "ERROR" in text or "Traceback" in text:
-        return 1
     return None
 
 

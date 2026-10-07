@@ -1,0 +1,127 @@
+{
+  "date": "2026-10-04",
+  "fork_commit": "6fcead43fc13b0049481ea5b5c491e02eab4ac68",
+  "fork_pr": "https://github.com/Zmaroo/tree-sitter-language-pack/pull/2",
+  "golden_resolution": {
+    "historical_expected": 81,
+    "baseline": 80,
+    "corrected": 78,
+    "source_snapshot_sha256": "1caa6478dcd61e982a36d5ef9e31482faea6922cd9d15c573789b30cda69c408",
+    "manifest_files": 175,
+    "added": [
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "GET",
+        "/api/leases"
+      ],
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "GET",
+        "/api/properties"
+      ],
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "GET",
+        "/api/tenants"
+      ],
+      [
+        "src/public/assets/tenant-payment.js",
+        "GET",
+        "/api/payments/config"
+      ]
+    ],
+    "removed": [
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "GET",
+        "/api/charges"
+      ],
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "GET",
+        "/api/expenses"
+      ],
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "GET",
+        "/api/payments"
+      ],
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "POST",
+        "/api/leases"
+      ],
+      [
+        "src/public/assets/landlord-dashboard.js",
+        "POST",
+        "/api/properties"
+      ],
+      [
+        "src/public/assets/tenant-payment.js",
+        "GET",
+        "/api/tenant/portal/messages"
+      ]
+    ],
+    "historical_missing_edge": "not reconstructible without original source/edge snapshot",
+    "fixtures_removed": true
+  },
+  "verification": {
+    "full_local_ci": "passed",
+    "direct_mcp_parity_cases": 68,
+    "direct_mcp_parity": "passed",
+    "rust_core_library": {
+      "passed": 314,
+      "ignored": 4
+    },
+    "broad_cargo_integration_suite": "failed with API-mismatch compilation errors outside changed extraction code; not claimed",
+    "binding_test_methods": 2,
+    "binding_languages": [
+      "javascript",
+      "typescript",
+      "tsx"
+    ],
+    "project_parser_contract_checks": 5,
+    "live_shadow_checks": 7,
+    "termination_cases": [
+      "SIGTERM staging",
+      "SIGKILL staging",
+      "SIGKILL uncommitted publication"
+    ],
+    "job_persistence_and_cancellation_checks": 9,
+    "indexing_health_checks": 22,
+    "hosted_fork_validation": "passed",
+    "hosted_fork_native_wheels": {
+      "linux": "passed",
+      "macos": "passed",
+      "windows": "passed"
+    },
+    "local_owner_proof_and_cli_checks": 5
+  },
+  "remaining": [
+    "multi-host/uncertain-writer recovery",
+    "coordinated graph/vector publication",
+    "lifecycle retention",
+    "large-repository transaction cost/timeout measurements"
+  ],
+  "private_evidence_root": "/Users/michaelmarler/Projects/rest_proxy/.runtime/reliable-indexing",
+  "log_sha256": {
+    "ci-final.log": "1c8f3f303e7f157da275b16aeff80be049707a7df7ab6103c313c469b6f34a05",
+    "full-parity.log": "69f3a82af9996485750fadba5ea44e78f18aa034dab98e07e434b7b3b38c6500",
+    "lifecycle.log": "146a9f46d7cff8bf418278b2f6feec17811d02373d0632457e7e48d53a751ba0",
+    "job-persistence.log": "c6d4a1ad85b23a9f763b37962e04a75d310b95682983715803e2c48bbb246884",
+    "health.log": "02c8abffb898ae2cecff770961bac39ada621b45b343b0c1029fb091ff5fa1eb",
+    "candidate-facts-tests.log": "7853f69ef61bb99cd0cfd8c7e0819bb5e9ac6d51a9e0457af8ea63e873cd5630",
+    "rust-core-suite.log": "1414bf508e01d8312405a81cbc5e44a62efac53cf86441a76681a4090f98bc6e",
+    "rental-reindex.log": "82beb03053098cfdcd636f415d9a343e0abf4984590a399ffb5e5d5dee55be38"
+  },
+  "fixture_node_residue": 0,
+  "shadow_node_residue": 0,
+  "live_rental_publication": {
+    "structural_status": "done",
+    "semantic_status": "done",
+    "structural_run": "ab4dfef13e8c:64872:1791135127440000000",
+    "semantic_structural_run": "ab4dfef13e8c:64872:1791135127440000000",
+    "semantic_run": "ab4dfef13e8c:semantic:4a8218546454"
+  },
+  "wheel_sha256": "ccc6bf9e47b945ebef8353b59794af4a2e3d9f487f8fed7d691562e5232458d9"
+}

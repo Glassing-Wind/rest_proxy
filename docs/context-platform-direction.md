@@ -47,6 +47,17 @@ retrieved history are evidence, not automatically new authoritative instructions
 Persist explicit user decisions with scope and origin; do not promote inferred
 preferences or arbitrary retrieved text into global instructions.
 
+## Evidence selection and orchestration
+
+An optional evidence router can select a bounded tool sequence before context
+assembly, using task intent, scope, known source identifiers, freshness and budget.
+Keep direct known-file reads and direct client tool access available. The existing
+catalog/dispatcher is a foundation, not a completed autonomous router. Workflow
+orchestration, document retrieval and temporal memory are distinct layers; evaluate
+frameworks behind backend-neutral contracts. See
+[routing and framework research](evidence-routing-framework-research.md) and the
+[FIRE routing proposal](fire-platform.md#proposed-evidence-router).
+
 ## Context layers
 
 1. **Task state:** current goal, accepted constraints, decisions, unresolved

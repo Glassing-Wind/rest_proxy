@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sys
+import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -307,7 +308,7 @@ DEFAULT_DIRECT_PARITY_CHECKS = [
         "params": {"workspace_id": "$workspace_id"},
         "required_substrings": [
             "### Git Summary: `/Users/michaelmarler/Projects/rest_proxy`",
-            "**Branch:** `codex/enterprise-hardening`",
+            "**Branch:** `$current_branch`",
         ],
     },
     {
@@ -848,6 +849,11 @@ def _normalize(text: str) -> str:
 
 
 def _normalized_expected_variants(text: str) -> list[str]:
+    if '$current_branch' in text:
+        branch = subprocess.check_output(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=ROOT, text=True,
+        ).strip()
+        text = text.replace('$current_branch', branch)
     normalized = _normalize_order_insensitive_line(str(text))
     variants = [str(text), normalized]
     stripped = normalized.lstrip()
