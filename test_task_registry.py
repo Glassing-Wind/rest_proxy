@@ -94,6 +94,59 @@ class RegistryTests(unittest.TestCase):
             self.registry.cancel('fixture', task['id'], 1, 'Stale request')
         self.assertEqual(self.registry.get('fixture', task['id']), task)
 
+    def submit_fixture(self):
+        task = self.registry.claim('fixture', self.task['id'], 1, 'worker')
+        return self.registry.submit('fixture', task['id'], 2, task['claim']['token'],
+                                    {'answer': 'original', 'source': 'fixture.py'})
+
+    def test_review_completion_reopens_and_is_terminal(self):
+        task = self.submit_fixture()
+        self.assertIsNone(task['claim'])
+        with self.assertRaises(ValueError):
+            self.registry.review('fixture', task['id'], 3, 'worker', 'accept', 'Self review')
+        task = self.registry.review('fixture', task['id'], 3, 'reviewer', 'accept', 'Checked evidence')
+        self.assertEqual(task['status'], 'completed')
+        self.assertEqual(TaskRegistry(self.state).get('fixture', task['id']), task)
+        for operation in [
+            lambda: self.registry.cancel('fixture', task['id'], 4, 'Stop'),
+            lambda: self.registry.claim('fixture', task['id'], 4, 'worker'),
+            lambda: self.registry.review('fixture', task['id'], 4, 'reviewer', 'accept', 'Again'),
+        ]:
+            with self.assertRaises(ValueError):
+                operation()
+
+    def test_correction_preserves_original_and_fences_old_claim(self):
+        task = self.submit_fixture()
+        task = self.registry.review('fixture', task['id'], 3, 'reviewer',
+                                    'request_correction', 'Check source again')
+        task = self.registry.claim('fixture', task['id'], 4, 'worker2')
+        task = self.registry.submit('fixture', task['id'], 5, task['claim']['token'],
+                                    {'answer': 'corrected'})
+        task = self.registry.review('fixture', task['id'], 6, 'reviewer', 'accept', 'Verified')
+        self.assertEqual([s['finding']['answer'] for s in task['submissions']],
+                         ['original', 'corrected'])
+        self.assertEqual([r['decision'] for r in task['reviews']], ['request_correction', 'accept'])
+        self.assertEqual(task['reviews'][-1]['submission'], 2)
+
+    def test_cancel_review_rejects_late_acceptance(self):
+        task = self.submit_fixture()
+        task = self.registry.cancel('fixture', task['id'], 3, 'Stop pending review')
+        with self.assertRaises(ValueError):
+            self.registry.review('fixture', task['id'], 4, 'reviewer', 'accept', 'Late')
+        self.assertEqual(self.registry.get('fixture', task['id']), task)
+
+    def test_submit_expiry_wrong_token_and_stale_review(self):
+        task = self.registry.claim('fixture', self.task['id'], 1, 'worker')
+        with self.assertRaises(ValueError):
+            self.registry.submit('fixture', task['id'], 2, 'wrong', {'answer': 'bad'})
+        with patch('memory.task_registry.time.time', return_value=task['claim']['expires_at']):
+            with self.assertRaises(ValueError):
+                self.registry.submit('fixture', task['id'], 2, task['claim']['token'], {'answer': 'late'})
+        task = self.registry.submit('fixture', task['id'], 2, task['claim']['token'], {'answer': 'ok'})
+        with self.assertRaises(ValueError):
+            self.registry.review('fixture', task['id'], 2, 'reviewer', 'accept', 'Stale')
+        self.assertEqual(self.registry.get('fixture', task['id']), task)
+
 
 if __name__ == '__main__':
     unittest.main()

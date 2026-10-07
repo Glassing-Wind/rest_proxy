@@ -8,10 +8,12 @@ This is an implementation direction, not a deployed team or permission system.
 ## Local registry foundation — October 6 acceptance
 
 [Registry receipt](../benchmarks/reports/2026-10-06/shared-task-registry.md): scoped
-SQLite create/read/claim/checkpoint/reopen and revision/expiry guards now pass eight
-offline tests, including durable cancellation and guarded expired read-only reclaim. This is a trusted local library, not authenticated task endpoints or
-worker execution. Cancellation/reclaim preserve evidence and reject stale workers; next implement
-review/completion transitions;
+SQLite create/read/claim/checkpoint/reopen and revision/expiry guards now pass twelve
+offline tests, including cancellation, expired read-only reclaim and retained
+finding/correction review/completion transitions. This is a trusted local library, not authenticated task endpoints or
+worker execution. Original findings and review decisions survive corrections and completion.
+Distinct reviewer IDs are required but are not authenticated identities. Next add
+a local task interface and scoped read-only tool dispatch;
 MCP/REST adapters and tool-dispatch permissions remain open. No persistent agent
 team or cross-chat synchronization is running.
 

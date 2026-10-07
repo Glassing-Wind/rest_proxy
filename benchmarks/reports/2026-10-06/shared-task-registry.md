@@ -38,3 +38,22 @@ old-token denial with current revision, new-worker continuation, stale cancellat
 and attempt-limit rollback. Checks are deterministic using mocked time, not sleep.
 Review/completion/corrections, API authentication, dispatch permissions and worker
 execution remain open. Read-only reclaim does not prove exactly-once side effects.
+
+## Findings, correction review and completion — subsequent October 6 acceptance
+
+Active unexpired claim holders can submit a nonempty bounded finding. Submission
+retains worker identity and finding, clears the claim and enters review_pending.
+A distinct caller-supplied reviewer ID can accept (completed) or request correction
+(queued for a new claim). Original submissions and all review decisions remain;
+reviews identify their submission number. All transitions require current revision.
+Cancelled pending reviews reject later acceptance; completed tasks are terminal.
+Five-attempt cap applies to both claims and correction requests.
+
+Twelve registry tests and six FIRE store tests pass. New cases verify durable
+completed state, terminal transition denial, self-review ID rejection, retained
+original/corrected findings, pending-review cancellation and stale/expired/wrong
+submission/review rejection. Distinct IDs do not authenticate independent people or
+agents; review quality is not validated. Tool execution, authenticated adapters,
+lease renewal, retention/deletion and operational recovery remain open. Next add
+an explicit local task interface and enforce scoped read-only dispatch before any
+model adapter. No running team or automatic chat coordination is established.

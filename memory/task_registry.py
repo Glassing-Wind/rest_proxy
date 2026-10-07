@@ -107,6 +107,8 @@ class TaskRegistry:
             # Expired claims require the explicit reclaim operation.
             if task['status'] != 'queued':
                 raise ValueError('Task is not queued')
+            if task['attempts'] >= 5:
+                raise ValueError('Task attempt limit reached')
             task['status'] = 'claimed'
             task['attempts'] += 1
             task['claim'] = dict(token=uuid.uuid4().hex, worker=worker,
@@ -133,7 +135,7 @@ class TaskRegistry:
             raise ValueError('Require bounded cancellation reason')
 
         def edit(task):
-            if task['status'] not in ('queued', 'claimed'):
+            if task['status'] not in ('queued', 'claimed', 'review_pending'):
                 raise ValueError('Task cannot be cancelled in this state')
             task['status'] = 'cancelled'
             task['cancellation'] = dict(reason=reason, at=time.time())
@@ -163,4 +165,45 @@ class TaskRegistry:
             task['attempts'] += 1
             task['claim'] = dict(token=uuid.uuid4().hex, worker=worker,
                                  expires_at=now + lease_seconds)
+        return self._update(project, task_id, revision, edit)
+
+    def submit(self, project: str, task_id: str, revision: int,
+               claim_token: str, finding: dict) -> dict:
+        """Retain a worker finding and relinquish its claim for explicit review."""
+        if not isinstance(finding, dict) or not finding:
+            raise ValueError('Require nonempty finding object')
+
+        def edit(task):
+            claim = task['claim']
+            if task['status'] != 'claimed' or not claim or claim['token'] != claim_token:
+                raise ValueError('Invalid active claim')
+            if claim['expires_at'] <= time.time():
+                raise ValueError('Claim expired')
+            task.setdefault('submissions', []).append(dict(
+                finding=finding, worker=claim['worker'], at=time.time()))
+            task['status'] = 'review_pending'
+            task['claim'] = None
+        return self._update(project, task_id, revision, edit)
+
+    def review(self, project: str, task_id: str, revision: int,
+               reviewer: str, decision: str, reason: str) -> dict:
+        """Record caller-supplied review identity; this is not authentication."""
+        self.identifier(reviewer)
+        if decision not in ('accept', 'request_correction'):
+            raise ValueError('Unsupported review decision')
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
+            raise ValueError('Require bounded review reason')
+
+        def edit(task):
+            if task['status'] != 'review_pending':
+                raise ValueError('Task is not awaiting review')
+            submission = task['submissions'][-1]
+            if reviewer == submission['worker']:
+                raise ValueError('Reviewer must differ from submitting worker')
+            if decision == 'request_correction' and task['attempts'] >= 5:
+                raise ValueError('Task attempt limit reached')
+            task.setdefault('reviews', []).append(dict(
+                reviewer=reviewer, decision=decision, reason=reason,
+                submission=len(task['submissions']), at=time.time()))
+            task['status'] = 'completed' if decision == 'accept' else 'queued'
         return self._update(project, task_id, revision, edit)
