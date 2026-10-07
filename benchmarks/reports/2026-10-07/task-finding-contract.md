@@ -24,3 +24,19 @@ it does not establish source binding. Use `submit_finding` for the future eviden
 worker adapter. No public authentication, autonomous worker, real independent review
 or tool-quality/savings claim. Next exercise this structured operation through the
 subprocess handoff and introduce a bounded worker adapter only after acceptance.
+
+## Structured subprocess handoff — subsequent October 7 acceptance
+
+The deterministic demonstration now uses submit_finding instead of raw submit.
+Nine separate CLI processes create/claim/read/checkpoint/reopen/submit/review/reopen
+and reopen again after deleting the fixture source. Both unchanged-source completion
+and changed-after-submission correction preserve validated numbered originals and
+hashes after source deletion. [Sanitized receipt](structured-task-handoff.json).
+Two strengthened handoff tests and the other 27 focused tests pass (29 total);
+new Python lint and diff checks pass. No new model or external dependency.
+
+Source changed after submission is detected by the scripted reviewer's explicit
+hash comparison, not by the generic review operation. The two roles still run
+under one fixture operator and do not establish independent review or authentication.
+Next design a bounded optional worker adapter using this structured contract;
+keep review explicit, source freshness checks separate and inference disabled by default.

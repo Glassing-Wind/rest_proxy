@@ -12,8 +12,10 @@ This is an implementation direction, not a deployed team or permission system.
 now validate bounded schema/citations against guarded source reads and retain numbered
 evidence through submission. Twenty-nine focused tests pass. Legacy raw submit stays
 unvalidated; source identity checks do not establish semantic correctness or later
-freshness. Next exercise structured submission in the subprocess handoff before
-model-worker integration. Authentication and cross-chat coordination remain open.
+freshness. Structured submission now passes a nine-process handoff including reopen after
+source deletion; original evidence survives both acceptance and correction cases.
+Next design a bounded optional worker adapter with explicit review and inference
+disabled by default. Authentication and cross-chat coordination remain open.
 
 
 ## Local registry foundation — October 6 acceptance

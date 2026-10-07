@@ -41,8 +41,14 @@ def run_demo(change_source: bool = False) -> dict:
         recovered = call('get', **identity)
         if recovered != task:
             raise AssertionError('Process reopen lost checkpoint')
-        task = call('submit', **identity, revision=3, claim_token=claim,
-                    finding={'answer': 'total delegates to sum', 'evidence': evidence})
+        task = call('submit_finding', **identity, revision=3, claim_token=claim,
+                    finding=dict(schema_version=1, answer='total delegates to sum',
+                                 citations=[{key: evidence[key] for key in
+                                             ('path', 'start_line', 'end_line', 'sha256')}],
+                                 limits=['Synthetic fixture; semantic review not established']))
+        retained = task['submissions'][0]['finding']['retained_evidence'][0]
+        if retained['source'] != evidence['source'] or retained['sha256'] != evidence['sha256']:
+            raise AssertionError('Structured submission failed to retain evidence')
         if change_source:
             source.write_text('def total(values):\n    return 0\n', encoding='utf-8')
         current_hash = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -53,6 +59,10 @@ def run_demo(change_source: bool = False) -> dict:
         reopened = call('get', **identity)
         if reopened != task:
             raise AssertionError('Review lost on reopen')
+        source.unlink()
+        after_removal = call('get', **identity)
+        if after_removal['submissions'][0]['finding']['retained_evidence'][0] != retained:
+            raise AssertionError('Source removal lost original evidence')
         expected = 'completed' if fresh else 'queued'
         if task['status'] != expected or len(task['submissions']) != 1:
             raise AssertionError('Unexpected handoff outcome')
@@ -60,7 +70,8 @@ def run_demo(change_source: bool = False) -> dict:
                     operations=operations, operation_count=len(operations),
                     separate_process_per_operation=True, checkpoint_reopened=True,
                     review_reopened=True, source_hash_matches=fresh, status=task['status'],
-                    original_finding_retained=True,
+                    original_finding_retained=True, structured_submission=True,
+                    retained_evidence_after_source_removal=True,
                     reviewer='deterministic fixture, not independent reasoning or authentication',
                     inference_used=False, live_rental_data_used=False,
                     token_savings_measured=False)
