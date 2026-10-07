@@ -1,5 +1,33 @@
 # Five-priority completion status — October 6, 2026
 
+## Apple Intelligence advisory review prototype — October 7
+
+FIRE Review Evidence created with Use Model (Cloud) -> Show Content. Synthetic
+source `def total(values): return sum(values)` and deliberately false positive-integer
+validation claim produced the expected supported/unsupported/correction assessment.
+[Receipt](../benchmarks/reports/2026-10-07/apple-review-prototype.json). Observed UI
+model label is Cloud; actual underlying model identity and usage are unexposed.
+Do not label this verified Gemini inference or Siri voice review acceptance. No
+private repository content sent and no task status changed. This is one easy case,
+not calibrated reviewer reliability or a persistent supervisor.
+
+`python -m scripts.task_review_export --state PRIVATE_DIR --project PROJECT
+--task-id ID --submission N` exports a bounded 8 KiB historical finding bundle with
+source evidence, task/revision/submission linkage and advisory instructions. Workspace
+and bearer claim metadata omitted; source/answer may still contain private content.
+Two offline tests verify metadata exclusion, evidence retention, invalid submission
+and oversized-bundle rejection; focused Ruff passes. Export does not transmit data.
+
+Official [Apple Shortcuts documentation](https://support.apple.com/guide/shortcuts-mac/use-apple-intelligence-in-shortcuts-mchl91750563/mac)
+supports on-device/Cloud models and action outputs. Broader Siri collaboration with
+Google does not attest which underlying model this action selected. No Claude
+subscription/integration is needed for this prototype. Next wire previewed explicit
+bundle input and bounded assessment capture tied to submission identity, before
+separate user approval or task review mutation. Real-task cloud sharing requires
+specific destination/data authorization; do not export private content automatically.
+Prior revision 0646c5e passed all eight hosted checks; new revision requires new CI.
+
+
 ## Correction feedback and live timeout — October 7
 
 Workers now include the latest request_correction review reason in the same bounded
