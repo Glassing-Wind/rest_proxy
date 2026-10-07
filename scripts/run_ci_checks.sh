@@ -25,7 +25,7 @@ echo "[ci] Running Ruff across production Python and operational scripts..."
   runtime_logging.py tool_choice_eval.py
 
 echo "[ci] Running offline shared-task acceptance..."
-for TASK_TEST in test_task_registry.py test_task_dispatch.py test_task_handoff.py test_task_worker.py test_task_provider.py test_task_capture.py test_task_run.py test_task_review_export.py test_task_assessment.py test_task_review_capture.py; do
+for TASK_TEST in test_task_registry.py test_task_dispatch.py test_task_handoff.py test_task_worker.py test_task_provider.py test_task_capture.py test_task_run.py test_task_review_export.py test_task_assessment.py test_task_review_capture.py test_task_review_calibration.py; do
   "$PYTHON_BIN" "$TASK_TEST"
 done
 

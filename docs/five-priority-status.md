@@ -1,5 +1,16 @@
 # Five-priority completion status — October 6, 2026
 
+## Calibration prompt isolation — October 7
+
+A local CLI now emits full-source or missing-definition synthetic prompts using the
+same review instructions as real exports. It whitelists only instructions, finding
+and source; grading answers/scoring metadata never enter model input. Two isolation/
+budget tests plus five export/capture regressions and focused lint pass. CLI smoke
+verified the missing-definition variant. No model call, task mutation or quality
+measurement performed. Next manually run both prompts and record claim judgments.
+[Dated procedure](../benchmarks/reports/2026-10-07/advisory-calibration-prompts.md).
+
+
 ## Claim-level advisory prompt — October 7
 
 Review exports now explicitly request supported, unsupported/unresolved claims and
