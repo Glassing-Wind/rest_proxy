@@ -1,5 +1,20 @@
 # Five-priority completion status — October 6, 2026
 
+## Local advisory trials — October 7
+
+Both synthetic variants completed against already available Qwen via numeric-loopback
+LM Studio, without lifecycle or task changes. Full source: 17.404 s, provider-reported
+317 prompt/3623 completion tokens. Missing definition: 12.420 s, 272/2359 tokens.
+Both questioned byte/character and Qwen-invocation claims, but falsely accepted task
+type rest_proxy; full response also cited intake line 4 instead of call line 5.
+[Dated responses and grading](../benchmarks/reports/2026-10-07/local-advisory-calibration.json).
+These are two qualitative fixtures, not general accuracy or savings evidence.
+The read_source claim is ambiguous; revise it to distinguish supplied action from
+implementation guarantee before scoring further. Automatic approval remains unsuitable.
+Next broaden controlled fixtures and source-line checks, preserving manual supervision.
+Five prompt/export regression tests pass. All eight hosted checks for 4cf303f passed.
+
+
 ## Calibration prompt isolation — October 7
 
 A local CLI now emits full-source or missing-definition synthetic prompts using the
