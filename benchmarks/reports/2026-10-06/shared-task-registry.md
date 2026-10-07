@@ -22,3 +22,19 @@ MCP/REST interfaces, authenticating callers, worker adapters and dispatch enforc
 remain open. No automatic cross-chat coordination, independent review, Qwen worker
 or exactly-once side effects are established. Next add guarded cancellation/reclaim
 and stale-worker checks before exposing task endpoints.
+
+## Cancellation and guarded reclaim — subsequent October 6 acceptance
+
+Explicit cancellation now persists for queued/claimed tasks and rejects subsequent
+worker checkpoint updates. It records a reason; it does not stop an executing process.
+Expired read-only claims can be explicitly replaced under revision checks, preserving
+evidence and checkpoints. New claim tokens fence stale worker writes. Reclaim records
+prior worker/expiry/reason without retaining old bearer tokens; total attempts capped
+at five. Active and cancelled tasks cannot be reclaimed. No automatic retries.
+
+Eight task registry tests and six FIRE store tests pass. New cases cover cancelled
+reopen, cancelled reclaim denial, active reclaim denial, preserved checkpoint/evidence,
+old-token denial with current revision, new-worker continuation, stale cancellation
+and attempt-limit rollback. Checks are deterministic using mocked time, not sleep.
+Review/completion/corrections, API authentication, dispatch permissions and worker
+execution remain open. Read-only reclaim does not prove exactly-once side effects.

@@ -104,7 +104,7 @@ class TaskRegistry:
             raise ValueError('Lease must be 1–3600 seconds')
 
         def edit(task):
-            # Expiry does not automatically authorize reclaim in this slice.
+            # Expired claims require the explicit reclaim operation.
             if task['status'] != 'queued':
                 raise ValueError('Task is not queued')
             task['status'] = 'claimed'
@@ -125,4 +125,42 @@ class TaskRegistry:
             if claim['expires_at'] <= time.time():
                 raise ValueError('Claim expired')
             task['checkpoint'] = checkpoint
+        return self._update(project, task_id, revision, edit)
+
+    def cancel(self, project: str, task_id: str, revision: int, reason: str) -> dict:
+        """Persist cancellation; this does not interrupt a running process."""
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
+            raise ValueError('Require bounded cancellation reason')
+
+        def edit(task):
+            if task['status'] not in ('queued', 'claimed'):
+                raise ValueError('Task cannot be cancelled in this state')
+            task['status'] = 'cancelled'
+            task['cancellation'] = dict(reason=reason, at=time.time())
+        return self._update(project, task_id, revision, edit)
+
+    def reclaim(self, project: str, task_id: str, revision: int, worker: str,
+                reason: str, lease_seconds: int = 60) -> dict:
+        """Explicitly replace an expired read-only claim, preserving its checkpoint."""
+        self.identifier(worker)
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
+            raise ValueError('Require bounded reclaim reason')
+        if type(lease_seconds) is not int or not 1 <= lease_seconds <= 3600:
+            raise ValueError('Lease must be 1–3600 seconds')
+
+        def edit(task):
+            claim = task['claim']
+            now = time.time()
+            if task['status'] != 'claimed' or not claim or claim['expires_at'] > now:
+                raise ValueError('Require expired claimed task')
+            if task['actions'] != ['read_source']:
+                raise ValueError('Only read-only tasks may be reclaimed')
+            if task['attempts'] >= 5:
+                raise ValueError('Task attempt limit reached')
+            task.setdefault('claim_history', []).append(dict(
+                worker=claim['worker'], expires_at=claim['expires_at'],
+                replaced_at=now, reason=reason))
+            task['attempts'] += 1
+            task['claim'] = dict(token=uuid.uuid4().hex, worker=worker,
+                                 expires_at=now + lease_seconds)
         return self._update(project, task_id, revision, edit)
