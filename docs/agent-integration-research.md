@@ -11,7 +11,7 @@ no persistent multi-agent team, authenticated task endpoints or automatic superv
 
 | Participant | Supported path and evidence | Our next acceptance |
 | --- | --- | --- |
-| Siri / Mac | [Apple Shortcuts](https://support.apple.com/en-euro/guide/shortcuts-mac/apdf22b0444c/mac): Siri can run a named shortcut. Local shell action can submit stdin to our task capture helper. | Draft FIRE Capture Task created in Shortcuts. Shell actions disabled by system setting; configuration/run remain blocked. No setting changed. Complete local queue/reopen test before voice test. |
+| Siri / Mac | [Apple Shortcuts](https://support.apple.com/en-euro/guide/shortcuts-mac/apdf22b0444c/mac): Siri can run a named shortcut. Local shell action can submit stdin to our task capture helper. | FIRE Capture Task configured in Shortcuts; user enabled scripting. Ask for Input -> stdin shell action -> Show Content. GUI test waits at runner input not exposed to automation; end-to-end/voice acceptance pending. |
 | iPhone / glasses | Separate app/Shortcut transport to an authenticated service; Mac shell action is Mac-specific. | No remotely reachable task intake. Do not use phone loopback to address Mac. |
 | Claude Code Desktop | [Current Desktop docs](https://code.claude.com/docs/en/desktop) describe MCP configuration through project/user settings and desktop connectors. Installing/running Desktop does not connect it to our task registry. | Add narrowly scoped task MCP interface and test claim/read/submit against disposable state, with review retained. No Claude settings or conversations changed. Standalone claude executable not on current shell PATH. |
 | Claude programmatic worker | [Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) exposes Claude Code loop in Python/TypeScript, MCP, permissions, sessions and hooks. Docs describe authentication/usage terms; desktop subscription is not evidence of permission to redistribute its login/limits in our product. | Explicit adapter permissions, credentials and budget; no SDK installed or paid inference invoked. |
@@ -115,3 +115,14 @@ Next milestones: finish Shortcut action wiring/run after the setting decision;
 expose authenticated/scoped task MCP operations for Claude/Codex; bounded supervisor
 review acceptance; separate document structure adapter with held-out fixtures.
 Primary priority 3, with priority 4 evidence bounds and priority 5 outcome evaluation.
+
+## Shortcut wiring checkpoint — later October 7
+
+User enabled scripting; enabled checkbox verified. FIRE Capture Task now contains
+Ask for Input (existing question), the absolute-path shell command with Provided
+Input passed to stdin, and Show Content bound to Shell Script Result. Administrator
+execution remains off. Run started, but runner input dialog is not exposed by the
+available app automation surface. User asked to enter a synthetic test phrase.
+No task state directory existed at inspection; do not claim a queued task or successful
+GUI/Siri acceptance yet. Prior revision 4479d4c passed all eight hosted checks.
+Earlier disabled-script sections above describe the initial state.

@@ -1,5 +1,14 @@
 # Shared task system — direction and first acceptance milestone
 
+## Shortcut wiring checkpoint — October 7
+
+User enabled scripting and FIRE Capture Task is wired Ask for Input -> local
+stdin capture -> Show Content, administrator execution off. Test is waiting at
+runner input not exposed to app automation; GUI/voice and persisted-task acceptance
+remain pending user test input. Prior revision 4479d4c passed all eight hosted checks.
+See [integration research](agent-integration-research.md) for current limitations.
+
+
 ## Participant interfaces and learning reuse — October 7
 
 [Integration research](agent-integration-research.md) records supported Siri,
