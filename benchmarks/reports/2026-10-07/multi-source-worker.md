@@ -41,4 +41,3 @@ Timeout does not prove generation stopped server-side; do not overlap retries.
 Next add bounded explicit request-timeout configuration and safe expired-claim
 resume dispatch, then decide one controlled retry. Automatic supervisor and
 background scheduling remain open; the original task is not complete.
-
