@@ -40,7 +40,15 @@ the fixture request. Thirteen focused tests passed.
 The rental fix and test remain uncommitted to avoid mixing this slice with the
 user's existing work. The preserved patch records only this session's code delta.
 
-## Next milestone
+## Project handoff — October 6
+
+The user has started a rental-project conversation. Application journeys, test
+backend setup and fixes continue there. rest_proxy implements the
+[shared task system](shared-task-system.md), primarily Priority 3, to retain scoped
+assignments and evidence across workers. No automatic cross-chat synchronization
+or connected persistent team is implemented.
+
+## Next rental milestone
 
 Choose one full applicant or tenant journey in a disposable test database, with
 payments, email and third-party accounting mocked. Verify draft resumption,

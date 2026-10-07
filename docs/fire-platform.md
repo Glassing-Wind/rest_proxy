@@ -5,6 +5,14 @@ platform being developed in rest_proxy. The repository/package name and existing
 interfaces remain unchanged. This document specifies intended behavior; it does
 not claim that the full platform is implemented.
 
+## Shared task coordination
+
+The [shared task system](shared-task-system.md) extends Priority 3 continuity toward
+durable scoped assignments, checkpoints and worker/reviewer handoffs. Its initial
+task registry is planned, not implemented. Existing evidence/checkpoint contracts
+are foundations; task leases and authorization must have their own acceptance.
+Application changes remain in their target repository and conversation.
+
 ## The cycle
 
 | Stage | Responsibility | Output |

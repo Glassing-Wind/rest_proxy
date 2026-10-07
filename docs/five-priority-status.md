@@ -13,6 +13,16 @@ the whole priority or enterprise release is complete.
 | 4. Bounded context assembly | Shared packing and stateless LM Studio forwarding implemented; exact provider budgeting remains incomplete. | Compact tool catalog, bounded numbered source, structured provenance and existing selection/deduplication. Compact schema pilot measured 77.54% fewer schema tokens. Deterministic cited evidence packing, canonical full supplied-request accounting with reserves, local tokenizer/byte-estimate modes, scoped FIRE snapshot-to-bundle adaptation, real MCP/REST parity and formatted LM Studio forwarding with observed usage (807 prompt/15 completion tokens in one fixture). | Provider serialization/model-tokenizer-framing attestation, automatic retrieval/source freshness and broader inference acceptance; real provider continuation/history deduplication and controlled usage measurements. Canonical-payload accounting is not verified provider usage. |
 | 5. Release and outcome validation | Runtime/parser validation and pilots complete; release/outcome gates incomplete. | Project Python 3.14 cutover/rollback, published modified ts-pack pin, native fork-wheel validation, isolated installs and local CI receipts; wheel/source-archive worker inclusion, core/embedded/full dependency separation and installed native fixture/daemon REST acceptance; schema-valid incomplete installed-package SBOM, shipped notice collection, source-bound supplemental namespace notices, ten observed grammar asset/notice bindings and cold graph/vector/FIRE restore fixture. Prior paired pilot and source-based grading exist; they establish no MCP superiority. | Fresh exact-pin source-build and supported-platform install matrix, exact artifact/dependency/grammar/model notices and SBOM, operational backup retention/deletion reconciliation and restore validation, repeated controlled coding investigations with actual usage/latency/resource/fallback measurements. Qwen worker trial is one functional case, not a paired savings evaluation. |
 
+## Shared task system — Priority 3 implementation direction
+
+The [shared task system](shared-task-system.md) is primarily FIRE continuity,
+with Priority 2 persistence/tool interfaces, Priority 4 worker bundles and Priority 5
+restart/permission/outcome validation. Next is a scoped local task registry with
+claim/revision, checkpoint, reclaim, cancellation and review fixtures. It is not
+implemented yet; existing FIRE checkpoints and rental receipts are foundations.
+The user started a separate rental conversation; rental journeys/fixes belong there,
+and rest_proxy owns shared coordination. Separate chats do not automatically sync.
+
 ## Commercial sequencing — October 6
 
 [Agent-team user testing](agent-team-user-testing.md) now has its first local
@@ -67,6 +77,11 @@ No paying customers, guaranteed earnings or measured tool superiority are claime
    [dependency repair receipt](../benchmarks/reports/2026-10-05/dependency-refresh.md).
 
 ## Work order from this checkpoint
+
+The October 6 shared-task direction supersedes the historical work order below:
+implement the minimum Priority 3 task registry and guarded restart/handoff fixture
+here; continue rental application acceptance in its own conversation. Keep the
+five-priority completion table's open release gates and measured-outcome requirements.
 
 The [bounded Qwen investigation/patch/review trial](../benchmarks/reports/2026-10-05/qwen-worker-trial.md)
 is complete, including a rejected truncated attempt, supervisor corrections and

@@ -123,10 +123,18 @@ or an unpaid demo a paid pilot. If ten qualified conversations produce no paid
 interest, change the offer/problem rather than adding more graph features. If
 scope or rework consumes the delivery budget, reduce scope before repeating it.
 
+## Conversation ownership — October 6
+
+The user started a separate rental-project conversation. Continue its application
+journeys and bug fixes there; implement reusable coordination in rest_proxy through
+the [shared task system](shared-task-system.md). A minimal registry is the next
+engineering slice, not a prerequisite for customer conversations or rental testing.
+
 ## Engineering work that supports revenue
 
-The next concrete milestone is a **source-graded pilot demonstration and reusable
-report template**, not another broad capability expansion. Start from the
+A first source-bound rental demonstration and reusable report template are available.
+Next implement the minimum durable task/handoff contract here while rental continues
+its full user journey in its own conversation. Start from the
 [reviewable investigation template](templates/investigation-report.md). Use native source reads
 for known files; use relationships/semantic discovery only when useful. Count
 fallbacks, omissions, actual usage and total investigation/review effort. Include

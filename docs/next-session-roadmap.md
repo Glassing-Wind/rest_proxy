@@ -10,10 +10,18 @@ are implemented; deployment of a chosen IDE adapter and new-file enrollment rema
 
 ## Current checkpoint — October 6, 2026
 
+**Current next rest_proxy milestone: the [shared task system](shared-task-system.md),
+primarily Priority 3.** Implement a minimal scoped durable task registry and local
+claim/restart/review acceptance fixture before model adapters. The user has started
+rental work in a separate project conversation; disposable database journeys and
+application fixes belong there. This chat owns coordination and evidence handoffs.
+Cross-chat synchronization and messaging are not established. Existing technical
+release gates and customer-validation work remain open.
+
 [Agent-team user testing](agent-team-user-testing.md) now has its first local
 rental-applicant browser demonstration: one reproduced submission blocker, a narrow
 working-tree fix and 13 passing focused tests. Backend fixture responses do not
-establish database/payment/email acceptance. Next: a disposable full journey and
+establish database/payment/email acceptance. Rental next: a disposable full journey. Rest_proxy next: durable
 structured finding/review handoff; no persistent multi-agent runner is implemented.
 A [filled, source-bound report](../benchmarks/reports/2026-10-06/rental-user-qa/investigation-report.md)
 now answers three questions with four retained snapshots and a machine-readable
@@ -23,7 +31,8 @@ Full database journey awaits an explicitly isolated disposable test configuratio
 
 **Direction change: near-term income validation.** Follow the
 [commercial direction](commercial-direction.md) and prepare a source-graded FIRE
-pilot demonstration plus reusable report template as the next milestone. The
+pilot demonstration plus reusable report template. The first rental demonstration
+and filled report are available; durable coordination is the next engineering slice. The
 [draft paid offer](paid-investigation-pilot.md) needs a demonstrated delivery scope,
 then user-led buyer interviews and one paid pilot. The user targets $3,000/month and reports 10,000+ unqualified contacts plus
 rental-platform/rental-law repositories. Confirm repository paths, then prefer a
