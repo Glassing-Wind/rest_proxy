@@ -1,5 +1,17 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Participant interfaces and learning reuse — October 7
+
+[Integration research](agent-integration-research.md) records supported Siri,
+Claude/Codex interfaces, framework choices and source-reviewed reuse candidates
+from RepoAnalyzer/GithubAnalyzer. Mac task intake helper passes two offline tests;
+FIRE Capture Task draft exists but script actions are disabled, so GUI/voice
+acceptance remains blocked pending the user's security-setting decision. No setting
+or participant configuration changed. Muse product identity remains unconfirmed.
+PR4 revision c6509dd passed all eight hosted checks. Next authenticated task adapters
+and supervised claim/evidence review; document AST extraction stays a separate slice.
+
+
 ## Explicit output budget and live handoff — October 7
 
 The optional adapter now accepts a bounded explicit 256–4096-token budget, default
