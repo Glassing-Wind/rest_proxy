@@ -4,6 +4,17 @@ Updated October 6, 2026. The user has started a separate rental-project conversa
 Keep rental implementation there and reusable coordination here in rest_proxy.
 This is an implementation direction, not a deployed team or permission system.
 
+
+## Local registry foundation — October 6 acceptance
+
+[Registry receipt](../benchmarks/reports/2026-10-06/shared-task-registry.md): scoped
+SQLite create/read/claim/checkpoint/reopen and revision/expiry guards now pass five
+offline tests. This is a trusted local library, not authenticated task endpoints or
+worker execution. Next implement guarded cancellation/reclaim and review transitions;
+MCP/REST adapters and tool-dispatch permissions remain open. No persistent agent
+team or cross-chat synchronization is running.
+
+
 ## Place in the five priorities
 
 The primary home is **Priority 3: FIRE continuity**. A shared task system extends

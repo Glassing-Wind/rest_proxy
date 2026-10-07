@@ -1,5 +1,16 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+
+## Local registry foundation — October 6 acceptance
+
+[Registry receipt](../benchmarks/reports/2026-10-06/shared-task-registry.md): scoped
+SQLite create/read/claim/checkpoint/reopen and revision/expiry guards now pass five
+offline tests. This is a trusted local library, not authenticated task endpoints or
+worker execution. Next implement guarded cancellation/reclaim and review transitions;
+MCP/REST adapters and tool-dispatch permissions remain open. No persistent agent
+team or cross-chat synchronization is running.
+
+
 ## Current five-priority status
 
 Use [the October 6 completion table](five-priority-status.md) for current completed
