@@ -1,14 +1,15 @@
 # Review bundle round trip — October 7
 
-FIRE Review Evidence still contains the synthetic fixed prompt. Do not mistake that
-prototype for live task input. The local preview for the original Siri/Qwen finding
+FIRE Review Evidence now contains the exact fixed real-task bundle. Its run reached
+Show Content; the output dialog and local import remain unverified. Do not rerun
+it to capture the result, and do not treat this fixed prompt as generic task input. The local preview for the original Siri/Qwen finding
 is `.runtime/task-live-trial/apple-review-preview.md`; bundle is
 `.runtime/task-live-trial/apple-review-bundle.json` (revision 7, submission 1).
 Private preview/bundle files remain ignored; do not commit or share automatically.
 
-After explicit choice to send this bundle to Apple Cloud, replace the prototype
-prompt with the previewed bundle and request supported/unsupported claims and
-corrections. Save/copy the exact returned text. Capture locally through stdin:
+The user authorized this bundle and ongoing FIRE advisory reviews to Apple Cloud.
+The exact prompt is installed and one run has started. Save/copy the exact returned
+text once accessible; do not infer it from the earlier synthetic response. Capture locally through stdin:
 
 ```sh
 .venv/bin/python -m scripts.task_review_capture \

@@ -1,5 +1,19 @@
 # Five-priority completion status — October 6, 2026
 
+## Live Apple review handoff — October 7
+
+The user authorized the previewed FIRE task/finding/source bundle to Apple Cloud
+and future reviews within that same workflow. No repeated approval is needed for
+that scope; new destinations or materially different sensitive data need separate
+consideration. The exact revision-7, submission-1 bundle replaced the synthetic
+shortcut prompt and the run reached Show Content. The result dialog is outside the
+available automation surface; output text and local import remain unverified.
+Do not repeat the cloud call or invent an assessment. User dismissal of the result
+can allow retained output inspection. Task status has not been changed by this run.
+Hosted CI for code commit 6c0d8fd passed all eight checks. This establishes check
+results, not investigation quality or an automatically invoked supervisor.
+
+
 ## Exact-bundle advisory capture — October 7
 
 Local capture helper validates exported bundle against current revision/submission/
