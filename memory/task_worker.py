@@ -11,7 +11,8 @@ from memory.task_registry import TaskRegistry
 async def run_worker(registry: TaskRegistry, project: str, task_id: str, revision: int,
                      worker: str, path: str, generate: Callable[[dict], Awaitable[dict]],
                      *, enabled: bool = False, start_line: int = 1, end_line: int = 80,
-                     timeout_seconds: int = 30, additional_sources: list[dict] | None = None) -> dict:
+                     timeout_seconds: int = 30, additional_sources: list[dict] | None = None,
+                     recovery_reason: str | None = None) -> dict:
     """Claim once, read up to three bounded ranges, generate once, submit for review.
 
     The injected generator receives no claim token, state path or tools. It must
@@ -34,7 +35,11 @@ async def run_worker(registry: TaskRegistry, project: str, task_id: str, revisio
             if source in ranges:
                 raise ValueError('Duplicate source range')
             ranges.append(source)
-    task = registry.claim(project, task_id, revision, worker, lease_seconds=timeout_seconds + 30)
+    if recovery_reason is None:
+        task = registry.claim(project, task_id, revision, worker, lease_seconds=timeout_seconds + 30)
+    else:
+        task = registry.reclaim(project, task_id, revision, worker, recovery_reason,
+                                lease_seconds=timeout_seconds + 30)
     token = task['claim']['token']
     dispatch = TaskDispatcher(registry)
     evidence_bundle = [dispatch.read_source(project, task_id, task['revision'], token,

@@ -161,7 +161,7 @@ class TaskRegistry:
                 raise ValueError('Task attempt limit reached')
             task.setdefault('claim_history', []).append(dict(
                 worker=claim['worker'], expires_at=claim['expires_at'],
-                replaced_at=now, reason=reason))
+                replaced_at=now, reason=reason, checkpoint=task.get('checkpoint')))
             task['attempts'] += 1
             task['claim'] = dict(token=uuid.uuid4().hex, worker=worker,
                                  expires_at=now + lease_seconds)

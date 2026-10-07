@@ -23,6 +23,8 @@ def main() -> int:
     parser.add_argument('--max-tokens', type=int, default=1024)
     parser.add_argument('--additional-source', action='append', default=[],
                         help='JSON object with path/start_line/end_line (at most two)')
+    parser.add_argument('--recover-expired', metavar='REASON',
+                        help='Explicitly replace an expired claim; one attempt, no retry loop')
     parser.add_argument('--execute', action='store_true')
     options = parser.parse_args()
     if not options.execute:
@@ -35,7 +37,8 @@ def main() -> int:
         result = asyncio.run(run_worker(
             TaskRegistry(options.state), options.project, options.task_id,
             options.revision, 'local-provider', options.path, provider, enabled=True,
-            start_line=options.start_line, end_line=options.end_line, additional_sources=additional))
+            start_line=options.start_line, end_line=options.end_line, additional_sources=additional,
+            recovery_reason=options.recover_expired))
         print(json.dumps(result, allow_nan=False))
         return 0
     except Exception as error:

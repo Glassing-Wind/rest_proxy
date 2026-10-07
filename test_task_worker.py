@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from memory.task_registry import TaskRegistry
 from memory.task_worker import run_worker
@@ -28,6 +29,30 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def run_adapter(self, generate=None, **kwargs):
         return await run_worker(self.registry, 'fixture', self.task['id'], 1, 'fixture-worker',
                                 'fixture.py', generate or self.generate, end_line=1, **kwargs)
+
+    async def test_expired_recovery_preserves_old_checkpoint_and_rereads_source(self):
+        with patch('memory.task_registry.time.time', return_value=100):
+            claimed = self.registry.claim('fixture', self.task['id'], 1, 'old', lease_seconds=1)
+            saved = self.registry.checkpoint('fixture', self.task['id'], claimed['revision'],
+                                             claimed['claim']['token'], {'partial': 'old evidence'})
+        (Path(self.temp.name) / 'fixture.py').write_text('return 2\n')
+        with patch('memory.task_registry.time.time', return_value=102):
+            result = await run_worker(self.registry, 'fixture', self.task['id'], saved['revision'],
+                'new', 'fixture.py', self.generate, enabled=True, end_line=1,
+                recovery_reason='Expired interrupted fixture')
+        reopened = self.registry.get('fixture', self.task['id'])
+        self.assertEqual(reopened['claim_history'][0]['checkpoint'], {'partial': 'old evidence'})
+        self.assertIn('return 2', result['finding']['retained_evidence'][0]['source'])
+        self.assertEqual(reopened['attempts'], 2)
+        self.assertEqual(self.calls, 1)
+
+    async def test_active_recovery_rejects_without_inference(self):
+        claimed = self.registry.claim('fixture', self.task['id'], 1, 'old')
+        with self.assertRaises(ValueError):
+            await run_worker(self.registry, 'fixture', self.task['id'], claimed['revision'],
+                'new', 'fixture.py', self.generate, enabled=True, recovery_reason='Still active')
+        self.assertEqual(self.calls, 0)
+        self.assertEqual(self.registry.get('fixture', self.task['id'])['revision'], claimed['revision'])
 
     async def test_disabled_makes_no_claim_or_call(self):
         with self.assertRaises(ValueError):

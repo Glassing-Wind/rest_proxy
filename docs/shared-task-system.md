@@ -1,5 +1,22 @@
 # Shared task system — direction and first acceptance milestone
 
+## Explicit expired-claim worker recovery — October 7
+
+One-shot dispatch accepts --recover-expired REASON alongside --execute. Recovery
+uses revision-checked registry reclaim, rejects active/cancelled claims and retains
+the five-attempt cap. Old checkpoint is archived with claim history before fresh
+source is read and a new checkpoint created. Earlier submissions/reviews remain.
+There is no polling or automatic retry; a failed call leaves the new claim for
+explicit handling. Cancel does not stop an already running external generation.
+
+Eleven worker, twelve registry and one CLI checks pass (24), plus focused Ruff.
+New fixtures verify expired recovery with changed source and historical checkpoint,
+and active-lease rejection without inference or mutation. Live Siri task was not
+reclaimed or retried. Next use an explicitly reviewed recovery command with smaller
+source ranges, then preserve outcome; provider timeout is not proof generation stopped.
+[Dated evidence](../benchmarks/reports/2026-10-07/expired-worker-recovery.md).
+
+
 ## Revised local advisory trials — October 7
 
 Both v2 synthetic trials completed, preserving raw outputs and provider-reported usage.
