@@ -216,3 +216,11 @@ cached macOS libraries against their release bundle and collects nine notices at
 declared source revisions. A separate incomplete grammar SBOM passes schema checks.
 Other 361 bundle files, reproducible binary source builds and native closure remain
 open; this does not establish a complete legal or platform acceptance.
+
+## Native CI job recovery — October 7
+
+[Recovered native CI job](../benchmarks/reports/2026-10-07/native-ci-patch-recovery.md)
+adds hosted native lifecycle tests to the local workflow. Thirty-one local tests
+pass with pinned engines; hosted Ubuntu acceptance remains open. Reconstructed
+from another chat's recorded workflow, not its original patch file. No publishing,
+retargeting or merge occurred. Priority 5 release gates remain open.
