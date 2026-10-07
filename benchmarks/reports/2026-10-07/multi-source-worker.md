@@ -24,3 +24,21 @@ Prior real Siri task remains queued revision 5 awaiting correction; it was not
 retried in this milestone. Next choose a bounded three-file evidence set for that
 live correction and review conclusions explicitly. Automatic supervisor adapter,
 request preview, authenticated task interface and background lifecycle remain open.
+
+## Correction feedback and live timeout — October 7
+
+Workers now include the latest request_correction review reason in the same bounded
+prompt. New fixture confirms feedback reaches the generator and two submissions
+survive retry. Nine worker, twelve provider, nine dispatcher and one CLI tests pass
+(31 focused checks), focused lint/diff pass.
+
+One explicitly authorized three-source attempt on Siri task
+1214c5b2e644470197b691e7e8e849aa hit the adapter's 20-second ReadTimeout. Registry
+reopen confirms claimed revision 7, attempt 2, three checkpoint sources, original
+submission and prior review retained. No corrected finding/usage counters, automatic
+retry or model lifecycle change. [Evidence](siri-correction-timeout.json).
+Timeout does not prove generation stopped server-side; do not overlap retries.
+Next add bounded explicit request-timeout configuration and safe expired-claim
+resume dispatch, then decide one controlled retry. Automatic supervisor and
+background scheduling remain open; the original task is not complete.
+

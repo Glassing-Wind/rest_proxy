@@ -49,6 +49,8 @@ async def run_worker(registry: TaskRegistry, project: str, task_id: str, revisio
                      'No actions or tools are available.')
     if len(evidence_bundle) > 1:
         prompt['evidence_bundle'] = [{key: item[key] for key in fields} for item in evidence_bundle]
+    if task.get('reviews') and task['reviews'][-1]['decision'] == 'request_correction':
+        prompt['review_feedback'] = task['reviews'][-1]['reason']
     if len(encoded(prompt).encode()) > 8192:
         raise ValueError('Worker input exceeds 8 KiB; use a smaller source range')
     task = registry.checkpoint(project, task_id, task['revision'], token,

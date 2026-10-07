@@ -62,6 +62,19 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved['submissions'][0]['finding'], result['finding'])
         self.assertEqual(len(saved['checkpoint']['evidence_bundle']), 2)
 
+    async def test_retry_receives_latest_correction_feedback(self):
+        result = await self.run_adapter(enabled=True)
+        reviewed = self.registry.review('fixture', self.task['id'], result['revision'],
+            'reviewer', 'request_correction', 'Explain the evidence limitations')
+        async def generate(prompt):
+            self.assertEqual(prompt['review_feedback'], 'Explain the evidence limitations')
+            return await self.generate(prompt)
+        retried = await run_worker(self.registry, 'fixture', self.task['id'],
+            reviewed['revision'], 'fixture-worker', 'fixture.py', generate,
+            enabled=True, end_line=1)
+        self.assertEqual(retried['status'], 'review_pending')
+        self.assertEqual(len(self.registry.get('fixture', self.task['id'])['submissions']), 2)
+
     async def test_multi_source_missing_citation_rejected(self):
         (Path(self.temp.name) / 'other.py').write_text('return 2\n')
         with self.assertRaises(ValueError):
