@@ -187,6 +187,27 @@ class TaskRegistry:
             task['claim'] = None
         return self._update(project, task_id, revision, edit)
 
+    def record_assessment(self, project: str, task_id: str, revision: int,
+                          submission: int, reviewer: str, assessment: str) -> dict:
+        """Retain an untrusted advisory assessment; never change status or approve work."""
+        self.identifier(reviewer)
+        if not isinstance(assessment, str) or not assessment.strip() or len(assessment.encode()) > 8192:
+            raise ValueError('Require nonempty assessment of at most 8 KiB')
+        if type(submission) is not int or submission < 1:
+            raise ValueError('Require positive submission number')
+
+        def edit(task):
+            if submission > len(task.get('submissions', [])):
+                raise ValueError('Submission not found')
+            assessments = task.setdefault('assessments', [])
+            if len(assessments) >= 10:
+                raise ValueError('Assessment retention limit reached')
+            assessments.append(dict(submission=submission, reviewer=reviewer,
+                                    text=assessment, at=time.time(),
+                                    trust='unverified advisory; caller-supplied identity',
+                                    observed_revision=revision))
+        return self._update(project, task_id, revision, edit)
+
     def review(self, project: str, task_id: str, revision: int,
                reviewer: str, decision: str, reason: str) -> dict:
         """Record caller-supplied review identity; this is not authentication."""
