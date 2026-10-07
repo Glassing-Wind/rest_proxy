@@ -1,5 +1,19 @@
 # Shared task system — direction and first acceptance milestone
 
+## Siri intake accepted — October 7
+
+User screenshots establish Siri invocation, request dictation and queued confirmation.
+Reopening task 852f3af340d8442f8b04930bcfccc75d confirms queued revision 1, read_source
+only, zero attempts and no claim; saved goal matches the visible transcript.
+[Receipt](../benchmarks/reports/2026-10-07/siri-task-intake.json).
+GUI and Siri local intake are now evidenced. Dictation misrecognized Qwen as Quin
+and Codex as Kodak Kodak (also changed the opening request). Accurate intent capture
+is not established. Next add request preview/confirmation with edit or cancellation
+before dispatch; retain original transcript separately from user-confirmed corrections.
+No automatic agent invocation occurred. Authenticated/scoped dispatch and semantic
+review remain open; do not silently rewrite voice requests from guessed intent.
+
+
 ## Shortcut GUI intake accepted — October 7
 
 User screenshot confirms queued task 37f060b4b4d542798757f48cbf72f7da. Reopening
