@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import unittest
 
-from scripts.task_review_calibration import calibration_prompt
+from scripts.task_review_calibration import calibration_prompt, citation_excerpt
 
 
 class CalibrationTests(unittest.TestCase):
@@ -21,6 +21,23 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(prompt, calibration_prompt(self.fixture, 'full'))
         self.fixture['expected'] = before['expected']
         self.assertEqual(self.fixture, before)
+
+    def test_wrong_but_existing_line_is_not_semantically_approved(self):
+        prompt = calibration_prompt(self.fixture, 'full')
+        excerpt = citation_excerpt(prompt, 'fixture/intake.py', 4, 4)
+        self.assertIn('len(goal)', excerpt['source'])
+        self.assertNotIn('registry.create', excerpt['source'])
+        self.assertIn('semantic support requires review', excerpt['validation'])
+        self.assertIn('registry.create', citation_excerpt(prompt, 'fixture/intake.py', 5, 5)['source'])
+
+    def test_missing_and_invalid_citations_rejected(self):
+        prompt = calibration_prompt(self.fixture, 'missing-definition')
+        for path, start, end in [('fixture/registry.py', 1, 1),
+                                  ('fixture/intake.py', 5, 6),
+                                  ('fixture/intake.py', True, 2),
+                                  ('fixture/intake.py', 1, 101)]:
+            with self.assertRaises(ValueError):
+                citation_excerpt(prompt, path, start, end)
 
     def test_missing_definition_and_budget(self):
         prompt = calibration_prompt(self.fixture, 'missing-definition')

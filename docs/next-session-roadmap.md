@@ -1,5 +1,21 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Calibration source-line inspection — October 7
+
+A bounded fixture citation resolver now returns the exact numbered source behind a
+citation and rejects absent paths/lines, ambiguous sources and oversized ranges.
+An existing wrong line still resolves: output explicitly labels range existence as
+insufficient for semantic support. Tests reproduce line 4 versus line 5 from the
+observed Qwen response. No automatic approval or semantic scorer was added.
+
+Version-2 synthetic fixture separates passing read_source from guaranteeing its
+execution, and raw-byte validation from reading. Historical v1 trials remain intact;
+v2 has not been run against a model. Four calibration and three export tests plus
+focused lint pass. All eight CI checks for preceding commit 7ebc8e4 passed.
+Next run v2 variants and inspect each cited excerpt alongside its judgment.
+[Dated evidence](../benchmarks/reports/2026-10-07/calibration-source-lines.md).
+
+
 ## Local advisory trials — October 7
 
 Both synthetic variants completed against already available Qwen via numeric-loopback

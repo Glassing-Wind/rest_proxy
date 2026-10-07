@@ -21,6 +21,28 @@ def calibration_prompt(fixture: dict, variant: str) -> dict:
     return prompt
 
 
+def citation_excerpt(prompt: dict, path: str, start: int, end: int) -> dict:
+    """Resolve numbered fixture lines for human review; never judge claim support."""
+    if type(start) is not int or type(end) is not int or not 1 <= start <= end:
+        raise ValueError('Invalid citation range')
+    if end - start >= 100:
+        raise ValueError('Citation exceeds 100 lines')
+    matches = [item for item in prompt['source'] if item['path'] == path]
+    if len(matches) != 1:
+        raise ValueError('Citation path absent or ambiguous')
+    lines = {}
+    for line in matches[0]['source'].splitlines():
+        number, separator, text = line.partition(': ')
+        if not separator or not number.isdigit() or int(number) in lines:
+            raise ValueError('Invalid numbered source')
+        lines[int(number)] = text
+    if any(number not in lines for number in range(start, end + 1)):
+        raise ValueError('Citation line missing')
+    return dict(path=path, start_line=start, end_line=end,
+                source='\n'.join(f'{number}: {lines[number]}' for number in range(start, end + 1)),
+                validation='range exists only; semantic support requires review')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fixture', required=True)
