@@ -25,8 +25,10 @@ fixtures (five provider tests). Sanitized generation provenance now persists sep
 invalid counters plus HTTP timeout fixtures pass (41 focused tests total).
 An opt-in synthetic trial against already-loaded Qwen Splash returned HTTP 400;
 checkpoint retained, no successful inference/usage. Bounded diagnostics now confirm
-json_object is rejected: this endpoint requires json_schema or text. Next implement
-explicit bounded JSON schema and fixture-test it before one synthetic retry; no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
+json_object is rejected: this endpoint requires json_schema or text. Explicit
+JSON schema now passes HTTP fixture checks; one live retry failed local validation
+(ValueError) with checkpoint retained. Exact stage was not recorded. Next add bounded
+validation-stage diagnostics before further trial; no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
 
 
 ## Structured finding contract — October 7 acceptance

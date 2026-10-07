@@ -93,3 +93,21 @@ Next implement bounded explicit json_schema output with HTTP fixture acceptance,
 then retry the synthetic task once. Keep model/citation constraints; do not relax
 to arbitrary text or automatically retry failure. PR revision 067a06e's eight hosted
 checks passed before this update; current revision needs its own CI. No merge.
+
+## Explicit JSON-schema request — subsequent October 7 acceptance
+
+Replaced rejected json_object mode with strict json_schema task_finding, following
+[official structured-output documentation](https://lmstudio.ai/docs/developer/openai-compat/structured-output).
+Schema bounds answer/limitations, forbids extra object fields and requires one cited
+path/range/hash. Local dispatch continues independent source/schema checks; provider
+format promises do not replace validation. Existing HTTP fixture now asserts exact
+response format, no extra properties and one citation. Nine provider tests and lint
+pass; full worker/dispatch/registry/handoff/FIRE regression rerun below.
+
+One planned retry against already-loaded Qwen ran for 6.169 seconds and failed local
+validation with ValueError rather than HTTPStatusError. The receipt does not capture
+the precise failed validation stage; do not infer truncation, model identity failure
+or malformed JSON from that alone. Checkpoint survived; no successful submission or
+usage receipt. [Attempt receipt](task-json-schema-attempt.json). No further retry or
+model/service lifecycle change. Next retain bounded validation-stage diagnostics to
+identify this new failure before another trial; live acceptance remains incomplete.

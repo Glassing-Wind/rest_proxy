@@ -20,6 +20,10 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         def handler(request):
             body = json.loads(request.content)
             self.assertNotIn('tools', body)
+            self.assertEqual(body['response_format']['type'], 'json_schema')
+            schema = body['response_format']['json_schema']['schema']
+            self.assertFalse(schema['additionalProperties'])
+            self.assertEqual(schema['properties']['citations']['maxItems'], 1)
             self.assertFalse(body['stream'])
             prompt = json.loads(body['messages'][1]['content'])
             evidence = prompt['evidence']
