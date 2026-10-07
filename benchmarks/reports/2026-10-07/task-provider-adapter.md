@@ -51,3 +51,24 @@ new revision requires its own CI. Timeout leaves no successful adapter receipt.
 No real provider contacted, model loaded or lifecycle changed. Next run an opt-in
 trial only against an explicitly identified already-running local model, preserving
 operator control; real model identity/JSON compliance and costs remain unverified.
+
+## Already-running provider attempt — October 7
+
+Read-only /api/v1/models confirmed qwen3.6-35b-a3b-splash already loaded at
+127.0.0.1:1234. No load/unload/start/stop request was made. A disposable synthetic
+two-line function task attempted the opt-in adapter. Chat endpoint returned HTTP
+400 before successful generation; active claim/checkpoint remained and no submission
+or usage receipt was recorded. [Initial receipt](task-live-provider-attempt.json).
+
+A second diagnostic attempt also returned 400; trying to inspect its streaming
+error text raised ResponseNotRead because the response was not consumed before
+raise_for_status. That attempt produced no replacement receipt. No further retries.
+Exact server rejection reason is not established. JSON-mode compatibility is a
+candidate, not a verified cause. Synthetic source only; no rental or customer code.
+Elapsed time in the initial failure receipt is not successful inference latency.
+
+PR #4 revision d7633e2 has all eight hosted checks passing. Live-model acceptance
+remains blocked on the 400. Next implement bounded error-body consumption with a
+fixture proving safe diagnostics, then verify supported structured response format
+before another live trial. Do not load a different model or silently relax the
+validated finding contract. No merge or external publication performed.

@@ -10,8 +10,10 @@ findings/review_pending. Three HTTP fixture tests pass; no real model contacted.
 Exact returned-model identity and malformed/tool-call responses now have rejection
 fixtures (five provider tests). Sanitized generation provenance now persists separately from findings, and missing/
 invalid counters plus HTTP timeout fixtures pass (41 focused tests total).
-Next verify an explicitly identified already-running local model in an opt-in trial;
-no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
+An opt-in synthetic trial against already-loaded Qwen Splash returned HTTP 400;
+checkpoint retained, no successful inference/usage. Exact rejection reason remains
+unestablished. Next add bounded HTTP error diagnostics and verify structured-output
+compatibility before retry; no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
 
 
 ## Structured finding contract — October 7 acceptance
