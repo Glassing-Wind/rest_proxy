@@ -15,6 +15,15 @@ the whole priority or enterprise release is complete.
 
 
 
+## Optional local-provider fixture — October 7
+
+[Loopback adapter receipt](../benchmarks/reports/2026-10-07/task-provider-adapter.md)
+now verifies a constrained one-request chat adapter through the worker to retained
+findings/review_pending. Three HTTP fixture tests pass; no real model contacted.
+Next validate malformed/tool-call/timeout/provider identity and usage handling before
+an opt-in real-model trial. Authentication and cross-chat coordination remain open.
+
+
 ## Structured finding contract — October 7 acceptance
 
 [Source-bound findings](../benchmarks/reports/2026-10-07/task-finding-contract.md)
