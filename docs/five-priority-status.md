@@ -14,6 +14,17 @@ the whole priority or enterprise release is complete.
 | 5. Release and outcome validation | Runtime/parser validation and pilots complete; release/outcome gates incomplete. | Project Python 3.14 cutover/rollback, published modified ts-pack pin, native fork-wheel validation, isolated installs and local CI receipts; wheel/source-archive worker inclusion, core/embedded/full dependency separation and installed native fixture/daemon REST acceptance; schema-valid incomplete installed-package SBOM, shipped notice collection, source-bound supplemental namespace notices, ten observed grammar asset/notice bindings and cold graph/vector/FIRE restore fixture. Prior paired pilot and source-based grading exist; they establish no MCP superiority. | Fresh exact-pin source-build and supported-platform install matrix, exact artifact/dependency/grammar/model notices and SBOM, operational backup retention/deletion reconciliation and restore validation, repeated controlled coding investigations with actual usage/latency/resource/fallback measurements. Qwen worker trial is one functional case, not a paired savings evaluation. |
 
 
+
+## Structured finding contract — October 7 acceptance
+
+[Source-bound findings](../benchmarks/reports/2026-10-07/task-finding-contract.md)
+now validate bounded schema/citations against guarded source reads and retain numbered
+evidence through submission. Twenty-nine focused tests pass. Legacy raw submit stays
+unvalidated; source identity checks do not establish semantic correctness or later
+freshness. Next exercise structured submission in the subprocess handoff before
+model-worker integration. Authentication and cross-chat coordination remain open.
+
+
 ## Local registry foundation — October 6 acceptance
 
 [Registry receipt](../benchmarks/reports/2026-10-06/shared-task-registry.md): scoped

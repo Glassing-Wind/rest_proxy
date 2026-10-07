@@ -28,7 +28,9 @@ def main() -> int:
         registry = TaskRegistry(options.state)
         operations = {name: getattr(registry, name) for name in
                       ('create', 'get', 'claim', 'checkpoint', 'cancel', 'reclaim', 'submit', 'review')}
-        operations['read_source'] = TaskDispatcher(registry).read_source
+        dispatcher = TaskDispatcher(registry)
+        operations['read_source'] = dispatcher.read_source
+        operations['submit_finding'] = dispatcher.submit_finding
         operation = request['operation']
         if not isinstance(operation, str) or operation not in operations:
             raise ValueError('Unsupported operation')

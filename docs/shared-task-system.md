@@ -5,6 +5,17 @@ Keep rental implementation there and reusable coordination here in rest_proxy.
 This is an implementation direction, not a deployed team or permission system.
 
 
+
+## Structured finding contract — October 7 acceptance
+
+[Source-bound findings](../benchmarks/reports/2026-10-07/task-finding-contract.md)
+now validate bounded schema/citations against guarded source reads and retain numbered
+evidence through submission. Twenty-nine focused tests pass. Legacy raw submit stays
+unvalidated; source identity checks do not establish semantic correctness or later
+freshness. Next exercise structured submission in the subprocess handoff before
+model-worker integration. Authentication and cross-chat coordination remain open.
+
+
 ## Local registry foundation — October 6 acceptance
 
 [Registry receipt](../benchmarks/reports/2026-10-06/shared-task-registry.md): scoped

@@ -77,6 +77,41 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertNotIn(self.task['claim']['token'], result.stdout)
 
+    def finding(self):
+        evidence = self.read(start_line=1, end_line=2)
+        return dict(schema_version=1, answer='Two fixture lines', limits=['Synthetic'],
+                    citations=[{key: evidence[key] for key in ('path', 'start_line', 'end_line', 'sha256')}])
+
+    def submit(self, finding):
+        return self.dispatch.submit_finding('fixture', self.task['id'], 2,
+                                            self.task['claim']['token'], finding)
+
+    def test_structured_finding_retains_source_after_removal(self):
+        task = self.submit(self.finding())
+        self.source.unlink()
+        saved = TaskRegistry(str(self.root / 'state')).get('fixture', task['id'])
+        self.assertEqual(saved['status'], 'review_pending')
+        self.assertEqual(saved['submissions'][0]['finding']['retained_evidence'][0]['source'],
+                         '1: first\n2: second')
+
+    def test_changed_citation_denied_without_transition(self):
+        finding = self.finding()
+        self.source.write_text('changed\n')
+        with self.assertRaises(ValueError):
+            self.submit(finding)
+        self.assertEqual(self.registry.get('fixture', self.task['id'])['status'], 'claimed')
+
+    def test_schema_duplicate_and_missing_range_denied(self):
+        for change in [lambda f: f.update(schema_version=True),
+                       lambda f: f.update(extra='unknown'),
+                       lambda f: f['citations'].append(f['citations'][0]),
+                       lambda f: f['citations'][0].update(end_line=10)]:
+            finding = self.finding()
+            change(finding)
+            with self.assertRaises(ValueError):
+                self.submit(finding)
+        self.assertEqual(self.registry.get('fixture', self.task['id'])['revision'], 2)
+
 
 if __name__ == '__main__':
     unittest.main()

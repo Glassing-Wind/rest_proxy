@@ -79,3 +79,48 @@ class TaskDispatcher:
                     end_line=start_line + len(selected) - 1, total_lines=len(lines),
                     sha256=hashlib.sha256(data).hexdigest(), source=text,
                     observed_at=time.time(), historical=False)
+
+    def submit_finding(self, project: str, task_id: str, revision: int,
+                       claim_token: str, finding: dict) -> dict:
+        """Validate cited current bytes and retain bounded evidence in submission.
+
+        This verifies citation identity, not whether the answer follows from it.
+        Source files can change after validation; future review must recheck them.
+        """
+        if not isinstance(finding, dict) or set(finding) != {
+                'schema_version', 'answer', 'citations', 'limits'}:
+            raise ValueError('Require versioned answer, citations and limits')
+        if type(finding['schema_version']) is not int or finding['schema_version'] != 1:
+            raise ValueError('Unsupported finding schema')
+        answer = finding['answer']
+        limits = finding['limits']
+        citations = finding['citations']
+        if not isinstance(answer, str) or not answer.strip() or len(answer) > 4096:
+            raise ValueError('Require bounded answer')
+        if (not isinstance(limits, list) or len(limits) > 20 or
+                any(not isinstance(value, str) or not value.strip() or len(value) > 1024 for value in limits)):
+            raise ValueError('Require bounded limitation strings')
+        if not isinstance(citations, list) or not 1 <= len(citations) <= 3:
+            raise ValueError('Require one to three source citations')
+        retained = []
+        identities = set()
+        for citation in citations:
+            if not isinstance(citation, dict) or set(citation) != {
+                    'path', 'start_line', 'end_line', 'sha256'}:
+                raise ValueError('Invalid citation fields')
+            digest = citation['sha256']
+            if (not isinstance(digest, str) or len(digest) != 64 or
+                    any(char not in '0123456789abcdef' for char in digest)):
+                raise ValueError('Require SHA-256 source identity')
+            evidence = self.read_source(project, task_id, revision, claim_token,
+                                        citation['path'], citation['start_line'], citation['end_line'])
+            if evidence['sha256'] != digest or evidence['end_line'] != citation['end_line']:
+                raise ValueError('Citation source changed or range unavailable')
+            identity = (evidence['path'], evidence['start_line'], evidence['end_line'])
+            if identity in identities:
+                raise ValueError('Duplicate citation')
+            identities.add(identity)
+            retained.append(evidence)
+        return self.registry.submit(project, task_id, revision, claim_token, {
+            **finding, 'retained_evidence': retained,
+            'validation': 'source identity/range only; semantic review pending'})
