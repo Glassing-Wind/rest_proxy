@@ -1,5 +1,20 @@
 # Shared task system — direction and first acceptance milestone
 
+## Claim-level advisory prompt — October 7
+
+Review exports now explicitly request supported, unsupported/unresolved claims and
+corrections with source path/line evidence. Missing definitions must remain unresolved;
+byte limits, decoded character limits and repository-wide absence are distinguished.
+Seven export/capture/assessment tests and focused Ruff pass. These are contract checks,
+not measured model accuracy. [Controlled fixture](../benchmarks/reports/2026-10-07/advisory-review-calibration-fixture.json)
+contains four judgments and a missing-definition variant; no model trial run yet.
+Next run both variants and manually grade omissions/false positives before considering
+supervisor automation. Existing exported bundles use the older prompt and now reject
+capture against freshly generated exports; prepare a new export before any new review.
+The fixed installed Shortcut has not been updated or rerun. Live task remains claimed
+at revision 8; no model lifecycle, retry, approval or inference-provider changes.
+
+
 ## Real Apple advisory response captured — October 7
 
 The user supplied the Cloud result screenshot and confirmed Done. Its visible text

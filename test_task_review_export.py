@@ -18,6 +18,14 @@ class ReviewExportTests(unittest.TestCase):
         self.assertIn('historical', bundle['instructions'])
         self.assertEqual(task['revision'], 4)
 
+    def test_review_requests_claims_and_missing_definition_uncertainty(self):
+        bundle = review_bundle(self.task(), 1)
+        instructions = bundle['instructions']
+        for requirement in ['Supported claims', 'Unsupported or unresolved claims',
+                            'Suggested corrections', 'path and line range',
+                            'bytes read', 'mark unresolved', 'Never approve']:
+            self.assertIn(requirement, instructions)
+
     def test_invalid_and_oversized_export_rejected(self):
         for submission in [True, 0, 2]:
             with self.assertRaises(ValueError):
