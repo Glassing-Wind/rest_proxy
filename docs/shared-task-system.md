@@ -12,9 +12,10 @@ SQLite create/read/claim/checkpoint/reopen and revision/expiry guards now pass t
 offline tests, including cancellation, expired read-only reclaim and retained
 finding/correction review/completion transitions. This is a trusted local library, not authenticated task endpoints or
 worker execution. Original findings and review decisions survive corrections and completion.
-Distinct reviewer IDs are required but are not authenticated identities. Next add
-a local task interface and scoped read-only tool dispatch;
-MCP/REST adapters and tool-dispatch permissions remain open. No persistent agent
+Distinct reviewer IDs are required but are not authenticated identities. A local JSON task interface and guarded bounded read-source dispatch now pass
+six additional tests (24 focused tests including FIRE regression). Next exercise
+a deterministic worker through claim/read/submit/review. Authenticated MCP/REST
+adapters, model workers and broader permissions remain open. No persistent agent
 team or cross-chat synchronization is running.
 
 
