@@ -1,5 +1,22 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Live expired-claim recovery outcome — October 7
+
+One explicitly scoped recovery of Siri task 1214c5b2e644470197b691e7e8e849aa
+replaced expired revision-8 claim and reread three smaller source ranges. Provider
+ReadTimeout at the configured 20-second boundary returned no finding/usage receipt.
+Reopen confirms revision 10, claimed status, attempt 3; old three-source checkpoint
+archived, fresh checkpoint retained, original submission, review and assessment intact.
+[Dated sanitized evidence](../benchmarks/reports/2026-10-07/siri-expired-recovery-timeout.json).
+No immediate retry or model lifecycle action. Timeout does not attest server stop.
+
+24 worker/registry/CLI regressions pass; all eight hosted checks for 10564e9 passed.
+Next add durable bounded failure metadata so timeout/rejection is visible in task
+history without reading private CLI files. Repeated provider timeouts block successful
+live correction; continue independent failure-reporting work before further calls.
+No automatic approval, completion or quality/token-savings claims.
+
+
 ## Explicit expired-claim worker recovery — October 7
 
 One-shot dispatch accepts --recover-expired REASON alongside --execute. Recovery
