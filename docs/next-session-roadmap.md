@@ -1,5 +1,23 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Real Apple advisory response captured — October 7
+
+The user supplied the Cloud result screenshot and confirmed Done. Its visible text
+was transcribed and imported against the exact revision-7/submission-1 export.
+Reopen verifies advisory retention at revision 8; status remains claimed, with the
+original submission and correction review preserved. Four capture/assessment tests
+pass. [Dated evidence](../benchmarks/reports/2026-10-07/apple-live-review.json).
+
+This review failed the intended semantic check: it summarized the finding and
+repeated `rest_proxy` as a task type. TaskRegistry.create defines it as project scope.
+It also conflated a 4096-character goal limit with stdin reading (16384-byte cap).
+Do not treat the result as approval or a calibrated supervisor. Model identity and
+usage remain unverified. Next: explicit review formatting with caller-supplied
+source contracts, then measure error detection on controlled fixtures before any
+automatic task acceptance. The Shortcut still has a fixed historical bundle;
+generic input/capture wiring and expired-claim recovery remain open.
+
+
 ## Live Apple review handoff — October 7
 
 The user authorized the previewed FIRE task/finding/source bundle to Apple Cloud

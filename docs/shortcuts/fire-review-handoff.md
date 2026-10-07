@@ -1,3 +1,12 @@
+# Real response captured — October 7
+
+User screenshot supplied the exact visible Cloud response; manually transcribed
+and captured against revision 7/submission 1. Reopen verified revision 8, status
+claimed, original submission/review preserved. The response repeated the incorrect
+"task type" claim and did not provide the requested claim-by-claim review.
+See [evidence](../../benchmarks/reports/2026-10-07/apple-live-review.json).
+The bundle below is now stale and must not be imported again or rerun for a new task.
+
 # Review bundle round trip — October 7
 
 FIRE Review Evidence now contains the exact fixed real-task bundle. Its run reached
