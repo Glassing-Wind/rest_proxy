@@ -14,8 +14,9 @@ An opt-in synthetic trial against already-loaded Qwen Splash returned HTTP 400;
 checkpoint retained, no successful inference/usage. Bounded diagnostics now confirm
 json_object is rejected: this endpoint requires json_schema or text. Explicit
 JSON schema now passes HTTP fixture checks; one live retry failed local validation
-(ValueError) with checkpoint retained. Exact stage was not recorded. Next add bounded
-validation-stage diagnostics before further trial; no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
+(finish_reason stage) with checkpoint retained. Stable stage diagnostics now pass
+fixtures; actual non-stop reason not recorded. Next retain allowlisted completion
+metadata and rejected-attempt usage before deciding bounded budget adjustments; no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
 
 
 ## Structured finding contract — October 7 acceptance

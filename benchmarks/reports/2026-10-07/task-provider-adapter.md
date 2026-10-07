@@ -111,3 +111,22 @@ or malformed JSON from that alone. Checkpoint survived; no successful submission
 usage receipt. [Attempt receipt](task-json-schema-attempt.json). No further retry or
 model/service lifecycle change. Next retain bounded validation-stage diagnostics to
 identify this new failure before another trial; live acceptance remains incomplete.
+
+## Stable validation-stage diagnostics — subsequent October 7 acceptance
+
+ProviderValidationError carries a static stage (response JSON/size, identity, choices,
+finish reason, message/tools, content or finding JSON/type) without raw content.
+One new fixture verifies invalid private JSON is not in exception text and failure
+has no successful usage receipt. Ten provider tests and lint pass. Existing HTTP
+error diagnostics remain separately bounded/untrusted.
+
+One synthetic trial against the already-loaded Qwen now identifies the failure as
+finish_reason: provider did not return the required stop completion. Actual reason
+value was not recorded; do not infer truncation or tool invocation from the stage.
+[Receipt](task-validation-stage.json). Checkpoint retained, no accepted finding or
+successful adapter usage receipt. No further retry and no lifecycle changes.
+
+PR revision 53b62cf's eight hosted checks passed before this change. Next record
+allowlisted completion metadata and rejected-attempt usage separately from success,
+then decide a bounded output-budget/reasoning adjustment from evidence. Never accept
+unfinished output merely because partial text parses as JSON. Real acceptance open.

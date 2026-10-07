@@ -6,7 +6,7 @@ import unittest
 
 import httpx
 
-from memory.task_provider import LocalTaskProvider, ProviderHTTPError
+from memory.task_provider import LocalTaskProvider, ProviderHTTPError, ProviderValidationError
 from memory.task_registry import TaskRegistry
 from memory.task_worker import run_worker
 
@@ -73,7 +73,7 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             payload = dict(model=model, choices=[dict(finish_reason='stop',
                            message={'content': '{}'})])
             provider = self.provider(lambda request: httpx.Response(200, json=payload))
-            with self.assertRaisesRegex(ValueError, 'identity'):
+            with self.assertRaisesRegex(ProviderValidationError, 'model_identity'):
                 await provider({})
             self.assertIsNone(provider.receipt)
 
@@ -125,6 +125,16 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             await provider({})
         self.assertEqual(json.loads(caught.exception.detail)['error'], 'fixture rejection')
         self.assertFalse(caught.exception.detail_truncated)
+
+    async def test_validation_stage_has_no_raw_content(self):
+        provider = self.provider(lambda request: httpx.Response(200, json={
+            'model': 'fixture-model', 'choices': [{'finish_reason': 'stop',
+            'message': {'content': 'private invalid json'}}]}))
+        with self.assertRaises(ProviderValidationError) as caught:
+            await provider({})
+        self.assertEqual(caught.exception.stage, 'finding_json')
+        self.assertNotIn('private', str(caught.exception))
+        self.assertIsNone(provider.receipt)
 
 
 if __name__ == '__main__':

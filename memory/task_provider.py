@@ -25,6 +25,14 @@ def finding_schema() -> dict:
                 required=['schema_version', 'answer', 'citations', 'limits'])
 
 
+class ProviderValidationError(ValueError):
+    """Stable failure stage without provider content or request data."""
+
+    def __init__(self, stage: str):
+        self.stage = stage
+        super().__init__('Local provider validation failed: ' + stage)
+
+
 class ProviderHTTPError(httpx.HTTPStatusError):
     """Generic failure text with bounded untrusted diagnostic data kept separate."""
 
@@ -84,27 +92,33 @@ class LocalTaskProvider:
                 async for chunk in response.aiter_bytes():
                     data.extend(chunk)
                     if len(data) > 65536:
-                        raise ValueError('Provider response exceeds 64 KiB')
-        payload = json.loads(data)
+                        raise ProviderValidationError('response_size')
+        try:
+            payload = json.loads(data)
+        except (ValueError, UnicodeDecodeError) as error:
+            raise ProviderValidationError('response_json') from error
         if not isinstance(payload, dict) or payload.get('model') != self.model:
-            raise ValueError('Provider model identity mismatch')
+            raise ProviderValidationError('model_identity')
         choices = payload.get('choices')
         if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
-            raise ValueError('Require exactly one chat choice')
+            raise ProviderValidationError('choices')
         choice = choices[0]
         if choice.get('finish_reason') != 'stop':
-            raise ValueError('Reject truncated or tool-call response')
+            raise ProviderValidationError('finish_reason')
         message = choice.get('message')
         if not isinstance(message, dict):
-            raise ValueError('Require chat message object')
+            raise ProviderValidationError('message')
         if message.get('tool_calls') or message.get('function_call'):
-            raise ValueError('Provider tools are disabled')
+            raise ProviderValidationError('tools')
         content = message.get('content')
         if not isinstance(content, str) or len(content.encode()) > 16384:
-            raise ValueError('Require bounded JSON content')
-        finding = json.loads(content)
+            raise ProviderValidationError('content_size_or_type')
+        try:
+            finding = json.loads(content)
+        except ValueError as error:
+            raise ProviderValidationError('finding_json') from error
         if not isinstance(finding, dict):
-            raise ValueError('Require finding object')
+            raise ProviderValidationError('finding_type')
         usage = payload.get('usage')
         observed = None
         if isinstance(usage, dict):
