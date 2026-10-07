@@ -13,8 +13,11 @@ offline tests, including cancellation, expired read-only reclaim and retained
 finding/correction review/completion transitions. This is a trusted local library, not authenticated task endpoints or
 worker execution. Original findings and review decisions survive corrections and completion.
 Distinct reviewer IDs are required but are not authenticated identities. A local JSON task interface and guarded bounded read-source dispatch now pass
-six additional tests (24 focused tests including FIRE regression). Next exercise
-a deterministic worker through claim/read/submit/review. Authenticated MCP/REST
+six additional tests (24 focused tests including FIRE regression). A deterministic subprocess handoff now passes both unchanged-source completion
+and changed-source correction cases (26 focused tests total). Each of eight
+operations reopens state in a separate process; two scripted roles are not independent
+reviewers. Next define a bounded structured finding/evidence contract before
+optional model workers. Authenticated MCP/REST
 adapters, model workers and broader permissions remain open. No persistent agent
 team or cross-chat synchronization is running.
 

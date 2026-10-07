@@ -88,3 +88,23 @@ Hidden-path exclusion is not comprehensive secret detection. Use expressly permi
 source workspaces. MCP/REST authentication, worker adapters, renewal, retention,
 structured finding schema and operational deployment remain open. Next exercise
 one deterministic worker through claim/read/submit/review before local-model use.
+
+## Deterministic subprocess handoff — subsequent October 6 acceptance
+
+`python -m scripts.check_task_handoff` exercises synthetic create → claim → bounded
+read → checkpoint → get after reopen → submit → review → get after reopen. Each
+operation runs in a separate local CLI process against a disposable private registry.
+Unchanged source completes; a modified source hash requests correction, returns
+the task to queued and retains the original submission. Two scripted fixture roles
+are not independent reviewers. This hash check belongs to the fixture reviewer;
+the generic registry does not automatically validate findings or current source.
+
+[Sanitized receipt](task-handoff.json) contains neither private paths nor claim tokens.
+Two new subprocess acceptance tests and the existing 24 focused tests pass (26 total).
+Ruff passes for the new files. Initial test expected nine operations but the actual
+sequence has eight; the expectation was corrected and the test rerun successfully.
+No model lifecycle, external services, rental data, cross-chat message or publication.
+
+Next define a bounded structured finding contract and bind it to retained evidence
+before adding an optional model-worker adapter. Authentication, renewal, retention,
+MCP/REST task routing and real independent outcome measurements remain open.
