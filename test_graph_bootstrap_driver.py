@@ -112,6 +112,52 @@ def _load_module(*, fail_verify: bool = False, tx=None):
 
 
 class GraphBootstrapDriverTests(unittest.TestCase):
+    def test_embedded_selects_ladybug_once_without_neo4j(self):
+        fake = _FakeDriver()
+        fake.initialize_schema = mock.AsyncMock()
+        constructor = mock.Mock(return_value=fake)
+        embedded = types.ModuleType('memory.embedded_ladybug')
+        embedded.LadybugGraphDriver = constructor
+        with mock.patch.dict('os.environ', {
+            'LM_PROXY_STORAGE_BACKEND': 'embedded', 'LM_PROXY_GRAPH_BACKEND': '',
+            'LM_PROXY_LADYBUG_PATH': '/tmp/disposable-test-ladybug',
+        }), mock.patch.dict(sys.modules, {'memory.embedded_ladybug': embedded}):
+            module, calls, _ = _load_module()
+            async def run():
+                await asyncio.gather(*(module.init_graph_db() for _ in range(3)))
+                self.assertIs(await module.require_driver(), fake)
+                await module.close_graph_db()
+            asyncio.run(run())
+        constructor.assert_called_once_with('/tmp/disposable-test-ladybug')
+        fake.initialize_schema.assert_awaited_once()
+        self.assertEqual(calls, [])
+        self.assertTrue(fake.closed)
+
+    def test_retired_kuzu_does_not_fall_back_to_neo4j(self):
+        with mock.patch.dict('os.environ', {
+            'LM_PROXY_STORAGE_BACKEND': '', 'LM_PROXY_GRAPH_BACKEND': 'kuzu',
+        }):
+            module, calls, _ = _load_module()
+            with self.assertRaisesRegex(RuntimeError, 'Kuzu backend is retired'):
+                asyncio.run(module.require_driver())
+        self.assertEqual(calls, [])
+        self.assertIsNone(module.get_driver())
+
+    def test_failed_ladybug_schema_closes_owner_without_neo4j(self):
+        fake = _FakeDriver()
+        fake.initialize_schema = mock.AsyncMock(side_effect=RuntimeError('bad schema'))
+        embedded = types.ModuleType('memory.embedded_ladybug')
+        embedded.LadybugGraphDriver = mock.Mock(return_value=fake)
+        with mock.patch.dict('os.environ', {
+            'LM_PROXY_STORAGE_BACKEND': 'embedded', 'LM_PROXY_GRAPH_BACKEND': '',
+        }), mock.patch.dict(sys.modules, {'memory.embedded_ladybug': embedded}):
+            module, calls, _ = _load_module()
+            with self.assertRaisesRegex(RuntimeError, 'bad schema'):
+                asyncio.run(module.require_driver())
+        self.assertEqual(calls, [])
+        self.assertTrue(fake.closed)
+        self.assertIsNone(module.get_driver())
+
     def test_init_graph_db_passes_explicit_driver_config(self):
         env = {
             "LM_PROXY_GRAPH_ENABLED": "1",

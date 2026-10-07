@@ -1,7 +1,8 @@
 """Experimental Kuzu graph adapter, not a supported Neo4j replacement.
 
+Retained only for historical feasibility probes; application selection is retired.
 Existing query compatibility, rollback and concurrent-session parity are unproven.
-Upstream Kuzu is archived; engine selection remains open. No latency claim is made.
+Ladybug is the selected successor. No database migration or latency claim is made.
 """
 
 from __future__ import annotations

@@ -8,6 +8,11 @@ created. Product name and implementation decisions remain open.
 
 ## Proposed role
 
+The separate [CLARITY direction](clarity-cockpit-direction.md) explores citizen
+contributions and public-source accountability without requiring agency camera
+access. Its sharing model and audience differ from the authorized case workflow
+below; neither grants access to the other's data.
+
 Explore whether a provenance-preserving graph and retrieval service could help
 authorized investigators assemble incident timelines from permitted camera
 observations, incident records and investigator notes. Flock Safety is a potential

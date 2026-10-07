@@ -1,6 +1,315 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
-## Current checkpoint — October 4, 2026
+
+
+## Structured finding contract — October 7 acceptance
+
+[Source-bound findings](../benchmarks/reports/2026-10-07/task-finding-contract.md)
+now validate bounded schema/citations against guarded source reads and retain numbered
+evidence through submission. Twenty-nine focused tests pass. Legacy raw submit stays
+unvalidated; source identity checks do not establish semantic correctness or later
+freshness. Structured submission now passes a nine-process handoff including reopen after
+source deletion; original evidence survives both acceptance and correction cases.
+An [optional one-shot worker boundary](../benchmarks/reports/2026-10-07/task-worker-boundary.md)
+now passes injected-generator acceptance (34 focused tests total), disabled by
+default with explicit review. No actual model has been connected. Next implement
+a constrained optional loopback provider adapter and HTTP fixture acceptance. Authentication and cross-chat coordination remain open.
+
+
+## Local registry foundation — October 6 acceptance
+
+[Registry receipt](../benchmarks/reports/2026-10-06/shared-task-registry.md): scoped
+SQLite create/read/claim/checkpoint/reopen and revision/expiry guards now pass twelve
+offline tests, including cancellation, expired read-only reclaim and retained
+finding/correction review/completion transitions. This is a trusted local library, not authenticated task endpoints or
+worker execution. Original findings and review decisions survive corrections and completion.
+Distinct reviewer IDs are required but are not authenticated identities. A local JSON task interface and guarded bounded read-source dispatch now pass
+six additional tests (24 focused tests including FIRE regression). A deterministic subprocess handoff now passes both unchanged-source completion
+and changed-source correction cases (26 focused tests total). Each of eight
+operations reopens state in a separate process; two scripted roles are not independent
+reviewers. Next define a bounded structured finding/evidence contract before
+optional model workers. Authenticated MCP/REST
+adapters, model workers and broader permissions remain open. No persistent agent
+team or cross-chat synchronization is running.
+
+
+## Current five-priority status
+
+Use [the October 6 completion table](five-priority-status.md) for current completed
+slices, remaining gates and evidence. The dated entries below are historical
+checkpoints; later entries at the top supersede pending work in older paragraphs.
+In particular, IDE lease renewal, owned watcher dispatch and guarded watch setup
+are implemented; deployment of a chosen IDE adapter and new-file enrollment remain.
+
+## Current checkpoint — October 6, 2026
+
+**Current next rest_proxy milestone: the [shared task system](shared-task-system.md),
+primarily Priority 3.** Implement a minimal scoped durable task registry and local
+claim/restart/review acceptance fixture before model adapters. The user has started
+rental work in a separate project conversation; disposable database journeys and
+application fixes belong there. This chat owns coordination and evidence handoffs.
+Cross-chat synchronization and messaging are not established. Existing technical
+release gates and customer-validation work remain open.
+
+[Agent-team user testing](agent-team-user-testing.md) now has its first local
+rental-applicant browser demonstration: one reproduced submission blocker, a narrow
+working-tree fix and 13 passing focused tests. Backend fixture responses do not
+establish database/payment/email acceptance. Rental next: a disposable full journey. Rest_proxy next: durable
+structured finding/review handoff; no persistent multi-agent runner is implemented.
+A [filled, source-bound report](../benchmarks/reports/2026-10-06/rental-user-qa/investigation-report.md)
+now answers three questions with four retained snapshots and a machine-readable
+handoff. Four offline integrity checks pass; independent review remains open.
+Full database journey awaits an explicitly isolated disposable test configuration.
+
+
+**Direction change: near-term income validation.** Follow the
+[commercial direction](commercial-direction.md) and prepare a source-graded FIRE
+pilot demonstration plus reusable report template. The first rental demonstration
+and filled report are available; durable coordination is the next engineering slice. The
+[draft paid offer](paid-investigation-pilot.md) needs a demonstrated delivery scope,
+then user-led buyer interviews and one paid pilot. The user targets $3,000/month and reports 10,000+ unqualified contacts plus
+rental-platform/rental-law repositories. Confirm repository paths, then prefer a
+rental-domain demonstration and a manual shortlist of 15–20 relevant contacts.
+TurboTenant is one potential prospect; Meta SDK exploration stays separate and
+bounded. No outreach, qualified buyer access or revenue is established. Keep the five engineering priorities and exact release
+gates; resolve packaging work according to the intended delivery rather than
+letting broad unused-grammar work postpone testing customer demand. CLARITY/glasses
+remain independent longer-term directions.
+
+[Observed grammar notices](grammar-notice-reconciliation.md) now bind ten cached
+macOS libraries to the verified release bundle and retain nine declared-source root
+notices. Their SBOM and local CI pass. Coverage excludes the other 361 bundle files
+and independent binary source builds. Next: exact native dependency closure and
+remaining release validation, then installed-model/paired coding acceptance.
+
+[Namespace notice reconciliation](namespace-notice-reconciliation.md) now verifies
+exact PyPI artifacts, installed files and immutable release-tree package blobs, and
+collects a bound supplemental license for both namespace packages. Original upstream
+notice omissions remain recorded. Next: native/grammar notice reconciliation; real
+installed-model and paired coding outcomes, backup policy and platform gates remain.
+
+[Release inventory and cold restore](release-inventory-and-restore.md) now passes
+a schema-valid incomplete SBOM and graph/vector/FIRE cold-copy fixture recovery.
+Four explicit package metadata/notice gaps and native/grammar/model closure remain
+release work. Next: reconcile those exact artifacts, then installed real-model and
+controlled paired coding outcomes; operational backup/deletion policy stays open.
+
+[Minimal embedded installed acceptance](minimal-embedded-install.md) now separates
+core/embedded/full extras, packages the missing parser diagnostics module and
+configures writable runtime paths outside installed modules. Fresh environment
+dependency checks and native fixture/fresh-daemon REST acceptance pass. Next:
+exact artifact notices/SBOM and backup/restore, then real installed-model and paired
+coding outcomes. Exact-pin rebuild/platform coverage remains open.
+
+[Distribution layout acceptance](distribution-acceptance.md) now includes both
+subprocess indexing workers in wheel/source archives and checks an offline isolated
+artifact install. Baseline omission is reproduced; local CI passes. Next release
+slice: minimal embedded dependency profile and installed-daemon/native indexing
+acceptance, including writable state/runtime paths. Paired outcomes remain open.
+
+[Opt-in LM Studio context forwarding](context-provider-forwarding.md) now formats
+and recounts the serialized request, requires a resident model and forwards a
+stateless bundle from the shared owner. Real Qwen usage was 807 prompt/15 completion
+tokens in one disposable FIRE case; focused tests and local CI pass. Exact template
+attestation, provider continuation and controlled paired outcomes remain open.
+Next: controlled coding-task acceptance and minimal release packaging.
+
+[FIRE snapshot-to-bundle integration](fire-context-bundles.md) now recovers one
+scoped state/original snapshot into historical candidates without replacing caller
+instructions or goal. Corrections, expiry/deletion and degradation are explicit;
+real fresh-process STDIO/HTTP/REST parity passes. Next milestone: one explicit
+provider request formatter/forwarder with serializer, tokenizer/framing, actual
+usage and continuation handling verified.
+
+[Shared supplied-request context bundles](context-bundle-contract.md) now preserve
+citations and complete text messages while accounting canonical request JSON plus
+reserves. Deterministic selection, omissions, local tokenizer mode and real MCP/REST
+parity pass. This is not verified provider serialization or usage. Next work: scoped
+FIRE checkpoint-to-bundle adaptation, then an explicit provider formatting/forwarding
+slice with actual usage and continuation-deduplication acceptance.
+
+[Explicit durable FIRE continuity](fire-durable-continuity.md) now stores scoped
+checkpoints and hashed originals with correction, expiry/purge and deletion. Real
+STDIO save to fresh HTTP resume recovers state after removing fixture conversation
+and source. Current-source validation remains explicit caller work. Next milestone:
+shared context-bundle contracts and whole-request budgeting; client cadence, history
+inspection and operational restore/outcome work remain open.
+
+[Shared-owner REST evidence reads](embedded-rest-evidence.md) now expose an opt-in
+read endpoint on the existing HTTP daemon. Tools, citations and storage ownership
+are shared with MCP; body/result bounds, mutation refusal and flag/backend gating
+are tested with real transport parity. Inference-proxy bundle injection is unfinished.
+Next coordinated milestone: scoped durable FIRE checkpoints and original evidence,
+then shared whole-request context budgeting. Remaining Priority 2 coverage stays open.
+
+[Python function-import bindings](embedded-symbol-imports.md) are now published as
+a distinct cited relationship kind and included as a bounded import-overview page.
+Aliases, relative imports, conservative exclusions, old-index status and native
+persistence/paging are verified with real STDIO/HTTP parity. Next work should address
+remaining owner integrations or the scoped FIRE checkpoint store; broader binding
+and general flow coverage remain incomplete.
+
+## Previous checkpoint — October 5, 2026
+
+[Embedded backend route overview](embedded-route-overview.md) now returns verified
+native route declarations through the explicit backend tool. Source/fact hashes,
+filters, bounds, persistence and real STDIO/HTTP parity pass. This does not supply
+service/database hops, broad framework coverage or auto/UI flow parity. Next work
+should address resolved imports or remaining owner integrations using the priority table.
+
+[Embedded symbol references](embedded-symbol-references.md) now routes the standard
+tool to verified static callers with bounded multi-workspace results and explicit
+partial coverage. Native snapshot/reindex/ambiguity and real STDIO/HTTP parity pass.
+Next bridge work: resolved imports and route summaries; broader reference coverage
+and remaining owner integrations still prevent full Priority 2 completion.
+
+[Embedded declared-import overview](embedded-import-overview.md) now routes the
+standard summary through the shared owner. Named declaration rankings, source/fact
+citations, wildcard counts and scan/output bounds are verified; implicit imports
+and resolved symbol edges remain unsupported. Native persistence/corruption checks
+and real STDIO/HTTP parity pass. Full reference/binding/route-summary parity remains
+unfinished; use the five-priority table for current scope.
+
+[Embedded related files](embedded-related-files.md) now connects the existing
+standard tool to the shared owner's published import/call/route file candidates.
+Reads are cited, model-independent and bounded; native reopen/reindex/deletion,
+publication guards and real STDIO/HTTP parity pass. This file-level bridge leaves
+symbol-reference/import summaries and full graph parity incomplete.
+
+The [Qwen worker trial](../benchmarks/reports/2026-10-05/qwen-worker-trial.md) now
+demonstrates one local known-file investigation, patch proposal and Codex review.
+The first attempt truncated; the accepted attempt required supervisor corrections.
+Optional `LMSTUDIO_API_KEY` support is implemented for the embedding adapter with
+credential exclusion from encoder identity and error redaction. Direct LM Studio
+HTTP was tested; automatic local/cloud routing, rest_proxy worker-route acceptance
+and token savings remain unverified. Use the five-priority table above for scope.
+
+[Watch this project setup](embedded-watch-setup.md) now previews service/model/source
+readiness and current manifest scope, then enables intent using exact revision/run
+preconditions. Blocked or stale requests do not enable watching. CLI and MCP setup
+keep global service permission separate; no real watch was enabled. Native ready/
+blocked cases and real blocked-CLI acceptance pass. All seven hosted checks passed
+for automatic refresh/watch dispatch commit `1d3d6d7`.
+
+[Automatic refresh and owned watch dispatch](embedded-refresh-and-watching.md) now
+provide foreground IDE lease renewal and opt-in owner polling. Polling hashes current
+published manifest paths and republishes changes through the existing owned pipeline,
+with matching encoder identity and prior-publication preservation on failure. Native
+background task and real HTTP registrar/SIGTERM checks pass. New-file enrollment,
+chosen IDE adapter deployment, richer retry/history and controlled outcomes remain
+pending. All seven hosted checks passed for registrar commit `53ca2a5`.
+
+[Embedded IDE registration](embedded-ide-registration.md) now connects the existing
+registrar CLI to an explicit owning HTTP MCP endpoint, with registration/release and
+unique unexpired lease discovery. Real owner/subprocess acceptance verifies no
+legacy registry writes and no second graph owner. Native ambiguity/expiry/root-change
+checks pass. Synchronous config/supervisor migration, chosen IDE adapter heartbeat
+policy and owned watcher dispatch remain pending. All seven hosted checks passed
+for the dependency repair commit `d360367`.
+
+[Dependency audit repair](../benchmarks/reports/2026-10-05/dependency-refresh.md)
+updates multidict/fsspec in both manifests after two new active-branch findings.
+The audit passes with its existing exclusions unchanged; Python 3.14 install,
+dependency consistency, native repository checks and local CI pass. This newer
+failure supersedes earlier green-check observations for subsequent heads.
+IDE registrar/discovery and embedded watcher dispatch remain next work.
+
+[Embedded workspace activity](embedded-workspace-activity.md) now persists typed
+watch intent and bounded expiring client leases under revision/publication
+preconditions. Reopen, same-root reindex, root changes, expiry/limits and deletion
+are verified. This records desired state, not worker activation or process liveness.
+IDE registrar/discovery migration and embedded watcher dispatch remain pending;
+legacy JSON registries are not redirected. All seven hosted checks passed for
+the prior journal commit `fc92c90`.
+
+[Embedded indexing journal](embedded-indexing-journal.md) now persists the latest
+owned attempt and its phases/outcome. Success commits with the publication receipt;
+reopen marks unmatched unfinished work interrupted. Cancellation, post-commit error,
+SIGKILL recovery and prior publication preservation are verified. The primary status
+read is bounded and model-independent; it waits for the owner lock rather than
+providing live phase polling. Sessions/watch intent, history/resume and REST remain
+pending. All seven hosted checks passed for the prior metadata commit `88d6018`.
+
+[Embedded project metadata](embedded-project-metadata.md) adds bounded, revisioned
+user/agent annotations in the shared Ladybug owner. Exact revision and publication
+preconditions prevent stale writes; same-root reindex preserves notes, root changes
+hide old notes, and project deletion removes them atomically. Native persistence,
+conflict/rollback/isolation tests and real transport read parity pass. This is the
+first application metadata slice; sessions, watchers, jobs, retention and REST remain
+pending. GitHub CI review found the active PR #3 head green; reported security
+failures belong to the older enterprise-hardening branch (see the metadata report).
+
+## Prior checkpoint — October 4, 2026
+
+[Embedded static relationships](embedded-static-relationships.md) now publish
+scoped file links with callable IDs, source citations and explicit resolution rules.
+A fresh 131-file real-model run produced 1,118 call and 186 import candidates;
+all relationship/source/fact hashes and STDIO/HTTP evidence verified. These are
+static source candidates, not runtime guarantees or full query parity. Broader
+resolution and remaining reference/import query bridges remain Priority 2
+work. Existing `get_call_chain` now traverses bounded published static candidates
+with cycle handling, citations and explicit truncation; native and real transport
+checks pass. Existing `get_symbol_context` now supports exact published symbols, bounded
+original source and static caller/callee pages; ambiguous names return choices.
+
+[Embedded parser facts](embedded-parser-facts.md) now persist hashed imports,
+syntactic call observations and native route/HTTP facts with the publication.
+A fresh real-model run on 131 frozen files contains 806 imports and 12,996 calls;
+all source/fact hashes and STDIO/HTTP evidence verified. Call targets are not yet
+resolved relationships. Full symbol/caller/import/route queries remain Priority 2
+work, along with remaining application metadata and REST integration.
+
+[Embedded project discovery](embedded-project-discovery.md) now lists durable
+publication IDs/roots/runs and routes the existing project-resolution and overview
+tools through the embedded owner. Canonical path/unique-name resolution refuses
+ambiguity and invents no missing-project hash. Metadata survives rollback/reopen
+and follows scoped deletion. Full graph queries, other workspace/session/watch/job
+metadata and REST integration remain Priority 2 gates.
+
+The [embedded MCP owner](embedded-mcp-owner.md) now exposes explicit manifest indexing,
+overview, published source and scoped retrieval through a shared process runtime.
+Real STDIO/HTTP MCP reads matched on the 131-file publication with external-storage
+networking denied and no embedding connection. Graph bootstrap shares the graph
+owner. Full graph queries, application workspace metadata and REST integration
+remain Priority 2 gates; the standard index worker stays guarded.
+
+The [real embedding baseline](real-embedding-acceptance.md) now passes strict
+Jina/LM Studio indexing and reopened retrieval on 131 frozen production files /
+1,629 chunks. Five source-anchor probes covered 4/5 expected files with vector
+search and 5/5 with hybrid; these are not controlled coding outcomes. Provider
+response indices and truncation checks are hardened, and encoder metadata persists
+with the publication. Resident model-artifact binding remains unverified (CLI/API
+size metadata differs from the local GGUF). The explicit MCP path above now shares its owner; full graph queries, application
+metadata and REST integration remain Priority 2 implementation gates.
+
+The [embedding provider direction](embedding-provider-direction.md) keeps LM Studio
+optional and proposes FastEmbed/ONNX native and TEI service evaluations. The
+configured Jina code-embedding model supplied the functional baseline above;
+controlled comparisons and production model-identity acceptance remain pending. Compare measured retrieval,
+resources and Python 3.14 installs before choosing a default; record preprocessing
+and truncation in encoder identity. No provider or inference setup changed.
+
+[Combined embedded publication](embedded-run-publication.md) now stages LanceDB
+chunks under a fresh run and exposes them through the atomic Ladybug receipt.
+Native text/vector/hybrid retrieval, failure/cancellation/crash recovery, cleanup
+and deletion passed. Network-denied storage acceptance covered 130 files and
+1,622 chunks using explicitly synthetic vectors; semantic quality is unmeasured.
+The real-provider baseline above extends that synthetic storage proof; production
+provider identity, complete graph queries and MCP/REST owner routing remain Priority 2
+gates. The outline checkpoints below preceded this work.
+
+[Owned embedded outlines](owned-embedded-outlines.md) now publish structural
+file/symbol snapshots and originals atomically, protected by a local database
+owner lock. Network-denied indexing/reopen inspected 128 production Python files
+and 1,122 symbols. Combined publication now extends this foundation; full query
+compatibility and application owner routing remain Priority 2 work.
+
+The [embedded transaction adapter](embedded-transaction-adapter.md) now passes
+native Python 3.14 rollback, cancellation, read-only and persistence checks.
+Application bootstrap now selects Ladybug in embedded mode and supports explicit
+file-outline schema/query reads. Kuzu selection is retired; indexing workers
+refuse embedded mode until owned writes exist. The remaining query corpus,
+single-owner indexing, LanceDB and metadata integration are the next Priority 2 gates.
 
 Latest [reliable-indexing acceptance](../benchmarks/reports/2026-10-04/reliable-indexing.md)
 fixes fetch-method cross-call leakage and resolves the current rental golden to

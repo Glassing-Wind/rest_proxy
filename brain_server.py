@@ -174,17 +174,21 @@ async def lifespan(app: Starlette):
         file=sys.stderr,
     )
 
-    async with mcp.session_manager.run():
-        yield
-
-    # Shutdown.
-    await _idx.stop_watcher()
     try:
-        import memory.store as memory_store
-        await memory_store.close_pool()
-    except ImportError:
-        pass
-    print("[brain-server] Shutdown complete.", file=sys.stderr)
+        async with mcp.session_manager.run():
+            yield
+    finally:
+        # Shutdown.
+        await _idx.stop_watcher()
+        from memory.embedded_runtime import close_embedded_runtime
+        await close_embedded_runtime()
+        try:
+            import memory.store as memory_store
+            await memory_store.close_pool()
+        except ImportError:
+            pass
+        print("[brain-server] Shutdown complete.", file=sys.stderr)
+
 
 
 # ---------------------------------------------------------------------------
@@ -329,11 +333,19 @@ async def server_fingerprint(request: Request) -> JSONResponse:
 
 _mcp_starlette = mcp.streamable_http_app()
 
+_evidence_routes = []
+if os.getenv('LM_PROXY_EMBEDDED_REST_ENABLED', '0').strip().lower() in {'1', 'true', 'yes', 'on'}:
+    from memory.storage_config import embedded_graph_selected
+    if embedded_graph_selected():
+        from tools.brain.embedded_rest import make_read_endpoint
+        _evidence_routes.append(Route('/evidence/read', make_read_endpoint(mcp), methods=['POST']))
+
 app = Starlette(
     routes=[
         Route("/", health),          # health check — matched first
         Route("/health", health),    # also at /health
         Route("/fingerprint", server_fingerprint),
+        *_evidence_routes,
         Mount("/", app=_mcp_starlette),  # pass-through; MCP handles /mcp
     ],
     lifespan=lifespan,

@@ -5,6 +5,14 @@ platform being developed in rest_proxy. The repository/package name and existing
 interfaces remain unchanged. This document specifies intended behavior; it does
 not claim that the full platform is implemented.
 
+## Shared task coordination
+
+The [shared task system](shared-task-system.md) extends Priority 3 continuity toward
+durable scoped assignments, checkpoints and worker/reviewer handoffs. Its initial
+task registry is planned, not implemented. Existing evidence/checkpoint contracts
+are foundations; task leases and authorization must have their own acceptance.
+Application changes remain in their target repository and conversation.
+
 ## The cycle
 
 | Stage | Responsibility | Output |
@@ -121,3 +129,12 @@ tasks without FIRE. Passing contract tests alone does not prove better outcomes.
 See [context contracts](context-platform-direction.md),
 [integrated implementation plan](integrated-platform-plan.md) and
 [session roadmap](next-session-roadmap.md).
+
+## October 6 durable continuity implementation
+
+The [explicit checkpoint/original store](fire-durable-continuity.md) implements scoped
+MCP save/resume, hashed paged originals, revision-checked corrections, retention and
+deletion. A real STDIO-to-fresh-HTTP drill recovers fixture task state and originals
+after removing the conversation/source. Earlier contract-only descriptions remain
+historical; client compaction integration and automatic current-source validation
+are not implemented.

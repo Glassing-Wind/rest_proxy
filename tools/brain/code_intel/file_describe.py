@@ -8,6 +8,7 @@ import os
 
 from _helpers import get_memory_modules
 from ts_diagnostics import normalize_ts_pack_result
+from memory.storage_config import embedded_graph_selected
 
 
 def resolve_describe_paths(project_path: str, file_path: str) -> tuple[str, str]:
@@ -171,19 +172,19 @@ async def describe_file_impl(
             ORDER BY s.start_line
             """
             neo_symbols: list[str] = []
-            async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
-                records = await execute_read(
-                    session,
-                    sym_cypher,
-                    fid=file_id,
-                    op="describe_file_symbols",
-                )
-                for rec in records:
-                    loc = f":{rec['start']}-{rec['end']}" if rec["start"] else ""
-                    sig = f"  →  {rec['sig']}" if rec["sig"] else ""
-                    neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
-                    if rec.get("name") and rec["name"] not in symbol_names:
-                        symbol_names.append(str(rec["name"]))
+            if hasattr(driver, "describe_file_symbols"):
+                records = await driver.describe_file_symbols(file_id)
+            else:
+                async with driver.session(database=graph_bootstrap._NEO4J_DB) as session:
+                    records = await execute_read(
+                        session, sym_cypher, fid=file_id, op="describe_file_symbols",
+                    )
+            for rec in records:
+                loc = f":{rec['start']}-{rec['end']}" if rec["start"] else ""
+                sig = f"  →  {rec['sig']}" if rec["sig"] else ""
+                neo_symbols.append(f"  [{rec['kind']}] {rec['name']}{loc}{sig}")
+                if rec.get("name") and rec["name"] not in symbol_names:
+                    symbol_names.append(str(rec["name"]))
             if live_ast_available:
                 # Replace the whole outline: retaining indexed rows resurrects deleted
                 # symbols and leaves signatures/locations stale after ordinary edits.
@@ -219,7 +220,7 @@ async def describe_file_impl(
 
     semantic_roles: list[str] = []
     preview_content = None
-    if project_path:
+    if project_path and not embedded_graph_selected():
         try:
             from _helpers import get_project_id
 

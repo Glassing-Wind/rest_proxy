@@ -35,6 +35,7 @@ from _runtime import resolve_python_runtime
 from _semantic_contract import SEMANTIC_CONTRACT_VERSION
 
 from graphrag_core.config import load_env
+from graphrag_core.app_state import get_runtime_dir
 from graphrag_core.indexing import watcher as index_watcher
 from graphrag_core.indexing.manifest import (
     build_manifest,
@@ -582,6 +583,10 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
               - "rebuild": Wipes all existing project data and starts fresh.
               - "cleanup": Only removes orphaned/deleted files from the index.
     """
+    from memory.storage_config import embedded_graph_selected, EMBEDDED_INDEXING_UNAVAILABLE
+
+    if embedded_graph_selected():
+        return EMBEDDED_INDEXING_UNAVAILABLE
     claimed_lock = False
     project_id = ""
     job_id = ""
@@ -673,7 +678,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
         base_dir = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         )
-        runtime_dir = os.path.join(base_dir, ".runtime")
+        runtime_dir = str(get_runtime_dir())
         os.makedirs(runtime_dir, exist_ok=True)
 
         manifest = build_manifest(project_path)

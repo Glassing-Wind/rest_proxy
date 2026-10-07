@@ -162,3 +162,12 @@ unlimited recall or improved coding outcomes.
 Related: [embedded verification](native-embedded-verification.md),
 [stack research](hybrid-stack-research.md), [implementation plan](enterprise-tooling-plan.md),
 [paired evidence](../benchmarks/reports/2026-10-03/README.md).
+
+## October 6 shared bundle implementation
+
+The [supplied-request bundle contract](context-bundle-contract.md) now implements
+deterministic cited packing and canonical request accounting through MCP/REST, with
+local tokenizer support and labeled byte estimates. Earlier proposed-contract text
+is historical; provider-specific formatting/usage, automatic freshness/retrieval and
+inference forwarding remain gates. The [durable FIRE store](fire-durable-continuity.md)
+is also implemented; checkpoint-to-bundle adaptation remains next.

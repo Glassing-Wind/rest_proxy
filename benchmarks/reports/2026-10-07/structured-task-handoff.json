@@ -1,0 +1,58 @@
+{
+  "unchanged_source": {
+    "schema_version": 1,
+    "fixture": "synthetic Python source",
+    "operations": [
+      "create",
+      "claim",
+      "read_source",
+      "checkpoint",
+      "get",
+      "submit_finding",
+      "review",
+      "get",
+      "get"
+    ],
+    "operation_count": 9,
+    "separate_process_per_operation": true,
+    "checkpoint_reopened": true,
+    "review_reopened": true,
+    "source_hash_matches": true,
+    "status": "completed",
+    "original_finding_retained": true,
+    "structured_submission": true,
+    "retained_evidence_after_source_removal": true,
+    "reviewer": "deterministic fixture, not independent reasoning or authentication",
+    "inference_used": false,
+    "live_rental_data_used": false,
+    "token_savings_measured": false
+  },
+  "changed_source": {
+    "schema_version": 1,
+    "fixture": "synthetic Python source",
+    "operations": [
+      "create",
+      "claim",
+      "read_source",
+      "checkpoint",
+      "get",
+      "submit_finding",
+      "review",
+      "get",
+      "get"
+    ],
+    "operation_count": 9,
+    "separate_process_per_operation": true,
+    "checkpoint_reopened": true,
+    "review_reopened": true,
+    "source_hash_matches": false,
+    "status": "queued",
+    "original_finding_retained": true,
+    "structured_submission": true,
+    "retained_evidence_after_source_removal": true,
+    "reviewer": "deterministic fixture, not independent reasoning or authentication",
+    "inference_used": false,
+    "live_rental_data_used": false,
+    "token_savings_measured": false
+  }
+}

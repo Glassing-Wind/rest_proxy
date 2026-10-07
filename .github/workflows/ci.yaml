@@ -87,11 +87,43 @@ jobs:
           LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL: "1"
         run: bash scripts/install_ci_requirements.sh
 
+      - name: Install offline distribution test backend
+        run: pip install setuptools==84.0.0
+
       - name: Run gated CI checks
         run: bash scripts/run_ci_checks.sh
 
       - name: Run tool-choice workflow checks
         run: python scripts/run_tool_choice_eval_suite.py
+
+  embedded-native:
+    runs-on: ubuntu-latest
+    needs: ts-pack-wheel
+    timeout-minutes: 15
+    env:
+      LM_PROXY_WATCHER_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - uses: actions/download-artifact@v4
+        with:
+          name: ts-pack-wheel
+          path: .runtime/wheels
+      - name: Install application and accepted embedded engines
+        env:
+          LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL: "1"
+        run: |
+          bash scripts/install_ci_requirements.sh
+          pip install ladybug==0.21.2 lancedb==0.39.0 pyarrow==25.0.1
+          pip check
+      - name: Verify native embedded lifecycle and publication
+        run: |
+          python test_embedded_ladybug.py
+          python test_embedded_outline_indexing.py
+          python test_embedded_repository.py
 
   enterprise-eval:
     runs-on: ubuntu-latest

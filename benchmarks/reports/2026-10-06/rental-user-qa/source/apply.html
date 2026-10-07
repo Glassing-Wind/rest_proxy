@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rental Application</title>
+    <link rel="stylesheet" href="/assets/application-apply.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">Rental application</p>
+        <h1>Complete your application</h1>
+        <p id="invite-context" class="subtitle">Loading invite details…</p>
+      </header>
+
+      <div id="status-banner" class="status-banner hidden"></div>
+
+      <section class="layout">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Status</p>
+              <h2>Application progress</h2>
+            </div>
+            <span id="application-status" class="status-pill">Draft</span>
+          </div>
+          <div class="stack compact">
+            <div id="application-meta" class="meta-card"></div>
+            <label class="checkbox-inline">
+              <input id="consent-to-screening" type="checkbox" />
+              I consent to a screening request being initiated from this application.
+            </label>
+            <label>
+              Preferred move-in date
+              <input id="preferred-move-in-date" type="date" />
+            </label>
+            <label>
+              Notes to landlord
+              <textarea id="applicant-notes" rows="4" placeholder="Anything the landlord should know up front"></textarea>
+            </label>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Primary applicant</p>
+              <h2>Contact and history</h2>
+            </div>
+          </div>
+          <form id="application-form" class="stack-form">
+            <div class="two-up">
+              <label>First name<input id="primary-first-name" required /></label>
+              <label>Last name<input id="primary-last-name" required /></label>
+            </div>
+            <div class="two-up">
+              <label>Email<input id="primary-email" type="email" required /></label>
+              <label>Phone<input id="primary-phone" required /></label>
+            </div>
+            <div class="two-up">
+              <label>Employer<input id="primary-employer-name" /></label>
+              <label>Job title<input id="primary-job-title" /></label>
+            </div>
+            <div class="two-up">
+              <label>Monthly income<input id="primary-monthly-income" type="number" min="0" step="0.01" /></label>
+              <label>Employment start date<input id="primary-employment-start-date" type="date" /></label>
+            </div>
+            <label>Current address<input id="primary-current-address1" /></label>
+            <div class="three-up">
+              <label>City<input id="primary-current-city" /></label>
+              <label>State<input id="primary-current-state" /></label>
+              <label>ZIP<input id="primary-current-postal-code" /></label>
+            </div>
+            <div class="two-up">
+              <label>Current landlord<input id="primary-current-landlord-name" /></label>
+              <label>Current landlord phone<input id="primary-current-landlord-phone" /></label>
+            </div>
+            <label class="checkbox-inline">
+              <input id="has-co-applicant" type="checkbox" />
+              Add a co-applicant
+            </label>
+            <section id="co-applicant-section" class="nested-card hidden">
+              <h3>Co-applicant</h3>
+              <div class="two-up">
+                <label>First name<input id="co-first-name" /></label>
+                <label>Last name<input id="co-last-name" /></label>
+              </div>
+              <div class="two-up">
+                <label>Email<input id="co-email" type="email" /></label>
+                <label>Phone<input id="co-phone" /></label>
+              </div>
+              <div class="two-up">
+                <label>Employer<input id="co-employer-name" /></label>
+                <label>Job title<input id="co-job-title" /></label>
+              </div>
+              <label>Monthly income<input id="co-monthly-income" type="number" min="0" step="0.01" /></label>
+            </section>
+            <div class="actions">
+              <button id="submit-application" type="submit">Submit application</button>
+            </div>
+          </form>
+        </article>
+      </section>
+    </main>
+
+    <script src="/assets/application-apply.js"></script>
+  </body>
+</html>

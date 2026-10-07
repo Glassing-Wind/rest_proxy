@@ -1090,6 +1090,17 @@ def register(mcp: FastMCP) -> None:
             full_source_preview: Prefer the indexed symbol's complete source span, within caps.
         """
         try:
+            from memory.storage_config import embedded_graph_selected
+            if embedded_graph_selected():
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_symbol_context(
+                    workspace_id, symbol_name, file_path=file_path or '', signature=signature or '',
+                    include_source=include_source_preview,
+                    max_lines=max(1, min(int(source_preview_lines), 200)),
+                    max_chars=max(256, min(int(source_preview_chars), 16000)), full_source=full_source_preview,
+                )
+                return json.dumps(result, ensure_ascii=False)
             project_id = get_project_id(workspace_id)
             preview_lines = max(1, min(int(source_preview_lines), 400))
             preview_chars = max(200, min(int(source_preview_chars), 16000))
@@ -1245,6 +1256,9 @@ def register(mcp: FastMCP) -> None:
         """
         Trace a call chain N hops deep from a starting symbol.
 
+        Embedded mode returns bounded JSON static candidates from one publication,
+        with citations, cycle markers and explicit truncation; it is not a complete runtime graph.
+
         Unlike get_symbol_context (single hop), this recursively follows
         CALLS edges to build a full call tree — ideal for understanding
         execution paths and gRPC handler flows.
@@ -1258,6 +1272,14 @@ def register(mcp: FastMCP) -> None:
             signature:    Optional signature substring to disambiguate symbols.
         """
         try:
+            if os.getenv('LM_PROXY_STORAGE_BACKEND', '').strip().lower() == 'embedded':
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_symbol_context(
+                    workspace_id, symbol_name, call_chain=True, depth=max(1, min(int(depth), 5)),
+                    direction=direction, file_path=file_path or '', signature=signature or '',
+                )
+                return json.dumps(result, ensure_ascii=False)
             project_id = get_project_id(workspace_id)
             depth = min(int(depth), 5)
             import graph_bootstrap
@@ -2173,6 +2195,9 @@ def register(mcp: FastMCP) -> None:
         """
         Find files that are structurally related to the target file.
 
+        Embedded mode returns bounded cited static import/call/route candidates
+        as JSON, with explicit incomplete coverage and continuation cursors.
+
         Args:
             project_path: Absolute path to the project root.
             file_path: Relative path to the file in the project.
@@ -2184,6 +2209,12 @@ def register(mcp: FastMCP) -> None:
                 return "Workspace path is required."
             if not str(file_path or "").strip():
                 return "File path is required."
+            from memory.storage_config import embedded_graph_selected
+            if embedded_graph_selected():
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_related_files(workspace_key, file_path)
+                return json.dumps(result, ensure_ascii=False)
             project_path = get_workspace_path(workspace_key)
             project_id = get_project_id(workspace_key)
             file_id = f"{project_id}:file:{file_path}"
@@ -3134,16 +3165,17 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def find_references(workspace_id: str | list[str], symbol_name: str) -> str:
         """
-        Find all locations that reference a symbol — function calls, type usages,
-        and any code chunk that mentions the name.
+        Find reference evidence for an exact symbol name.
 
-        Combines two sources:
+        Legacy storage combines two sources:
         1. Neo4j [:CALLS|CALLS_INFERRED] edges (precise + inferred call graph hits)
         2. Postgres full-text search over codebase_embeddings (catches type references,
            field accesses, generic bounds, and string literals that the graph misses)
 
-        Use this before renaming or deleting a symbol to find every location that
-        must be updated.
+        Embedded mode returns bounded cited static callers as JSON, with explicit
+        partial coverage and ambiguity reporting. It does not resolve type/field
+        usages, string mentions, symbol imports or dynamic calls. Review additional
+        source evidence before renaming or deleting a symbol on either backend.
 
         Args:
             workspace_id:  Logical workspace name or absolute project path (or list).

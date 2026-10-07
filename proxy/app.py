@@ -26,12 +26,16 @@ from proxy.config import (
 )
 
 import os
-from pathlib import Path
 
-_RUNTIME_DIR = Path(__file__).resolve().parents[1] / ".runtime"
+from graphrag_core.app_state import get_runtime_dir
+
+_RUNTIME_DIR = get_runtime_dir()
 _PROXY_PID_FILE = _RUNTIME_DIR / "proxy.pid"
 
 app = FastAPI(title="LM Studio Stateful Chat Proxy")
+if os.getenv('LM_PROXY_CONTEXT_FORWARD_ENABLED', '0').strip().lower() in {'1', 'true', 'yes', 'on'}:
+    from proxy.context_forwarding import context_chat
+    app.add_api_route('/v1/context/chat/completions', context_chat, methods=['POST'])
 
 
 @app.on_event("startup")

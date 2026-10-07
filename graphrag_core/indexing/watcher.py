@@ -170,6 +170,9 @@ def save_indexed_projects(data: dict[str, dict[str, object]]) -> None:
 
 async def load_watched_config() -> None:
     """Load pinned watches and active session leases on startup."""
+    from memory.storage_config import embedded_graph_selected
+    if embedded_graph_selected():
+        return
     if not WATCHER_ENABLED:
         print(
             "[lm-proxy:watcher] Disabled via LM_PROXY_WATCHER_ENABLED=0.",
@@ -198,6 +201,13 @@ async def start_watcher(index_fn) -> asyncio.Task | None:
     """Start the polling watcher loop and return the task."""
     global _WATCHER_TASK
     set_index_fn(index_fn)
+    from memory.storage_config import embedded_graph_selected
+    if embedded_graph_selected():
+        if os.getenv('LM_PROXY_EMBEDDED_WATCH_ENABLED', '0').strip().lower() in {'1', 'true', 'yes', 'on'}:
+            from memory.embedded_runtime import get_embedded_runtime
+            _WATCHER_TASK = await get_embedded_runtime().start_watch(
+                float(os.getenv('LM_PROXY_EMBEDDED_WATCH_INTERVAL', '30')))
+        return _WATCHER_TASK
     if not WATCHER_ENABLED:
         return None
     _WATCHER_TASK = asyncio.create_task(_poll_watcher(index_fn))

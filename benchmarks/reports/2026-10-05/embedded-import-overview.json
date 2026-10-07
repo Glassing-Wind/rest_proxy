@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-05",
+  "base_commit": "dff089e",
+  "scope": "Standard symbol-import overview bridge to cited declared-import observations",
+  "tests": {
+    "native_repository": 20,
+    "runtime_mcp": 12,
+    "offline_overview_bounds": 2,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "parity": true,
+    "run_id": "f3200555-2e14-4ad0-98ba-6daa81fe6c17",
+    "named_items": 1,
+    "embedding_model_required_for_reads": false,
+    "synthetic_vectors": true,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "named declarations separated from aliases, module and wildcard imports",
+    "source/fact hashes and publication citations",
+    "missing spans remain unavailable rather than inventing lines",
+    "native reopen/live-edit/reindex/deletion behavior",
+    "corrupted fact hashes refused",
+    "missing/old publication statuses",
+    "file/read-byte/ranked-row/output limits",
+    "shared-owner dispatch without legacy graph or encoder",
+    "real STDIO and Streamable HTTP parity"
+  ],
+  "limits": [
+    "Declared parser observations only, not resolved symbol bindings or implicit usage.",
+    "Counts/rankings cover scanned files only; 100-file and 8 MiB source/fact retrieval ceilings.",
+    "Citation samples capped at three and explicitly marked incomplete.",
+    "Overview has no new paging parameter; remaining files require explicit per-file fact reads.",
+    "Synthetic indexing fixture; no semantic quality, latency or token-savings claim.",
+    "No operational index, inference provider or watch setting changed.",
+    "No hosted CI result claimed for this new commit."
+  ],
+  "artifacts_sha256": {
+    "native.log": "2cadbb816e4188e36ef79a81db7d0250a8954f75245a2566103dc58a61a7a625",
+    "runtime.log": "0cf050401232d32915d9bdf07185c7d38341affbdf5ad62b3ce32a275948c911",
+    "bounds.log": "455a234a903f02c7d36882c9b036acc1ee7cca1176404082cfe9897ae40211f7",
+    "transport.json": "f18dfe34c0754d95c4bebb8eb547a7becaf1cd656294b78e1bdeac407cc01096",
+    "stdio.log": "ab502f1f2da0dd3e385275400a619d46a148429498e4a2279904e1f26d9f7e79",
+    "http.log": "08e36cfac74c04b983b61af1cf032ee8e0f2e9e0d353515c175ad1918cd32ed3",
+    "ci.log": "a595ea3b20f122134cb0cbd2605fab7f819fed4a24fb7582d602f08b29f9a8f1"
+  },
+  "source_sha256": {
+    "graphrag_core/indexing/embedded_imports.py": "a8a539475e9814415b02aec840542717ec6c1ee39adcbd6b932529ec1028caaf",
+    "graphrag_core/indexing/embedded_repository.py": "9957dd7a5b80c56c5a0c57c00b2555e15da25358d8bb5e4a9c00c1097de26dfc",
+    "memory/embedded_runtime.py": "1a99018ac73e04c2c70c2efebd35f86dfc80ef3f7f9f617fc7fbc14d9a9cc37f",
+    "tools/brain/search/tools.py": "8a45ce9af0c251907535260028ac37c988b6e9a5e5bf65c61b66449e5533fd9b",
+    "test_embedded_import_overview.py": "28fc8d3c7af59a04ac860c80e18d4fbefdd7e9d3d3a62195f297b75d682311be"
+  }
+}

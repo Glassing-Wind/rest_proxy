@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-05",
+  "base_commit": "6571b85",
+  "scope": "Standard get_related_files bridge to the single embedded owner",
+  "tests": {
+    "native_repository": 19,
+    "runtime_mcp": 11,
+    "offline_bounds_and_publication_guards": 3,
+    "full_local_ci": "passed"
+  },
+  "transport_acceptance": {
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
+    "parity": true,
+    "run_id": "24318f54-8136-4eeb-b460-ee9c7717cc26",
+    "relationship_count": 2,
+    "embedding_model_required_for_reads": false,
+    "synthetic_vectors": true,
+    "operational_services_changed": false
+  },
+  "verified": [
+    "incoming/outgoing import and call candidates with endpoint source hashes",
+    "original published evidence retained after live edits and reopen",
+    "same-owner MCP dispatch without legacy workspace hashing or encoder",
+    "outside-workspace absolute path refusal",
+    "scoped reindex and deletion remove stale relationships",
+    "older contracts explicit; mixed publication reads refused",
+    "six bounded relationship groups, byte budget and continuation cursors",
+    "real sequential STDIO and Streamable HTTP parity"
+  ],
+  "limits": [
+    "Conservative static source candidates; incomplete dependency coverage.",
+    "Symbol usage, implicit imports, crate/build/resource edges and runtime dispatch are unsupported.",
+    "HTTP-route group implemented through the existing reader; this two-file transport fixture has no routes.",
+    "Fixture indexing uses synthetic vectors, not semantic quality evidence.",
+    "No new inference-provider migration, automatic model load or operational watch activation.",
+    "Hosted checks not verified for the new commit; no performance/savings claims."
+  ],
+  "artifacts_sha256": {
+    "native-final.log": "692389835c7bdfa01fce052329a2dfcde801765ec6d2e8d2ef4c9921d0dcde4b",
+    "runtime.log": "9eaad22564a748a72872d49546c92dd766b6f80d9c74d42159c6e146030748fd",
+    "bounds.log": "5279d1fc9a1ced44f9c96da1414ef59e4676f963fbad52e7a1a2903538819b0d",
+    "transport.json": "b97976ab02841d454b73f630c24019972bfd3acf94c100da3c06cf6ebeafe5ff",
+    "stdio.log": "b8060e3f410ae8beb2649744673705280f79ec91b296846b630dabd29b93217f",
+    "http.log": "efca45eede31843826919c014d8bb802a55b6b929b7334cf17b7eeb37a2f65d7",
+    "ci-final.log": "9d2459ac41ca6e2e2940d2404afc977b04e761555528bee2af0bf7c6f347251f"
+  },
+  "source_sha256": {
+    "graphrag_core/indexing/embedded_related.py": "f5b0fd422a49ac9639cecf0c6dfb69123a9a49409cbcf50c67dc537a81e3354d",
+    "graphrag_core/indexing/embedded_repository.py": "decd3ae2a0251b963461a9e8d809d1fe5fe36cd13c497d5764732dc8f57a64f8",
+    "memory/embedded_runtime.py": "0f8b45781514abb45bf8f30ee2cf73ba9ac8f36d432f49e3c842c7e3aae85443",
+    "tools/brain/code_intel/core.py": "141c894cdfae57577c3d677746a34c407a0631ea5166fe989653e4039975a811",
+    "test_embedded_related_files.py": "19c23e35e50ab64e101baa623af7f3267907c40e634faffa0d8db51c9e7e26f6"
+  }
+}

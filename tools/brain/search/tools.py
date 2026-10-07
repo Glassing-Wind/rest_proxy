@@ -15,12 +15,24 @@ def register(mcp: FastMCP) -> None:
         Summarize explicit (IMPORTS_SYMBOL) and implicit (IMPLICIT_IMPORTS_SYMBOL)
         symbol import edges for a project.
 
+        Embedded mode returns cited declared-import rankings plus a separately
+        paged set of conservative Python function-import bindings. Rankings remain
+        declarations; full binding coverage and implicit import edges are unsupported.
+
         Args:
             project_path: Absolute path to the project root.
             limit: Max rows to return per section (default 20).
             include_implicit: Include heuristic IMPLICIT_IMPORTS_SYMBOL edges when true.
         """
         try:
+            from memory.storage_config import embedded_graph_selected
+            if embedded_graph_selected():
+                import json
+                from memory.embedded_runtime import get_embedded_runtime
+                result = await get_embedded_runtime().workspace_import_overview(
+                    project_path, limit=limit, include_implicit=include_implicit,
+                )
+                return json.dumps(result, ensure_ascii=False)
             import graph_bootstrap
 
             driver = await graph_bootstrap.require_driver()

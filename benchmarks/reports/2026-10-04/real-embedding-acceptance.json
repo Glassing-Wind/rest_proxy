@@ -1,0 +1,591 @@
+{
+  "application_ready": false,
+  "date": "2026-10-04",
+  "encoder": {
+    "descriptor": {
+      "artifact_binding": "local-file-fingerprint-not-attested-against-resident-weights",
+      "artifact_sha256": "ca9829b369c715e486e9fdf7ec9bee3f91ad91028d867220bb686732947b65a5",
+      "context_length": 8192,
+      "dimension": 768,
+      "document_prefix": "",
+      "estimated_chars_per_token": 3,
+      "input_policy": "reject-if-provider-normalization-changes-text-v1",
+      "input_token_margin": 0.9,
+      "loaded_config": {
+        "context_length": 8192
+      },
+      "model": "text-embedding-jina-embeddings-v2-base-code",
+      "output_normalization": "cosine-unit-v1",
+      "provider": "lmstudio",
+      "query_prefix": "",
+      "runtime_version": "not-attested",
+      "tokenizer_pooling": "model-artifact-and-serving-runtime-defined"
+    },
+    "encoder_id": "lmstudio-sha256:913e2f5bb8df30c3754bff1742c5e0f44606355ccc0300eef6c6599962c819c3",
+    "local_artifact_bytes": 322997920,
+    "reported_artifact_bytes": 322999136,
+    "resident_artifact_binding_verified": false
+  },
+  "environment": {
+    "optional_storage": "Ladybug and LanceDB",
+    "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "python": "3.14.4"
+  },
+  "evaluation": {
+    "coverage_only_not_coding_outcome_evaluation": true,
+    "results": [
+      {
+        "case": "publication",
+        "expected_file": "graphrag_core/indexing/embedded_repository.py",
+        "modes": {
+          "hybrid": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 21,
+                "file_path": "graphrag_core/indexing/embedded_repository.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/embedded_repository.py:1315f51d7f01c8",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f",
+                "start_line": 1
+              },
+              {
+                "end_line": 22,
+                "file_path": "graphrag_core/indexing/embedded_outlines.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/embedded_outlines.py:db99960dd3a52f",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "61d6f70a99b49b504c77068e30770a3a6d5543dd4d295efb1cecf314ac1d94f7",
+                "start_line": 1
+              },
+              {
+                "end_line": 278,
+                "file_path": "memory/cross_project_trace.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/cross_project_trace.py:4b06d0a4380c05",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "27f5c39145c4d04edaecf1eb934af5352af735bf8da02c220b434fc4f1e59b8e",
+                "start_line": 277
+              },
+              {
+                "end_line": 101,
+                "file_path": "memory/embedded_lance_runs.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/embedded_lance_runs.py:b0dc27591e2f57",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+                "start_line": 69
+              },
+              {
+                "end_line": 25,
+                "file_path": "graphrag_core/indexing/shadow_admin.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow_admin.py:23377334167a96",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "0f5d5268a83a08403ab06d63704f18fe4951b1ba518ed8ee90448c802228893e",
+                "start_line": 1
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.037919665992376395
+          },
+          "vector": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 21,
+                "file_path": "graphrag_core/indexing/embedded_repository.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/embedded_repository.py:1315f51d7f01c8",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "bd9f3623d1371167ac78c7be426799754e785e4120b9a28d7be8df114e52af8f",
+                "start_line": 1
+              },
+              {
+                "end_line": 278,
+                "file_path": "memory/cross_project_trace.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/cross_project_trace.py:4b06d0a4380c05",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "27f5c39145c4d04edaecf1eb934af5352af735bf8da02c220b434fc4f1e59b8e",
+                "start_line": 277
+              },
+              {
+                "end_line": 25,
+                "file_path": "graphrag_core/indexing/shadow_admin.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow_admin.py:23377334167a96",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "0f5d5268a83a08403ab06d63704f18fe4951b1ba518ed8ee90448c802228893e",
+                "start_line": 1
+              },
+              {
+                "end_line": 109,
+                "file_path": "local_embeddings/strict_lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd",
+                "start_line": 84
+              },
+              {
+                "end_line": 25,
+                "file_path": "memory/store_graph_ops.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/store_graph_ops.py:a75830f194c16b",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "a19dd7b92cae0539412a4d2daddc9b777c2046a55a41845a1f99199ce293123f",
+                "start_line": 24
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.03895566599385347
+          }
+        },
+        "question": "How are staged vectors hidden until an atomic graph publication succeeds?"
+      },
+      {
+        "case": "vector-validation",
+        "expected_file": "memory/embedded_lance_runs.py",
+        "modes": {
+          "hybrid": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 109,
+                "file_path": "local_embeddings/strict_lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd",
+                "start_line": 84
+              },
+              {
+                "end_line": 69,
+                "file_path": "memory/embedded_lance_runs.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/embedded_lance_runs.py:df32cd722e3d45",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa",
+                "start_line": 25
+              },
+              {
+                "end_line": 178,
+                "file_path": "memory/store_search.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/store_search.py:e710986dc06cf4",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "5c2c14a9e89400e68ee2f3bb539c66a1b8c3101fdfe1aff48c687850b15aa0c8",
+                "start_line": 166
+              },
+              {
+                "end_line": 291,
+                "file_path": "tools/brain/search/duplication.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/search/duplication.py:43e526e5247e7b",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "08fe25da866207549ae41367dce7fc4b25f452b3cd158c09a899aee7f3a75508",
+                "start_line": 290
+              },
+              {
+                "end_line": 84,
+                "file_path": "local_embeddings/strict_lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/strict_lmstudio.py:b0fdf58aab1757",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd",
+                "start_line": 59
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.033085957998991944
+          },
+          "vector": {
+            "expected_file_in_top5": false,
+            "hits": [
+              {
+                "end_line": 109,
+                "file_path": "local_embeddings/strict_lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/strict_lmstudio.py:7745b0e1894f61",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9944962bc0255d4d8927e1436b35cc08b4d6fe0a7de7a7871272099ceee86ffd",
+                "start_line": 84
+              },
+              {
+                "end_line": 178,
+                "file_path": "memory/store_search.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/store_search.py:e710986dc06cf4",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "5c2c14a9e89400e68ee2f3bb539c66a1b8c3101fdfe1aff48c687850b15aa0c8",
+                "start_line": 166
+              },
+              {
+                "end_line": 291,
+                "file_path": "tools/brain/search/duplication.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/search/duplication.py:43e526e5247e7b",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "08fe25da866207549ae41367dce7fc4b25f452b3cd158c09a899aee7f3a75508",
+                "start_line": 290
+              },
+              {
+                "end_line": 16,
+                "file_path": "memory/store_search.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/store_search.py:e6baf461afaa0a",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "5c2c14a9e89400e68ee2f3bb539c66a1b8c3101fdfe1aff48c687850b15aa0c8",
+                "start_line": 1
+              },
+              {
+                "end_line": 2788,
+                "file_path": "tools/brain/code_intel/core.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/code_intel/core.py:eff7015d6c5f7d",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "5932b333d1e65d28332045d3faca56f0b1ec847e3b28128c8b612dabbca5b34c",
+                "start_line": 2787
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.03388512499805074
+          }
+        },
+        "question": "Where are cosine vectors validated for finite nonzero values and normalized before float32 storage?"
+      },
+      {
+        "case": "writer-recovery",
+        "expected_file": "graphrag_core/indexing/shadow_recovery.py",
+        "modes": {
+          "hybrid": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 37,
+                "file_path": "graphrag_core/indexing/shadow_recovery.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow_recovery.py:a9cd6278af79a2",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9dcc3c47e52f862b22933326cabc0c40a60219766be644aca4cba9c818f8841c",
+                "start_line": 1
+              },
+              {
+                "end_line": 68,
+                "file_path": "graphrag_core/indexing/shadow_recovery.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow_recovery.py:2ce5b2fea31b7b",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9dcc3c47e52f862b22933326cabc0c40a60219766be644aca4cba9c818f8841c",
+                "start_line": 39
+              },
+              {
+                "end_line": 464,
+                "file_path": "tools/hands/indexing.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/hands/indexing.py:d399e00c574242",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "0324a830262aeb208cdd9a9e370b637cdc2a721544e425a87c240dc875df6547",
+                "start_line": 435
+              },
+              {
+                "end_line": 8,
+                "file_path": "graphrag_core/indexing/shadow.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow.py:6466300850d0e6",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "ee380be09c8759097e424d0ca76e663be610336ed61027d6ae3ca64c04928e5c",
+                "start_line": 1
+              },
+              {
+                "end_line": 80,
+                "file_path": "graphrag_core/indexing/shadow_recovery.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow_recovery.py:b1a8819b31f835",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9dcc3c47e52f862b22933326cabc0c40a60219766be644aca4cba9c818f8841c",
+                "start_line": 68
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.033354917002725415
+          },
+          "vector": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 37,
+                "file_path": "graphrag_core/indexing/shadow_recovery.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow_recovery.py:a9cd6278af79a2",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9dcc3c47e52f862b22933326cabc0c40a60219766be644aca4cba9c818f8841c",
+                "start_line": 1
+              },
+              {
+                "end_line": 8,
+                "file_path": "graphrag_core/indexing/shadow.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow.py:6466300850d0e6",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "ee380be09c8759097e424d0ca76e663be610336ed61027d6ae3ca64c04928e5c",
+                "start_line": 1
+              },
+              {
+                "end_line": 68,
+                "file_path": "graphrag_core/indexing/shadow_recovery.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/shadow_recovery.py:2ce5b2fea31b7b",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "9dcc3c47e52f862b22933326cabc0c40a60219766be644aca4cba9c818f8841c",
+                "start_line": 39
+              },
+              {
+                "end_line": 33,
+                "file_path": "memory/embedded_owner.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/embedded_owner.py:3d4a1c1a9adef4",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "27f4831f03033f762b084a49393bd2974673903e0f0c6d04fd3caf64bf7fa1e1",
+                "start_line": 1
+              },
+              {
+                "end_line": 464,
+                "file_path": "tools/hands/indexing.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/hands/indexing.py:d399e00c574242",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "0324a830262aeb208cdd9a9e370b637cdc2a721544e425a87c240dc875df6547",
+                "start_line": 435
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.03224391600815579
+          }
+        },
+        "question": "How does abandoned writer recovery check local host and dead process ownership before changing status?"
+      },
+      {
+        "case": "source-evidence",
+        "expected_file": "tools/brain/code_intel/file_describe.py",
+        "modes": {
+          "hybrid": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 111,
+                "file_path": "tools/brain/code_intel/file_describe.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/code_intel/file_describe.py:581ac873de002a",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "bc6e0044be318e6a721b17215dd46f7d4f9bca6fabcc9d6921369d18b7e4b064",
+                "start_line": 72
+              },
+              {
+                "end_line": 205,
+                "file_path": "graphrag_core/indexing/embedded_outlines.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/embedded_outlines.py:78514dd1ab7c0d",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "61d6f70a99b49b504c77068e30770a3a6d5543dd4d295efb1cecf314ac1d94f7",
+                "start_line": 199
+              },
+              {
+                "end_line": 199,
+                "file_path": "graphrag_core/indexing/embedded_outlines.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/embedded_outlines.py:5dbda2e00f6991",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "61d6f70a99b49b504c77068e30770a3a6d5543dd4d295efb1cecf314ac1d94f7",
+                "start_line": 162
+              },
+              {
+                "end_line": 1536,
+                "file_path": "tools/brain/code_intel/core.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/code_intel/core.py:b7e2dc491bd4c7",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "5932b333d1e65d28332045d3faca56f0b1ec847e3b28128c8b612dabbca5b34c",
+                "start_line": 1499
+              },
+              {
+                "end_line": 163,
+                "file_path": "memory/cross_project_trace.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/cross_project_trace.py:172fde023bc519",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "27f5c39145c4d04edaecf1eb934af5352af735bf8da02c220b434fc4f1e59b8e",
+                "start_line": 138
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.03345275000901893
+          },
+          "vector": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 111,
+                "file_path": "tools/brain/code_intel/file_describe.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/code_intel/file_describe.py:581ac873de002a",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "bc6e0044be318e6a721b17215dd46f7d4f9bca6fabcc9d6921369d18b7e4b064",
+                "start_line": 72
+              },
+              {
+                "end_line": 205,
+                "file_path": "graphrag_core/indexing/embedded_outlines.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:graphrag_core/indexing/embedded_outlines.py:78514dd1ab7c0d",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "61d6f70a99b49b504c77068e30770a3a6d5543dd4d295efb1cecf314ac1d94f7",
+                "start_line": 199
+              },
+              {
+                "end_line": 1536,
+                "file_path": "tools/brain/code_intel/core.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/code_intel/core.py:b7e2dc491bd4c7",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "5932b333d1e65d28332045d3faca56f0b1ec847e3b28128c8b612dabbca5b34c",
+                "start_line": 1499
+              },
+              {
+                "end_line": 163,
+                "file_path": "memory/cross_project_trace.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:memory/cross_project_trace.py:172fde023bc519",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "27f5c39145c4d04edaecf1eb934af5352af735bf8da02c220b434fc4f1e59b8e",
+                "start_line": 138
+              },
+              {
+                "end_line": 1182,
+                "file_path": "tools/brain/code_intel/core.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:tools/brain/code_intel/core.py:38bf4a498ff818",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "5932b333d1e65d28332045d3faca56f0b1ec847e3b28128c8b612dabbca5b34c",
+                "start_line": 1149
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.03332149999914691
+          }
+        },
+        "question": "How are source excerpts bounded with line numbers and SHA256 evidence?"
+      },
+      {
+        "case": "embedding-batches",
+        "expected_file": "local_embeddings/lmstudio.py",
+        "modes": {
+          "hybrid": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 307,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:75095a34b49162",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 293
+              },
+              {
+                "end_line": 352,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:5018c4e4600164",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 307
+              },
+              {
+                "end_line": 293,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:96baf3d181c3e9",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 251
+              },
+              {
+                "end_line": 427,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:6c359e0e3bb166",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 404
+              },
+              {
+                "end_line": 251,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:dd577144c6c23f",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 250
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.03333224999369122
+          },
+          "vector": {
+            "expected_file_in_top5": true,
+            "hits": [
+              {
+                "end_line": 307,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:75095a34b49162",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 293
+              },
+              {
+                "end_line": 293,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:96baf3d181c3e9",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 251
+              },
+              {
+                "end_line": 251,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:dd577144c6c23f",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 250
+              },
+              {
+                "end_line": 352,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:5018c4e4600164",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 307
+              },
+              {
+                "end_line": 70,
+                "file_path": "local_embeddings/lmstudio.py",
+                "ref_id": "rest-proxy-real-provider-proof:v6:local_embeddings/lmstudio.py:ae988ccfee3c99",
+                "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243",
+                "source_sha256": "4c575cbea76a1864d28bc4e5c5e2724f5fdf648097f551f5227c760eebd6e6e2",
+                "start_line": 58
+              }
+            ],
+            "retrieval_and_citation_check_seconds": 0.03231708300882019
+          }
+        },
+        "question": "How does LM Studio embedding generation check loaded models and batch input texts?"
+      }
+    ],
+    "source_citations_verified": true
+  },
+  "network_policy": {
+    "allowed_network": "localhost:1234 only",
+    "neo4j_tcp_denied": true,
+    "platform": "macOS sandbox-exec",
+    "scope": "index/evaluation client process",
+    "services_stopped": false
+  },
+  "private_log_sha256": {
+    "ci.log": "0cdc1b81f79a7d793201c10ee8349eb7426c8611a1d0962737b87db989ae19e5",
+    "network-policy.log": "bf7b56fd25f0d25d6f4b1cac983e70fa17930e08f8cbb1f91b7831bed5ac66a1",
+    "provider-tests.log": "b6f3ac3eb5561aa9760e70a7eb1ea8f50b5e97acf0c718c21abb9dd65d0103ab",
+    "result.json": "56f4d0523c651d8e385edf6fe6507baea69fed72de8f60b8149576709d01ef54",
+    "storage-tests.log": "6ef235e390c8d2dfc8b3155ccd5c13eae48027a9a4ca9b272290502a3e636375",
+    "strict-tests.log": "b6a161abed43b9a0dba9259cd451b39b20b10425ac13cc14786554c0e6fac7f1"
+  },
+  "publication": {
+    "project_id": "rest-proxy-real-provider-proof",
+    "run_id": "88313bd4-f9fc-4a2c-9ea4-cb8ca2e2f243"
+  },
+  "remaining_gates": [
+    "MCP/REST owner routing",
+    "full graph/query compatibility",
+    "application metadata integration",
+    "resident model artifact and runtime identity binding",
+    "controlled provider/model and coding outcome evaluation",
+    "native install, restore and resource acceptance"
+  ],
+  "scope": "experimental combined embedded owner with strict real embeddings",
+  "snapshot": {
+    "production_python_files": 131,
+    "source_manifest_sha256": "5d3fcda7cad16298ab7b93d2b9d7f12083f8a5b44237879158a54bdc8ce766cb",
+    "subject": "private frozen production-source manifest, captured before later encoder-metadata changes"
+  },
+  "summary": {
+    "cases": 5,
+    "chunks": 1629,
+    "dimension": 768,
+    "files": 131,
+    "hybrid_expected_file_coverage": 5,
+    "index_seconds": 23.165124541003024,
+    "reopen_verified": true,
+    "vector_expected_file_coverage": 4
+  },
+  "timing_limits": [
+    "one warm local run, concurrent activity not isolated",
+    "index excludes artifact hashing, model setup/probe and query evaluation",
+    "case timings include retrieval and citation checks, exclude query embedding",
+    "no paired provider or coding-task comparison"
+  ],
+  "validation": {
+    "full_local_ci": "passed",
+    "native_combined_owner_tests": 4,
+    "optional_native_tests_in_hosted_ci": false,
+    "provider_regressions": 9,
+    "strict_encoder_tests": 4
+  }
+}

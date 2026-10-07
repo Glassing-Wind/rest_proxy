@@ -13,6 +13,11 @@ PRIMARY_TOOL_NAMES: frozenset[str] = frozenset({
     "trace_graph_provenance", "dispatch_deep_analysis",
 })
 
+OPTIONAL_PRIMARY_TOOL_NAMES = frozenset({
+    "search_embedded_repository", "describe_embedded_file", "get_embedded_overview",
+    "resolve_embedded_session", "get_embedded_workspace_activity", "get_embedded_indexing_attempt", "get_embedded_project_metadata", "list_embedded_projects", "get_embedded_file_facts", "get_embedded_relationships",
+})
+
 # Keep write/admin tools and the dispatcher itself outside this route.
 DEEP_ANALYSIS_TOOL_NAMES: frozenset[str] = frozenset({
     "get_app_flow_summary", "get_backend_flow_summary", "trace_symbol_cross_project",
@@ -53,7 +58,7 @@ def apply_primary_tool_filter(mcp: FastMCP) -> None:
     original_list_tools = manager.list_tools
 
     def filtered_list_tools() -> list:
-        return [tool for tool in original_list_tools() if tool.name in PRIMARY_TOOL_NAMES]
+        return [tool for tool in original_list_tools() if tool.name in PRIMARY_TOOL_NAMES | OPTIONAL_PRIMARY_TOOL_NAMES]
 
     manager.list_tools = filtered_list_tools
     manager._primary_filter_applied = True

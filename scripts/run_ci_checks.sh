@@ -24,6 +24,11 @@ echo "[ci] Running Ruff across production Python and operational scripts..."
   embedding_service.py graph_bootstrap.py mcp_server.py \
   runtime_logging.py tool_choice_eval.py
 
+echo "[ci] Running offline shared-task acceptance..."
+for TASK_TEST in test_task_registry.py test_task_dispatch.py test_task_handoff.py test_task_worker.py; do
+  "$PYTHON_BIN" "$TASK_TEST"
+done
+
 echo "[ci] Running GraphRAG regression suite..."
 ./scripts/check_graph_pipeline.sh
 
@@ -69,6 +74,32 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_memory_mode.py
 "$PYTHON_BIN" test_fire_context.py
 "$PYTHON_BIN" test_openai_provider.py
+"$PYTHON_BIN" test_lmstudio_provider.py
+"$PYTHON_BIN" test_strict_lmstudio_encoder.py
+"$PYTHON_BIN" test_qwen_worker_trial.py
+"$PYTHON_BIN" test_embedded_runtime.py
+"$PYTHON_BIN" test_embedded_related_files.py
+"$PYTHON_BIN" test_embedded_import_overview.py
+"$PYTHON_BIN" test_embedded_route_overview.py
+"$PYTHON_BIN" test_embedded_symbol_imports.py
+"$PYTHON_BIN" test_embedded_rest.py
+"$PYTHON_BIN" test_fire_store.py
+"$PYTHON_BIN" test_context_bundle.py
+"$PYTHON_BIN" test_fire_context_bundle.py
+"$PYTHON_BIN" test_context_forwarding.py
+"$PYTHON_BIN" test_distribution.py
+"$PYTHON_BIN" test_release_inventory.py
+"$PYTHON_BIN" test_python_notice.py
+"$PYTHON_BIN" test_grammar_assets.py
+"$PYTHON_BIN" test_embedded_restore.py
+"$PYTHON_BIN" test_embedded_facts.py
+"$PYTHON_BIN" test_embedded_relationships.py
+"$PYTHON_BIN" test_embedded_call_chain.py
+"$PYTHON_BIN" test_embedded_metadata.py
+"$PYTHON_BIN" test_embedded_jobs.py
+"$PYTHON_BIN" test_embedded_activity.py
+"$PYTHON_BIN" test_embedded_session_client.py
+"$PYTHON_BIN" test_embedded_watch.py
 "$PYTHON_BIN" test_nltk_security.py
 "$PYTHON_BIN" test_dependency_security_batch.py
 "$PYTHON_BIN" test_mcp_tool_parity_selection.py

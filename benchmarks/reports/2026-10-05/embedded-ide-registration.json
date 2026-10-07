@@ -1,0 +1,45 @@
+{
+  "artifacts_sha256": {
+    "ci.log": "f77d278d29912c2f10ea940db2c261093578dfcc6e38e2bf1127b62a939144c0",
+    "native-tests.log": "caf7cc6c275f2774075f7101070ee3167c39977e39388d0ecac13f23ffe8fa73",
+    "registrar.json": "e7d0223266bb48ab0f260280ebab8a8a0a6a0c515bbab8a66f0565a7dee29b60",
+    "registrar.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "runtime-tests.log": "dbf86a373e94719ee01d33c44a2bfcc7c3adeb4e48ba8910d40e7f7a2cb66743",
+    "unit-tests.log": "edb4e2159c923ea45a32656078835cdf531c3d7b414c670dd786978875cb0678"
+  },
+  "date": "2026-10-05",
+  "limits": [
+    "Explicit CLI and MCP discovery; no automatic IDE heartbeat/supervisor rewiring.",
+    "Lease identity is a caller assertion, not authenticated process liveness.",
+    "No legacy registry import or write fallback.",
+    "No native graph owner opened by the registrar.",
+    "15-second deadline; timeouts do not prove writes failed to commit.",
+    "Watch intent still does not activate a worker.",
+    "Real acceptance uses disposable synthetic vectors and no model; no real IDE mapping changed."
+  ],
+  "prior_hosted_checks": "all seven passed",
+  "prior_hosted_head": "d360367",
+  "python": "3.14.4",
+  "real_subprocess_acceptance": {
+    "discovery_verified": true,
+    "legacy_registries_unchanged": true,
+    "missing_and_released_sessions_refused": true,
+    "missing_workspace_refused": true,
+    "model_required": false,
+    "owner_service_remained_usable": true,
+    "registration_verified": true,
+    "release_verified": true,
+    "run_id": "fb638fe5-c5bc-4587-b44c-3d6048c47d2f",
+    "synthetic_vectors": true,
+    "transports": [
+      "streamable-http"
+    ]
+  },
+  "scope": "Explicit IDE registrar/discovery over the existing loopback HTTP MCP owner",
+  "tests": {
+    "full_local_ci": "passed",
+    "native_repository": 15,
+    "offline_client_contracts": 3,
+    "runtime_mcp": 10
+  }
+}

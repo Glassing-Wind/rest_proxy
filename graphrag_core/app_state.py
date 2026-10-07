@@ -9,6 +9,14 @@ from pathlib import Path
 _LEGACY_BASE_DIR = Path("~/.gemini/antigravity").expanduser()
 
 
+def get_runtime_dir() -> Path:
+    """Return an explicit writable runtime root, retaining the source-tree default."""
+    override = os.getenv("LM_PROXY_RUNTIME_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(__file__).resolve().parents[1] / ".runtime"
+
+
 def get_config_dir() -> Path:
     """Return the machine-local config directory for lmproxy."""
     override = os.getenv("LM_PROXY_CONFIG_DIR", "").strip()

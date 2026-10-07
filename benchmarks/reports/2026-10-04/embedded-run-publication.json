@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-04",
+  "python": "3.14.4",
+  "platform": "Darwin/arm64",
+  "versions": {
+    "ladybug": "0.21.2",
+    "lancedb": "0.39.0",
+    "pyarrow": "25.0.1",
+    "tree-sitter-language-pack": "1.20.0"
+  },
+  "scope": "experimental single-owner run-published graph/vector storage; not MCP integration",
+  "publication_protocol": "stage vectors and native FTS, then atomically publish Ladybug receipt; retrieval prefilters by that run",
+  "verification": {
+    "native_publication_test_methods": 4,
+    "native_outline_test_methods": 4,
+    "native_transaction_test_methods": 4,
+    "full_local_ci": "passed",
+    "kill_after_vector_staging": "previous publication preserved; orphan cleanup verified"
+  },
+  "network_denied_repository_acceptance": {
+    "files": 130,
+    "symbols": 1147,
+    "chunks": 1622,
+    "source_bytes": 1502493,
+    "manifest_sha256": "ffdf4e08b2fe0e1ec504c291958b01cdf3dfcc86f06e02ffcf7c44fab4ca513f",
+    "run_id": "e06b6af0-3289-4676-9a1e-6323bce1c6f5",
+    "reopen_verified": true,
+    "source_bundle_matches_retrieval": true,
+    "encoder_id": "storage-fixture-3d-no-semantic-quality-claim-v1",
+    "embedding_vectors": "synthetic 3D storage fixture",
+    "retrieval_modes": [
+      "hybrid",
+      "text",
+      "vector"
+    ]
+  },
+  "logs_sha256": {
+    "hybrid-result.json": "cc79ca6133ead4e96a059a248c6029234f00ee3a71a9d89567aaa518a9f7be79",
+    "hybrid-run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "publication-tests.log": "60827d993a11825cac438df2a557dad757df748b19d96126d91ff368adf0b3de",
+    "full-ci.log": "46c3f0ac0330c4032ec8689210c125f6aaacfee80925da68897cb17f0e8f6d0f",
+    "outline-tests.log": "8250d0a1baf8363c14a47f56893f216b07bd654564ffebe672dc943f4618cba9",
+    "transaction-tests.log": "4c6e8699a08b4b24e41b802db05c6cf844905aab05c333a770750a7dd61cd927"
+  },
+  "application_embedded_ready": false,
+  "semantic_quality_evaluated": false,
+  "remaining": [
+    "actual embedding provider and semantic quality acceptance",
+    "call/import/route and full query/schema corpus",
+    "HTTP/STDIO/MCP/REST owner routing",
+    "durable application memory metadata routing",
+    "whole-request budgeting and FIRE continuity",
+    "native clean installs and supported-platform CI",
+    "power-loss/restore and load/resource validation"
+  ],
+  "limits": [
+    "macOS execution only",
+    "exact vector search; no ANN index",
+    "shared FTS corpus statistics can change across staging",
+    "optional native tests are not hosted CI gates",
+    "cancellation during COMMIT may produce a committed publication"
+  ]
+}

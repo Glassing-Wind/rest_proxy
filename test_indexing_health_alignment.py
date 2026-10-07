@@ -273,6 +273,14 @@ def run_indexing_health(module, workspace_id: str, audit: bool = False) -> str:
 
 
 class IndexingHealthAlignmentTests(unittest.TestCase):
+    def test_embedded_mode_refuses_index_job_before_resolving_workspace(self):
+        module = load_indexing_module()
+        with mock.patch.dict('os.environ', {'LM_PROXY_GRAPH_BACKEND': 'ladybug'}), \
+                mock.patch.object(module, 'get_workspace_path',
+                                  side_effect=AssertionError('should not start job')):
+            result = asyncio.run(module.index_workspace('/missing'))
+        self.assertIn('Standard embedded indexing is not implemented', result)
+
     def test_watch_project_syncs_valid_mcp_client_roots(self):
         module = load_indexing_module()
 

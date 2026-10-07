@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-04",
+  "python": "3.14.4",
+  "ladybug": "0.21.2",
+  "ts_pack": "1.20.0",
+  "platform": "Darwin/arm64",
+  "scope": "standalone atomic file-outline publication and bounded source investigation",
+  "network_policy": "macOS sandbox-exec deny network*; socket denial verified",
+  "real_repository": {
+    "project_id": "rest-proxy-offline-proof",
+    "run_id": "74a5b683-91f8-4fd1-925b-5ecdfddcbb57",
+    "files": 128,
+    "symbols": 1122,
+    "unsupported_symbols": 0,
+    "source_bytes": 1488535,
+    "manifest_sha256": "d0e272544dc341c1877233a0e0f0361153316fecb9c8cc4e0effc56f914ca419",
+    "bounded_excerpt_lines": 12,
+    "publication_run": "74a5b683-91f8-4fd1-925b-5ecdfddcbb57",
+    "reopen_verified": true,
+    "source_hashes_verified": 128,
+    "symbols_for_inspected_file": 25
+  },
+  "verification": {
+    "native_indexing_test_methods": 4,
+    "native_transaction_test_methods": 4,
+    "full_local_ci": "passed",
+    "owner_competition": "refused; release after close verified",
+    "killed_uncommitted_writer": "published outlines and run ID preserved after reopen"
+  },
+  "logs_sha256": {
+    "index.log": "487ab6dcc036774f66dcdd09cb058e8b608d27c92ccf90ebf76570a0635b9b73",
+    "inspect.json": "0584dcda81bd7e99549f8a36c208fdd1894172605a04955342a86f91d1ea86f4",
+    "reopen.json": "a7ee4ee4c621be317abdca1474b2961c53a5ca5891ea2a63791522c86334547e",
+    "network-denial.log": "7daf4439bcc4713f4efd915beb4977cf37f1fbb64d4a9c82e869d206309d92ba",
+    "tests.log": "b71c625e1f12adc46be58e7aa59727a1785b2289dab2f8970e3b9b0fa12f5d84",
+    "transactions.log": "7b48e1d13437599a6b21c25e053c0fce9ba033c68edb99b39557e501ba398297",
+    "ci.log": "372ce54582304e84656fb8012180e172147e4ccc88feb6fa9d046b9d0d616f67"
+  },
+  "application_embedded_ready": false,
+  "limits": [
+    "128 production Python files, not every repository file",
+    "Outline/source evidence only; no call/import/route graph parity",
+    "No embeddings, LanceDB routing, or cross-store publication",
+    "No HTTP/STDIO owner routing or MCP indexing",
+    "Executed on this Mac only; optional native tests are not hosted CI gates",
+    "Cancellation during COMMIT can result in a committed publication"
+  ]
+}

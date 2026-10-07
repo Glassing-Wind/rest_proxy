@@ -52,6 +52,8 @@ async def main() -> None:
         await mcp.run_stdio_async()
     finally:
         await _idx.stop_watcher()
+        from memory.embedded_runtime import close_embedded_runtime
+        await close_embedded_runtime()
         try:
             import memory.store as memory_store
             await memory_store.close_pool()

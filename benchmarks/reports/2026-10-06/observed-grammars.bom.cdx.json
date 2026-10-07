@@ -1,0 +1,312 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "components": [
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:go:02a737efd613324bfa3670be20cb43e58a6afd445995288e962d19b23828ed74",
+      "name": "libtree_sitter_go.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "02a737efd613324bfa3670be20cb43e58a6afd445995288e962d19b23828ed74"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter/tree-sitter-go"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"4b52d191cead337b11e274b79459a86f1b5a7779\", \"local_file\": \"go-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter/tree-sitter-go/2346a3ab1bb3857b48b29d779a1ef9799a248cd7/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:javascript:330096a0a3d4c98a77f389fbb43e3aa5a3934209597342b270ee7fcd5feb718b",
+      "name": "libtree_sitter_javascript.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "330096a0a3d4c98a77f389fbb43e3aa5a3934209597342b270ee7fcd5feb718b"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter/tree-sitter-javascript"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "58404d8cf191d69f2674a8fd507bd5776f46cb11"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"4b52d191cead337b11e274b79459a86f1b5a7779\", \"local_file\": \"javascript-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter/tree-sitter-javascript/58404d8cf191d69f2674a8fd507bd5776f46cb11/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:json:cf5dc365af2586031500fade59c7c404f274a0107ac7d54e1fea14d63bef9e8f",
+      "name": "libtree_sitter_json.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "cf5dc365af2586031500fade59c7c404f274a0107ac7d54e1fea14d63bef9e8f"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter/tree-sitter-json"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "254c42a6476413b776221e03982ac8ae159eeb72"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"4b52d191cead337b11e274b79459a86f1b5a7779\", \"local_file\": \"json-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"2e0110e07abef7c2548b26ec9d6969775617ca539a0dc8dbeeb14d6452c711d1\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter/tree-sitter-json/254c42a6476413b776221e03982ac8ae159eeb72/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:kotlin:d214c719a0aa503ea359aa5dd3593e89d7c688d58677e0cfbad582b9a8578129",
+      "name": "libtree_sitter_kotlin.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d214c719a0aa503ea359aa5dd3593e89d7c688d58677e0cfbad582b9a8578129"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/fwcd/tree-sitter-kotlin"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"777756371d981380e00992bed77f52d220d7d6f5\", \"local_file\": \"kotlin-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"948495f61768f7de26bcc61113d8cd95f50bbc15adb678c28c941c6c8fcd5903\", \"source_url\": \"https://raw.githubusercontent.com/fwcd/tree-sitter-kotlin/1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:properties:1a9b485b24385fbc5cbcbaef6e71797968f6172e5837b1c5b8d6211bbc28c350",
+      "name": "libtree_sitter_properties.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1a9b485b24385fbc5cbcbaef6e71797968f6172e5837b1c5b8d6211bbc28c350"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter-grammars/tree-sitter-properties"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "6310671b24d4e04b803577b1c675d765cbd5773b"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"7094a20529cd00436ad0cab177e635308982b1ef\", \"local_file\": \"properties-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"3297073719030b7261afd78b7267931ccc03a27f7a65ca6fc644316180f71bf6\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-properties/6310671b24d4e04b803577b1c675d765cbd5773b/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:python:a0aca809ab8a578209f465128464b561ed0fd124088c12a49f08777fed76bd53",
+      "name": "libtree_sitter_python.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a0aca809ab8a578209f465128464b561ed0fd124088c12a49f08777fed76bd53"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter/tree-sitter-python"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"ff8ed93cb0dd57d68feeefe4829dbc9083584b5e\", \"local_file\": \"python-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"d724405ce238a22c0d35769c5a36b386ad5958192efe8bbb304fb2896254575f\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter/tree-sitter-python/26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:rust:f3d3dc688311258248dbc9fb76edaac233120288fb2cce18f1fac069cbebf399",
+      "name": "libtree_sitter_rust.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f3d3dc688311258248dbc9fb76edaac233120288fb2cce18f1fac069cbebf399"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter/tree-sitter-rust"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "77a3747266f4d621d0757825e6b11edcbf991ca5"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"ceaf3c9adca54f7d3242593dd4db8065b1611699\", \"local_file\": \"rust-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"31d5b6f4243d5c7c6e1c4ebbbb9f6407bd1457a08bcc4f706521710341acba36\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter/tree-sitter-rust/77a3747266f4d621d0757825e6b11edcbf991ca5/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:swift:d439e58a91e4ffcafaec096e42c9ed73c6df8de6ff861b3c5f4288a757823e4e",
+      "name": "libtree_sitter_swift.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d439e58a91e4ffcafaec096e42c9ed73c6df8de6ff861b3c5f4288a757823e4e"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/alex-pinkus/tree-sitter-swift"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "00bbb0a2550f8bc0023a2a4992922d51ae045626"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"f158d7005311344ac316830fe68492214e1645e6\", \"local_file\": \"swift-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"3533cec129bb4bba015c0d61d86dd7c3b7e82110e4d2ff7837a01eff5bad5ccc\", \"source_url\": \"https://raw.githubusercontent.com/alex-pinkus/tree-sitter-swift/00bbb0a2550f8bc0023a2a4992922d51ae045626/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:tsx:e0c946fb56d8a10c8664c6a0d9f6c4d441647a1cd693eefa658f65ea4245c69e",
+      "name": "libtree_sitter_tsx.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e0c946fb56d8a10c8664c6a0d9f6c4d441647a1cd693eefa658f65ea4245c69e"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter/tree-sitter-typescript"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "75b3874edb2dc714fb1fd77a32013d0f8699989f"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"aa9f858db5722d9576104726471b11cc0e31f131\", \"local_file\": \"tsx-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"49bf33cf78ef5897e4e161ce1517df7de1ae5042a65b6bcfd44401e0fc606559\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/75b3874edb2dc714fb1fd77a32013d0f8699989f/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "urn:rest-proxy:observed-grammar:typescript:6966cb024d24a85290fba333b9dc0da21c6f77f117c810e36d9b2354d1804eb2",
+      "name": "libtree_sitter_typescript.dylib",
+      "version": "1.20.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "6966cb024d24a85290fba333b9dc0da21c6f77f117c810e36d9b2354d1804eb2"
+        }
+      ],
+      "properties": [
+        {
+          "name": "rest-proxy:declared-source-repository",
+          "value": "https://github.com/tree-sitter/tree-sitter-typescript"
+        },
+        {
+          "name": "rest-proxy:declared-source-revision",
+          "value": "75b3874edb2dc714fb1fd77a32013d0f8699989f"
+        },
+        {
+          "name": "rest-proxy:source-notice-evidence",
+          "value": "[{\"git_blob_sha1\": \"aa9f858db5722d9576104726471b11cc0e31f131\", \"local_file\": \"tsx-LICENSE\", \"path\": \"LICENSE\", \"sha256\": \"49bf33cf78ef5897e4e161ce1517df7de1ae5042a65b6bcfd44401e0fc606559\", \"source_url\": \"https://raw.githubusercontent.com/tree-sitter/tree-sitter-typescript/75b3874edb2dc714fb1fd77a32013d0f8699989f/LICENSE\"}]"
+        },
+        {
+          "name": "rest-proxy:binary-build-reproduced",
+          "value": "false"
+        }
+      ]
+    }
+  ],
+  "compositions": [
+    {
+      "aggregate": "incomplete"
+    }
+  ]
+}

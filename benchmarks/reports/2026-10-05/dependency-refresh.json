@@ -1,0 +1,42 @@
+{
+  "artifacts_sha256": {
+    "audit.log": "426157ba714a4d6661d0b7a45a32e8743d42ef4e8d26886e53efe9f5c2f947bc",
+    "auditor-install.log": "3ba87a52c8315dd2c756974046bd52480288a3b06b9d1d0b484b5bc8097f237f",
+    "ci.log": "4927737420fd575ead5188b113b032810c00f8b551306ebf51b37b5728489742",
+    "install.log": "20f4b2d8adb58260fa5db048086b22dc0ebcbc59d107eb1e3f39e1dd90f0c01e",
+    "native-tests.log": "2cde0568ad3a6e67339a6f3056a2416c8850411304f3df37886f889fb8bdddcf",
+    "pip-check.log": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+  },
+  "checks": {
+    "dependency_audit": "passed",
+    "existing_ignored_advisories": 99,
+    "full_local_ci": "passed",
+    "installation": "passed",
+    "native_repository_tests": 14,
+    "pip_check": "passed"
+  },
+  "date": "2026-10-05",
+  "failed_hosted_security_run": 37403569682,
+  "limits": [
+    "Audit reports no unexcluded finding at evaluation time; exclusion baseline remains.",
+    "No IDE registrar/discovery or watcher-dispatch implementation in this security repair."
+  ],
+  "manifests": [
+    "requirements.txt",
+    "requirements-ci.txt"
+  ],
+  "packages": {
+    "fsspec": {
+      "from": "2026.2.0",
+      "reported_advisory": "CVE-2026-104851",
+      "to": "2026.6.0"
+    },
+    "multidict": {
+      "from": "6.7.1",
+      "reported_advisory": "CVE-2026-104874",
+      "to": "6.9.1"
+    }
+  },
+  "python": "3.14.4",
+  "security_baseline_changed": false
+}

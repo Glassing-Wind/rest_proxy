@@ -1,0 +1,123 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "3aea47c",
+  "release_source_commit": "8528f9f250336e608d6d592287af6ad67a0ef30e",
+  "package_audit": [
+    {
+      "name": "lance-namespace",
+      "version": "0.13.0",
+      "artifacts": [
+        {
+          "filename": "lance_namespace-0.13.0-py3-none-any.whl",
+          "sha256": "438c7b17aef421c21c138196e715f2510d62f07e865372047f87c1e75e618c7a",
+          "source_url": "https://files.pythonhosted.org/packages/e7/47/cfa33cca1ba7c749fd2918cfc5c8ded788f378cc6424d23e4fead5a14125/lance_namespace-0.13.0-py3-none-any.whl",
+          "notice_files": []
+        },
+        {
+          "filename": "lance_namespace-0.13.0.tar.gz",
+          "sha256": "24554a0997bdb39595c6e4cb3ac6722069f6cd3bd1a74e7acbba7bfaf774a40d",
+          "source_url": "https://files.pythonhosted.org/packages/c0/e7/d5d46594678ee479c0eda830c47b2f5c46133bd100e84e9aa6e01306eca7/lance_namespace-0.13.0.tar.gz",
+          "notice_files": []
+        }
+      ],
+      "installed_python_files_match_pypi_wheel": 4,
+      "source_binding": {
+        "package_files_bound_to_source_tree": 5,
+        "installed_files_match_wheel": true,
+        "notice_sha256": "03c4e02af8cbe96dd3a9bfaac9ee27ec6a8e9a3ee38ed7b290d50495c11eea48",
+        "scope": "Specified package subtree and root LICENSE; metadata and other subtrees excluded"
+      },
+      "source_commit": "8528f9f250336e608d6d592287af6ad67a0ef30e"
+    },
+    {
+      "name": "lance-namespace-urllib3-client",
+      "version": "0.13.0",
+      "artifacts": [
+        {
+          "filename": "lance_namespace_urllib3_client-0.13.0-py3-none-any.whl",
+          "sha256": "fb361eb4f6c7f2d1f9e92809609657b73e38241393e9c4516e12d6b6ee643a0a",
+          "source_url": "https://files.pythonhosted.org/packages/60/4c/7b8f0712a7fe1b8655b711342bc4989696635a79e7027ee56ba3cae23e99/lance_namespace_urllib3_client-0.13.0-py3-none-any.whl",
+          "notice_files": []
+        },
+        {
+          "filename": "lance_namespace_urllib3_client-0.13.0.tar.gz",
+          "sha256": "1e8a79c6e4e6277033597fd76aa0e2f33d909ca1436c935936e9e569221f43ef",
+          "source_url": "https://files.pythonhosted.org/packages/69/25/9aaa4a5e8999693fb0f227c2c0c4b97bd8f0539066408cdff0b89d41b2d5/lance_namespace_urllib3_client-0.13.0.tar.gz",
+          "notice_files": []
+        }
+      ],
+      "installed_python_files_match_pypi_wheel": 163,
+      "source_binding": {
+        "package_files_bound_to_source_tree": 164,
+        "installed_files_match_wheel": true,
+        "notice_sha256": "03c4e02af8cbe96dd3a9bfaac9ee27ec6a8e9a3ee38ed7b290d50495c11eea48",
+        "scope": "Specified package subtree and root LICENSE; metadata and other subtrees excluded"
+      },
+      "source_commit": "8528f9f250336e608d6d592287af6ad67a0ef30e"
+    }
+  ],
+  "inventory": {
+    "components": 48,
+    "notices": 72,
+    "supplemental_notices": 2,
+    "gaps": [
+      {
+        "component": "pkg:pypi/lance-namespace@0.13.0",
+        "gap": "No shipped license/notice files discovered",
+        "supplement": "Separate source-bound notice collected; upstream artifact unchanged"
+      },
+      {
+        "component": "pkg:pypi/lance-namespace-urllib3-client@0.13.0",
+        "gap": "No shipped license/notice files discovered",
+        "supplement": "Separate source-bound notice collected; upstream artifact unchanged"
+      },
+      {
+        "component": "pkg:pypi/lancedb@0.39.0",
+        "gap": "No concise machine-readable license metadata"
+      },
+      {
+        "component": "pkg:pypi/tree-sitter@0.26.0",
+        "gap": "No concise machine-readable license metadata"
+      }
+    ],
+    "artifacts": [
+      {
+        "name": "rest_proxy-0.1.0-py3-none-any.whl",
+        "sha256": "10e31d7f3e45bf64964db0cf3dea696731825a8662aa63f8d1c0d53ba52980b4",
+        "bytes": 556708
+      },
+      {
+        "name": "tree_sitter_language_pack-1.20.0-cp310-abi3-macosx_11_0_arm64.whl",
+        "sha256": "3cbb22e637cc1c7fa650c9fa54683586711863d5654f42e97c5f234230043027",
+        "bytes": 5433399
+      }
+    ]
+  },
+  "focused_tests": 7,
+  "schema_validation": "CycloneDX 1.6 passed; incomplete composition retained",
+  "local_ci": "All gated checks passed",
+  "limitations": [
+    "Supplemental notices do not modify upstream artifacts or grant legal approval",
+    "Package subtree and root license binding; other repository assets are excluded",
+    "Native bundled, grammar and model notice closure remains open",
+    "No dependency upgrades, service lifecycle changes, push, merge or deployment"
+  ],
+  "sha256": {
+    "scripts/reconcile_python_notice.py": "56d85e8cdb5fd50246cd0ad450eeef71adbbc2e0efd8d51866cccc00e5f8856c",
+    "scripts/build_release_inventory.py": "f3b6f3df4080a368b30cdf2f11db6605f56605dbbc04ce472084d317c10cd18e",
+    "test_python_notice.py": "8415bc9b61ffaa0b49009e4670a4b94318a73567a7a0ceb8f4f1262ec899645c",
+    "test_release_inventory.py": "1914491ef741d094d512ba0e6ef0328b3c7ffc646c732a6f7a2d4677a4b7553e",
+    ".runtime/notice-reconciliation/package-artifact-audit.json": "1d056f429648c3b5816d5f37c3b599ee6de7bded8c809f3d51f86e781dae4d6b",
+    ".runtime/notice-reconciliation/release-tag.json": "c3b0cc0d5b0f26c2430418983ab756b2121876d039cd9066c2ad9cdbc33fcd00",
+    ".runtime/notice-reconciliation/annotated-tag.json": "28da260eb07db2f8fd5b4ccb20722d6a5868cd99b66a52ad3ceebc81f5710c4e",
+    ".runtime/notice-reconciliation/release-tree.json": "740f1006de336cce25bf1aec7c498bce9df4807cfb235a692336c162a9d7944a",
+    ".runtime/notice-reconciliation/lance-namespace-release-LICENSE": "03c4e02af8cbe96dd3a9bfaac9ee27ec6a8e9a3ee38ed7b290d50495c11eea48",
+    ".runtime/notice-reconciliation/supplements.json": "5a5ff04582d4db14b64b450b2f79bf095992aaf587fa5cf67d28739c960f92c4",
+    ".runtime/notice-reconciliation/inventory-summary.json": "a9a35d8a1e0e726f89e6ed18019de56fd7fdcb95e2fc6e834b8dca0d96fc25e1",
+    ".runtime/notice-reconciliation/contracts.log": "41e894b016da1b1ce4b5a28249f1b2dd1c96255419d93f53f0e465e5245d6471",
+    ".runtime/notice-reconciliation/ci.log": "7517f30b55ee0299a381d6dd4814039c6078f454825a764a3960cf4d2c016d73",
+    ".runtime/notice-reconciliation/schema-validation.log": "826ac194b0bc4d0b2f261e89396ca64c5c6e245b614f11044313e8fbfa48e0fb",
+    ".runtime/notice-reconciliation/supplemented-inventory/inventory.json": "09448c9177cac03d8faceb0f93002b1cc1b4b2e94ad3080268c1c788db4732cb",
+    ".runtime/notice-reconciliation/supplemented-inventory/bom.cdx.json": "657ed7b3352780346e428ce0dffed5260a046d3577e142ba9e916be4c7798dad"
+  }
+}

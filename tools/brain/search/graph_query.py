@@ -165,6 +165,14 @@ def register(mcp: FastMCP, *, include_admin: bool = False) -> None:
         Args:
             workspace_id: Logical workspace ID or absolute project path.
         """
+        from memory.storage_config import embedded_graph_selected
+        if embedded_graph_selected():
+            from memory.embedded_runtime import get_embedded_runtime
+            project = await get_embedded_runtime().resolve_project(workspace_id)
+            if project is None:
+                return json.dumps({'workspace_id': workspace_id, 'project_id': None,
+                                   'workspace_path': None, 'status': 'not_published'})
+            return json.dumps(dict(project, workspace_id=workspace_id), indent=2)
         project_id = get_project_id(workspace_id)
         workspace_path = get_workspace_path(workspace_id)
         return json.dumps(

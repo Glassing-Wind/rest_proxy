@@ -1,0 +1,4 @@
+# Native embedded engines plus our modified parser fork, not the upstream wheel.
+ladybug==0.21.2
+lancedb==0.39.0
+tree_sitter_language_pack @ git+https://github.com/Zmaroo/tree-sitter-language-pack.git@6fcead43fc13b0049481ea5b5c491e02eab4ac68#subdirectory=crates/ts-pack-python

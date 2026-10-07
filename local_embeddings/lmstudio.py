@@ -117,6 +117,8 @@ class LMStudioEmbeddingProvider(LocalEmbeddingProvider):
 
     def __init__(self, config: LMStudioConfig | None = None):
         self.config = config or LMStudioConfig.from_env()
+        # Credentials are transport settings, not reproducible encoder configuration.
+        self._api_key = os.getenv("LMSTUDIO_API_KEY", "").strip()
         self._client: httpx.AsyncClient | None = None
         self._load_lock = asyncio.Lock()
         self._last_loaded_model_id: str | None = None
@@ -145,6 +147,7 @@ class LMStudioEmbeddingProvider(LocalEmbeddingProvider):
                 base_url=self.config.base_url,
                 timeout=self.config.embed_timeout_s,
                 limits=limits,
+                headers={"Authorization": f"Bearer {self._api_key}"} if self._api_key else None,
             )
         return self._client
 
@@ -181,7 +184,11 @@ class LMStudioEmbeddingProvider(LocalEmbeddingProvider):
                 ) from exc
             except httpx.HTTPStatusError as exc:
                 body = exc.response.text.strip()
+                if self._api_key:
+                    body = body.replace(self._api_key, "[redacted]")
                 detail = body[:300] if body else exc.response.reason_phrase
+                if self._api_key:
+                    detail = detail.replace(self._api_key, "[redacted]")
                 if exc.response.status_code in {404, 409, 422} and "/v1/embeddings" in path:
                     raise ModelNotLoadedError(
                         f"Embedding model '{self.config.embed_model}' is not loaded or "
@@ -412,7 +419,12 @@ class LMStudioEmbeddingProvider(LocalEmbeddingProvider):
         elapsed = time.perf_counter() - started
         if not isinstance(data, dict) or not isinstance(data.get("data"), list):
             raise ModelLoadError("LM Studio returned an unexpected response for POST /v1/embeddings")
-        items = sorted(data["data"], key=lambda item: item.get("index", 0))
+        items = data["data"]
+        if (len(items) != len(texts) or any(not isinstance(item, dict) for item in items)
+                or any(type(item.get("index")) is not int for item in items)
+                or {item["index"] for item in items} != set(range(len(texts)))):
+            raise ModelLoadError("LM Studio embeddings response has invalid input/vector indices.")
+        items = sorted(items, key=lambda item: item["index"])
         vectors = [item.get("embedding") for item in items]
         if any(not isinstance(vec, list) for vec in vectors):
             raise ModelLoadError("LM Studio embeddings response was missing embedding vectors.")

@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-06",
+  "base_commit": "37fd3d1",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "profile": {
+    "core_direct_dependencies": 6,
+    "extras": [
+      "embedded",
+      "full",
+      "dev"
+    ],
+    "installed_distributions": 48,
+    "dependency_check": "compatible",
+    "native_parser": "retained modified wheel; not a fresh source-build attestation",
+    "source_pin": "6fcead43fc13b0049481ea5b5c491e02eab4ac68"
+  },
+  "trial": {
+    "python": "3.14.4",
+    "installed_modules_verified": true,
+    "files_indexed": 2,
+    "native_vector_search": true,
+    "fresh_daemon_rest_source_and_text_search": true,
+    "source_hash_verified": true,
+    "explicit_runtime_paths_verified": true,
+    "network_policy": "Python socket audit guards allow only disposable REST loopback connections",
+    "embedding": "Synthetic vectors; no quality or resident-model identity claim",
+    "versions": {
+      "rest-proxy": "0.1.0",
+      "ladybug": "0.21.2",
+      "lancedb": "0.39.0",
+      "tree-sitter-language-pack": "1.20.0"
+    },
+    "seconds": 2.15
+  },
+  "contracts": "artifact layout, metadata extras, isolated installed continuity and runtime paths passed",
+  "local_ci": "All gated checks passed",
+  "retained_failure": "Initial temporary-path assertion failed on macOS symlink alias; expected path normalized, passing checks rerun.",
+  "limitations": [
+    "Two-file fixture and synthetic vectors only",
+    "Python socket audit guards, not an OS network sandbox",
+    "No real model inference or embedding lifecycle actions",
+    "No new exact-pin parser source build or platform-matrix validation",
+    "No complete notices/SBOM, backup/restore drill or paired coding outcomes",
+    "No push, hosted CI, merge or deployment claimed"
+  ],
+  "sha256": {
+    "pyproject.toml": "1faeb6568d5698840f5ffa38d7dd5606223eb81e78c957ef6f7d62269b053412",
+    "requirements-core.txt": "ace222809f05e699c084543202ad4f628e523eeefe00c582e15db1a7b973832a",
+    "requirements-embedded.txt": "0749d981324e3d4a829a0160b06a46b6de488f7f6e71cb33b71bafa814ee5177",
+    "requirements-dev.txt": "2caf22cf721a506485a1a05cce6fa75abb5190e52fbb1a55ceaf1a7139e9f4fd",
+    "graphrag_core/app_state.py": "1f36079e23414d9edb17e35eea965c7416f765033658d912805bea111c16da52",
+    "_jobs.py": "a04f027380936719d27c8cae3abfe433db73b905bec567cc949792ecd513c45c",
+    "proxy/app.py": "04152a54b365a86b5504633913601a5f9a13465e3532ec589c198dd424976182",
+    "tools/hands/indexing.py": "424580ef9c752e8be204a909809f6f0c49e204c0d90c0441535f7ca35f0cd1db",
+    "test_distribution.py": "d6a0d93537d20364fca0fd4354b86f7ad8548e824743cbf327ca3cb7aa9d6dc4",
+    "scripts/check_installed_embedded.py": "0d3925a327ffd6203c84581449c9dc989e141912d31d1a0759a33f572f3d4840",
+    ".runtime/minimal-embedded-acceptance/rest_proxy-0.1.0-py3-none-any.whl": "10e31d7f3e45bf64964db0cf3dea696731825a8662aa63f8d1c0d53ba52980b4",
+    ".runtime/minimal-embedded-acceptance/trial.json": "bff6f43445ead80baa85eb3285f6f73cc30932da75e51c48ed9b440cefdcbcd3",
+    ".runtime/minimal-embedded-acceptance/trial.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".runtime/minimal-embedded-acceptance/contracts.log": "044a08b8afbb77b149442c1bc26f831436715ce4be2c48a4c6f49d6760d260c8",
+    ".runtime/minimal-embedded-acceptance/ci.log": "bbb7372b3b7daafa776206c0fafabc213ec413c1001b334e2d26247370e41367",
+    ".runtime/minimal-embedded-acceptance/install.log": "5113ee951f9d84408da17d294e3b621a9e64463485f24f3d2f4807f61a0633bd",
+    ".runtime/minimal-embedded-acceptance/build.log": "07f0af0fe6fc0929ca496b3746a766d4c4ff7e815df80a04c3c2e58a02851123",
+    ".runtime/minimal-embedded-acceptance/package-install.log": "4438bfbe969be9c75d56d28804cc18f1162eba1c0bddb2ec29e8e351c6a96901",
+    ".runtime/minimal-embedded-acceptance/dependency-check.log": "787a37c382ded1ac355582b4a0d361857bc68ad01657efae7935f50a1446ead6",
+    ".runtime/minimal-embedded-acceptance/resolved.txt": "b3b29f0db17077ea38c4b5e7ff348c22157036a7d2c88176acde13860be5e240",
+    ".runtime/minimal-embedded-acceptance/contracts-path-assertion-failed.log": "4e08cc89ac9c85c25c5a6d9f109410a44db7ccf99b27a116a925a8f7c4791322",
+    ".runtime/minimal-embedded-acceptance/ci-path-assertion-failed.log": "56156fa071f44d964c73df7c0ca454650730a6b93abab7f83be1ada73ab49415",
+    ".runtime/ts-pack-120-published-wheels/tree_sitter_language_pack-1.20.0-cp310-abi3-macosx_11_0_arm64.whl": "3cbb22e637cc1c7fa650c9fa54683586711863d5654f42e97c5f234230043027"
+  }
+}

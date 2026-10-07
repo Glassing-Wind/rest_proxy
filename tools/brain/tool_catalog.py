@@ -20,6 +20,43 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    'assemble_fire_context_bundle': ToolCatalogEntry('primary', 'FIRE bounded context', 'Recover one scoped checkpoint/original snapshot as historical candidates in a budgeted context bundle.'),
+    'assemble_context_bundle': ToolCatalogEntry('primary', 'bounded context', 'Pack supplied instructions/messages/tools and cited evidence against a complete declared request budget.'),
+    'save_fire_checkpoint': ToolCatalogEntry('admin', 'FIRE continuity', 'Persist explicit scoped task state and supporting originals before compaction.'),
+    'resume_fire_checkpoint': ToolCatalogEntry('primary', 'FIRE continuity', 'Recover scoped task state while disclosing historical evidence freshness.'),
+    'get_fire_original': ToolCatalogEntry('primary', 'FIRE continuity', 'Retrieve a hashed historical original supporting the current checkpoint.'),
+    'delete_fire_task': ToolCatalogEntry('admin', 'FIRE continuity', 'Delete scoped task state and originals with a revision precondition.'),
+    'purge_expired_fire_versions': ToolCatalogEntry('admin', 'FIRE continuity', 'Remove expired scoped checkpoint versions and originals.'),
+    "resolve_embedded_session": ToolCatalogEntry(
+        "primary", "embedded metadata", "Resolve a unique unexpired client lease against current published roots."),
+    "configure_embedded_project_watch": ToolCatalogEntry(
+        "admin", "embedded metadata", "Watch this project: inspect readiness/scope and enable with preview preconditions."),
+    "get_embedded_workspace_activity": ToolCatalogEntry(
+        "primary", "embedded metadata", "Read watch intent and unexpired client leases."),
+    "set_embedded_watch_intent": ToolCatalogEntry(
+        "admin", "embedded metadata", "Persist desired watch state without activating a worker."),
+    "refresh_embedded_session": ToolCatalogEntry(
+        "admin", "embedded metadata", "Refresh or release an explicit client lease with revision preconditions."),
+    "get_embedded_indexing_attempt": ToolCatalogEntry(
+        "primary", "embedded indexing", "Inspect the latest durable embedded attempt and its publication identity."),
+    "get_embedded_project_metadata": ToolCatalogEntry(
+        "primary", "embedded metadata", "Read revisioned user/agent annotations, separate from repository evidence."),
+    "update_embedded_project_metadata": ToolCatalogEntry(
+        "admin", "embedded metadata", "Replace project annotations with revision and publication preconditions."),
+    "get_embedded_relationships": ToolCatalogEntry(
+        "primary", "embedded investigation", "Inspect published static caller/importer/route candidates and their source citations."),
+    "get_embedded_file_facts": ToolCatalogEntry(
+        "primary", "embedded investigation", "Read published import/call/route observations with source and run citations."),
+    "list_embedded_projects": ToolCatalogEntry(
+        "primary", "embedded investigation", "Discover committed embedded projects and canonical workspace paths."),
+    "index_embedded_repository": ToolCatalogEntry(
+        "admin", "embedded indexing", "Replace an embedded project from an explicit source manifest."),
+    "search_embedded_repository": ToolCatalogEntry(
+        "primary", "embedded investigation", "Search published embedded chunks with run and source citations."),
+    "describe_embedded_file": ToolCatalogEntry(
+        "primary", "embedded investigation", "Read bounded original source from an embedded publication."),
+    "get_embedded_overview": ToolCatalogEntry(
+        "primary", "embedded investigation", "Check embedded publication counts and encoder identity."),
     "add_memory": ToolCatalogEntry(
         "memory",
         "context",

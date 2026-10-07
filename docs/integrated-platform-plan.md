@@ -4,8 +4,13 @@ Product name: **FIRE — Find, Integrate, Retrieve, Explain**. See
 [the FIRE direction](fire-platform.md) for the first checkpoint/provenance slice
 and compaction/resumption acceptance scenarios.
 
-Updated October 3, 2026. This is the coordinating implementation plan; linked
+Updated October 4, 2026. This is the coordinating implementation plan; linked
 research and evidence retain their detailed findings.
+
+For current delivery status rather than the original milestone sequence, consult
+[the October 6 five-priority table](five-priority-status.md). It distinguishes
+validated slices from incomplete end-to-end acceptance and supersedes earlier
+pending-work statements in this plan.
 
 ## Outcome
 
@@ -28,8 +33,24 @@ packaging. Existing server backends remain supported during the transition.
   performance superiority. Preserve that distinction in product claims.
 - Permissive top-level engine licenses do not establish a GPL-free distribution.
   Audit the exact artifact, dependencies, native extensions, utilities and models.
-- One process owns mutable embedded graph storage. Indexing must share that owner,
-  rather than opening the same database independently in subprocesses.
+- One process owns mutable embedded graph storage. The [embedded MCP owner](embedded-mcp-owner.md)
+  shares indexing/retrieval ownership; [durable project discovery](embedded-project-discovery.md)
+  bridges standard resolution/overview tools. [Parser facts](embedded-parser-facts.md)
+  supply hashed import/call/route observations. [Static relationships](embedded-static-relationships.md)
+  resolve a conservative subset with source citations; broader resolution remains incomplete.
+  Full graph queries and remaining application
+  metadata/REST integration are still acceptance gates.
+
+## Embedding provider direction
+
+Keep embedding generation behind a provider boundary. LM Studio remains an
+optional development adapter and the first available real-model baseline; it is
+not a requirement of the native embedded distribution. Evaluate FastEmbed/ONNX
+for in-process generation and TEI for optional team serving. Select defaults from
+measured code retrieval, resource use and installation reliability, with pinned
+model/configuration identity and Python 3.14/platform acceptance. No candidate
+runtime has been adopted or shown superior. The inference proxy remains separate.
+See [embedding provider direction](embedding-provider-direction.md).
 
 ## Implementation milestones
 
@@ -132,3 +153,73 @@ daemon and background jobs use it by default. Python 3.11 is retained for rollba
 CI and optional container configuration target 3.14. The new native setup command
 builds and load-checks an unstripped pinned ts-pack wheel. Default-path local CI
 passed after cutover. See [runtime setup and rollback](python314-runtime.md).
+
+### October 5, 2026 metadata checkpoint
+
+[Project annotations](embedded-project-metadata.md) now persist in the embedded owner
+with bounded JSON, revision/publication preconditions and atomic scoped deletion.
+Annotations remain separate from repository evidence. Session/watch/job persistence,
+FIRE checkpoint history and REST integration remain outstanding.
+
+[Embedded indexing journal](embedded-indexing-journal.md) adds durable latest-attempt
+metadata, atomic success and recovery without automatically resuming work.
+IDE session and watch-intent migration remain separate integration tasks.
+
+[Workspace activity](embedded-workspace-activity.md) now provides typed durable watch
+intent and client leases. Legacy IDE registry migration, process liveness validation
+and worker dispatch remain separate integration gates.
+
+[IDE registrar/discovery](embedded-ide-registration.md) now uses the existing HTTP
+MCP owner through explicit CLI commands. Lease expiry, ambiguity and published-root
+matching are enforced. Automatic IDE refresh and watcher dispatch remain pending.
+
+[Automatic IDE refresh and embedded watch dispatch](embedded-refresh-and-watching.md)
+now renew leases through the existing HTTP owner and poll current manifest paths
+inside the shared runtime. Both are opt-in; broader enrollment/deployment and
+controlled outcome validation remain pending.
+
+[Watch this project setup](embedded-watch-setup.md) now checks service/model/source
+readiness, shows current-manifest scope and enables project intent with preview
+preconditions. Global service permission remains an explicit deployment choice.
+
+## October 6 shared-owner REST read surface
+
+[REST evidence reads](embedded-rest-evidence.md) now share the HTTP MCP daemon’s
+owner and existing tool contracts through a bounded opt-in endpoint. This is a read
+surface; whole-request context bundles and inference-proxy integration remain gates.
+
+## October 6 explicit FIRE recovery
+
+[Durable task/original recovery](fire-durable-continuity.md) now has a private local
+store and opt-in MCP tools with real process-reopen acceptance. Client cadence,
+current-source validation and operational restore/outcome gates remain; whole-request
+bundle budgeting is the next coordinated implementation slice.
+
+## October 6 FIRE-backed context bundles
+
+The [snapshot adapter](fire-context-bundles.md) now connects scoped checkpoint/original
+recovery to the shared budgeted contract through MCP/REST. Provider formatting,
+forwarding, actual usage and continuation measurements remain the next gate.
+
+## October 6 distribution layout
+
+[Artifact acceptance](distribution-acceptance.md) now verifies packaged indexing
+workers, source-archive contents and isolated continuity imports. This repairs a
+reproduced wheel omission; minimal dependencies and installed native runtime
+acceptance remain release gates.
+
+## October 6 minimal installed runtime
+
+[Core/native dependency separation](minimal-embedded-install.md), explicit writable
+runtime paths and installed fixture indexing/fresh-daemon REST acceptance now pass
+on macOS ARM64 / Python 3.14. Exact-pin rebuilds, artifact notices/SBOM, restore and
+controlled coding outcomes remain required.
+
+## October 6 commercial sequencing
+
+The [commercial direction](commercial-direction.md) now prioritizes a source-graded
+repository-investigation demo and validation of a bounded paid service. The user's
+need for income favors testing a delivery outcome before expanding the platform.
+CLARITY relationships/team/contact/access concepts and smart glasses remain distinct
+longer-term applications. All installed-product release gates remain in effect;
+no outreach, paid engagement or income has been established.
