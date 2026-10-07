@@ -1,5 +1,32 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Siri task -> Qwen -> explicit Codex review — October 7
+
+An explicit one-task CLI (`python -m scripts.task_run`) now requires --execute,
+state/project/task/revision, source range and loopback endpoint/model. It calls the
+existing worker once, without polling, retries, lifecycle calls or automatic review.
+Missing --execute rejects before state creation; one CLI test plus five worker and
+twelve provider tests pass, focused Ruff/diff checks pass.
+
+User-authorized Siri task 1214c5b2e644470197b691e7e8e849aa was supplied only
+scripts/task_capture.py lines 1–33. Already-loaded Qwen produced a source-validated
+finding, review_pending revision 4, reporting 866 prompt/2414 completion tokens.
+Manual Codex review requested correction: project scope was called a type, broader
+coordination question lacked source coverage, and limits were keywords. Registry
+reopen confirms queued revision 5 with original finding and review retained.
+[Evidence](../benchmarks/reports/2026-10-07/siri-worker-review.json).
+This is one real supervised handoff, not a persistent background team or automatic
+Codex adapter. No automatic retry occurs. Prior cancelled Siri task stays cancelled.
+
+Queueing uses TaskRegistry.create and private SQLite; run_worker claims a revision,
+reads bounded source, checkpoints, generates and submits for review. Full team needs
+multi-file evidence selection, user request preview/correction, scoped task access,
+a supported supervisor adapter, bounded dispatch scheduling and failure/cancellation
+handling. Next implement multi-source worker evidence without loosening citation
+checks; persistent scheduling stays opt-in and requires explicit lifecycle approval.
+No quality/token-savings claim, and five overall priority gates remain open.
+
+
 ## Siri intake accepted — October 7
 
 User screenshots establish Siri invocation, request dictation and queued confirmation.
