@@ -6,7 +6,7 @@ import unittest
 
 import httpx
 
-from memory.task_provider import LocalTaskProvider
+from memory.task_provider import LocalTaskProvider, ProviderHTTPError
 from memory.task_registry import TaskRegistry
 from memory.task_worker import run_worker
 
@@ -103,6 +103,24 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(httpx.ReadTimeout):
             await provider({})
         self.assertIsNone(provider.receipt)
+
+    async def test_http_error_diagnostic_is_bounded_and_not_in_exception_text(self):
+        provider = self.provider(lambda request: httpx.Response(400, content=b'private' * 1000))
+        with self.assertRaises(ProviderHTTPError) as caught:
+            await provider({})
+        error = caught.exception
+        self.assertEqual(error.response.status_code, 400)
+        self.assertEqual(len(error.detail.encode()), 4096)
+        self.assertTrue(error.detail_truncated)
+        self.assertNotIn('private', str(error))
+        self.assertIsNone(provider.receipt)
+
+    async def test_short_error_body_available_without_streaming_read_failure(self):
+        provider = self.provider(lambda request: httpx.Response(400, json={'error': 'fixture rejection'}))
+        with self.assertRaises(ProviderHTTPError) as caught:
+            await provider({})
+        self.assertEqual(json.loads(caught.exception.detail)['error'], 'fixture rejection')
+        self.assertFalse(caught.exception.detail_truncated)
 
 
 if __name__ == '__main__':

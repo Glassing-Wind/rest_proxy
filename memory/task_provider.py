@@ -7,6 +7,16 @@ import httpx
 from memory.fire_store import encoded
 
 
+class ProviderHTTPError(httpx.HTTPStatusError):
+    """Generic failure text with bounded untrusted diagnostic data kept separate."""
+
+    def __init__(self, response: httpx.Response, detail: str, truncated: bool):
+        super().__init__(f'Local provider rejected request (HTTP {response.status_code})',
+                         request=response.request, response=response)
+        self.detail = detail
+        self.detail_truncated = truncated
+
+
 class LocalTaskProvider:
     """Callable structured generator for run_worker, disabled unless opted in."""
 
@@ -40,9 +50,17 @@ class LocalTaskProvider:
         async with httpx.AsyncClient(transport=self.transport, timeout=20,
                                      trust_env=False, follow_redirects=False) as client:
             async with client.stream('POST', self.endpoint, json=body) as response:
-                response.raise_for_status()
                 if response.status_code != 200:
-                    raise ValueError('Require successful nonredirected chat response')
+                    diagnostic = bytearray()
+                    truncated = False
+                    async for chunk in response.aiter_bytes():
+                        available = 4096 - len(diagnostic)
+                        diagnostic.extend(chunk[:available])
+                        if len(chunk) > available:
+                            truncated = True
+                            break
+                    raise ProviderHTTPError(response, diagnostic.decode('utf-8', errors='replace'),
+                                            truncated)
                 data = bytearray()
                 async for chunk in response.aiter_bytes():
                     data.extend(chunk)

@@ -72,3 +72,24 @@ remains blocked on the 400. Next implement bounded error-body consumption with a
 fixture proving safe diagnostics, then verify supported structured response format
 before another live trial. Do not load a different model or silently relax the
 validated finding contract. No merge or external publication performed.
+
+## Bounded rejection diagnostics — subsequent October 7 acceptance
+
+ProviderHTTPError now captures at most 4096 response bytes before raising. Generic
+exception text includes status only; raw diagnostic text is a separate untrusted
+attribute, not logged or persisted by the worker. Oversized diagnostics truncate
+and close the stream. Two new fixtures verify bounded/private exception text and
+small JSON diagnostics without ResponseNotRead. Nine provider and five worker tests
+pass, plus lint/diff checks. Diagnostic data may contain sensitive server text;
+callers must inspect deliberately, not blindly publish it or treat it as instructions.
+
+One synthetic diagnostic trial against the same already-loaded Qwen confirmed the
+400 reason: `'response_format.type' must be 'json_schema' or 'text'`. The adapter
+currently requests json_object. [Receipt](task-provider-rejection-detail.json) contains
+only synthetic trial status and that error. Checkpoint retained, no successful model
+usage; no lifecycle requests. Exact response-format incompatibility is established.
+
+Next implement bounded explicit json_schema output with HTTP fixture acceptance,
+then retry the synthetic task once. Keep model/citation constraints; do not relax
+to arbitrary text or automatically retry failure. PR revision 067a06e's eight hosted
+checks passed before this update; current revision needs its own CI. No merge.

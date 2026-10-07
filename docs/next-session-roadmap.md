@@ -11,9 +11,9 @@ Exact returned-model identity and malformed/tool-call responses now have rejecti
 fixtures (five provider tests). Sanitized generation provenance now persists separately from findings, and missing/
 invalid counters plus HTTP timeout fixtures pass (41 focused tests total).
 An opt-in synthetic trial against already-loaded Qwen Splash returned HTTP 400;
-checkpoint retained, no successful inference/usage. Exact rejection reason remains
-unestablished. Next add bounded HTTP error diagnostics and verify structured-output
-compatibility before retry; no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
+checkpoint retained, no successful inference/usage. Bounded diagnostics now confirm
+json_object is rejected: this endpoint requires json_schema or text. Next implement
+explicit bounded JSON schema and fixture-test it before one synthetic retry; no model/service lifecycle changes are authorized. Authentication and cross-chat coordination remain open.
 
 
 ## Structured finding contract — October 7 acceptance
