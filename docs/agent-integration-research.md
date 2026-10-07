@@ -1,5 +1,16 @@
 # Agent interfaces and repository reuse — October 7, 2026
 
+## Shortcut GUI intake accepted — October 7
+
+User screenshot confirms queued task 37f060b4b4d542798757f48cbf72f7da. Reopening
+private local registry confirms rest_proxy scope, queued revision 1, read_source
+only, zero attempts and no claim. No agent invoked. Request text is excluded from
+published evidence. [Receipt](../benchmarks/reports/2026-10-07/shortcut-task-intake.json).
+GUI task intake and durable reopen are now verified; Siri voice invocation remains
+untested. Next scoped worker/supervisor dispatch with explicit review. This does
+not establish a persistent team or authenticated remote task interface.
+
+
 ## Verified state
 
 PR4 revision c6509dd passed all eight hosted checks on inspection October 7.
