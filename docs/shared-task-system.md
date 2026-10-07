@@ -128,3 +128,13 @@ They are not connected. This chat is not automatically callable as a background
 supervisor. Smart-glasses capture remains a separate input direction. The existing
 scheduled continuation can prepare authorized local work; it is not a shared queue,
 worker scheduler or authorization mechanism.
+
+## Repository sync policy — user authorization October 7
+
+Commit and push completed, validated changes to the existing working branch with
+normal non-force pushes. Inspect hosted CI and address failures. Preserve unrelated
+user/remote changes. Explicit approval remains required for merging, deployment,
+release publication and operational model/service lifecycle changes. This supersedes
+the automation's earlier assistant-authored blanket no-push restriction; that earlier
+restriction was not an identified original user preference. Messaging/outreach and
+commercial commitments still require separate explicit authorization.

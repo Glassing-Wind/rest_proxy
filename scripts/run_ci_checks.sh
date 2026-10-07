@@ -24,6 +24,11 @@ echo "[ci] Running Ruff across production Python and operational scripts..."
   embedding_service.py graph_bootstrap.py mcp_server.py \
   runtime_logging.py tool_choice_eval.py
 
+echo "[ci] Running offline shared-task acceptance..."
+for TASK_TEST in test_task_registry.py test_task_dispatch.py test_task_handoff.py test_task_worker.py; do
+  "$PYTHON_BIN" "$TASK_TEST"
+done
+
 echo "[ci] Running GraphRAG regression suite..."
 ./scripts/check_graph_pipeline.sh
 
