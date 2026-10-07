@@ -1,5 +1,17 @@
 # Five-priority completion status — October 6, 2026
 
+## Bounded multi-source worker — October 7
+
+[Acceptance](../benchmarks/reports/2026-10-07/multi-source-worker.md): worker accepts
+up to three explicit guarded source ranges, requires exact ordered citations for
+all ranges, retains all evidence/checkpoints and keeps the 8 KiB whole-prompt cap.
+Provider schema and CLI now support this contract. Thirty focused checks pass,
+including correction/source-deletion/reopen retention and missing-citation rejection.
+This is fixture acceptance; live multi-file model correction remains next. Siri task
+stays queued revision 5, with original partial finding/review retained. No automatic
+retry, background worker or supervisor adapter started. Overall priority gates remain.
+
+
 ## Siri task -> Qwen -> explicit Codex review — October 7
 
 An explicit one-task CLI (`python -m scripts.task_run`) now requires --execute,

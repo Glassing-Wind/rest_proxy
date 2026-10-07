@@ -18,7 +18,7 @@ def finding_schema() -> dict:
     return dict(type='object', additionalProperties=False,
                 properties=dict(schema_version={'type': 'integer', 'enum': [1]},
                                 answer={'type': 'string', 'minLength': 1, 'maxLength': 4096},
-                                citations={'type': 'array', 'minItems': 1, 'maxItems': 1,
+                                citations={'type': 'array', 'minItems': 1, 'maxItems': 3,
                                            'items': citation},
                                 limits={'type': 'array', 'maxItems': 20,
                                         'items': {'type': 'string', 'minLength': 1, 'maxLength': 1024}}),

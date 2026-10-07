@@ -42,6 +42,38 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['finding']['retained_evidence'][0]['source'], '1: return 1')
         self.assertNotIn('claim', result)
 
+    async def test_multi_source_retention_after_correction_and_source_deletion(self):
+        root = Path(self.temp.name)
+        (root / 'other.py').write_text('return 2\n')
+        async def generate(prompt):
+            return dict(schema_version=1, answer='Two fixture return statements',
+                limits=['Synthetic; no semantic correctness attestation'],
+                citations=[{key: item[key] for key in ('path', 'start_line', 'end_line', 'sha256')}
+                           for item in prompt['evidence_bundle']])
+        result = await self.run_adapter(generate, enabled=True, additional_sources=[
+            dict(path='other.py', start_line=1, end_line=1)])
+        self.assertEqual(len(result['finding']['retained_evidence']), 2)
+        self.registry.review('fixture', self.task['id'], result['revision'], 'reviewer',
+                             'request_correction', 'Need stronger conclusion')
+        (root / 'fixture.py').unlink()
+        (root / 'other.py').unlink()
+        saved = TaskRegistry(str(root / 'state')).get('fixture', self.task['id'])
+        self.assertEqual(saved['status'], 'queued')
+        self.assertEqual(saved['submissions'][0]['finding'], result['finding'])
+        self.assertEqual(len(saved['checkpoint']['evidence_bundle']), 2)
+
+    async def test_multi_source_missing_citation_rejected(self):
+        (Path(self.temp.name) / 'other.py').write_text('return 2\n')
+        with self.assertRaises(ValueError):
+            await self.run_adapter(enabled=True, additional_sources=[
+                dict(path='other.py', start_line=1, end_line=1)])
+        self.assertNotIn('submissions', self.registry.get('fixture', self.task['id']))
+
+    async def test_too_many_sources_rejected_before_claim(self):
+        with self.assertRaises(ValueError):
+            await self.run_adapter(enabled=True, additional_sources=[{}] * 3)
+        self.assertEqual(self.registry.get('fixture', self.task['id'])['status'], 'queued')
+
     async def test_unsupplied_citation_rejected(self):
         async def generate(prompt):
             result = await self.generate(prompt)
