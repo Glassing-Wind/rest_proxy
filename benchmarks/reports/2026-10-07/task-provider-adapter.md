@@ -130,3 +130,21 @@ PR revision 53b62cf's eight hosted checks passed before this change. Next record
 allowlisted completion metadata and rejected-attempt usage separately from success,
 then decide a bounded output-budget/reasoning adjustment from evidence. Never accept
 unfinished output merely because partial text parses as JSON. Real acceptance open.
+
+## Rejected-attempt metadata — October 7
+
+The optional local adapter now exposes `attempt_receipt` separately from successful
+`receipt`: allowlisted finish reason, model identity match and bounded nonnegative
+integer prompt/completion counters. Unknown provider strings, output text and extra
+fields are excluded; each call resets both receipts. Attempt metadata is caller-held,
+not automatically persisted to registry history. Eleven provider tests, five worker
+tests and focused Ruff checks pass, including private-content exclusion and reset.
+
+One synthetic trial against already-loaded Qwen reported `finish_reason=length`,
+449 prompt tokens and 1,024 completion tokens in 5.377 seconds. The completion reached
+the configured 1,024-token output limit. No finding was accepted; the checkpoint
+remained available before disposable fixture cleanup. These are provider-reported
+counters, not savings or quality measurements. No model/service lifecycle changes.
+See [attempt evidence](task-attempt-metadata.json). Prior commit 739b9c8 passed all
+eight hosted checks. Next test an explicit bounded output-budget option while retaining
+stop-only acceptance and source validation; reasoning/output allocation is still unknown.

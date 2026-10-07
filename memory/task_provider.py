@@ -60,9 +60,11 @@ class LocalTaskProvider:
         self.enabled = enabled
         self.transport = transport
         self.receipt = None
+        self.attempt_receipt = None
 
     async def __call__(self, prompt: dict) -> dict:
         self.receipt = None
+        self.attempt_receipt = None
         if self.enabled is not True:
             raise ValueError('Local provider requires explicit opt-in')
         supplied = encoded(prompt)
@@ -97,6 +99,26 @@ class LocalTaskProvider:
             payload = json.loads(data)
         except (ValueError, UnicodeDecodeError) as error:
             raise ProviderValidationError('response_json') from error
+        # Diagnostic metadata is separate from accepted-generation provenance.
+        # Unknown strings and extra provider fields may contain private content.
+        if isinstance(payload, dict):
+            usage = payload.get('usage')
+            observed = None
+            if isinstance(usage, dict) and all(
+                    type(usage.get(key)) is int and 0 <= usage[key] <= 2**63 - 1
+                    for key in ('prompt_tokens', 'completion_tokens')):
+                observed = {key: usage[key] for key in ('prompt_tokens', 'completion_tokens')}
+            choices = payload.get('choices')
+            reason = None
+            if isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], dict):
+                value = choices[0].get('finish_reason')
+                reason = value if isinstance(value, str) and value in {
+                    'stop', 'length', 'tool_calls', 'function_call', 'content_filter'} else 'unknown'
+            self.attempt_receipt = dict(
+                requested_model=self.model, model_identity_matches=payload.get('model') == self.model,
+                finish_reason=reason, usage=observed,
+                usage_source='provider-reported' if observed is not None else 'unavailable',
+                requests=1, tools_enabled=False, accepted=False)
         if not isinstance(payload, dict) or payload.get('model') != self.model:
             raise ProviderValidationError('model_identity')
         choices = payload.get('choices')
@@ -119,13 +141,9 @@ class LocalTaskProvider:
             raise ProviderValidationError('finding_json') from error
         if not isinstance(finding, dict):
             raise ProviderValidationError('finding_type')
-        usage = payload.get('usage')
-        observed = None
-        if isinstance(usage, dict):
-            if all(type(usage.get(key)) is int and usage[key] >= 0 for key in
-                   ('prompt_tokens', 'completion_tokens')):
-                observed = {key: usage[key] for key in ('prompt_tokens', 'completion_tokens')}
-        self.receipt = dict(requested_model=self.model, returned_model=payload.get('model'),
-                            usage=observed, usage_source='provider-reported' if observed else 'unavailable',
+        self.receipt = dict(requested_model=self.model, returned_model=self.model,
+                            usage=self.attempt_receipt['usage'],
+                            usage_source=self.attempt_receipt['usage_source'],
                             requests=1, tools_enabled=False)
+        self.attempt_receipt['accepted'] = True
         return finding

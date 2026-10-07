@@ -126,6 +126,32 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads(caught.exception.detail)['error'], 'fixture rejection')
         self.assertFalse(caught.exception.detail_truncated)
 
+    async def test_rejected_attempt_metadata_is_allowlisted_and_resets(self):
+        responses = iter([
+            httpx.Response(200, json=dict(model='fixture-model', secret='private',
+                choices=[dict(finish_reason='length', message={'content': 'private'})],
+                usage=dict(prompt_tokens=90, completion_tokens=1024, secret='private'))),
+            httpx.Response(200, json=dict(model='private',
+                choices=[dict(finish_reason='private')],
+                usage=dict(prompt_tokens=True, completion_tokens=4))),
+            httpx.Response(200, content=b'invalid')])
+        provider = self.provider(lambda request: next(responses))
+        with self.assertRaises(ProviderValidationError):
+            await provider({})
+        self.assertEqual(provider.attempt_receipt['finish_reason'], 'length')
+        self.assertEqual(provider.attempt_receipt['usage']['completion_tokens'], 1024)
+        self.assertFalse(provider.attempt_receipt['accepted'])
+        self.assertIsNone(provider.receipt)
+        self.assertNotIn('private', json.dumps(provider.attempt_receipt))
+        with self.assertRaises(ProviderValidationError):
+            await provider({})
+        self.assertEqual(provider.attempt_receipt['finish_reason'], 'unknown')
+        self.assertIsNone(provider.attempt_receipt['usage'])
+        self.assertNotIn('private', json.dumps(provider.attempt_receipt))
+        with self.assertRaises(ProviderValidationError):
+            await provider({})
+        self.assertIsNone(provider.attempt_receipt)
+
     async def test_validation_stage_has_no_raw_content(self):
         provider = self.provider(lambda request: httpx.Response(200, json={
             'model': 'fixture-model', 'choices': [{'finish_reason': 'stop',

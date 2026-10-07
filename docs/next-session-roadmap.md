@@ -1,5 +1,17 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Bounded rejected-attempt diagnostics — October 7
+
+The optional adapter now separates allowlisted attempt metadata from accepted
+findings. Eleven provider tests and five worker tests pass. A synthetic Qwen trial
+reported `length` at the configured 1,024-token completion limit (449 prompt tokens);
+no finding accepted, checkpoint preserved before disposable fixture cleanup.
+[Evidence](../benchmarks/reports/2026-10-07/task-attempt-metadata.json).
+Attempt metadata is caller-held, not durable task history. Next add an explicit
+bounded output-budget option and test it without relaxing stop/citation validation.
+No quality or savings claim; all five overall priorities retain their open gates.
+
+
 
 
 ## Optional local-provider fixture — October 7
