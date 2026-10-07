@@ -1,5 +1,18 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Exact-bundle advisory capture — October 7
+
+Local capture helper validates exported bundle against current revision/submission/
+finding before storing advice. Two new tests verify reopen, replay/edited-bundle and
+post-cancellation rejection. Assessment/export regressions (four tests) and focused
+Ruff pass. No task approval/status change. Local 3,175-byte preview prepared for
+Siri task revision 7, original submission 1, not transmitted to Cloud.
+[Handoff instructions](shortcuts/fire-review-handoff.md). GUI model input/capture
+wiring remains pending; the existing shortcut still runs its synthetic prompt.
+Next user choice of this exact evidence bundle/destination before live cloud review.
+This is not a persistent supervisor or verified model identity.
+
+
 ## Advisory assessment retention — October 7
 
 TaskRegistry.record_assessment and the local JSON operation now retain an 8 KiB
