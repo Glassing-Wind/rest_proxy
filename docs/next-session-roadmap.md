@@ -1,5 +1,19 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## TurboTenant introduction sent — October 8
+
+User explicitly authorized sending the reviewed short introduction. Gmail displayed
+“Message sent” for the introduction to TurboTenant's publicly listed partnership
+address. It asked whether product/engineering would like a five-minute demonstration
+of findings in the user's rental platform. No attachments, source code or price
+were included. Send confirmation is not proof of delivery, response or buyer interest.
+
+This authorization covers that introduction only; follow-up messages, other recipients
+and commercial commitments still need user instruction. No reply inspection or
+scheduled outreach is authorized by this record. Next prepare the existing rental
+walkthrough for an interested reviewer and obtain one concrete workflow/problem
+before agreeing a pilot. Framework expansion remains parked.
+
 ## First practical offer recommendation — October 8
 
 Reviewed the rental demonstration and narrowed the generic investigation offer to
