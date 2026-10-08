@@ -1,5 +1,19 @@
 # Five-priority completion status — October 6, 2026
 
+## Durable gateway direction reconciled — October 7
+
+User-provided study summary introduces configured forwarding, a separate durable
+event journal, idempotent evidence projection and scoped retrieval. Local HEAD has
+newer task recovery/failure reporting, but no demonstrated traffic capture pipeline.
+[Concrete prototype decisions](durable-knowledge-gateway.md) preserve existing
+inference behavior and exclude external-action replay. Full study file is missing;
+source review remains pending. No code/runtime/license change in this slice.
+Next gateway proof: offline private journal plus crash/reopen and idempotent local
+projection tests, before a single controlled HTTP route. Existing task recovery and
+paired investigation evaluations remain open; coordinate cloud ownership before
+editing overlapping files. Do not replace revenue validation with platform scope.
+
+
 ## Returned-finding rejection history — October 7
 
 Worker now best-effort records finding_rejected at returned_finding stage when
