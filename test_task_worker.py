@@ -78,6 +78,30 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved['status'], 'cancelled')
         self.assertNotIn('failures', saved)
 
+    async def test_wrong_citation_records_rejection_without_model_text(self):
+        async def invalid(prompt):
+            return dict(schema_version=1, answer='private-generated-output', citations=[], limits=[])
+        with self.assertRaises(ValueError):
+            await self.run_adapter(invalid, enabled=True)
+        saved = self.registry.get('fixture', self.task['id'])
+        self.assertEqual(saved['status'], 'claimed')
+        self.assertNotIn('submissions', saved)
+        self.assertEqual(saved['failures'][0]['category'], 'finding_rejected')
+        self.assertEqual(saved['failures'][0]['stage'], 'returned_finding')
+        self.assertNotIn('private-generated-output', str(saved))
+        self.assertEqual(self.registry.inspect('fixture', self.task['id'])['failures'], saved['failures'])
+
+    async def test_source_change_before_submit_retains_rejection(self):
+        async def changed(prompt):
+            result = await self.generate(prompt)
+            (Path(self.temp.name) / 'fixture.py').write_text('return 999\n')
+            return result
+        with self.assertRaises(ValueError):
+            await self.run_adapter(changed, enabled=True)
+        saved = self.registry.get('fixture', self.task['id'])
+        self.assertEqual(saved['failures'][0]['category'], 'finding_rejected')
+        self.assertNotIn('submissions', saved)
+
     async def test_disabled_makes_no_claim_or_call(self):
         with self.assertRaises(ValueError):
             await self.run_adapter()

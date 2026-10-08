@@ -72,29 +72,36 @@ async def run_worker(registry: TaskRegistry, project: str, task_id: str, revisio
             # Cancellation, reclaim, stale revision or storage failure must not be overwritten.
             pass
         raise
-    if not isinstance(result, dict) or len(encoded(result).encode()) > 16384:
-        raise ValueError('Require finding object of at most 16 KiB')
-    citations = result.get('citations')
-    expected = [{key: item[key] for key in ('path', 'start_line', 'end_line', 'sha256')}
-                for item in evidence_bundle]
-    if citations != expected:
-        raise ValueError('Worker must cite exactly its supplied source ranges')
-    generation = None
-    receipt = getattr(generate, 'receipt', None)
-    if isinstance(receipt, dict):
-        usage = receipt.get('usage')
-        if not (isinstance(usage, dict) and set(usage) == {'prompt_tokens', 'completion_tokens'}
-                and all(type(value) is int and value >= 0 for value in usage.values())):
-            usage = None
-        requested = receipt.get('requested_model')
-        returned = receipt.get('returned_model')
-        if (isinstance(requested, str) and 0 < len(requested) <= 128 and returned == requested):
-            generation = dict(requested_model=requested, returned_model=returned,
-                              usage=usage, usage_source='provider-reported' if usage else 'unavailable',
-                              requests=1, tools_enabled=False,
-                              attestation='trusted adapter report; not independent metering')
-    submitted = dispatch.submit_finding(project, task_id, task['revision'], token, result,
-                                        generation=generation)
+    try:
+        if not isinstance(result, dict) or len(encoded(result).encode()) > 16384:
+            raise ValueError('Require finding object of at most 16 KiB')
+        citations = result.get('citations')
+        expected = [{key: item[key] for key in ('path', 'start_line', 'end_line', 'sha256')}
+                    for item in evidence_bundle]
+        if citations != expected:
+            raise ValueError('Worker must cite exactly its supplied source ranges')
+        generation = None
+        receipt = getattr(generate, 'receipt', None)
+        if isinstance(receipt, dict):
+            usage = receipt.get('usage')
+            if not (isinstance(usage, dict) and set(usage) == {'prompt_tokens', 'completion_tokens'}
+                    and all(type(value) is int and value >= 0 for value in usage.values())):
+                usage = None
+            requested = receipt.get('requested_model')
+            returned = receipt.get('returned_model')
+            if (isinstance(requested, str) and 0 < len(requested) <= 128 and returned == requested):
+                generation = dict(requested_model=requested, returned_model=returned,
+                                  usage=usage, usage_source='provider-reported' if usage else 'unavailable',
+                                  requests=1, tools_enabled=False,
+                                  attestation='trusted adapter report; not independent metering')
+        submitted = dispatch.submit_finding(project, task_id, task['revision'], token, result,
+                                            generation=generation)
+    except Exception:
+        try:
+            registry.record_failure(project, task_id, task['revision'], token, 'finding_rejected')
+        except Exception:
+            pass
+        raise
     # Do not return bearer capabilities or the entire private task record.
     return dict(task_id=task_id, project=project, revision=submitted['revision'],
                 status=submitted['status'], inference_calls=1,

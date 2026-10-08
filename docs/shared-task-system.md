@@ -1,5 +1,23 @@
 # Shared task system — direction and first acceptance milestone
 
+## Returned-finding rejection history — October 7
+
+Worker now best-effort records finding_rejected at returned_finding stage when
+result validation, freshness checking or submission fails. Generation errors remain
+separate. This category identifies the pipeline stage, not a semantic judgment or
+proof the provider is at fault; persistence failures can also prevent submission.
+Raw returned content/exception messages are excluded. Claims/checkpoints stay intact;
+stale revision/cancel/reclaim prevents history overwrite, and no retry is triggered.
+
+30 checks pass (worker 15, registry 12, inspection 2, CLI 1), plus focused lint.
+New fixtures verify bad citation rejection and source changes before submit, without
+persisting rejected model text or creating submissions. All eight hosted checks for
+f97a54f passed. No live task or inference calls. Next make an explicit recovery
+preview that shows revision, expiry and source ranges before another bounded run;
+do not repeatedly retry the unchanged 20-second provider timeout.
+[Dated evidence](../benchmarks/reports/2026-10-07/returned-finding-failures.md).
+
+
 ## Sanitized task inspection — October 7
 
 Local task API now exposes inspect: revision/status/attempts, claim presence/expiry,
