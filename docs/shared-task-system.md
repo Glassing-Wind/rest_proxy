@@ -1,5 +1,18 @@
 # Shared task system — direction and first acceptance milestone
 
+## Bounded helper extraction contract — October 7
+
+Helper output validation covers five allowlisted fields with unique record/unresolved
+coverage, 8 KiB source and 4 KiB result budgets, bounded values and exact quote on
+cited source line. Validation returns detached output explicitly marked for supervisor
+verification; an incorrect inferred value with a genuine quote can still pass.
+Three offline tests verify forgery/range/coverage rejection, UTF-8 limits and that
+quote matching does not confer semantic approval. Focused lint passes. No model calls,
+live task changes or token-savings evidence. Next isolated Qwen extraction fixture;
+paid/direct comparison and supervisor verification must include correction overhead.
+All eight hosted checks for 5c735c6 passed.
+
+
 ## Qwen helper role corrected — October 7
 
 User clarified local Qwen is for simple work and possible paid-token reduction,
