@@ -1,5 +1,18 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Full gateway study and first contract — October 7
+
+Full supplied study preserved at [research/rest-proxy-architecture-study.md](research/rest-proxy-architecture-study.md)
+and reconciled with current branch. Internal v1 capture contract now validates exact
+fields, event types, bounded identifiers, timestamps, canonical payload hash and UTF-8
+size caps (8 KiB payload/10 KiB event). Two offline checks pass with focused lint.
+Contract does not authenticate scope, redact payload, persist events or forward traffic;
+no CloudEvents compliance claimed. Hash establishes identity, not truth/authenticity.
+Next private SQLite journal with transactional append, duplicate-ID conflict handling,
+scoped reads and subprocess crash/reopen proof, before routing. Existing inference
+routes remain untouched. No framework installation or licensing changes.
+
+
 ## Durable gateway direction reconciled — October 7
 
 User-provided study summary introduces configured forwarding, a separate durable

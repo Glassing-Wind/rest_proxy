@@ -1,10 +1,11 @@
 # Durable knowledge gateway direction — October 7, 2026
 
-Basis: user-provided architecture-study summary, reconciled with local HEAD f96f765
-and open draft PR #4 (codex/task-provider-adapter → main). The detailed
-rest-proxy-architecture-study.md was not found in repository, Downloads or attachment
-paths searched. Its sources and full conclusions have not been reviewed. The summary
-reports an inspection of main d2ae74c; do not treat that as the current branch state.
+Basis: full user-provided [architecture study](research/rest-proxy-architecture-study.md),
+read October 7 and reconciled with local HEAD 52ffb86 and open draft PR #4.
+The study inspected main d2ae74c; the active branch adds task recovery, advisory
+retention and failure inspection. Study source links are preserved as supplied;
+upstream protocol/license claims have not been independently reverified in this
+implementation slice. No new dependency or license decision relies on them.
 
 REST proxy may expand into a configured knowledge gateway: forwarding → durable
 journal → asynchronous normalization → evidence stores/indexes → agent tools.
