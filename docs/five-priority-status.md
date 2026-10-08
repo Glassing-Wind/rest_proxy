@@ -1,5 +1,19 @@
 # Five-priority completion status — October 6, 2026
 
+## First practical offer recommendation — October 8
+
+Reviewed the rental demonstration and narrowed the generic investigation offer to
+[one application workflow investigation](paid-investigation-pilot.md): reproduce,
+diagnose browser/API/persistence behavior, propose a narrow change and regressions,
+and walk through the evidence. Proposed $750, eight total delivery hours, up to
+three questions; implementation is separately scoped. Supports JavaScript/TypeScript
+or Python after a fit check, matching the actual rental demonstration.
+
+This is a recommended offer, not approved customer terms or evidence of demand.
+Next user-led problem conversation and fit check for one actual workflow. No
+outreach, invoice, commercial commitment or platform performance claim. Track all
+labor and direct costs in the first pilot; prior demonstration effort is unmeasured.
+
 ## Active delivery scope — October 8
 
 The next acceptance is the rental-owned five-minute walkthrough and a user-selected
