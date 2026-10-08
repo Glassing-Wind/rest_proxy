@@ -60,7 +60,18 @@ async def run_worker(registry: TaskRegistry, project: str, task_id: str, revisio
         raise ValueError('Worker input exceeds 8 KiB; use a smaller source range')
     task = registry.checkpoint(project, task_id, task['revision'], token,
                                {'evidence': evidence, 'evidence_bundle': evidence_bundle, 'next_action': 'generate structured finding'})
-    result = await asyncio.wait_for(generate(prompt), timeout=timeout_seconds)
+    try:
+        result = await asyncio.wait_for(generate(prompt), timeout=timeout_seconds)
+    except Exception as error:
+        category = ('timeout' if isinstance(error, TimeoutError) or
+                    type(error).__name__ in ('ReadTimeout', 'ConnectTimeout', 'WriteTimeout',
+                                            'PoolTimeout') else 'generation_error')
+        try:
+            registry.record_failure(project, task_id, task['revision'], token, category)
+        except Exception:
+            # Cancellation, reclaim, stale revision or storage failure must not be overwritten.
+            pass
+        raise
     if not isinstance(result, dict) or len(encoded(result).encode()) > 16384:
         raise ValueError('Require finding object of at most 16 KiB')
     citations = result.get('citations')

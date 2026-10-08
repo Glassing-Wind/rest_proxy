@@ -1,5 +1,23 @@
 # Five-priority completion status — October 6, 2026
 
+## Durable generation failure metadata — October 7
+
+One-shot worker now best-effort stores timeout/generation_error with attempt number,
+stage, observed revision and unknown remote termination. Raw error text, model output,
+claim tokens and usage guesses are excluded. Recording preserves claimed status and
+checkpoint; cancellation/reclaim/stale revision rejects recording instead of overwriting
+newer state. Current claim may report after lease expiry, but cannot perform actions.
+At most five records fit within the existing transactional 64 KiB task cap.
+
+26 worker/registry/CLI checks and focused lint pass. New fixtures verify reopen with
+sanitized timeout and cancellation during generation without stale writes. Existing
+live timeout is not retroactively invented as a worker record; dated evidence remains.
+No new model calls or live task changes. All eight hosted checks for 77bdd1c passed.
+Next expose sanitized failure summaries to task inspection and distinguish validation
+failures after generation from transport/generation errors; retries remain explicit.
+[Dated evidence](../benchmarks/reports/2026-10-07/task-generation-failures.md).
+
+
 ## Live expired-claim recovery outcome — October 7
 
 One explicitly scoped recovery of Siri task 1214c5b2e644470197b691e7e8e849aa

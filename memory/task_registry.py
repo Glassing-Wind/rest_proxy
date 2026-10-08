@@ -129,6 +129,24 @@ class TaskRegistry:
             task['checkpoint'] = checkpoint
         return self._update(project, task_id, revision, edit)
 
+    def record_failure(self, project: str, task_id: str, revision: int,
+                       claim_token: str, category: str) -> dict:
+        """Retain bounded failure category for current claim; no retry or state change."""
+        if category not in ('timeout', 'generation_error'):
+            raise ValueError('Unsupported failure category')
+
+        def edit(task):
+            claim = task['claim']
+            if task['status'] != 'claimed' or not claim or claim['token'] != claim_token:
+                raise ValueError('Invalid current claim')
+            failures = task.setdefault('failures', [])
+            if len(failures) >= 5:
+                raise ValueError('Failure retention limit reached')
+            failures.append(dict(at=time.time(), attempt=task['attempts'], category=category,
+                                 stage='generation', observed_revision=revision,
+                                 remote_termination='unknown'))
+        return self._update(project, task_id, revision, edit)
+
     def cancel(self, project: str, task_id: str, revision: int, reason: str) -> dict:
         """Persist cancellation; this does not interrupt a running process."""
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:

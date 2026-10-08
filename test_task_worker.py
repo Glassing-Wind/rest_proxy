@@ -54,6 +54,30 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.calls, 0)
         self.assertEqual(self.registry.get('fixture', self.task['id'])['revision'], claimed['revision'])
 
+    async def test_generation_failure_reopens_without_private_error_text(self):
+        async def failing(prompt):
+            raise TimeoutError('private-provider-body')
+        with self.assertRaises(TimeoutError):
+            await self.run_adapter(failing, enabled=True)
+        saved = TaskRegistry(str(Path(self.temp.name) / 'state')).get('fixture', self.task['id'])
+        self.assertEqual(saved['status'], 'claimed')
+        self.assertEqual(saved['failures'][0]['category'], 'timeout')
+        self.assertEqual(saved['failures'][0]['attempt'], 1)
+        self.assertEqual(saved['failures'][0]['remote_termination'], 'unknown')
+        self.assertNotIn('private-provider-body', str(saved))
+        self.assertTrue(saved['checkpoint'])
+
+    async def test_failure_after_cancellation_does_not_overwrite_task(self):
+        async def failing(prompt):
+            task = self.registry.get('fixture', self.task['id'])
+            self.registry.cancel('fixture', task['id'], task['revision'], 'User stopped')
+            raise RuntimeError('private')
+        with self.assertRaises(RuntimeError):
+            await self.run_adapter(failing, enabled=True)
+        saved = self.registry.get('fixture', self.task['id'])
+        self.assertEqual(saved['status'], 'cancelled')
+        self.assertNotIn('failures', saved)
+
     async def test_disabled_makes_no_claim_or_call(self):
         with self.assertRaises(ValueError):
             await self.run_adapter()
