@@ -1,5 +1,17 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Qwen helper role corrected — October 7
+
+User clarified local Qwen is for simple work and possible paid-token reduction,
+not supervision. [Helper direction](helper-agent-direction.md) assigns supervision
+to Codex/user and execution/validation to deterministic tools. Historical reviewer
+trials are not helper-quality evidence. Next isolated field-extraction trial with
+exact source quotes, supervisor verification and controlled paired accounting.
+No savings, automatic-team, framework installation or live-task retry claim.
+Gateway journal implementation remains independently open. All eight hosted checks
+for 41bdc09 passed. This milestone changes documentation only.
+
+
 ## Full gateway study and first contract — October 7
 
 Full supplied study preserved at [research/rest-proxy-architecture-study.md](research/rest-proxy-architecture-study.md)

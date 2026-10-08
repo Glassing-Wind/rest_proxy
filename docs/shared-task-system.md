@@ -1,5 +1,17 @@
 # Shared task system — direction and first acceptance milestone
 
+## Qwen helper role corrected — October 7
+
+User clarified local Qwen is for simple work and possible paid-token reduction,
+not supervision. [Helper direction](helper-agent-direction.md) assigns supervision
+to Codex/user and execution/validation to deterministic tools. Historical reviewer
+trials are not helper-quality evidence. Next isolated field-extraction trial with
+exact source quotes, supervisor verification and controlled paired accounting.
+No savings, automatic-team, framework installation or live-task retry claim.
+Gateway journal implementation remains independently open. All eight hosted checks
+for 41bdc09 passed. This milestone changes documentation only.
+
+
 ## Returned-finding rejection history — October 7
 
 Worker now best-effort records finding_rejected at returned_finding stage when
