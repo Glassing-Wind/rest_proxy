@@ -1,5 +1,21 @@
 # Five-priority completion status — October 6, 2026
 
+## Sanitized task inspection — October 7
+
+Local task API now exposes inspect: revision/status/attempts, claim presence/expiry,
+checkpoint presence, recovery/submission/review/assessment counts and bounded failure
+metadata. Goal, workspace, bearer token, worker label, source and free-text history
+are excluded. Inspection performs no mutation or provider calls. Empty failure list
+explicitly does not imply success: older and uninstrumented failure paths are missing.
+
+Two inspection checks, twelve registry and two handoff regressions pass (16), plus
+focused lint. CLI process acceptance verifies safe output and unchanged revision.
+All eight hosted checks for f5c29b5 passed. Live Siri task not modified/retried.
+Next distinguish post-generation validation failures in durable history; generic Siri
+status/cancel UI and automatic dispatch remain open.
+[Dated evidence](../benchmarks/reports/2026-10-07/task-inspection.md).
+
+
 ## Durable generation failure metadata — October 7
 
 One-shot worker now best-effort stores timeout/generation_error with attempt number,

@@ -27,7 +27,7 @@ def main() -> int:
             raise ValueError('Arguments must be an object')
         registry = TaskRegistry(options.state)
         operations = {name: getattr(registry, name) for name in
-                      ('create', 'get', 'claim', 'checkpoint', 'cancel', 'reclaim', 'submit', 'review', 'record_assessment')}
+                      ('create', 'get', 'inspect', 'claim', 'checkpoint', 'cancel', 'reclaim', 'submit', 'review', 'record_assessment')}
         dispatcher = TaskDispatcher(registry)
         operations['read_source'] = dispatcher.read_source
         operations['submit_finding'] = dispatcher.submit_finding

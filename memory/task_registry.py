@@ -72,6 +72,25 @@ class TaskRegistry:
         with self.connect() as db:
             return self._read(db, project, task_id)
 
+    def inspect(self, project: str, task_id: str) -> dict:
+        """Read status metadata without bearer tokens, source, goals or free text."""
+        task = self.get(project, task_id)
+        claim = task.get('claim')
+        failures = [{key: item[key] for key in ('at', 'attempt', 'category', 'stage',
+                    'observed_revision', 'remote_termination') if key in item}
+                    for item in task.get('failures', [])]
+        return dict(task_id=task['id'], project=task['project'], revision=task['revision'],
+                    status=task['status'], attempts=task['attempts'],
+                    claim_present=bool(claim),
+                    claim_expired=bool(claim and claim['expires_at'] <= time.time()),
+                    checkpoint_present=bool(task.get('checkpoint')),
+                    recovery_count=len(task.get('claim_history', [])),
+                    submission_count=len(task.get('submissions', [])),
+                    review_count=len(task.get('reviews', [])),
+                    assessment_count=len(task.get('assessments', [])), failures=failures,
+                    failure_history_complete=False,
+                    note='Only instrumented generation failures retained; absence is not success')
+
     @staticmethod
     def _read(db, project, task_id):
         row = db.execute('SELECT payload FROM tasks WHERE project=? AND id=?',
