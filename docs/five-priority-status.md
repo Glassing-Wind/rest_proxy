@@ -1,5 +1,24 @@
 # Five-priority completion status — October 6, 2026
 
+## Active delivery scope — October 8
+
+The next acceptance is the rental-owned five-minute walkthrough and a user-selected
+bounded pilot scope. The demonstration and receipt verification are ready; no further
+framework, model or gateway implementation is a prerequisite. Rental application
+changes remain in its separate project conversation.
+
+Older dated entries below retain historical next steps and blockers. They are an
+implementation log, not a queue to execute in parallel. The current outcome-first
+scope supersedes their model trials, gateway journal and additional scaffolding next
+steps unless a concrete delivery blocker is identified. Qwen remains an optional
+simple-task helper; Codex/user retain supervision. The five priorities remain partial.
+
+Hosted CI for e3500eeb2d9c85f04cd76d63ce0692235fcc0e3c passed all eight checks;
+[dated verification](../benchmarks/reports/2026-10-08/delivery-scope-and-ci.md)
+records the exact revision and runs. Awaiting pilot scope is a product decision,
+not an indexing or provider failure. Do not spend live-task attempts or repeatedly
+add documentation milestones while that decision is pending.
+
 ## Rental demonstration receipt verified — October 8
 
 Read-only inspection confirms retained multiline/database evidence, no Enter-triggered
