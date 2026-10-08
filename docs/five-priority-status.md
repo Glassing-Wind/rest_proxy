@@ -1,5 +1,23 @@
 # Five-priority completion status — October 6, 2026
 
+## Isolated helper trial blocked by output budget — October 7
+
+Literal five-field extraction fixture ran separately from live tasks. json_object
+request returned HTTP 400; body not retained, exact rejection reason unverified.
+One explicit json_schema request completed HTTP 200 in 10.543 s but finish_reason
+length and empty final output. Provider reported 302 prompt/2048 completion tokens,
+all completion tokens attributed to reasoning. No extractable result or supervisor
+semantic verification possible. No further retries in this milestone.
+[Dated attempt evidence](../benchmarks/reports/2026-10-07/qwen-helper-extraction-trial.json).
+
+Three contract regressions pass. All eight hosted checks for e1c5f36 passed. No live
+task mutation or model/service lifecycle changes. No conclusion about general helper
+suitability or paid-token savings: direct baseline and verification usage unmeasured.
+Next investigate bounded per-request reasoning controls supported by this exact model/
+LM Studio runtime before changing settings or increasing budgets blindly. Continue
+independent gateway journal work while inference compatibility remains unresolved.
+
+
 ## Bounded helper extraction contract — October 7
 
 Helper output validation covers five allowlisted fields with unique record/unresolved
