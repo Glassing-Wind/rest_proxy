@@ -1,5 +1,18 @@
 # Five-priority completion status — October 6, 2026
 
+## Outcome-first rental demonstration — October 7
+
+User accepted narrowing to a real useful investigation. Existing rental chat owns
+application behavior and has reached disposable PostgreSQL/browser acceptance; no
+need to invent another infrastructure prerequisite. [Compiled demonstration](../benchmarks/reports/2026-10-07/rental-outcome/demo.md)
+links original submission bug/fix, cleared-note fix, latest 30-test/browser receipt
+and limitations. This slice compiles evidence, not a new browser run or independent
+review. No paid-token/delivery-effort measurements exist. Rental changes untouched.
+Next rental-owned five-minute walkthrough and an agreed bounded pilot scope.
+Park new model/framework/gateway expansion unless needed for that delivery; keep
+five-priority gaps honest. No outreach or commercial commitments without approval.
+
+
 ## Isolated helper trial blocked by output budget — October 7
 
 Literal five-field extraction fixture ran separately from live tasks. json_object
