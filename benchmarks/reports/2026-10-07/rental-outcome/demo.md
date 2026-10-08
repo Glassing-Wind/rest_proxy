@@ -52,3 +52,12 @@ commercial promise or recording of real applicant data authorized by this artifa
 Further framework/model tuning and gateway expansion are parked as delivery work
 unless they resolve a concrete blocker. This is a direction decision, not deletion
 of the documented longer-term ideas or suspension of automations.
+
+## Receipt verification — October 8
+
+[Read-only verification](receipt-verification.json) binds six retained evidence files
+to SHA-256 identities and compares three relevant current source files with their
+tested hashes: applicant UI, ApplicationService and journey script all match.
+Saved multiline text matches the database receipt, Enter triggered no write, and
+final submitted notes are null. No new browser run or application change performed.
+This does not certify all 176 source hashes, external services or a clean checkout.

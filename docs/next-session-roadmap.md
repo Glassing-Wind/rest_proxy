@@ -1,5 +1,16 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Rental demonstration receipt verified — October 8
+
+Read-only inspection confirms retained multiline/database evidence, no Enter-triggered
+write and final null notes. Three relevant current source hashes match tested receipt;
+six evidence-file hashes captured in [verification](../benchmarks/reports/2026-10-07/rental-outcome/receipt-verification.json).
+No fresh browser run, application fix or independent review claimed. Previous-head
+CI (a298618) passed eight checks. Demonstration is ready for an internal walkthrough;
+next requires rental-owned presentation and user pilot-scope choice, not another
+framework/infrastructure prerequisite. No outreach, pricing promise or task retry.
+
+
 ## Outcome-first rental demonstration — October 7
 
 User accepted narrowing to a real useful investigation. Existing rental chat owns
