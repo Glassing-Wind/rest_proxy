@@ -81,7 +81,7 @@ class TaskDispatcher:
                     observed_at=time.time(), historical=False)
 
     def submit_finding(self, project: str, task_id: str, revision: int,
-                       claim_token: str, finding: dict) -> dict:
+                       claim_token: str, finding: dict, generation: dict | None = None) -> dict:
         """Validate cited current bytes and retain bounded evidence in submission.
 
         This verifies citation identity, not whether the answer follows from it.
@@ -123,4 +123,4 @@ class TaskDispatcher:
             retained.append(evidence)
         return self.registry.submit(project, task_id, revision, claim_token, {
             **finding, 'retained_evidence': retained,
-            'validation': 'source identity/range only; semantic review pending'})
+            'validation': 'source identity/range only; semantic review pending'}, generation=generation)

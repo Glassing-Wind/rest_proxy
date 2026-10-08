@@ -1,0 +1,15 @@
+{
+  "task_id": "37f060b4b4d542798757f48cbf72f7da",
+  "project": "rest_proxy",
+  "status": "queued",
+  "revision": 1,
+  "actions": [
+    "read_source"
+  ],
+  "claim_present": false,
+  "attempts": 0,
+  "registry_reopen": true,
+  "gui_confirmation": "User supplied screenshot shows queued confirmation",
+  "siri_voice_tested": false,
+  "agent_invoked": false
+}

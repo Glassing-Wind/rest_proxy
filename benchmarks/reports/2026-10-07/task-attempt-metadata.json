@@ -1,0 +1,24 @@
+{
+  "status": "failed",
+  "error_type": "ProviderValidationError",
+  "validation_stage": "finish_reason",
+  "task_status": "claimed",
+  "checkpoint_retained": true,
+  "adapter_receipt": null,
+  "attempt_receipt": {
+    "requested_model": "qwen3.6-35b-a3b-splash",
+    "model_identity_matches": true,
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 449,
+      "completion_tokens": 1024
+    },
+    "usage_source": "provider-reported",
+    "requests": 1,
+    "tools_enabled": false,
+    "accepted": false
+  },
+  "http_status": null,
+  "response_detail": "",
+  "elapsed_seconds": 5.377
+}

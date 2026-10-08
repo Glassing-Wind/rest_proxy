@@ -72,6 +72,25 @@ class TaskRegistry:
         with self.connect() as db:
             return self._read(db, project, task_id)
 
+    def inspect(self, project: str, task_id: str) -> dict:
+        """Read status metadata without bearer tokens, source, goals or free text."""
+        task = self.get(project, task_id)
+        claim = task.get('claim')
+        failures = [{key: item[key] for key in ('at', 'attempt', 'category', 'stage',
+                    'observed_revision', 'remote_termination') if key in item}
+                    for item in task.get('failures', [])]
+        return dict(task_id=task['id'], project=task['project'], revision=task['revision'],
+                    status=task['status'], attempts=task['attempts'],
+                    claim_present=bool(claim),
+                    claim_expired=bool(claim and claim['expires_at'] <= time.time()),
+                    checkpoint_present=bool(task.get('checkpoint')),
+                    recovery_count=len(task.get('claim_history', [])),
+                    submission_count=len(task.get('submissions', [])),
+                    review_count=len(task.get('reviews', [])),
+                    assessment_count=len(task.get('assessments', [])), failures=failures,
+                    failure_history_complete=False,
+                    note='Only instrumented generation failures retained; absence is not success')
+
     @staticmethod
     def _read(db, project, task_id):
         row = db.execute('SELECT payload FROM tasks WHERE project=? AND id=?',
@@ -129,6 +148,25 @@ class TaskRegistry:
             task['checkpoint'] = checkpoint
         return self._update(project, task_id, revision, edit)
 
+    def record_failure(self, project: str, task_id: str, revision: int,
+                       claim_token: str, category: str) -> dict:
+        """Retain bounded failure category for current claim; no retry or state change."""
+        if category not in ('timeout', 'generation_error', 'finding_rejected'):
+            raise ValueError('Unsupported failure category')
+
+        def edit(task):
+            claim = task['claim']
+            if task['status'] != 'claimed' or not claim or claim['token'] != claim_token:
+                raise ValueError('Invalid current claim')
+            failures = task.setdefault('failures', [])
+            if len(failures) >= 5:
+                raise ValueError('Failure retention limit reached')
+            failures.append(dict(at=time.time(), attempt=task['attempts'], category=category,
+                                 stage='returned_finding' if category == 'finding_rejected' else 'generation',
+                                 observed_revision=revision,
+                                 remote_termination='unknown'))
+        return self._update(project, task_id, revision, edit)
+
     def cancel(self, project: str, task_id: str, revision: int, reason: str) -> dict:
         """Persist cancellation; this does not interrupt a running process."""
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
@@ -161,15 +199,17 @@ class TaskRegistry:
                 raise ValueError('Task attempt limit reached')
             task.setdefault('claim_history', []).append(dict(
                 worker=claim['worker'], expires_at=claim['expires_at'],
-                replaced_at=now, reason=reason))
+                replaced_at=now, reason=reason, checkpoint=task.get('checkpoint')))
             task['attempts'] += 1
             task['claim'] = dict(token=uuid.uuid4().hex, worker=worker,
                                  expires_at=now + lease_seconds)
         return self._update(project, task_id, revision, edit)
 
     def submit(self, project: str, task_id: str, revision: int,
-               claim_token: str, finding: dict) -> dict:
+               claim_token: str, finding: dict, generation: dict | None = None) -> dict:
         """Retain a worker finding and relinquish its claim for explicit review."""
+        if generation is not None and not isinstance(generation, dict):
+            raise ValueError('Generation provenance must be an object')
         if not isinstance(finding, dict) or not finding:
             raise ValueError('Require nonempty finding object')
 
@@ -180,9 +220,30 @@ class TaskRegistry:
             if claim['expires_at'] <= time.time():
                 raise ValueError('Claim expired')
             task.setdefault('submissions', []).append(dict(
-                finding=finding, worker=claim['worker'], at=time.time()))
+                finding=finding, worker=claim['worker'], at=time.time(), generation=generation))
             task['status'] = 'review_pending'
             task['claim'] = None
+        return self._update(project, task_id, revision, edit)
+
+    def record_assessment(self, project: str, task_id: str, revision: int,
+                          submission: int, reviewer: str, assessment: str) -> dict:
+        """Retain an untrusted advisory assessment; never change status or approve work."""
+        self.identifier(reviewer)
+        if not isinstance(assessment, str) or not assessment.strip() or len(assessment.encode()) > 8192:
+            raise ValueError('Require nonempty assessment of at most 8 KiB')
+        if type(submission) is not int or submission < 1:
+            raise ValueError('Require positive submission number')
+
+        def edit(task):
+            if submission > len(task.get('submissions', [])):
+                raise ValueError('Submission not found')
+            assessments = task.setdefault('assessments', [])
+            if len(assessments) >= 10:
+                raise ValueError('Assessment retention limit reached')
+            assessments.append(dict(submission=submission, reviewer=reviewer,
+                                    text=assessment, at=time.time(),
+                                    trust='unverified advisory; caller-supplied identity',
+                                    observed_revision=revision))
         return self._update(project, task_id, revision, edit)
 
     def review(self, project: str, task_id: str, revision: int,

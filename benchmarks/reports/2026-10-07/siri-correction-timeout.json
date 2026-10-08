@@ -1,0 +1,14 @@
+{
+  "task_id": "1214c5b2e644470197b691e7e8e849aa",
+  "status": "claimed",
+  "revision": 7,
+  "attempts": 2,
+  "original_submissions_retained": 1,
+  "reviews_retained": 1,
+  "checkpoint_source_count": 3,
+  "error_type": "ReadTimeout",
+  "adapter_read_timeout_seconds": 20,
+  "accepted_correction": false,
+  "usage_available": false,
+  "automatic_retry": false
+}

@@ -1,0 +1,49 @@
+{
+  "receipt_directory": "/Users/michaelmarler/Projects/rental/output/playwright/rental-applicant-receipts/2026-10-08T051323Z-multiline",
+  "receipt_hashes": {
+    "validation.json": "c0467442503dbd6526e1b97b667e65006267dcb71dab8f4e00479ef82f1b70fc",
+    "source-identity.json": "a2d0e2c6b7b43b412577b4898c76778afe04253fa40ff0ad6c790d04f6532e4f",
+    "replay.json": "d65b1921b254c10a106ba0df15bf2231bd5f69187a894b8ece41ce31923def92",
+    "persistence.json": "d22ff49270fb1f9fbe90c5f5994d69e93accdd3cbb2f05e5f20756ee8595085d",
+    "draft.png": "65bf1899f46912323d941b44c21978928e311e4e5d20de13a84b87681b5636d2",
+    "submitted.png": "d0d96711778a57b8dcd2f2d15103f91b65a36a698ceffeac31675ecf5cc61f1c"
+  },
+  "tested_starting_head": "3ca3d7ef4d3343b4c6b4ef08ba5a646f2a435346",
+  "tested_dirty_working_tree": true,
+  "selected_source_matches": [
+    {
+      "path": "src/public/assets/application-apply.js",
+      "recorded_sha256": "7551e08f4554b7c4ace12f1835f066fb360f78a7bc6808a6600b07246eeffe4b",
+      "current_sha256": "7551e08f4554b7c4ace12f1835f066fb360f78a7bc6808a6600b07246eeffe4b"
+    },
+    {
+      "path": "src/services/ApplicationService.ts",
+      "recorded_sha256": "fd00de1cf6a48e196b1b99fcf391074d305944d8d7149ec75cdd0a52ed2215b2",
+      "current_sha256": "fd00de1cf6a48e196b1b99fcf391074d305944d8d7149ec75cdd0a52ed2215b2"
+    },
+    {
+      "path": "scripts/qa/applicant-journey.js",
+      "recorded_sha256": "7baee068a91c33750b8b39591da0ca95bdc963351c2f6bc31e25a663777d9db8",
+      "current_sha256": "7baee068a91c33750b8b39591da0ca95bdc963351c2f6bc31e25a663777d9db8"
+    }
+  ],
+  "checks": {
+    "saved_multiline_matches": true,
+    "enter_sent_no_writes": true,
+    "final_notes_cleared": true
+  },
+  "reported_validation": {
+    "browser": "PASS",
+    "multilineNote": "PASS",
+    "focusedTests": 30,
+    "build": "not repeated; script/docs only",
+    "integrations": "mocked",
+    "cleanup": "owned launcher terminated; ports checked free"
+  },
+  "limits": [
+    "Read-only receipt inspection, not fresh browser execution",
+    "Hashes identify observed files, not independently establish truth",
+    "Only three current source files compared",
+    "No independent reviewer or FIRE improvement measurement"
+  ]
+}

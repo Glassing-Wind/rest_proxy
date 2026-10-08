@@ -1,0 +1,48 @@
+{
+  "status": "review_pending",
+  "finding": {
+    "answer": "The function total takes an iterable of numerical values and returns their sum.",
+    "citations": [
+      {
+        "end_line": 2,
+        "path": "fixture.py",
+        "sha256": "3251dbf18617cd67c47707cb9bd1611dbac212ff0ee9814a75b8ce1f34b85aad",
+        "start_line": 1
+      }
+    ],
+    "limits": [
+      "No specific limits provided"
+    ],
+    "retained_evidence": [
+      {
+        "end_line": 2,
+        "historical": false,
+        "observed_at": 1791388555.35394,
+        "path": "fixture.py",
+        "project": "live-fixture",
+        "revision": 3,
+        "sha256": "3251dbf18617cd67c47707cb9bd1611dbac212ff0ee9814a75b8ce1f34b85aad",
+        "source": "1: def total(values):\n2:     return sum(values)",
+        "start_line": 1,
+        "task_id": "7a2cb8583d344b39b595899444e8f6ed",
+        "total_lines": 2
+      }
+    ],
+    "schema_version": 1,
+    "validation": "source identity/range only; semantic review pending"
+  },
+  "generation": {
+    "attestation": "trusted adapter report; not independent metering",
+    "requested_model": "qwen3.6-35b-a3b-splash",
+    "requests": 1,
+    "returned_model": "qwen3.6-35b-a3b-splash",
+    "tools_enabled": false,
+    "usage": {
+      "completion_tokens": 2194,
+      "prompt_tokens": 449
+    },
+    "usage_source": "provider-reported"
+  },
+  "reopen_equal": true,
+  "elapsed_seconds": 10.669
+}

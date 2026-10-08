@@ -1,0 +1,72 @@
+{
+  "trials": [
+    {
+      "variant": "full",
+      "prompt_sha256": "65cbf5a30efdeaf3e094f7686137ae0f99d1b5600fbb002620899de16f2cb912",
+      "requested_model": "qwen3.6-35b-a3b-splash",
+      "max_tokens": 4096,
+      "http_status": 200,
+      "returned_model": "qwen3.6-35b-a3b-splash",
+      "usage": {
+        "prompt_tokens": 327,
+        "completion_tokens": 3356,
+        "total_tokens": 3683,
+        "completion_tokens_details": {
+          "reasoning_tokens": 2748
+        }
+      },
+      "content": "\n\n**Supported claims**\n- The intake creates a task/project type labeled `rest_proxy`. (`fixture/intake.py` line 5, `fixture/registry.py` line 1) The code explicitly passes the string `\"rest_proxy\"` as the first argument to `registry.create`, which maps to the `project` key in the returned dictionary.\n- The intake passes `read_source` in the action list. (`fixture/intake.py` line 5, `fixture/registry.py` line 1) The list `[\"read_source\"]` is explicitly passed as the third argument to `registry.create`, which maps to the `actions` key in the returned dictionary.\n\n**Unsupported or unresolved claims**\n- The intake accepts at most 4096 raw bytes. (`fixture/intake.py` lines 2-4) The provided code enforces a 16384-byte limit on the raw input (`len(raw) > 16384`) and a 4096-character limit on the decoded UTF-8 string (`len(goal) > 4096`). The finding incorrectly assigns the decoded character limit to the raw byte limit, conflating bytes read with decoded character validation.\n- The intake invokes Qwen. (No citation in provided excerpts) The provided source files contain no reference to \"Qwen\" or any external model invocation. Absence in this excerpt does not confirm or deny its presence across the repository.\n- The intake guarantees `read_source` execution. (`fixture/intake.py` line 5, `fixture/registry.py` lines 1-2) The code constructs and returns a dictionary containing the action name. This reflects caller intent and data structure creation, not an implementation guarantee of execution. The mechanism that schedules or runs the action is not defined here.\n\n**Suggested corrections**\n- Replace \"accepts at most 4096 raw bytes\" with \"accepts at most 16384 raw bytes, followed by a validation that the decoded UTF-8 string does not exceed 4096 characters.\" (`fixture/intake.py` lines 2-4) The finding incorrectly assigns the decoded character limit to the raw byte limit.\n- Remove \"invokes Qwen\" or provide the specific module/file responsible for model invocation. (Missing source needed: invocation layer, model routing configuration, or external API client) The current excerpt only shows data preparation and registry creation; absence in this excerpt does not equate to absence across the repository.\n- Replace \"guarantees read_source execution\" with \"passes `read_source` as a requested action in the created task dictionary.\" (`fixture/intake.py` line 5, `fixture/registry.py` line 1) The finding conflates caller intent (data passing) with implementation guarantees (execution). Missing source needed: executor, scheduler, or task runner implementation that processes the `actions` list.",
+      "finish_reason": "stop",
+      "elapsed_seconds": 17.718
+    },
+    {
+      "variant": "missing-definition",
+      "prompt_sha256": "122098bba33fd02027b13ee16cc8100bba71738f822d5a5cd4a07fc11bd9687c",
+      "requested_model": "qwen3.6-35b-a3b-splash",
+      "max_tokens": 4096,
+      "http_status": 200,
+      "returned_model": "qwen3.6-35b-a3b-splash",
+      "usage": {
+        "prompt_tokens": 282,
+        "completion_tokens": 3289,
+        "total_tokens": 3571,
+        "completion_tokens_details": {
+          "reasoning_tokens": 2854
+        }
+      },
+      "content": "\n\n**Supported claims**\n- The intake creates a task of type `rest_proxy`. (`fixture/intake.py`, line 5)\n- The intake passes `read_source` in the action list. (`fixture/intake.py`, line 5)\n\n**Unsupported or unresolved claims**\n- The intake accepts at most 4096 raw bytes. (`fixture/intake.py`, lines 2-4)\n- The intake invokes Qwen. (`fixture/intake.py`, lines 1-5)\n- The intake guarantees `read_source` execution. (`fixture/intake.py`, line 5)\n\n**Suggested corrections**\n- Replace \"accepts at most 4096 raw bytes\" with \"accepts at most 16384 raw bytes, followed by a validation that the decoded UTF-8 string does not exceed 4096 characters.\" The provided excerpt distinguishes bytes read (`len(raw)`) from decoded character validation (`len(goal)`), and the finding conflates the two thresholds. (`fixture/intake.py`, lines 2-4)\n- Remove \"invokes Qwen\" as it is not evidenced in the provided excerpt. Absence of a reference in this excerpt does not confirm or deny Qwen usage elsewhere in the repository. If Qwen invocation occurs downstream, cite the specific module or function responsible. (`fixture/intake.py`, lines 1-5)\n- Replace \"guarantees `read_source` execution\" with \"passes `read_source` in the action list to `registry.create()`.\" The code demonstrates caller intent (passing a list), but implementation guarantees depend on the unprovided definition of `registry.create()`. Passing an item in a list does not equate to a guarantee of execution. (`fixture/intake.py`, line 5)\n- Missing source needed to resolve uncertainty: The implementation of `registry.create()` and any downstream task execution or model routing logic are required to verify execution guarantees or Qwen invocation. Historical evidence is limited to the provided excerpt; do not assume current source freshness or repository-wide behavior.",
+      "finish_reason": "stop",
+      "elapsed_seconds": 16.138
+    }
+  ],
+  "grading": {
+    "method": "Codex qualitative source inspection; not independent blinded grading",
+    "full": {
+      "raw_byte_error": "detected",
+      "project_type_error": "missed; task/project type conflation remains in supported section",
+      "qwen_invocation": "not evidenced",
+      "action_argument": "supported",
+      "execution_guarantee": "rejected",
+      "citation_limit": "Qwen absence judgment has no source citation; no invented downstream guarantee"
+    },
+    "missing-definition": {
+      "raw_byte_error": "detected",
+      "project_type_uncertainty": "missed; asserted task type without registry definition",
+      "action_argument": "supported",
+      "execution_guarantee": "questioned; missing definition requested",
+      "qwen_invocation": "not evidenced"
+    },
+    "conclusion": "Both fail task-type distinction; no automatic approval or aggregate generalization."
+  },
+  "task_mutations": 0,
+  "transport": {
+    "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+    "timeout_seconds": 20,
+    "temperature": 0,
+    "response_byte_cap": 65536,
+    "retries": 0,
+    "trust_env": false,
+    "redirects": false,
+    "reasoning_text_retained": false
+  }
+}
