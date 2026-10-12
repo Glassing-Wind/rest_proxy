@@ -1,0 +1,66 @@
+{
+  "task_id": "1214c5b2e644470197b691e7e8e849aa",
+  "project": "rest_proxy",
+  "revision": 4,
+  "status": "review_pending",
+  "inference_calls": 1,
+  "independent_review": false,
+  "usage_measured": false,
+  "generation": {
+    "requested_model": "qwen3.6-35b-a3b-splash",
+    "returned_model": "qwen3.6-35b-a3b-splash",
+    "usage": {
+      "prompt_tokens": 866,
+      "completion_tokens": 2414
+    },
+    "usage_source": "provider-reported",
+    "requests": 1,
+    "tools_enabled": false,
+    "attestation": "trusted adapter report; not independent metering"
+  },
+  "finding": {
+    "answer": "Based on the provided `scripts/task_capture.py`, FIRE tasks are queued by reading input from stdin, validating its length (max 4096 characters), and passing it to `TaskRegistry.create()` with the type `'rest_proxy'` and permissions `['read_source']`. The system explicitly queues the task for review without executing its text or invoking any agent. The provided source code does not contain any information regarding Qwen, Codex, or how they might be connected as a supervised team.",
+    "citations": [
+      {
+        "end_line": 33,
+        "path": "scripts/task_capture.py",
+        "sha256": "4559cc1f86ef5c74fc1d098fef66390dbeabc570d4a713d3f0f566e81783ce33",
+        "start_line": 1
+      }
+    ],
+    "limits": [
+      "TaskRegistry.create",
+      "rest_proxy",
+      "read_source",
+      "stdin",
+      "no agent has been invoked"
+    ],
+    "retained_evidence": [
+      {
+        "end_line": 33,
+        "historical": false,
+        "observed_at": 1791391209.042803,
+        "path": "scripts/task_capture.py",
+        "project": "rest_proxy",
+        "revision": 3,
+        "sha256": "4559cc1f86ef5c74fc1d098fef66390dbeabc570d4a713d3f0f566e81783ce33",
+        "source": "1: \"\"\"Mac Shortcut intake: bounded text on stdin, local queued read-only task only.\"\"\"\n2: import argparse\n3: import sys\n4: from pathlib import Path\n5: \n6: from memory.task_registry import TaskRegistry\n7: \n8: \n9: def capture(goal: str, state: str, workspace: str) -> dict:\n10:     \"\"\"Queue a request without executing its text or invoking any agent.\"\"\"\n11:     if not isinstance(goal, str) or not goal.strip() or len(goal) > 4096:\n12:         raise ValueError('Require a nonempty request of at most 4096 characters')\n13:     return TaskRegistry(state).create('rest_proxy', workspace, goal.strip(), [], ['read_source'])\n14: \n15: \n16: def main() -> int:\n17:     parser = argparse.ArgumentParser(description=__doc__)\n18:     parser.add_argument('--state', default=str(Path.home() / 'Library/Application Support/FIRE/tasks'))\n19:     options = parser.parse_args()\n20:     try:\n21:         raw = sys.stdin.buffer.read(16385)\n22:         if len(raw) > 16384:\n23:             raise ValueError('Input too large')\n24:         task = capture(raw.decode('utf-8'), options.state, str(Path(__file__).resolve().parents[1]))\n25:         print('Queued for review. Task ' + task['id'] + '. No agent has been invoked.')\n26:         return 0\n27:     except (ValueError, OSError):\n28:         print('Request could not be queued; check input and local state access.', file=sys.stderr)\n29:         return 1\n30: \n31: \n32: if __name__ == '__main__':\n33:     raise SystemExit(main())",
+        "start_line": 1,
+        "task_id": "1214c5b2e644470197b691e7e8e849aa",
+        "total_lines": 33
+      }
+    ],
+    "schema_version": 1,
+    "validation": "source identity/range only; semantic review pending"
+  },
+  "supervisor_review": {
+    "at": 1791391231.929089,
+    "decision": "request_correction",
+    "reason": "Source supports intake description, but rest_proxy is project scope, not task type. Full requested team investigation needs registry, worker and provider evidence. Limits should explain evidence scope and missing automatic dispatch/review rather than list keywords. Retain this partial finding; do not automatically retry.",
+    "reviewer": "codex-supervisor",
+    "submission": 1
+  },
+  "after_review_status": "queued",
+  "after_review_revision": 5,
+  "review_adapter": "manual Codex chat using local registry; no automatic supervisor invocation"
+}

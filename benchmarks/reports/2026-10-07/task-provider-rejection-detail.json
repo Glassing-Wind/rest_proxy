@@ -1,0 +1,10 @@
+{
+  "status": "failed",
+  "error_type": "ProviderHTTPError",
+  "task_status": "claimed",
+  "checkpoint_retained": true,
+  "adapter_receipt": null,
+  "http_status": 400,
+  "response_detail": "{\"error\":\"'response_format.type' must be 'json_schema' or 'text'\"}",
+  "elapsed_seconds": 0.035
+}

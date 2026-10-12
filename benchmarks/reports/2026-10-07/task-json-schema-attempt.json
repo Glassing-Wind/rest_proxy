@@ -1,0 +1,10 @@
+{
+  "status": "failed",
+  "error_type": "ValueError",
+  "task_status": "claimed",
+  "checkpoint_retained": true,
+  "adapter_receipt": null,
+  "http_status": null,
+  "response_detail": "",
+  "elapsed_seconds": 6.169
+}

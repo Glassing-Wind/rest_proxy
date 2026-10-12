@@ -1,0 +1,13 @@
+{
+  "task_id": "1214c5b2e644470197b691e7e8e849aa",
+  "submission": 1,
+  "observed_revision": 7,
+  "saved_revision": 8,
+  "status": "claimed",
+  "assessment": "FIRE tasks are queued by reading up to 4096 characters from stdin and calling TaskRegistry.create() with type 'rest_proxy' and permission ['read_source']; no agent is invoked. The provided code contains no information about Qwen, Codex, or how they might form a supervised team.",
+  "observation": "User-supplied screenshot; text manually transcribed, Cloud label visible; user reports Done pressed",
+  "model_identity": "unverified",
+  "usage": null,
+  "semantic_result": "Failed to distinguish rest_proxy project from task type; summarized instead of identifying supported/unsupported claims. Reading is byte-bounded at 16384 before decoded goal length validation at 4096 characters.",
+  "automatic_approval": false
+}

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from memory.task_dispatch import TaskDispatcher
 from memory.task_registry import TaskRegistry
@@ -76,6 +77,27 @@ class DispatchTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)
         self.assertNotIn(self.task['claim']['token'], result.stdout)
+
+    def test_local_api_rejects_scope_revision_token_and_paths_without_mutation(self):
+        base = dict(project='fixture', task_id=self.task['id'], revision=2,
+                    claim_token=self.task['claim']['token'], path='fixture.py')
+        (self.workspace / 'link.py').symlink_to(self.source)
+        cases = [dict(project='other'), dict(revision=1), dict(claim_token='wrong'),
+                 dict(path='../fixture.py'), dict(path=str(self.source)),
+                 dict(path='.env'), dict(path='link.py')]
+        for change in cases:
+            with self.subTest(change=change):
+                request = dict(operation='read_source', arguments={**base, **change})
+                result = subprocess.run([sys.executable, '-m', 'scripts.task_local', '--state',
+                    str(self.root / 'state')], input=json.dumps(request), capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1)
+                self.assertFalse(json.loads(result.stdout)['ok'])
+                self.assertNotIn(self.task['claim']['token'], result.stdout)
+                self.assertEqual(self.registry.get('fixture', self.task['id']), self.task)
+        with patch('memory.task_registry.time.time', return_value=self.task['claim']['expires_at'] + 1):
+            with self.assertRaises(ValueError):
+                self.read()
+        self.assertEqual(self.registry.get('fixture', self.task['id']), self.task)
 
     def finding(self):
         evidence = self.read(start_line=1, end_line=2)
