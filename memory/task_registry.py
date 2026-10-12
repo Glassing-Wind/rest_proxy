@@ -89,7 +89,7 @@ class TaskRegistry:
                     review_count=len(task.get('reviews', [])),
                     assessment_count=len(task.get('assessments', [])), failures=failures,
                     failure_history_complete=False,
-                    note='Only instrumented generation failures retained; absence is not success')
+                    note='Only instrumented worker failures retained; absence is not success')
 
     @staticmethod
     def _read(db, project, task_id):
@@ -151,7 +151,7 @@ class TaskRegistry:
     def record_failure(self, project: str, task_id: str, revision: int,
                        claim_token: str, category: str) -> dict:
         """Retain bounded failure category for current claim; no retry or state change."""
-        if category not in ('timeout', 'generation_error', 'finding_rejected'):
+        if category not in ('timeout', 'generation_error', 'finding_rejected', 'preparation_error'):
             raise ValueError('Unsupported failure category')
 
         def edit(task):
@@ -162,7 +162,8 @@ class TaskRegistry:
             if len(failures) >= 5:
                 raise ValueError('Failure retention limit reached')
             failures.append(dict(at=time.time(), attempt=task['attempts'], category=category,
-                                 stage='returned_finding' if category == 'finding_rejected' else 'generation',
+                                 stage=('preparation' if category == 'preparation_error' else
+                                        'returned_finding' if category == 'finding_rejected' else 'generation'),
                                  observed_revision=revision,
                                  remote_termination='unknown'))
         return self._update(project, task_id, revision, edit)

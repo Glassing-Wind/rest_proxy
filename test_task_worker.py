@@ -30,6 +30,67 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         return await run_worker(self.registry, 'fixture', self.task['id'], 1, 'fixture-worker',
                                 'fixture.py', generate or self.generate, end_line=1, **kwargs)
 
+    async def test_missing_source_records_preparation_failure_without_inference(self):
+        (Path(self.temp.name) / 'fixture.py').unlink()
+        with self.assertRaises(FileNotFoundError):
+            await self.run_adapter(enabled=True)
+        saved = TaskRegistry(str(Path(self.temp.name) / 'state')).get('fixture', self.task['id'])
+        self.assertEqual(self.calls, 0)
+        self.assertEqual(saved['status'], 'claimed')
+        self.assertEqual(saved['failures'][0]['stage'], 'preparation')
+        self.assertEqual(saved['failures'][0]['category'], 'preparation_error')
+        self.assertFalse(saved['checkpoint'])
+        self.assertNotIn('submissions', saved)
+
+    async def test_oversized_prompt_records_failure_and_can_recover(self):
+        (Path(self.temp.name) / 'fixture.py').write_text('private-' + 'x' * 9000)
+        with self.assertRaises(ValueError):
+            await self.run_adapter(enabled=True)
+        saved = self.registry.get('fixture', self.task['id'])
+        self.assertEqual(self.calls, 0)
+        self.assertEqual(saved['failures'][0]['stage'], 'preparation')
+        self.assertNotIn('private-', str(saved))
+        (Path(self.temp.name) / 'fixture.py').write_text('return 1\n')
+        with patch('memory.task_registry.time.time', return_value=saved['claim']['expires_at'] + 1):
+            result = await run_worker(self.registry, 'fixture', self.task['id'], saved['revision'],
+                'recovery-worker', 'fixture.py', self.generate, enabled=True, end_line=1,
+                recovery_reason='Reduced source after preparation failure')
+        self.assertEqual(result['status'], 'review_pending')
+        self.assertEqual(self.calls, 1)
+
+    async def test_checkpoint_failure_keeps_original_error_without_inference(self):
+        with patch.object(self.registry, 'checkpoint', side_effect=OSError('private-storage-error')):
+            with self.assertRaises(OSError):
+                await self.run_adapter(enabled=True)
+        saved = self.registry.get('fixture', self.task['id'])
+        self.assertEqual(self.calls, 0)
+        self.assertEqual(saved['failures'][0]['stage'], 'preparation')
+        self.assertNotIn('private-storage-error', str(saved))
+
+    async def test_timeout_reopen_recovery_review_and_source_removal(self):
+        async def timed_out(prompt):
+            raise TimeoutError('private-runtime-error')
+        with self.assertRaises(TimeoutError):
+            await self.run_adapter(timed_out, enabled=True)
+        reopened = TaskRegistry(str(Path(self.temp.name) / 'state'))
+        saved = reopened.get('fixture', self.task['id'])
+        self.assertEqual(saved['failures'][0]['category'], 'timeout')
+        with patch('memory.task_registry.time.time', return_value=saved['claim']['expires_at'] + 1):
+            result = await run_worker(reopened, 'fixture', self.task['id'], saved['revision'],
+                'recovery-worker', 'fixture.py', self.generate, enabled=True, end_line=1,
+                recovery_reason='Injected call ended; explicit expired recovery')
+        reviewed = reopened.review('fixture', self.task['id'], result['revision'],
+                                   'human-review-fixture', 'accept', 'Synthetic evidence checked')
+        (Path(self.temp.name) / 'fixture.py').unlink()
+        final = TaskRegistry(str(Path(self.temp.name) / 'state')).get('fixture', self.task['id'])
+        self.assertEqual(final['status'], 'completed')
+        self.assertEqual(final['revision'], reviewed['revision'])
+        self.assertEqual(final['attempts'], 2)
+        self.assertEqual(len(final['claim_history']), 1)
+        self.assertEqual(final['submissions'][0]['finding']['retained_evidence'][0]['source'], '1: return 1')
+        self.assertEqual(final['failures'], saved['failures'])
+        self.assertEqual(self.calls, 1)
+
     async def test_expired_recovery_preserves_old_checkpoint_and_rereads_source(self):
         with patch('memory.task_registry.time.time', return_value=100):
             claimed = self.registry.claim('fixture', self.task['id'], 1, 'old', lease_seconds=1)
