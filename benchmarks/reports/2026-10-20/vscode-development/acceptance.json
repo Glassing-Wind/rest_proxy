@@ -1,0 +1,128 @@
+{
+  "as_of": "2026-10-20",
+  "base_revision": "e841eab5e915d09df13919b7374e9774c403512c",
+  "working_tree_had_unrelated_changes": true,
+  "scope": "workspace editor configuration and bounded transport validation",
+  "runtime": {
+    "python": "3.14.8",
+    "architecture": "arm64",
+    "vscode": "1.142.0"
+  },
+  "configuration": {
+    "json_files_parsed": 5,
+    "agent_headers_parsed": 2,
+    "task_paths_valid": true,
+    "python_settings_known_to_installed_schemas": 9,
+    "python_settings_total": 9,
+    "local_markdown_links_resolve": true
+  },
+  "ui": {
+    "project_opened": true,
+    "selected_interpreter": "./.venv/bin/python",
+    "selected_python": "3.14.8",
+    "native_mcp_server": "graphragBrain",
+    "native_mcp_source": "rest_proxy/.mcp.json",
+    "native_mcp_status": "Running",
+    "model_prompt_sent": false,
+    "custom_agent_picker_or_tools_verified": false,
+    "debugger_execution_verified": false,
+    "codex_sidebar_readiness": "unverified: Mac locked before final optional inspection"
+  },
+  "mcp_probe": {
+    "endpoint": "http://127.0.0.1:8001/mcp",
+    "protocol": "2025-11-25",
+    "initialize_http": 200,
+    "initialized_notification_http": 202,
+    "tools_list_http": 200,
+    "tool_count": 60,
+    "read_tool": "describe_file",
+    "read_file": "AGENTS.md",
+    "source_range": {
+      "start_line": 1,
+      "max_lines": 8
+    },
+    "read_http": 200,
+    "read_tool_error": false,
+    "source_and_hash_present": true,
+    "response_sha256": "69b068545fb2a415262d3c431ce80e2b305ba02c891a7ae4fbb35054e174e5a1",
+    "own_session_delete_http": 200
+  },
+  "index_sample": {
+    "disk_files": 607,
+    "structural_files": 484,
+    "semantic_files": 484,
+    "stale_structural_files": 59,
+    "stale_semantic_files": 59,
+    "missing_files": 123,
+    "publication_runs_aligned": true,
+    "atomic_filesystem_audit": false
+  },
+  "catalog_matches_current_source": null,
+  "tests": {
+    "core_standalone": {
+      "run": 20,
+      "passed": 20,
+      "failed": 0,
+      "errors": 0
+    },
+    "lessons_configured_task": {
+      "run": 234,
+      "passed": 230,
+      "skipped": 4,
+      "skip_reason": "optional pypdf unavailable",
+      "failed": 0,
+      "errors": 0
+    },
+    "lessons_manual_discovery": {
+      "cases": 234,
+      "errors": 0
+    },
+    "initial_combined_core_attempt": {
+      "run": 20,
+      "failures": 6,
+      "errors": 4,
+      "cause": "existing module-mock/import interference; final tasks isolate scripts in separate processes"
+    }
+  },
+  "validation": {
+    "ruff_fixture": "test_lessons_scripture.py",
+    "ruff_passed": true,
+    "diff_whitespace_passed": true,
+    "independent_review": "no actionable defects; UI/model limitations retained"
+  },
+  "changes_not_performed": [
+    "shared daemon restart",
+    "reindex",
+    "dependency installation",
+    "paid provider/model request",
+    "model or provider migration",
+    "global preference edits"
+  ],
+  "performance_evaluation": false,
+  "selected_source_sha256": {
+    ".gitignore": "88cb7226cafcf3fa3bdc104487424b4e85deade329fa1ad76347952df2812c0f",
+    ".mcp.json": "d062bba7d78ca9943c36b8e87201b758b1a686c43f8756ab6b7188e6fb396189",
+    ".vscode/settings.json": "c5456863698c4cd063e262bc89dbb735ccac08c19ec29e74e59548ef60ce0e29",
+    ".vscode/tasks.json": "e1b4bdf73d7c62d5792c3f5352829bfb9aada1524e74b99d15a095518359a3f5",
+    ".vscode/launch.json": "c098398b058afe6e1e6d2182292db3acbce7db7cbfc87a33e69a2eda4bdbe60f",
+    ".vscode/extensions.json": "157d524caf84ec4f988dee2eaf5bed5a22268f53e54acfc3450391e7592a84ec",
+    ".github/agents/rest-proxy-evidence.agent.md": "ab779c8fd72798a0eaac41f5750ca7525a9d1731442df4f9b9ae7b76abe24236",
+    ".github/agents/rest-proxy-review.agent.md": "42a7b458c0709820077d84c0a1c72d2d07b04f855011beff7f7dcc2023fc0d79",
+    "docs/vscode-development.md": "f4abae77c9ed9f0917b998d775316f3d0c8afbc1b3cbd32b6c8b29a5f856fc3c",
+    "docs/operations.md": "928a21ad8862ce8bc7d92ff57a7808d1a1e72a32d5ed8ee13e3a2d8c1327d3e2",
+    "docs/openai.md": "b2e00f43c43d74153044bc38e7fb0250529ae2c92c026a7d819a2510cbe7d880"
+  },
+  "limits": [
+    "not an exact clean-head model acceptance",
+    "native role/tool/model invocation unverified",
+    "stale and incomplete index",
+    "current-source tool groups absent from live daemon",
+    "broad shared catalog includes admin and mutation tools",
+    "unrelated working tree state retained"
+  ],
+  "catalog_assessment_correction": {
+    "as_of": "2026-10-20",
+    "original_recorded_value": false,
+    "correction": "Missing optional groups are expected under explicit profile/state flags. A fresh source import also registers 60 tools. Catalog parity was not established by missing groups; a separate live/source fingerprint difference was observed in follow-up."
+  }
+}

@@ -44,6 +44,7 @@ include = ["graphrag_core*", "local_embeddings*", "memory*", "proxy*", "tools*",
 
 [tool.setuptools.package-data]
 "graphrag_core.evidence_workspace" = ["static/index.html", "static/app.js", "static/style.css"]
+"graphrag_core.task_cockpit" = ["static/index.html", "static/app.js", "static/style.css"]
 
 [tool.ruff]
 line-length = 120

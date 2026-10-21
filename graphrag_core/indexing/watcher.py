@@ -20,7 +20,9 @@ from graphrag_core.indexing.manifest import build_manifest
 
 load_env()
 
-WATCHED_PATHS: Dict[str, Dict[str, float]] = {}
+# None marks a restored subscription awaiting its first successful scan. Newly
+# added watches use {} so their existing files still trigger initial indexing.
+WATCHED_PATHS: Dict[str, Dict[str, float] | None] = {}
 PINNED_WATCHES: set[str] = set()
 WATCH_INTERVAL = 30
 WATCHER_ENABLED = os.getenv("LM_PROXY_WATCHER_ENABLED", "0").strip().lower() in {
@@ -169,7 +171,12 @@ def save_indexed_projects(data: dict[str, dict[str, object]]) -> None:
 
 
 async def load_watched_config() -> None:
-    """Load pinned watches and active session leases on startup."""
+    """Restore pinned subscriptions without indexing merely because of startup.
+
+    The first successful poll establishes a baseline for restored roots. Changes
+    made while the process was stopped require an explicit workspace index.
+    Reloading configuration preserves any baseline already being watched.
+    """
     from memory.storage_config import embedded_graph_selected
     if embedded_graph_selected():
         return
@@ -186,7 +193,9 @@ async def load_watched_config() -> None:
             if isinstance(paths, list):
                 for project_path in paths:
                     if isinstance(project_path, str) and os.path.isdir(project_path):
-                        PINNED_WATCHES.add(os.path.abspath(project_path))
+                        root = os.path.abspath(project_path)
+                        PINNED_WATCHES.add(root)
+                        WATCHED_PATHS.setdefault(root, None)
         _sync_runtime_watch_roots()
         print(
             "[lm-proxy:watcher] Restored "
@@ -226,27 +235,43 @@ async def stop_watcher() -> None:
         _WATCHER_TASK = None
 
 
+def _scan_watch_mtimes(project_path: str) -> dict[str, float]:
+    """Read one complete snapshot, raising on root or manifest-file failures."""
+    # os.walk inside build_manifest can silently return no files for a missing
+    # or unreadable root. That must not be mistaken for a successful empty scan.
+    with os.scandir(project_path):
+        pass
+    current_mtimes = {}
+    for entry in build_manifest(project_path, strict=True):
+        fpath = str(entry.get("abs_path") or "")
+        if fpath:
+            current_mtimes[fpath] = os.path.getmtime(fpath)
+    return current_mtimes
+
+
 async def _poll_watcher(index_fn) -> None:
     """Background loop to check for file changes in watched projects."""
     while True:
         try:
             _sync_runtime_watch_roots()
             for project_path, last_mtimes in list(WATCHED_PATHS.items()):
-                changed = False
-                current_mtimes = {}
-                for entry in build_manifest(project_path):
-                    fpath = str(entry.get("abs_path") or "")
-                    if not fpath:
-                        continue
-                    try:
-                        mtime = os.path.getmtime(fpath)
-                        current_mtimes[fpath] = mtime
-                        if fpath not in last_mtimes or mtime > last_mtimes[fpath]:
-                            changed = True
-                    except (OSError, FileNotFoundError):
-                        continue
-                if not changed and len(current_mtimes) != len(last_mtimes):
-                    changed = True
+                try:
+                    # An incomplete scan must not prime a restored root or
+                    # replace a live baseline with apparent file deletions.
+                    current_mtimes = _scan_watch_mtimes(project_path)
+                except Exception as e:
+                    print(
+                        f"[lm-proxy:watcher] Failed to scan {project_path}: {e}",
+                        file=sys.stderr,
+                    )
+                    continue
+                if last_mtimes is None:
+                    WATCHED_PATHS[project_path] = current_mtimes
+                    continue
+                changed = len(current_mtimes) != len(last_mtimes) or any(
+                    fpath not in last_mtimes or mtime > last_mtimes[fpath]
+                    for fpath, mtime in current_mtimes.items()
+                )
                 WATCHED_PATHS[project_path] = current_mtimes
                 if changed:
                     print(

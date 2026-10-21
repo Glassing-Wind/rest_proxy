@@ -1,0 +1,90 @@
+{
+  "answer": {
+    "observed_code": "brain_server.py defines the Starlette application brain_server.app, which mounts mcp.streamable_http_app() and passes /mcp requests through to the MCP evidence transport. proxy/app.py defines the separate FastAPI application proxy.app.app, titled \"LM Studio Stateful Chat Proxy\"; its telemetry mapping names inference endpoints including /v1/chat/completions and /v1/embeddings.",
+    "documented_role": "AGENTS.md identifies the LM Studio inference proxy as a separate, optional compatibility layer.",
+    "inference": "These are two API surfaces within the same repository and product stack: the brain application serves repository evidence through MCP, while the proxy application provides the optional inference compatibility API."
+  },
+  "index_health": {
+    "workspace": "<workspace>",
+    "project_id": "6f8dead37cb2",
+    "sync_status": "Healthy",
+    "files_on_disk": 610,
+    "files_in_structural_index": 610,
+    "files_in_semantic_index": 610,
+    "run_alignment": "Aligned",
+    "parse_success": "421/421 source-eligible files",
+    "support_file_coverage": "610/610",
+    "deep_audit_requested": false
+  },
+  "citations": [
+    {
+      "file_path": "AGENTS.md",
+      "line": 14,
+      "quote": "# The LM Studio inference proxy is a separate, optional compatibility layer.",
+      "sha256": "9bbe989ab2f23a539bc437f553eaf8658f27746be3c1d88afd01be9ee4b5afe2"
+    },
+    {
+      "file_path": "brain_server.py",
+      "line": 371,
+      "quote": "_mcp_starlette = mcp.streamable_http_app()",
+      "sha256": "9da858cb04389c26ef3c6311450f4cf8aa3384b1737d8d7d176041dd4c0ab286"
+    },
+    {
+      "file_path": "brain_server.py",
+      "line": 383,
+      "quote": "app = Starlette(",
+      "sha256": "9da858cb04389c26ef3c6311450f4cf8aa3384b1737d8d7d176041dd4c0ab286"
+    },
+    {
+      "file_path": "brain_server.py",
+      "line": 392,
+      "quote": "        Mount(\"/\", app=_mcp_starlette),  # pass-through; MCP handles /mcp",
+      "sha256": "9da858cb04389c26ef3c6311450f4cf8aa3384b1737d8d7d176041dd4c0ab286"
+    },
+    {
+      "file_path": "proxy/app.py",
+      "line": 93,
+      "quote": "app = FastAPI(title=\"LM Studio Stateful Chat Proxy\", lifespan=lifespan)",
+      "sha256": "70e4a6f37e5149fe5320d8aea37da10eb9529b9aa77162d5a6a7cecf85489d4b"
+    },
+    {
+      "file_path": "proxy/app.py",
+      "line": 97,
+      "quote": "    \"/v1/chat/completions\": \"proxy.chat\", \"/v1/context/chat/completions\": \"proxy.context_chat\",",
+      "sha256": "70e4a6f37e5149fe5320d8aea37da10eb9529b9aa77162d5a6a7cecf85489d4b"
+    }
+  ],
+  "tools_used": [
+    {
+      "tool": "graphrag-brain.get_indexing_health",
+      "workspace_id": "<workspace>"
+    },
+    {
+      "tool": "graphrag-brain.describe_file",
+      "file_path": "AGENTS.md",
+      "include_source": true,
+      "start_line": 1,
+      "max_lines": 38
+    },
+    {
+      "tool": "graphrag-brain.describe_file",
+      "file_path": "brain_server.py",
+      "include_source": true,
+      "start_line": 365,
+      "max_lines": 38
+    },
+    {
+      "tool": "graphrag-brain.describe_file",
+      "file_path": "proxy/app.py",
+      "include_source": true,
+      "start_line": 85,
+      "max_lines": 21
+    }
+  ],
+  "native_fallback_count": 0,
+  "limitations": [
+    "Four read-only MCP calls were used. Source excerpts describe current local files, not a verified checkout of base commit 8ba5961.",
+    "The bounded excerpts establish application construction and routing configuration; live inference behavior and deployment configuration were not checked.",
+    "Index health is the tool's reported result; no deep audit was requested."
+  ]
+}

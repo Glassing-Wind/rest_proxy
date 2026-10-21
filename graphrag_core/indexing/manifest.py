@@ -287,7 +287,12 @@ def suggest_indexignore_entries(project_path: str) -> list[dict[str, str]]:
     return suggestions
 
 
-def build_manifest(project_path: str) -> list[dict[str, object]]:
+def build_manifest(project_path: str, *, strict: bool = False) -> list[dict[str, object]]:
+    """Collect eligible files, optionally refusing incomplete filesystem scans.
+
+    Existing index callers retain best-effort behavior. Watcher snapshots use
+    strict mode so unreadable paths cannot appear to be deleted files.
+    """
     manifest: list[dict[str, object]] = []
     root = Path(project_path)
     indexignore_patterns = load_indexignore_patterns(project_path)
@@ -309,7 +314,10 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
         rel_lower = rel.lower()
         return rel_lower.endswith(".xcodeproj") or rel_lower.endswith(".xcworkspace") or ".xcassets" in rel_lower
 
-    for current_root, dirnames, filenames in os.walk(root):
+    def _raise_walk_error(error: OSError) -> None:
+        raise error
+
+    for current_root, dirnames, filenames in os.walk(root, onerror=_raise_walk_error if strict else None):
         current_path = Path(current_root)
         rel_dir_parts = current_path.relative_to(root).parts if current_path != root else ()
         dirnames[:] = [
@@ -352,5 +360,7 @@ def build_manifest(project_path: str) -> list[dict[str, object]]:
                     }
                 )
             except Exception:
+                if strict:
+                    raise
                 continue
     return manifest

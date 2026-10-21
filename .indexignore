@@ -2,6 +2,9 @@ session-*.md
 doc_*.json
 *_manifest.json
 
+# Machine-local agent settings are configuration, not repository evidence.
+.codex/**
+
 # Keep grading evidence and prior answers outside retrieval treatment.
 benchmarks/reports
 benchmarks/reports/*

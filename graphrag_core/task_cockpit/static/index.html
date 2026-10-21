@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Task status · Rest-proxy Cockpit</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" aria-label="Workspace">
+      <a class="brand" href="/" aria-label="Rest-proxy Cockpit home"><span class="mark" aria-hidden="true">r<span>p</span></span><span>rest_proxy<small>COCKPIT</small></span></a>
+      <p class="nav-label">WORKSPACE</p>
+      <div class="selected-nav"><span aria-hidden="true">◉</span> Task status <span class="nav-dot" aria-hidden="true"></span></div>
+      <div class="scope-box"><span class="eyebrow">SELECTED PROJECT</span><strong id="project-side">Connect to view</strong><p>One task. An explicit scope.</p></div>
+      <div class="sidebar-bottom"><span class="local-dot" aria-hidden="true"></span> Local session<span class="muted">Read-only access</span></div>
+    </aside>
+    <main>
+      <header class="topbar"><span>Workspace <span class="separator">/</span> Task status</span><span class="read-only">Read only</span></header>
+      <section class="heading"><div><p class="eyebrow">TASK WORKSPACE</p><h1>A clear view of the work.</h1><p class="subtitle">Track progress and review requirements for one selected task.</p></div><div class="actions"><button id="disconnect" class="quiet" hidden>Disconnect</button><button id="refresh" disabled>Refresh status <span aria-hidden="true">↻</span></button></div></section>
+      <p id="notice" class="notice" role="status" aria-live="polite">Connect to load the selected task.</p>
+      <section id="access" class="access card" aria-labelledby="access-heading">
+        <span class="section-index">01 / ACCESS</span><h2 id="access-heading">Connect to your task view</h2><p>Open the private launch link or enter its access code. Access stays in this tab until you disconnect or reload.</p>
+        <form id="connect-form"><label for="token">Local access code</label><div class="connect-row"><input id="token" type="password" autocomplete="off" spellcheck="false" maxlength="256" required><button type="submit">Connect</button></div></form>
+      </section>
+      <section id="task-view" hidden aria-labelledby="task-heading">
+        <article class="task-card card"><div class="task-summary"><div><span class="section-index">01 / SELECTED TASK</span><h2 id="task-heading">Task</h2><p id="task-id" class="mono"></p></div><span id="status" class="status-badge">Unknown</span></div><div class="task-bottom"><span id="review-policy">Review policy unavailable</span><span id="checked-at"></span></div></article>
+        <div class="metrics" aria-label="Task progress">
+          <article class="metric card"><span>Revision</span><strong id="revision">—</strong><small>Current task record</small></article>
+          <article class="metric card"><span>Attempts</span><strong id="attempts">—</strong><small>Recorded claims</small></article>
+          <article class="metric card"><span>Submissions</span><strong id="submissions">—</strong><small>Findings returned</small></article>
+          <article class="metric card"><span>Reviews</span><strong id="reviews">—</strong><small>Decisions recorded</small></article>
+        </div>
+        <div class="detail-grid">
+          <article class="card detail"><span class="section-index">02 / CONTINUITY</span><h2>Execution &amp; recovery</h2><dl><div><dt>Claim</dt><dd id="claim">—</dd></div><div><dt>Checkpoint</dt><dd id="checkpoint">—</dd></div><div><dt>Recoveries</dt><dd id="recoveries">—</dd></div><div><dt>Assessments</dt><dd id="assessments">—</dd></div><div><dt>Latest reviewer type</dt><dd id="reviewer">—</dd></div></dl></article>
+          <article class="card detail"><span class="section-index">03 / RECORDED ISSUES</span><h2>Generation failures</h2><p id="failure-empty" class="empty">No instrumented failures recorded.</p><div class="table-wrap"><table id="failure-table" hidden><thead><tr><th>Attempt</th><th>Category</th><th>Stage</th></tr></thead><tbody id="failures"></tbody></table></div><p id="failure-note" class="detail-note">An empty failure history does not establish success.</p></article>
+        </div>
+        <footer class="scope-note"><span aria-hidden="true">↳</span><p><strong>Status, with boundaries.</strong> Source content, task goals and access credentials are excluded. Evidence inspection and review actions use separate scopes. Reviewer labels do not verify identity.</p></footer>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -39,6 +39,10 @@ REQUIRED = {
     'graphrag_core/evidence_workspace/static/app.js',
     'graphrag_core/evidence_workspace/static/style.css',
     'memory/evidence_workspace.py', 'scripts/evidence_workspace.py',
+    'graphrag_core/task_cockpit/__init__.py', 'graphrag_core/task_cockpit/reads.py',
+    'graphrag_core/task_cockpit/server.py', 'scripts/task_cockpit.py',
+    'graphrag_core/task_cockpit/static/index.html',
+    'graphrag_core/task_cockpit/static/app.js', 'graphrag_core/task_cockpit/static/style.css',
 }
 
 
