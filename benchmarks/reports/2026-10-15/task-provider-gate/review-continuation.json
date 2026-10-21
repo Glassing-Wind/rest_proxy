@@ -1,0 +1,47 @@
+{
+  "observed_at_utc": "2026-10-15T18:19:24.976433+00:00",
+  "local_head": "da67d5d201cd637b6f07b2acf88dbcd1ff3120e4",
+  "human_review_recorded": true,
+  "human_review_decision": "request_correction",
+  "registry_revision": 5,
+  "registry_status": "queued",
+  "additional_inference_calls": 0,
+  "git_status_unchanged_from_human_review_start": false,
+  "task_source_changed": false,
+  "task_changes_this_continuation": [
+    "benchmarks/reports/2026-10-15/task-provider-gate/"
+  ],
+  "checks": [
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "benchmarks/reports/2026-10-07/task-advisory-retention.md"
+      ],
+      "exit_code": 0,
+      "whitespace_diagnostics": false
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--no-index",
+        "--check",
+        "/dev/null",
+        "/Users/michaelmarler/Projects/rest_proxy/benchmarks/reports/2026-10-15/task-provider-gate/README.md"
+      ],
+      "exit_code": 1,
+      "whitespace_diagnostics": false
+    }
+  ],
+  "hosted_refresh": {
+    "source": "Read-only independent agent gh pr view and reviews API refresh",
+    "head": "da01b790737dc0341964bce3c8f78cf0c6e97b6e",
+    "draft": true,
+    "successful_checks": 8,
+    "recorded_pr_reviews": 0,
+    "pr2_and_pr3_merged": true
+  }
+}

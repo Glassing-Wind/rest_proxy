@@ -43,7 +43,7 @@ class TaskRegistry:
         return value
 
     def create(self, project: str, workspace: str, goal: str, evidence: list,
-               actions: list) -> dict:
+               actions: list, human_review_required: bool = False) -> dict:
         self.identifier(project)
         if not isinstance(goal, str) or not goal.strip() or len(goal) > 4096:
             raise ValueError('Require bounded goal')
@@ -52,13 +52,15 @@ class TaskRegistry:
         # Initial slice deliberately accepts read-only tasks only.
         if not isinstance(actions, list) or not actions or any(a != 'read_source' for a in actions):
             raise ValueError('Only read_source capability supported')
+        if type(human_review_required) is not bool:
+            raise ValueError('Human review requirement must be a boolean')
         root = Path(workspace).resolve(strict=True)
         if not root.is_dir():
             raise ValueError('Workspace must be a directory')
         task = dict(schema_version=1, id=uuid.uuid4().hex, project=project,
                     workspace=str(root), goal=goal, evidence=evidence, actions=['read_source'],
                     revision=1, status='queued', claim=None, attempts=0, checkpoint=None,
-                    created_at=time.time())
+                    created_at=time.time(), human_review_required=human_review_required)
         payload = encoded(task)
         if len(payload.encode()) > 65536:
             raise ValueError('Task exceeds 64 KiB')
@@ -87,12 +89,16 @@ class TaskRegistry:
                     recovery_count=len(task.get('claim_history', [])),
                     submission_count=len(task.get('submissions', [])),
                     review_count=len(task.get('reviews', [])),
+                    human_review_required=task.get('human_review_required', False),
+                    latest_review_actor_type=(task.get('reviews') or [{}])[-1].get('actor_type', 'unspecified'),
                     assessment_count=len(task.get('assessments', [])), failures=failures,
                     failure_history_complete=False,
                     note='Only instrumented worker failures retained; absence is not success')
 
     @staticmethod
     def _read(db, project, task_id):
+        TaskRegistry.identifier(project)
+        TaskRegistry.identifier(task_id)
         row = db.execute('SELECT payload FROM tasks WHERE project=? AND id=?',
                          (project, task_id)).fetchone()
         if row is None:
@@ -247,25 +253,57 @@ class TaskRegistry:
                                     observed_revision=revision))
         return self._update(project, task_id, revision, edit)
 
+    @staticmethod
+    def _apply_review(task: dict, reviewer: str, decision: str, reason: str,
+                      actor_type: str, basis: dict | None = None) -> None:
+        """Apply a local review under the caller's revision transaction."""
+        TaskRegistry.identifier(reviewer)
+        if decision not in ('accept', 'request_correction', 'escalate'):
+            raise ValueError('Unsupported review decision')
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
+            raise ValueError('Require bounded review reason')
+        if task['status'] != 'review_pending':
+            raise ValueError('Task is not awaiting review')
+        submission = task['submissions'][-1]
+        if reviewer == submission['worker']:
+            raise ValueError('Reviewer must differ from submitting worker')
+        if task.get('human_review_required', False) and actor_type != 'human' and decision != 'escalate':
+            raise ValueError('Task requires explicit human review')
+        if decision == 'request_correction' and task['attempts'] >= 5:
+            raise ValueError('Task attempt limit reached')
+        if len(task.get('reviews', [])) >= 20:
+            raise ValueError('Review retention limit reached')
+        record = dict(reviewer=reviewer, decision=decision, reason=reason,
+                      submission=len(task['submissions']), at=time.time(), actor_type=actor_type,
+                      trust='trusted-local caller report; actor identity and independence not authenticated')
+        if basis is not None:
+            record['basis'] = basis
+        task.setdefault('reviews', []).append(record)
+        if decision == 'escalate':
+            task['human_review_required'] = True
+        else:
+            task['status'] = 'completed' if decision == 'accept' else 'queued'
+
     def review(self, project: str, task_id: str, revision: int,
-               reviewer: str, decision: str, reason: str) -> dict:
-        """Record caller-supplied review identity; this is not authentication."""
+               reviewer: str, decision: str, reason: str, *, reviewer_kind: str = 'unspecified') -> dict:
+        """Legacy/manual local review; unspecified labels never imply human approval."""
         self.identifier(reviewer)
         if decision not in ('accept', 'request_correction'):
             raise ValueError('Unsupported review decision')
+        if reviewer_kind not in ('human', 'unspecified'):
+            raise ValueError('Agent and automated reviews require their source-checking operations')
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1024:
             raise ValueError('Require bounded review reason')
 
         def edit(task):
-            if task['status'] != 'review_pending':
-                raise ValueError('Task is not awaiting review')
-            submission = task['submissions'][-1]
-            if reviewer == submission['worker']:
-                raise ValueError('Reviewer must differ from submitting worker')
-            if decision == 'request_correction' and task['attempts'] >= 5:
-                raise ValueError('Task attempt limit reached')
-            task.setdefault('reviews', []).append(dict(
-                reviewer=reviewer, decision=decision, reason=reason,
-                submission=len(task['submissions']), at=time.time()))
-            task['status'] = 'completed' if decision == 'accept' else 'queued'
+            self._apply_review(task, reviewer, decision, reason, reviewer_kind,
+                               basis={'verification': 'manual caller decision; no automatic source checks'})
+        return self._update(project, task_id, revision, edit)
+
+    def escalate_review(self, project: str, task_id: str, revision: int,
+                        reviewer: str, reason: str) -> dict:
+        """Escalate even when source validation fails; never approve a finding."""
+        def edit(task):
+            self._apply_review(task, reviewer, 'escalate', reason, 'agent',
+                               basis={'verification': 'escalation only; source not verified'})
         return self._update(project, task_id, revision, edit)

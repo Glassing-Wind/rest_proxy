@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "tested_commit": "da01b790737dc0341964bce3c8f78cf0c6e97b6e",
+  "source": "git archive exact published PR head (provided by parent)",
+  "cwd": "private source snapshot of da01b790737dc0341964bce3c8f78cf0c6e97b6e",
+  "python": "3.14.8 (main, Sep 30 2026, 17:55:09) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "python_executable": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python",
+  "dotenv_present": false,
+  "environment_overrides": {
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "test_records": [
+    {
+      "label": "test_task_registry.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_registry.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.11,
+      "tests_run": 12,
+      "source_sha256": "d544b4959bf5b8c32e6a84584dcd1c7280ffc24fbe225f787afd7f1b5ad9732b",
+      "stdout": "test_task_registry.py.stdout.log",
+      "stderr": "test_task_registry.py.stderr.log"
+    },
+    {
+      "label": "test_task_dispatch.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_dispatch.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.585,
+      "tests_run": 10,
+      "source_sha256": "4a7aa88bdc58caba4c983e7920863bbb7e5f550e4f5982f156ab1714d1d8c7f5",
+      "stdout": "test_task_dispatch.py.stdout.log",
+      "stderr": "test_task_dispatch.py.stderr.log"
+    },
+    {
+      "label": "test_task_handoff.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_handoff.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.996,
+      "tests_run": 2,
+      "source_sha256": "72132c9afc6557315170c326e134c6b0326e8cf61681713bb7ad26cad5b2a6f8",
+      "stdout": "test_task_handoff.py.stdout.log",
+      "stderr": "test_task_handoff.py.stderr.log"
+    },
+    {
+      "label": "test_task_worker.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_worker.py",
+      "exit_code": 0,
+      "elapsed_seconds": 1.17,
+      "tests_run": 19,
+      "source_sha256": "a13d7f5166d3a529faeaccecca867b360acf659ed7f6ceef4d16f21a0c061e44",
+      "stdout": "test_task_worker.py.stdout.log",
+      "stderr": "test_task_worker.py.stderr.log"
+    },
+    {
+      "label": "test_task_provider.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_provider.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.187,
+      "tests_run": 12,
+      "source_sha256": "ee422ca4dd62ca9a26ea2f9c68eabf310b50afabd8692f30d481bf2e4483cfd4",
+      "stdout": "test_task_provider.py.stdout.log",
+      "stderr": "test_task_provider.py.stderr.log"
+    },
+    {
+      "label": "test_task_capture.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_capture.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.064,
+      "tests_run": 2,
+      "source_sha256": "87f41bede54059e4e06d9521646acab1f43c0ddef75527b046a5d675330cddc3",
+      "stdout": "test_task_capture.py.stdout.log",
+      "stderr": "test_task_capture.py.stderr.log"
+    },
+    {
+      "label": "test_task_run.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_run.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.19,
+      "tests_run": 1,
+      "source_sha256": "db78c3d9f013ebfcfec5ccfe71c0eb827caa12e5b4fc3359e9a7ffaacb2896a5",
+      "stdout": "test_task_run.py.stdout.log",
+      "stderr": "test_task_run.py.stderr.log"
+    },
+    {
+      "label": "test_task_review_export.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_review_export.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.056,
+      "tests_run": 3,
+      "source_sha256": "18d78565e492e60d2a6763165b91fe1558f1ded9f99805948c6bb979edaaddda",
+      "stdout": "test_task_review_export.py.stdout.log",
+      "stderr": "test_task_review_export.py.stderr.log"
+    },
+    {
+      "label": "test_task_assessment.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_assessment.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.064,
+      "tests_run": 2,
+      "source_sha256": "c409f478e13ed1d5470710a5f3ab7bca13b8e5b5159f31f5d29410064c156f1f",
+      "stdout": "test_task_assessment.py.stdout.log",
+      "stderr": "test_task_assessment.py.stderr.log"
+    },
+    {
+      "label": "test_task_review_capture.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_review_capture.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.068,
+      "tests_run": 2,
+      "source_sha256": "c84c560a1119a9dfb9c796636627f14c18e8ac0707c2d89341d48afe3f8d62d7",
+      "stdout": "test_task_review_capture.py.stdout.log",
+      "stderr": "test_task_review_capture.py.stderr.log"
+    },
+    {
+      "label": "test_task_review_calibration.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_review_calibration.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.059,
+      "tests_run": 4,
+      "source_sha256": "5739b8b55ba553f8affeb1f22231800a13864fa6dbbb0c49a2a3abe7d4bcd662",
+      "stdout": "test_task_review_calibration.py.stdout.log",
+      "stderr": "test_task_review_calibration.py.stderr.log"
+    },
+    {
+      "label": "test_task_inspect.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_task_inspect.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.142,
+      "tests_run": 2,
+      "source_sha256": "0fd663a33012f608f6ad187b2e2a0d2f1d1c3699c274a869995874e001856f81",
+      "stdout": "test_task_inspect.py.stdout.log",
+      "stderr": "test_task_inspect.py.stderr.log"
+    },
+    {
+      "label": "test_gateway_events.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_gateway_events.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.049,
+      "tests_run": 2,
+      "source_sha256": "1dc4c7897f061b058cbc32d13bbbd6502c4b543385c78d6504d37e9192c8253c",
+      "stdout": "test_gateway_events.py.stdout.log",
+      "stderr": "test_gateway_events.py.stderr.log"
+    },
+    {
+      "label": "test_helper_extraction.py",
+      "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python test_helper_extraction.py",
+      "exit_code": 0,
+      "elapsed_seconds": 0.056,
+      "tests_run": 3,
+      "source_sha256": "dc21b2cbdc0219598a839c1107f254e7bf7efb751fdacfe86968199b9892ac82",
+      "stdout": "test_helper_extraction.py.stdout.log",
+      "stderr": "test_helper_extraction.py.stderr.log"
+    }
+  ],
+  "total_tests_run": 76,
+  "failed_scripts": [],
+  "ruff": {
+    "command": "/Users/michaelmarler/Projects/rest_proxy/.runtime/python314-verify/venv/bin/python -m ruff check --no-cache gateway/events.py memory/helper_extraction.py memory/task_provider.py memory/task_worker.py memory/task_registry.py memory/task_dispatch.py scripts/task_review_calibration.py scripts/task_run.py scripts/check_task_handoff.py scripts/task_review_capture.py scripts/task_local.py scripts/task_review_export.py scripts/task_capture.py",
+    "paths": [
+      "gateway/events.py",
+      "memory/helper_extraction.py",
+      "memory/task_provider.py",
+      "memory/task_worker.py",
+      "memory/task_registry.py",
+      "memory/task_dispatch.py",
+      "scripts/task_review_calibration.py",
+      "scripts/task_run.py",
+      "scripts/check_task_handoff.py",
+      "scripts/task_review_capture.py",
+      "scripts/task_local.py",
+      "scripts/task_review_export.py",
+      "scripts/task_capture.py"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.066,
+    "stdout": "ruff.stdout.log",
+    "stderr": "ruff.stderr.log"
+  },
+  "limitations": [
+    "Offline fixtures only; no real-model runtime acceptance.",
+    "No full CI, daemon, service, indexing, or model lifecycle operations."
+  ],
+  "versions": {
+    "httpx": "0.28.1",
+    "ruff": "0.15.7"
+  },
+  "asserted_unittest_ok_without_skips": true,
+  "total_failures": 0,
+  "total_errors": 0,
+  "total_skips": 0,
+  "ruff_stdout": "All checks passed!\n",
+  "checked_source_sha256": {
+    "gateway/events.py": "1dad10ed8db5349a716672922ca916af47c5c2c649d1905e1bb139f428d343c5",
+    "memory/helper_extraction.py": "d516be457e5aac277616135ae0d3307931cd3fa8751e729bd7c8e1c7aa8493be",
+    "memory/task_provider.py": "8821324a55251a3cceff0b4dc8cf66feb73b235c5c40a793b31e661d2d35ffeb",
+    "memory/task_worker.py": "623b5cc22ec2f166d5ce9a0a9bf46104e089cf17e09665d966480779c7516fe4",
+    "memory/task_registry.py": "8bd514d3b3c2fa4e0948fd54c90ae779579119287615724f4c041a6ea67b3d11",
+    "memory/task_dispatch.py": "b7de671a95e6a6d2fe1ca9aaaf57af0f0abbfae9cc7d759ed69a26f700914727",
+    "scripts/task_review_calibration.py": "dfa91f5e8ac2bf05949896efc72f3fe0462dece53800c17dae8bcd9ed06063c8",
+    "scripts/task_run.py": "c4f9c5889975a16fc5f0feec02007057f747e69451a498e61d056913c45dbc92",
+    "scripts/check_task_handoff.py": "32fe1310b24b569723949abd33b7191277fee4dc543b50cfc0344b8fbf67329c",
+    "scripts/task_review_capture.py": "88fc8a788dc9980c61a991467823d12e59ec5eeeb94e62e0a897c68f3c1bd79d",
+    "scripts/task_local.py": "341ba9541dccf720485a8ec9fa682e4eee84bd275f224b3e3b16d65e2f4e8fd7",
+    "scripts/task_review_export.py": "4379ee2f94ee6333ddea80ad5e84a911aefa9af00e7e2d65982b2ac3aad9dcb4",
+    "scripts/task_capture.py": "4559cc1f86ef5c74fc1d098fef66390dbeabc570d4a713d3f0f566e81783ce33"
+  }
+}

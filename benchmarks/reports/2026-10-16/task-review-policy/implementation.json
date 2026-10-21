@@ -1,0 +1,41 @@
+{
+  "observed_at_utc": "2026-10-16T18:59:46.580838+00:00",
+  "local_head": "da67d5d201cd637b6f07b2acf88dbcd1ff3120e4",
+  "branch": "codex/task-provider-adapter",
+  "scope": "local working tree; not published PR head",
+  "changed_source_sha256": {
+    "memory/task_dispatch.py": "291c9b0641ec007d91f97e6c421c1ef02777e9995b0e841164a9dd0cb4f5bacd",
+    "memory/task_registry.py": "aa429f3a5a3d55ff73ee2048fe6982f63b2ebb06a29e2a645015651a68d90e95",
+    "memory/task_review.py": "c1f25130c47dfa5a3b5a7d8b63e2441d7ca9d28d8ecaf866e77afb1a4a1661a7",
+    "memory/task_review_fixture.py": "3b7b792721848767da4fee73852d10b00d7527210ec769555c9878a80d5e6fe0",
+    "scripts/task_local.py": "2ef183a9b947cdb01357c3155136aac1bb5bb4c4adcb209392f6e12f929b988b",
+    "scripts/check_task_provider_fixture.py": "14e599b28dfbcce8e410b87a9acf668f489dc6b15461772388beb13997191c9c",
+    "scripts/run_ci_checks.sh": "a54899fe44d2eb46e0c94ed158dcc300c61c0805d3ead766ad83ed40102adb70",
+    "test_task_review.py": "4e12627dbbd097ef7bb0845aca4a147d3176be55da5efd8ec02bfa2a0bfbe765",
+    "test_task_review_fixture.py": "8796157d1519303ec62ab6941185c61479ac38786678e5b03db60efc47e52ef5",
+    "docs/task-review-policy.md": "625c184432f5faf604b085a4299ccfd9b31f1d44a76c943b2e79d105e2ca8528",
+    "docs/shared-task-system.md": "d9ceb2fb13429002c46942c632bebda82715e29f7bcd8b02a74c26bf1b784dc3"
+  },
+  "validation": {
+    "local_offline_tests": 108,
+    "existing_local_baseline": 71,
+    "new_review_tests": 23,
+    "new_fixture_tests": 14,
+    "ruff": "passed",
+    "shell_syntax": "passed",
+    "tracked_diff_check": "passed",
+    "tested_python_source_still_matches": true,
+    "post_validation_change": "Registered the two already-passing new test scripts in the offline CI loop; verified this is the only CI-script change since validation, retaining pre-existing user additions."
+  },
+  "real_model_called_for_new_policy": false,
+  "historical_published_gate": {
+    "head": "da01b790737dc0341964bce3c8f78cf0c6e97b6e",
+    "offline_tests": 76,
+    "note": "Separate October 15 receipt; not rerun or relabelled."
+  },
+  "git_actions": {
+    "commit": false,
+    "push": false,
+    "merge": false
+  }
+}

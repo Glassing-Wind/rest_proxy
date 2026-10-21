@@ -1,5 +1,29 @@
 # Shared task system — direction and first acceptance milestone
 
+## Explicit local review policy — October 15
+
+The [local task review policy](task-review-policy.md) defines a bounded agent review
+path for routine `read_source` findings. `TaskReviewer.prepare_review` binds fresh
+source evidence to the current revision, latest submission and finding digest.
+`review_agent` requires separate supported/unsupported/unresolved judgments for the
+answer and every limitation. Fully supported routine work can be accepted; a concrete
+error can request correction. Unresolved work escalates to a human, stays pending and
+sets a sticky `human_review_required` flag. Consequential or sensitive tasks must set
+that flag at creation; its default is false for routine tasks.
+
+Explicit human, agent and automated fixture activity remain distinguishable. Legacy
+review calls without a kind retain `actor_type=unspecified`. Caller labels are not
+authenticated identities or evidence of independent review, and the raw local API
+remains a trusted operator override. Review authorizes no commands, Git operations,
+deployment or external action. No automatic inference dispatch, retries or services
+are added by this policy.
+
+Deterministic checks can accept an exact pinned synthetic fixture; they do not prove
+arbitrary semantics. Agent agreement remains advisory when evidence is missing or a
+human decision is required. The dated milestones below retain their historical
+results; they do not establish acceptance of this new path. Record implementation
+checks and live results against the revision actually tested.
+
 ## Isolated helper trial blocked by output budget — October 7
 
 Literal five-field extraction fixture ran separately from live tasks. json_object

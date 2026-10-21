@@ -1,0 +1,17 @@
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_registry.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_dispatch.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_handoff.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_worker.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_provider.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_capture.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_run.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_review_export.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_assessment.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_review_capture.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_review_calibration.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_inspect.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_gateway_events.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_helper_extraction.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_review.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python test_task_review_fixture.py
+/Users/michaelmarler/Projects/rest_proxy/.venv/bin/python -m ruff check --no-cache memory/task_dispatch.py memory/task_registry.py memory/task_review.py memory/task_review_fixture.py scripts/task_local.py scripts/check_task_provider_fixture.py test_task_review.py test_task_review_fixture.py
