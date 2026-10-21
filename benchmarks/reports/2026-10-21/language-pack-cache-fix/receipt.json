@@ -1,0 +1,21 @@
+{
+  "base_commit": "6fcead43fc13b0049481ea5b5c491e02eab4ac68",
+  "patch_sha256": "07752f3ec1639a8f395014e57365635869d3f877737bbcb98bb5ab13ba358d14",
+  "wheel": ".runtime/query-cache-fix-20261021/tree_sitter_language_pack-1.20.0-cp310-abi3-macosx_11_0_arm64.whl",
+  "wheel_sha256": "47a65e96a955402b49bafac2bc118cf204def30e0f107b17adfd27a366986244",
+  "installed_native_sha256": "27281fe7902f84a5d5c50e64e69f2133b173fa073dabeb2c1ca1a4f92b2b1c25",
+  "rollback_wheel": ".runtime/reliable-indexing/wheels/tree_sitter_language_pack-1.20.0-cp310-abi3-macosx_11_0_arm64.whl",
+  "rollback_wheel_sha256": "ccc6bf9e47b945ebef8353b59794af4a2e3d9f487f8fed7d691562e5232458d9",
+  "shared_cache_max_entries": 256,
+  "per_thread_cache_max_entries": 32,
+  "max_cached_key_bytes": 65536,
+  "services_restarted": false,
+  "published": true,
+  "requirements_pin_updated": true,
+  "published_commit": "d10c656bce9e5ac9e8c282230b7ea83295e7ab12",
+  "fork_pull_request": "https://github.com/Zmaroo/tree-sitter-language-pack/pull/3",
+  "requirements_scope": "review branch only; original checkout preserved",
+  "service_restart_blocker": "launchctl kickstart denied by sandbox; loopback health unavailable",
+  "hosted_checks": "pending",
+  "historical_local_patch": "scripts/patches/ts-pack-bounded-query-cache.patch"
+}

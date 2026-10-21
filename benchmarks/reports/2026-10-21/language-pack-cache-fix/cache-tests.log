@@ -1,0 +1,9 @@
+warning: tree-sitter-language-pack@1.20.0: TSLP_OFFLINE set; refusing to download parser sources
+   Compiling tree-sitter-language-pack v1.20.0 (/private/tmp/ts-pack-query-cache-bounded-20261021/crates/ts-pack-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.22s
+     Running unittests src/lib.rs (target/debug/deps/tree_sitter_language_pack-46dc40d8bec3b136)
+
+running 1 test
+test query::tests::compiled_cache_bounds_with_python ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 320 filtered out; finished in 13.41s

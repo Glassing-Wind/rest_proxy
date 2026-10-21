@@ -1,0 +1,47 @@
+{
+  "samples": [
+    {
+      "phase": "warmup",
+      "unique_patterns": 0,
+      "rss": 31965184,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "phase": "new_3000",
+      "unique_patterns": 3000,
+      "rss": 32522240,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "phase": "replay_3000",
+      "unique_patterns": 3000,
+      "rss": 32522240,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "phase": "new_3000_more",
+      "unique_patterns": 6000,
+      "rss": 32538624,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "phase": "replay_6000",
+      "unique_patterns": 6000,
+      "rss": 32538624,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "phase": "tree_dropped",
+      "unique_patterns": 6000,
+      "rss": 32555008,
+      "fds": 3,
+      "threads": 1
+    }
+  ],
+  "scope": "synthetic patterns on one Python tree; isolated cache; results dropped each call"
+}
