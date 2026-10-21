@@ -2,6 +2,25 @@
 
 ## Shared HTTP MCP daemon
 
+When launchd owns the listener, use its registered service for a refresh instead
+of racing its KeepAlive policy with a second `nohup` process. On this Mac the label
+is `com.graphrag.brain-server`:
+
+```bash
+launchctl kickstart -k "gui/$(id -u)/com.graphrag.brain-server"
+```
+
+The shell scripts below manage standalone instances. Verify the process owner
+before choosing either path. A restart invalidates existing MCP sessions; clients
+must reconnect. Optional tool groups also depend on explicit profile/state flags,
+so missing embedded/FIRE tools alone do not establish stale loaded code.
+
+Restored pinned watches establish their current-file baseline on the first
+successful scan, then detect later edits, additions and deletions. Restoration
+does not enqueue a new index for every existing file. Use explicit
+`index_workspace(..., mode="incremental")` for repository changes made while the
+service was stopped, and verify structural/semantic completion and index health.
+
 The recommended mode is one shared Streamable HTTP daemon:
 
 ```bash
@@ -35,6 +54,11 @@ python scripts/check_mcp_protocol.py
 
 ## Client configuration
 
+For VS Code's native agent clients, Python tasks, debug profiles and the separate
+Codex extension configuration, follow [VS Code development](vscode-development.md).
+Its root `.mcp.json` uses `mcpServers`; Codex uses the TOML configuration below.
+These clients do not share a configuration format.
+
 For clients that accept URL-based MCP configuration:
 
 ```toml
@@ -62,6 +86,10 @@ python scripts/graphrag_mcp_supervisor.py
 ```
 
 ## Inference proxy
+
+For how the client, backend, APIs, workers and storage fit together, see the
+[product stack](product-stack.md). MCP and REST adapters should reuse the shared
+application logic; the inference proxy is a separate optional service.
 
 Run the proxy independently of the MCP daemon:
 

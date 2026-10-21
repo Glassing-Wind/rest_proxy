@@ -1,0 +1,93 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "rest_proxy: Ruff current Python file",
+            "type": "process",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": ["-m", "ruff", "check", "${file}"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "problemMatcher": []
+        },
+        {
+            "label": "rest_proxy: offline core checks",
+            "detail": "Runs each documented script in a separate process to isolate its module mocks.",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "rest_proxy: offline source citations",
+                "rest_proxy: offline retrieval",
+                "rest_proxy: offline task handoff"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "rest_proxy: offline source citations",
+            "type": "process",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": ["test_file_source_excerpt.py"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "problemMatcher": []
+        },
+        {
+            "label": "rest_proxy: offline retrieval",
+            "type": "process",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": ["test_search_codebase_tool.py"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "problemMatcher": []
+        },
+        {
+            "label": "rest_proxy: offline task handoff",
+            "type": "process",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": ["test_task_handoff.py"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "problemMatcher": []
+        },
+        {
+            "label": "rest_proxy: offline lessons acceptance",
+            "detail": "The 16 synthetic test modules selected by the lessons-corpus CI workflow.",
+            "type": "process",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "-W", "error::ResourceWarning", "-m", "unittest",
+                "test_lessons_ast",
+                "test_lessons_acquisition",
+                "test_lessons_ledger",
+                "test_lessons_corpus",
+                "test_lessons_server",
+                "test_lessons_cli",
+                "test_lessons_frontier",
+                "test_lessons_recovery",
+                "test_lessons_ledger_reader",
+                "test_lessons_exchange",
+                "test_lessons_investigation",
+                "test_lessons_scripture",
+                "test_lessons_james_pilot",
+                "test_lessons_james_investigation",
+                "test_lessons_mcp",
+                "test_lessons_pdf"
+            ],
+            "options": {"cwd": "${workspaceFolder}"},
+            "problemMatcher": []
+        },
+        {
+            "label": "rest_proxy: offline Cockpit acceptance",
+            "detail": "Synthetic read-only API and owned temporary launcher checks; never restarts MCP.",
+            "type": "process",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": ["-W", "error::ResourceWarning", "-m", "unittest", "test_task_cockpit_http", "test_task_cockpit_launch"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "problemMatcher": []
+        },
+        {
+            "label": "rest_proxy: check running MCP protocol",
+            "detail": "Requires the existing local MCP daemon; creates and closes only this check's sessions.",
+            "type": "process",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": ["scripts/check_mcp_protocol.py"],
+            "options": {"cwd": "${workspaceFolder}"},
+            "problemMatcher": []
+        }
+    ]
+}

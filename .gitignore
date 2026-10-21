@@ -22,8 +22,12 @@ session-ses_*.md
 # Crawlee runtime storage (request queues, statistics — never commit)
 storage/
 
-# VS Code
-.vscode/
+# Reviewed, portable VS Code configuration; other editor files stay local.
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 # OS generated files
 .DS_Store

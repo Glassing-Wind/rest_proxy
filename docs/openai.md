@@ -18,11 +18,15 @@ LM_PROXY_OPENAI_REASONING_EFFORT=low
 
 Start a separate canary process using the project's Python environment:
 
+Port 8001 belongs to the shared GraphRAG MCP daemon. This optional canary uses
+8002; the normal inference proxy uses 8000. Starting it is a separate rollout
+decision, not part of editor or MCP setup.
+
 ```bash
-uvicorn proxy:app --host 127.0.0.1 --port 8001
+.venv/bin/python -m uvicorn proxy:app --host 127.0.0.1 --port 8002
 ```
 
-Set the client's base URL to `http://127.0.0.1:8001/v1` and its model to
+Set the client's base URL to `http://127.0.0.1:8002/v1` and its model to
 `gpt-6-sol`. Explicit client model IDs are respected; the configured model applies
 when the caller omits `model`. Existing `LM_PROXY_MODEL_ALIASES` mappings also apply.
 Cloud routing never silently falls back to a local model or Chat Completions.
@@ -31,7 +35,7 @@ OpenAI credentials are sent only to `LM_PROXY_OPENAI_BASE_URL` (default
 `/v1/models` performs authenticated OpenAI discovery. A missing key returns HTTP 503.
 
 ```bash
-curl --fail-with-body http://127.0.0.1:8001/v1/chat/completions \
+curl --fail-with-body http://127.0.0.1:8002/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"gpt-6-sol","messages":[{"role":"user","content":"Reply with ready."}],"max_completion_tokens":512}'
 ```

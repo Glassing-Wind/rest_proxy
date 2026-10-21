@@ -1,0 +1,145 @@
+{
+  "as_of": "2026-10-20",
+  "implementation_revisions": [
+    "8ba5961",
+    "e6d873f"
+  ],
+  "final_validation_base_revision": "e6d873ff10ab5346b5098433bd1f9189db6244b8",
+  "working_tree_had_preexisting_unrelated_changes": true,
+  "service": {
+    "owner": "launchd com.graphrag.brain-server",
+    "boot_id": "6496-84c148e8",
+    "fingerprint": "f2103291e9d3",
+    "source_fingerprint_matches": true,
+    "ready_http": 200,
+    "tools": 60,
+    "catalog": {
+      "protocol_check_exit": 0,
+      "protocol": "2025-11-25",
+      "catalog_source_names_equal": true,
+      "tool_count": 60,
+      "catalog_sha256": "a69df929188521a9c7ceb59ca5c112d4cc0f19b15b40e32bce783e8c24112009",
+      "own_session_closed_http": 200,
+      "configuration_files_unchanged": true,
+      "only_expected_index_jobs_created": true
+    },
+    "storage_profile": "existing service-backed Neo4j/PostgreSQL",
+    "configuration_bodies_retained": false
+  },
+  "index_jobs": [
+    {
+      "job_id": "65bceb7f",
+      "status": "done",
+      "files": 610,
+      "struct_rc": 0,
+      "semantic_rc": 0,
+      "runtime_source": "project_venv",
+      "maintenance_complete": true,
+      "maintenance_pending": false,
+      "maintenance_error": null
+    },
+    {
+      "job_id": "5a5009a3",
+      "status": "done",
+      "files": 610,
+      "struct_rc": 0,
+      "semantic_rc": 0,
+      "runtime_source": "project_venv",
+      "maintenance_complete": true,
+      "maintenance_pending": false,
+      "maintenance_error": null
+    }
+  ],
+  "final_health": {
+    "files_on_disk": 610,
+    "structural_files": 610,
+    "semantic_files": 610,
+    "reported_stale_files": 0,
+    "reported_missing_files": 0,
+    "source_eligible_parsed": 421,
+    "source_eligible_total": 421,
+    "runs_aligned": true,
+    "deep_audit_run": false
+  },
+  "offline_checks": {
+    "watcher_tests": 12,
+    "embedded_watcher_tests": 2,
+    "manifest_tests": 11,
+    "total_passed": 25,
+    "ruff_changed_python_passed": true,
+    "diff_check_passed": true,
+    "full_ci_run": false
+  },
+  "vscode_task": {
+    "json_valid": true,
+    "citations_verified": 6,
+    "source_files": [
+      "AGENTS.md",
+      "brain_server.py",
+      "proxy/app.py"
+    ],
+    "actual_mcp_tool_calls": 4,
+    "native_fallback_calls": 0,
+    "model_runtime": [
+      {
+        "model": "gpt-6.1-sol",
+        "effort": "ultra"
+      }
+    ],
+    "client_runtime": [
+      {
+        "originator": "codex_vscode",
+        "cli_version": "0.162.0-alpha.17.2",
+        "source": "vscode"
+      }
+    ],
+    "usage": {
+      "input_tokens": 224983,
+      "cached_input_tokens": 204928,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 2167,
+      "reasoning_output_tokens": 483,
+      "total_tokens": 227150
+    },
+    "ui_chat_reopened": true,
+    "role_tool_allowlist_enforcement_verified": false,
+    "raw_response_sha256": "7d223ccc2e49fd296db704dd42175336fd4d48e86b6db789e6963166afc1976f",
+    "task_marker": "RP_VSCODE_MCP_20261020_A",
+    "visible_title": "Identify MCP and inference APIs",
+    "named_base_revision": "8ba5961",
+    "cited_sources_unchanged_in_followup": true,
+    "one_off_approved_read_requests": 4,
+    "persistent_approval_rule_added": false,
+    "automatic_ide_context_included": false,
+    "answer_path": "vscode-answer.json",
+    "answer_normalization": "workspace paths replaced by <workspace> or repository-relative paths; raw response SHA-256 retained",
+    "billing_dollars_measured": false,
+    "coordinator_or_subagent_usage_included": false,
+    "paired_baseline_run": false
+  },
+  "selected_source_sha256": {
+    ".indexignore": "5147c6315f5aadc105657bed626a22c7a29bba43311589fc90c05cf0180e5317",
+    ".mcp.json": "d062bba7d78ca9943c36b8e87201b758b1a686c43f8756ab6b7188e6fb396189",
+    "graphrag_core/indexing/manifest.py": "7f3b0d634d8b9b014422253e6d809393bce86ec3b89b5e9dec6cb4ae72dfbccb",
+    "graphrag_core/indexing/watcher.py": "c93a516d6f72e60d5169ad13a458ed302c6f44a072ce83bc411e595598ddfd97",
+    "test_watcher.py": "9f9a8ea5a8329111fc6712ad8269dcc59870f17a2b113ee597fa744fb5ff69bd",
+    "brain_server.py": "9da858cb04389c26ef3c6311450f4cf8aa3384b1737d8d7d176041dd4c0ab286",
+    "_mcp.py": "9eab8811cd46820cb3d80442968f6873ace4175e668e3898e8418cdaf3f1587a",
+    "tools/__init__.py": "02e2fc27a2d9fcccca1ea1a3be8b116057e91528c8e5598ec07486268b4c57f1",
+    "proxy/app.py": "70e4a6f37e5149fe5320d8aea37da10eb9529b9aa77162d5a6a7cecf85489d4b",
+    "AGENTS.md": "9bbe989ab2f23a539bc437f553eaf8658f27746be3c1d88afd01be9ee4b5afe2",
+    "docs/product-stack.md": "e2bc4803cbfaca53eca71accffa1ec8f21149a68fde9f287d122cc3122ccc28d",
+    "docs/operations.md": "88d11b362fd595e37b420734fd3d2b5bae6f5d3574ddb3819267a7d6c55ad566",
+    "docs/vscode-development.md": "7634f0b24a4e8acd3a108c1807d8ea3a21c73d5d00616365807a003f29306710"
+  },
+  "limits": [
+    "not a clean release acceptance",
+    "service includes preexisting working-tree implementation",
+    "no deep graph fidelity audit",
+    "custom-role tool enforcement not verified",
+    "no TaskRegistry worker/SDK integration established",
+    "chat persistence is not task-registry reopen",
+    "no PR4 local-provider acceptance claimed",
+    "no speed/cost/quality superiority established"
+  ]
+}

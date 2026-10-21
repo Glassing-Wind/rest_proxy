@@ -1,0 +1,372 @@
+{
+  "as_of": "2026-10-20",
+  "source": "Local VS Code extension registry and package manifests; not active-extension or security attestation",
+  "registered_entries": 70,
+  "unique_ids": 67,
+  "multiple_registered_versions": {
+    "github.remotehub": [
+      "0.64.0",
+      "0.65.0"
+    ],
+    "ms-edgedevtools.vscode-edge-devtools": [
+      "2.1.10",
+      "2.1.13"
+    ],
+    "ms-vscode-remote.remote-ssh": [
+      "0.124.0",
+      "0.128.0"
+    ]
+  },
+  "extensions": [
+    {
+      "id": "aliasadidev.nugetpackagemanagergui",
+      "version": "2.1.1",
+      "name": "NuGet Package Manager GUI"
+    },
+    {
+      "id": "bibhasdn.django-html",
+      "version": "1.3.0",
+      "name": "Django Template"
+    },
+    {
+      "id": "bierner.markdown-preview-github-styles",
+      "version": "2.2.0",
+      "name": "Markdown Preview Github Styling"
+    },
+    {
+      "id": "charliermarsh.ruff",
+      "version": "2026.88.0",
+      "name": "Ruff"
+    },
+    {
+      "id": "christian-kohler.npm-intellisense",
+      "version": "1.4.5",
+      "name": "npm Intellisense"
+    },
+    {
+      "id": "davidanson.vscode-markdownlint",
+      "version": "0.62.1",
+      "name": "markdownlint"
+    },
+    {
+      "id": "dbaeumer.vscode-eslint",
+      "version": "3.0.34",
+      "name": "ESLint"
+    },
+    {
+      "id": "eamodio.gitlens",
+      "version": "19.4.0",
+      "name": "GitLens \u2014 Git supercharged"
+    },
+    {
+      "id": "github.remotehub",
+      "version": "0.64.0",
+      "name": "GitHub Repositories"
+    },
+    {
+      "id": "github.remotehub",
+      "version": "0.65.0",
+      "name": "GitHub Repositories"
+    },
+    {
+      "id": "github.vscode-github-actions",
+      "version": "0.32.3",
+      "name": "GitHub Actions"
+    },
+    {
+      "id": "github.vscode-pull-request-github",
+      "version": "0.170.0",
+      "name": "GitHub Pull Requests"
+    },
+    {
+      "id": "jebbs.plantuml",
+      "version": "2.18.1",
+      "name": "PlantUML"
+    },
+    {
+      "id": "martin-vana.vscode-extension-green-socket-io",
+      "version": "1.0.4",
+      "name": "Green Client for Socket.IO"
+    },
+    {
+      "id": "mechatroner.rainbow-csv",
+      "version": "3.24.1",
+      "name": "Rainbow CSV"
+    },
+    {
+      "id": "mindaro-dev.file-downloader",
+      "version": "1.0.13",
+      "name": "File Downloader"
+    },
+    {
+      "id": "ms-azuretools.vscode-azure-github-copilot",
+      "version": "1.0.244",
+      "name": "GitHub Copilot for Azure"
+    },
+    {
+      "id": "ms-azuretools.vscode-azure-mcp-server",
+      "version": "3.0.51",
+      "name": "Azure MCP Server"
+    },
+    {
+      "id": "ms-azuretools.vscode-azureresourcegroups",
+      "version": "0.13.2",
+      "name": "Azure Resources"
+    },
+    {
+      "id": "ms-azuretools.vscode-containers",
+      "version": "2.5.3",
+      "name": "Container Tools"
+    },
+    {
+      "id": "ms-azuretools.vscode-docker",
+      "version": "2.0.0",
+      "name": "Docker"
+    },
+    {
+      "id": "ms-dotnettools.csdevkit",
+      "version": "3.40.215",
+      "name": "C# Dev Kit"
+    },
+    {
+      "id": "ms-dotnettools.csharp",
+      "version": "2.160.4",
+      "name": "C#"
+    },
+    {
+      "id": "ms-dotnettools.vscode-dotnet-runtime",
+      "version": "3.2.0",
+      "name": ".NET Install Tool"
+    },
+    {
+      "id": "ms-edgedevtools.vscode-edge-devtools",
+      "version": "2.1.10",
+      "name": "Microsoft Edge Tools for VS Code"
+    },
+    {
+      "id": "ms-edgedevtools.vscode-edge-devtools",
+      "version": "2.1.13",
+      "name": "Microsoft Edge Tools for VS Code"
+    },
+    {
+      "id": "ms-kubernetes-tools.vscode-kubernetes-tools",
+      "version": "1.4.1",
+      "name": "Kubernetes"
+    },
+    {
+      "id": "ms-python.debugpy",
+      "version": "2026.7.12871008",
+      "name": "Python Debugger"
+    },
+    {
+      "id": "ms-python.python",
+      "version": "2026.11.2026101901",
+      "name": "Python"
+    },
+    {
+      "id": "ms-python.vscode-pylance",
+      "version": "2026.4.1",
+      "name": "Pylance"
+    },
+    {
+      "id": "ms-toolsai.jupyter",
+      "version": "2025.9.1",
+      "name": "Jupyter"
+    },
+    {
+      "id": "ms-toolsai.jupyter-keymap",
+      "version": "1.1.2",
+      "name": "Jupyter Keymap"
+    },
+    {
+      "id": "ms-toolsai.jupyter-renderers",
+      "version": "1.3.0",
+      "name": "Jupyter Notebook Renderers"
+    },
+    {
+      "id": "ms-toolsai.vscode-jupyter-cell-tags",
+      "version": "0.1.9",
+      "name": "Jupyter Cell Tags"
+    },
+    {
+      "id": "ms-toolsai.vscode-jupyter-powertoys",
+      "version": "0.1.1",
+      "name": "Jupyter PowerToys"
+    },
+    {
+      "id": "ms-toolsai.vscode-jupyter-slideshow",
+      "version": "0.1.6",
+      "name": "Jupyter Slide Show"
+    },
+    {
+      "id": "ms-vscode-remote.remote-containers",
+      "version": "0.469.0",
+      "name": "Dev Containers"
+    },
+    {
+      "id": "ms-vscode-remote.remote-ssh",
+      "version": "0.124.0",
+      "name": "Remote - SSH"
+    },
+    {
+      "id": "ms-vscode-remote.remote-ssh",
+      "version": "0.128.0",
+      "name": "Remote - SSH"
+    },
+    {
+      "id": "ms-vscode-remote.remote-ssh-edit",
+      "version": "0.87.0",
+      "name": "Remote - SSH: Editing Configuration Files"
+    },
+    {
+      "id": "ms-vscode-remote.remote-wsl",
+      "version": "0.104.4",
+      "name": "WSL"
+    },
+    {
+      "id": "ms-vscode-remote.vscode-remote-extensionpack",
+      "version": "0.26.0",
+      "name": "Remote Development"
+    },
+    {
+      "id": "ms-vscode.azure-repos",
+      "version": "0.40.0",
+      "name": "Azure Repos"
+    },
+    {
+      "id": "ms-vscode.cmake-tools",
+      "version": "1.24.42",
+      "name": "CMake Tools"
+    },
+    {
+      "id": "ms-vscode.cpp-devtools",
+      "version": "0.6.18",
+      "name": "C/C++ DevTools"
+    },
+    {
+      "id": "ms-vscode.cpptools",
+      "version": "1.35.4",
+      "name": "C/C++"
+    },
+    {
+      "id": "ms-vscode.cpptools-extension-pack",
+      "version": "1.5.1",
+      "name": "C/C++ Extension Pack"
+    },
+    {
+      "id": "ms-vscode.cpptools-themes",
+      "version": "2.0.0",
+      "name": "C/C++ Themes"
+    },
+    {
+      "id": "ms-vscode.makefile-tools",
+      "version": "0.12.17",
+      "name": "Makefile Tools"
+    },
+    {
+      "id": "ms-vscode.remote-explorer",
+      "version": "0.5.0",
+      "name": "Remote Explorer"
+    },
+    {
+      "id": "ms-vscode.remote-repositories",
+      "version": "0.42.0",
+      "name": "Remote Repositories"
+    },
+    {
+      "id": "ms-vscode.remote-server",
+      "version": "1.5.4",
+      "name": "Remote - Tunnels"
+    },
+    {
+      "id": "ms-windows-ai-studio.windows-ai-studio",
+      "version": "1.6.16",
+      "name": "Foundry Toolkit for VS Code"
+    },
+    {
+      "id": "openai.chatgpt",
+      "version": "26.51007.21434",
+      "name": "Codex \u2013 OpenAI\u2019s coding agent"
+    },
+    {
+      "id": "openai.codex-audio",
+      "version": "26.1007.21434",
+      "name": "Codex Audio"
+    },
+    {
+      "id": "openai.openai-chatgpt-adhoc",
+      "version": "0.0.1731016154",
+      "name": "ChatGPT \u2013 Work with VS Code on macOS"
+    },
+    {
+      "id": "redhat.java",
+      "version": "1.58.0",
+      "name": "Language Support for Java(TM) by Red Hat"
+    },
+    {
+      "id": "redhat.vscode-yaml",
+      "version": "2.0.0",
+      "name": "YAML"
+    },
+    {
+      "id": "rooveterinaryinc.roo-cline",
+      "version": "3.54.0",
+      "name": "Roo Code"
+    },
+    {
+      "id": "simonsiefke.svg-preview",
+      "version": "2.8.3",
+      "name": "Svg Preview"
+    },
+    {
+      "id": "sst-dev.opencode",
+      "version": "1.0.0",
+      "name": "opencode"
+    },
+    {
+      "id": "twxs.cmake",
+      "version": "0.0.17",
+      "name": "CMake"
+    },
+    {
+      "id": "vscjava.vscode-gradle",
+      "version": "3.18.1",
+      "name": "Gradle for Java"
+    },
+    {
+      "id": "vscjava.vscode-java-debug",
+      "version": "0.60.0",
+      "name": "Debugger for Java"
+    },
+    {
+      "id": "vscjava.vscode-java-dependency",
+      "version": "0.27.7",
+      "name": "Project Manager for Java"
+    },
+    {
+      "id": "vscjava.vscode-java-pack",
+      "version": "0.31.2",
+      "name": "Extension Pack for Java"
+    },
+    {
+      "id": "vscjava.vscode-java-test",
+      "version": "0.47.0",
+      "name": "Test Runner for Java"
+    },
+    {
+      "id": "vscjava.vscode-maven",
+      "version": "0.46.0",
+      "name": "Maven for Java"
+    },
+    {
+      "id": "vscodevim.vim",
+      "version": "1.32.4",
+      "name": "Vim"
+    },
+    {
+      "id": "xabikos.javascriptsnippets",
+      "version": "1.8.0",
+      "name": "JavaScript (ES6) code snippets"
+    }
+  ]
+}
