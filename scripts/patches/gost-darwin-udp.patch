@@ -1,0 +1,198 @@
+diff --git a/internal/net/dialer/dialer.go b/internal/net/dialer/dialer.go
+index 860ce0b..44b3324 100644
+--- a/internal/net/dialer/dialer.go
++++ b/internal/net/dialer/dialer.go
+@@ -110,10 +110,16 @@ func (d *Dialer) dialOnce(ctx context.Context, network, addr, ifceName string, i
+ 	switch network {
+ 	case "udp", "udp4", "udp6":
+ 		if addr == "" {
++			bindRelay := runtime.GOOS == "darwin" && bindToDevice && ifceName != ""
+ 			var laddr *net.UDPAddr
+ 			if ifAddr != nil {
+ 				laddr, _ = ifAddr.(*net.UDPAddr)
+ 			}
++			if bindRelay {
++				// A named Darwin interface needs a dual-stack association, not
++				// whichever source address Interface.Addrs happens to list first.
++				laddr = nil
++			}
+ 
+ 			c, err := net.ListenUDP(network, laddr)
+ 			if err != nil {
+@@ -121,22 +127,39 @@ func (d *Dialer) dialOnce(ctx context.Context, network, addr, ifceName string, i
+ 			}
+ 			sc, err := c.SyscallConn()
+ 			if err != nil {
++				if bindRelay {
++					c.Close()
++				}
+ 				log.Error(err)
+ 				return nil, err
+ 			}
++			var bindErr error
+ 			err = sc.Control(func(fd uintptr) {
+-				// NOTE: bindDevice is intentionally skipped for empty-addr UDP
+-				// (relay/listener sockets). The ListenUDP laddr binding above
+-				// is sufficient to pin the source IP. SO_BINDTODEVICE would
+-				// force all outbound datagrams through the named interface,
+-				// which may conflict with the kernel routing table and cause
+-				// silent packet drops — breaking UDP associate (issue #287).
++				if bindRelay {
++					bindNetwork := "udp4"
++					if c.LocalAddr().(*net.UDPAddr).IP.To4() == nil {
++						bindNetwork = "udp6"
++					}
++					bindErr = bindDevice(bindNetwork, "", fd, ifceName)
++					if bindErr != nil {
++						return
++					}
++				}
++				// Preserve source-address-only binding for other platforms and
++				// explicit IP interfaces (issue #287).
+ 				if d.Mark != 0 {
+ 					if err := setMark(fd, d.Mark); err != nil {
+ 						log.Warnf("set mark: %v", err)
+ 					}
+ 				}
+ 			})
++			if bindRelay && (err != nil || bindErr != nil) {
++				c.Close()
++				if bindErr != nil {
++					return nil, bindErr
++				}
++				return nil, err
++			}
+ 			if err != nil {
+ 				log.Error(err)
+ 			}
+diff --git a/internal/net/dialer/dialer_darwin_test.go b/internal/net/dialer/dialer_darwin_test.go
+new file mode 100644
+index 0000000..6d2c08a
+--- /dev/null
++++ b/internal/net/dialer/dialer_darwin_test.go
+@@ -0,0 +1,125 @@
++package dialer
++
++import (
++	"context"
++	"net"
++	"syscall"
++	"testing"
++	"time"
++
++	"github.com/go-gost/core/logger"
++	"golang.org/x/sys/unix"
++)
++
++func TestDarwinNamedInterfaceUDPAssociationDualStack(t *testing.T) {
++	ifce, err := net.InterfaceByName("lo0")
++	if err != nil {
++		t.Skip("Darwin loopback interface is unavailable")
++	}
++	d := &Dialer{Interface: "lo0"}
++	conn, err := d.Dial(context.Background(), "udp", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	pc := conn.(*net.UDPConn)
++	localIP := pc.LocalAddr().(*net.UDPAddr).IP
++	if localIP.To4() != nil || !localIP.IsUnspecified() {
++		t.Fatalf("expected wildcard IPv6 dual-stack socket, got %v", localIP)
++	}
++	sc, err := pc.SyscallConn()
++	if err != nil {
++		t.Fatal(err)
++	}
++	var boundIndex, v6Only int
++	var optionErr error
++	if err := sc.Control(func(fd uintptr) {
++		boundIndex, optionErr = unix.GetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_BOUND_IF)
++		if optionErr == nil {
++			v6Only, optionErr = unix.GetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY)
++		}
++	}); err != nil {
++		t.Fatal(err)
++	}
++	if optionErr != nil {
++		t.Fatal(optionErr)
++	}
++	if boundIndex != ifce.Index || v6Only != 0 {
++		t.Fatalf("expected bound dual-stack interface %d; got bound=%d v6only=%d", ifce.Index, boundIndex, v6Only)
++	}
++	for _, test := range []struct{ network, host string }{{"udp4", "127.0.0.1"}, {"udp6", "::1"}} {
++		t.Run(test.network, func(t *testing.T) {
++			peer, err := net.ListenUDP(test.network, &net.UDPAddr{IP: net.ParseIP(test.host)})
++			if err != nil {
++				t.Skipf("loopback %s unavailable: %v", test.network, err)
++			}
++			defer peer.Close()
++			deadline := time.Now().Add(2 * time.Second)
++			peer.SetDeadline(deadline)
++			pc.SetDeadline(deadline)
++			payload := []byte("synthetic-loopback-" + test.network)
++			if _, err := pc.WriteToUDP(payload, peer.LocalAddr().(*net.UDPAddr)); err != nil {
++				t.Fatal(err)
++			}
++			buffer := make([]byte, 128)
++			n, source, err := peer.ReadFromUDP(buffer)
++			if err != nil || string(buffer[:n]) != string(payload) {
++				t.Fatalf("loopback request mismatch: %v", err)
++			}
++			if _, err := peer.WriteToUDP(payload, source); err != nil {
++				t.Fatal(err)
++			}
++			n, _, err = pc.ReadFromUDP(buffer)
++			if err != nil || string(buffer[:n]) != string(payload) {
++				t.Fatalf("loopback reply mismatch: %v", err)
++			}
++		})
++	}
++}
++
++func TestDarwinNamedInterfaceUDPAssociationMissingInterface(t *testing.T) {
++	d := &Dialer{Interface: "gost_missing_iface!"}
++	conn, err := d.Dial(context.Background(), "udp", "")
++	if err == nil || conn != nil {
++		if conn != nil {
++			conn.Close()
++		}
++		t.Fatalf("missing interface must fail without a connection: conn=%v err=%v", conn, err)
++	}
++}
++
++func TestDarwinNamedInterfaceUDPAssociationBindFailure(t *testing.T) {
++	d := &Dialer{}
++	conn, err := d.dialOnce(context.Background(), "udp", "", "gost_missing_iface",
++		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)}, true, logger.Default())
++	if err == nil || conn != nil {
++		if conn != nil {
++			conn.Close()
++		}
++		t.Fatalf("socket binding failure must propagate without a connection: conn=%v err=%v", conn, err)
++	}
++}
++
++func TestDarwinExplicitIPUDPAssociationPreservesSourceBinding(t *testing.T) {
++	d := &Dialer{Interface: "127.0.0.1"}
++	conn, err := d.Dial(context.Background(), "udp", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	pc := conn.(*net.UDPConn)
++	if !pc.LocalAddr().(*net.UDPAddr).IP.Equal(net.IPv4(127, 0, 0, 1)) {
++		t.Fatalf("explicit IP source binding changed: %v", pc.LocalAddr())
++	}
++	sc, err := pc.SyscallConn()
++	if err != nil {
++		t.Fatal(err)
++	}
++	var index int
++	var optionErr error
++	if err := sc.Control(func(fd uintptr) {
++		index, optionErr = unix.GetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_BOUND_IF)
++	}); err != nil || optionErr != nil || index != 0 {
++		t.Fatalf("explicit IP must remain source-only: index=%d control=%v option=%v", index, err, optionErr)
++	}
++}

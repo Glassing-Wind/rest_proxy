@@ -1,0 +1,32 @@
+{
+  "binary_sha256": "d6883edd609d425732dd49b14bd7eba7083a71b431c68acc3fcb57babb701e19",
+  "build": "3.3.0-restproxy-darwin-udp1",
+  "build_arguments": [
+    "go",
+    "build",
+    "-trimpath",
+    "-ldflags",
+    "-s -w -X main.version=v3.3.0-restproxy-darwin-udp1",
+    "-o",
+    "../gost-darwin-udp1",
+    "./cmd/gost"
+  ],
+  "checks": [
+    "four Darwin UDP tests passed",
+    "11 offline manager checks passed",
+    "focused Ruff passed",
+    "live IPv4/IPv6 TCP and UDP through the connected tunnel",
+    "gateway-only deny controls established raw-app attribution",
+    "local GraphRAG DIRECT health HTTP200"
+  ],
+  "date": "2026-10-10",
+  "go_toolchain": "go1.26.3 darwin/arm64",
+  "gost_commit": "cb76f63754768c7b5d68895a0d51635b0141b80f",
+  "gost_repository": "https://github.com/go-gost/gost",
+  "gost_tag": "v3.3.0",
+  "local_replace": "github.com/go-gost/x=../gost-x-v0.16.0",
+  "patch_sha256": "78a3cf28532478730d43a950c4bc03b24a0b7de60d8f2dd87c324f0eba33defc",
+  "x_commit": "14fed91c6245289e2e92ea60a97332a62c90fad0",
+  "x_repository": "https://github.com/go-gost/x",
+  "x_tag": "v0.16.0"
+}
