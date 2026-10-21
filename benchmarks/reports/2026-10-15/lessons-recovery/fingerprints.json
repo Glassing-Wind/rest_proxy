@@ -1,0 +1,83 @@
+{
+  "original_responses": [
+    {
+      "body_sha256": "4121c5eb1b2886ea6e95aa3cf5bb6eb73d3713c7b13e960e95a6ce0522ca2797",
+      "final_url": "https://hammy64000.com/american-cosmology-and-arlington-national-cemetery/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000001",
+      "requested_url": "https://hammy64000.com/american-cosmology-and-arlington-national-cemetery/",
+      "status": 200
+    },
+    {
+      "body_sha256": "af86df525f88745d62a95ad6abb5a54ec7d1412d23d9f5b46a941afb60bee181",
+      "final_url": "https://hammy64000.com/american-healthcare-and-the-caduceus-of-hermes/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000002",
+      "requested_url": "https://hammy64000.com/american-healthcare-and-the-caduceus-of-hermes/",
+      "status": 200
+    },
+    {
+      "body_sha256": "2f7d26aa241d9dd19e54cdb105d83ab33d3b6337e057ca3180e7e4a59e89e2e3",
+      "final_url": "https://hammy64000.com/death-comes-for-everyone/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000003",
+      "requested_url": "https://hammy64000.com/death-comes-for-everyone/",
+      "status": 200
+    },
+    {
+      "body_sha256": "bfc49da33122384e593a66c30461395fc7db1801b2bab03bf41dc9a3accc1e1f",
+      "final_url": "https://hammy64000.com/life-in-the-age-of-pisces/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000004",
+      "requested_url": "https://hammy64000.com/life-in-the-age-of-pisces/",
+      "status": 200
+    },
+    {
+      "body_sha256": "a8ea0203e9de2c58fff8bc92235c94f9e9f3d91977ab24c1e9d0c6f0f2476751",
+      "final_url": "https://hammy64000.com/meltdown/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000005",
+      "requested_url": "https://hammy64000.com/meltdown/",
+      "status": 200
+    },
+    {
+      "body_sha256": "06dede7b0a2d507d5b9e407a2d3953a10b24a3e6fc18c4508fb07428045c44a2",
+      "final_url": "https://hammy64000.com/mercy-and-judgment-in-2025/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000006",
+      "requested_url": "https://hammy64000.com/mercy-and-judgment-in-2025/",
+      "status": 200
+    },
+    {
+      "body_sha256": "3a7eb14d639cc64a3cc2cb34f72d081665f0529b84fb25886f96b0738643b0fe",
+      "final_url": "https://hammy64000.com/religion-must-guide-the-political-moment/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000007",
+      "requested_url": "https://hammy64000.com/religion-must-guide-the-political-moment/",
+      "status": 200
+    },
+    {
+      "body_sha256": "6efc10572a2bc224b0110dda2cbceb8713b8f56f6a7834630908584a613519de",
+      "final_url": "https://hammy64000.com/series/the-epistle-of-james/",
+      "id": "recovery:460a510a9bfd4394a78d36289df3a9d8:000008",
+      "requested_url": "https://hammy64000.com/series/the-epistle-of-james/",
+      "status": 200
+    }
+  ],
+  "parent_lesson_ledger_sha256_after_intentional_review_append": "55a10da0c63e8c1f5093061f9a6febbf636e39890a5a7856c50aee12c3f930cb",
+  "parent_representation_manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+  "private_review_artifacts": {
+    "20261015T175925Z-b2dcb222-help-without-humiliation-proposed-revision.json": "687f33f35ffe9e7d879a6a02ee181965b1061392db00bbae313f66dd1383e386",
+    "20261015T175925Z-b2dcb222-intentions-and-context-proposed-revision.json": "a858605751db5b556c15753a4b4f947eb122dc040230839dcfb172c7c646a3c8",
+    "20261015T175925Z-b2dcb222-model-review-notes.json": "fae41cd4d8fa8eebc5b75d8d7cc30fbaf22d5c0657dfb5513f07e12fadb0bc80",
+    "review-publication-receipt.json": "4da5e4704284c6dba8b274f061bb9e13a985366667a57696ad9b843c1909b6e2"
+  },
+  "public_receipts": {
+    "availability.json": "b1a60b881b15c0fd024fd74d41f48565dd33aaba2b343429fc4fba511231a925",
+    "live-acceptance.json": "7133042794b1431bd0689dc4e5f7812b8d4470f14431ef28353ab19a93e60acb",
+    "offline-tests.txt": "41d7bc3c25dbfc39e9d78ed484d373960f54595612ecc11da4f7ca9a10be7fad",
+    "pdf-tests.txt": "a0fb67d700a3b318646f27c2853bc581e3a380b768ec590ec295dcf737aa6d4f",
+    "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "recovery_representation_manifest_sha256": "e2208a82c92ec188d412421378eb53597d43204ad9d4a32984062203dd9e685b",
+  "recovery_snapshot": {
+    "acquisitions.jsonl": "e9147e0be9071fc84f70093d03ac172fb477671266c36f6bdd85b3ba739d3da3",
+    "coverage.json": "7da2cf3a50b845d0b714372d3e744f6818ca76a12808c8c7014e5f2ea99aab2a",
+    "documents.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "inventory.json": "cd8cbefd7025bf8c57d75ab24b1d32a6d2feeed791138e6f445794b98250a166"
+  },
+  "schema": "lessons-recovery-fingerprints/1"
+}

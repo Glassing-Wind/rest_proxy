@@ -1,0 +1,94 @@
+{
+  "acceptance": {
+    "correction_requires_new_lesson_revision_and_review": true,
+    "dependency_resolution_uses_one_transaction_snapshot": true,
+    "disputed_and_rejected_findings_retained": true,
+    "exact_reviewed_finding_refs_required_for_new_lessons": true,
+    "failed_operations_preserve_fixture_ledger_and_sources": true,
+    "human_lesson_acceptance_and_separate_release_still_required": true,
+    "legacy_bundles_inspectable_only_with_missing_prerequisite_marked": true,
+    "legacy_histories_readable_and_require_explicit_upgrade_for_acceptance": true,
+    "separate_process_cli_reopen_and_release_verified": true,
+    "unchanged_lesson_hash_does_not_bypass_changed_finding": true,
+    "unreviewed_missing_malformed_self_or_stale_refs_refused": true
+  },
+  "base_commit": "90f07abea671319751f52212ee4adad9c2628ced",
+  "boundaries": {
+    "claim_truth_or_investigation_quality_established": false,
+    "downstream_memory_import_implemented": false,
+    "existing_private_proposals_accepted_or_released": false,
+    "models_called_or_trained": false,
+    "production_corpus_or_ledger_mutated": false,
+    "review_web_ui_implemented": false,
+    "services_started_or_reconfigured": false
+  },
+  "checks": [
+    {
+      "command": ".venv/bin/python -W error::ResourceWarning -m unittest test_lessons_ast test_lessons_acquisition test_lessons_ledger test_lessons_corpus test_lessons_server test_lessons_cli test_lessons_frontier test_lessons_recovery test_lessons_ledger_reader test_lessons_exchange test_lessons_investigation test_lessons_mcp test_lessons_pdf",
+      "elapsed_seconds": 4.378,
+      "exit_code": 0,
+      "passed": 190,
+      "skip_reason": "Optional pypdf absent from project environment.",
+      "skipped": 4,
+      "tests_run": 194
+    },
+    {
+      "command": "<bundled-python> -W error::ResourceWarning -m unittest test_lessons_pdf",
+      "elapsed_seconds": 0.355,
+      "exit_code": 0,
+      "passed": 4,
+      "skipped": 0,
+      "tests_run": 4
+    },
+    {
+      "command": ".venv/bin/python -m ruff check graphrag_core/lessons_corpus scripts/lessons_corpus.py scripts/free_man.py scripts/extract_lessons_pdf.py test_lessons_*.py",
+      "exit_code": 0,
+      "result": "All checks passed!"
+    },
+    {
+      "command": "git diff --check -- <implementation files>",
+      "exit_code": 0
+    }
+  ],
+  "distinct_tests_verified": 194,
+  "recorded_at": "2026-10-20T01:24:28.534648+00:00",
+  "result_basis": "Observed tool command results in this implementation session; no tests rerun by receipt writer.",
+  "runtime": {
+    "machine": "arm64",
+    "pdf_runtime": "Existing bundled document Python; no project dependency installation.",
+    "python": "3.14.8"
+  },
+  "schema": "investigation-lessons-acceptance/1",
+  "scope": "Synthetic disposable corpus and ledger; offline CLI and artifact validation.",
+  "source_sha256": {
+    ".github/workflows/lessons-corpus.yaml": "fdc48b829a07bc97f568a3650b905aedd2c775cbfff60bb59ce8fff0f4679748",
+    "graphrag_core/lessons_corpus/__init__.py": "9a748e527d8b00afb2d51e0bf01bb8e06481cfcfc5d9a448183c33bbbcd37aca",
+    "graphrag_core/lessons_corpus/acquire.py": "b6a5e1ff80eb33177b7c82fe6d311173e936525336981e51eb7b1df421cbc323",
+    "graphrag_core/lessons_corpus/ast.py": "53b79ff2fb2d0a1edf27e2b72a8c1d330fa5365811ea5cafb92ef327c8889604",
+    "graphrag_core/lessons_corpus/corpus.py": "663df071f1ebc436bb16f68e4a432efa352d60598ae47cb87a09b29ab07c906b",
+    "graphrag_core/lessons_corpus/exchange.py": "74d1af170fee2bb1cfe7335fa9cedbf76f1823687533ba1d8d3496218fe50ac2",
+    "graphrag_core/lessons_corpus/frontier.py": "e11b7a3877dc59941696ee85c03a818fbe41e94047744741d4e767769343f7bd",
+    "graphrag_core/lessons_corpus/ledger.py": "d5a6e040c851e874f3b0cbc5b39f65a22aa28098b54349c83e9af1b18080e972",
+    "graphrag_core/lessons_corpus/ledger_reader.py": "e12a08dd19eb3dd617bf150a6096d8b71239a601aa6eeba7340e9ef19f634080",
+    "graphrag_core/lessons_corpus/mcp.py": "4ce8a72db6452e67814a377414967fcd5648d0eca383f6dc381502d92fa000f8",
+    "graphrag_core/lessons_corpus/reads.py": "caa380e338f0bf676c1e599ffe3174cc6fee445689b387c0f9c9536ee045fa94",
+    "graphrag_core/lessons_corpus/recovery.py": "2fb463b80d4310d9995e40c66854d2aa713cf480f942441d514984a31fb3ca00",
+    "graphrag_core/lessons_corpus/server.py": "161b7e363d2a0e1286fc370443df5f4810a22064f304427f6ac50b646195b7e9",
+    "scripts/extract_lessons_pdf.py": "2f9d3352a653a0bd4330799fd7a98664650a93cf8101b1f4ad1db80a2c62a4ed",
+    "scripts/free_man.py": "e482871c822d7cafe014fb853f050e2945c0e334c388a36cf598a5571208db45",
+    "scripts/lessons_corpus.py": "fa0677776d17a815f9dbc4dff10a895040bf810852d03692489d16427398f3df",
+    "test_lessons_acquisition.py": "b1e210386d0e7840a74874f413e8b902335c0f63729919ebb97a3b998783d90a",
+    "test_lessons_ast.py": "cd7b7b201d846a964a11e1c8b982f63fe1d25d8554938056ae34c27d6ddc6638",
+    "test_lessons_cli.py": "903cafd9fb1f593a26397c1ab0f954a6534d6169e56e77e0ad89342ffefae8fa",
+    "test_lessons_corpus.py": "ffdd1768c71037cec7be2b9c651024518754d47971605ace3df1bac02e53ee5d",
+    "test_lessons_exchange.py": "8663a7513410033cbce5135bdee8a4dec64052b1a2857025b84f4682ba08798d",
+    "test_lessons_frontier.py": "08929871d8e28abc72ebf66ad2c60effd8cc57156347aacf7a9c140cd354738c",
+    "test_lessons_investigation.py": "56fa0182f288f0690fd75d1d62ea57b5cbf48add8e28a2bab1f12781d5b26d10",
+    "test_lessons_ledger.py": "f564cf7b508f7d3dea4ba084625a534983acc6c8a0829899e4976e2a0f8adf94",
+    "test_lessons_ledger_reader.py": "abc7289fcc6a868e7e73761fe423744735b6d4b9d02e0878502104b7bec3be20",
+    "test_lessons_mcp.py": "1ba1b578d33d2eff40d7cf8a6941c476e9b5b78ae702cadc614940b9e414e472",
+    "test_lessons_pdf.py": "31a6fcef746a933042dab2bb0ad7b1cef54a157c9831563e29faf02797dc3bdd",
+    "test_lessons_recovery.py": "724400fa4fb1db5ca321dd340cdf1d8cbc02ba5a9b857a8b977ecb54a99540b6",
+    "test_lessons_server.py": "bfab78a864949cbd260da9fbb241cf6f58174d358668a030b3dd21755bde907e"
+  }
+}

@@ -1,0 +1,227 @@
+{
+  "checked_at": "2026-10-15T18:11:05.051005+00:00",
+  "frontier": {
+    "filtered_totals": {
+      "occurrence_count": 1985,
+      "target_count": 587
+    },
+    "limit": 1,
+    "meaning": "Observed URL occurrences and acquisition labels; no recovery, identity or permission is established.",
+    "next_offset": 1,
+    "offset": 0,
+    "origin": "all",
+    "parent_manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+    "schema": "lessons-reference-frontier/1",
+    "scope": "authored",
+    "totals": {
+      "acquired_original_occurrences": 1485,
+      "catalog_reference_occurrences": 97514,
+      "catalog_source_count": 5261,
+      "http_reference_occurrences": 1985,
+      "non_http_reference_occurrences": 76,
+      "scope_reference_occurrences": 2061,
+      "scope_source_count": 123,
+      "target_count": 587
+    }
+  },
+  "lesson_review": {
+    "human_approval_recorded": false,
+    "ledger_sha256_after": "55a10da0c63e8c1f5093061f9a6febbf636e39890a5a7856c50aee12c3f930cb",
+    "ledger_sha256_before": "3963dc20ff7c9cf0d558f15edd26cf833898a46b9e80c77601f2885e08f653e4",
+    "lessons": [
+      {
+        "counter_context_citations": 2,
+        "current_revision": 3,
+        "human_review": "pending",
+        "lesson_id": "help-without-humiliation",
+        "model_review_revision": 2,
+        "original_revision": 1,
+        "outcome_kinds": [
+          "predicted"
+        ],
+        "revision_sha256": "b0121ac568c45eca78a86f3f29e0160328484718eb7c713f432d9ca54d9b7120",
+        "status": "proposed",
+        "support_citations": 2
+      },
+      {
+        "counter_context_citations": 2,
+        "current_revision": 3,
+        "human_review": "pending",
+        "lesson_id": "intentions-and-context",
+        "model_review_revision": 2,
+        "original_revision": 1,
+        "outcome_kinds": [
+          "predicted"
+        ],
+        "revision_sha256": "7692b1c1130907138246dc21e0b5f5461c6c7d337a46c53b67f9cb4d1a02cda7",
+        "status": "proposed",
+        "support_citations": 3
+      }
+    ],
+    "model_review_notes_sha256": "fae41cd4d8fa8eebc5b75d8d7cc30fbaf22d5c0657dfb5513f07e12fadb0bc80",
+    "schema": "lessons-review-publication/1",
+    "source_manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+    "training_performed": false
+  },
+  "live_listener_started": false,
+  "model_review_performed": true,
+  "parent_coverage_complete": false,
+  "parent_manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+  "parent_manifest_unchanged": true,
+  "parent_verification": {
+    "artifact_files": 10291,
+    "meaning": "capture integrity; not truth or completeness of the world",
+    "original_responses": 984,
+    "sources": 5261,
+    "status": "verified"
+  },
+  "pipeline_model_calls": 0,
+  "private_case_records_included": false,
+  "recovery": {
+    "acquisitions": 8,
+    "article_counterpart_candidates": 7,
+    "capture_code_note": "Capture preceded final exact-host and preflight timing fixes. All eight saved final URLs match the sole explicitly permitted host; parent hash and full artifacts revalidated. No original snapshot rewritten.",
+    "capture_complete_within_selected_body_scope": true,
+    "derived_html_whitespace_words_including_page_templates": 9378,
+    "errors": [],
+    "historical_equivalence_established": false,
+    "parent_changed": false,
+    "reference_relations_approved": 0,
+    "related_current_series_index": 1,
+    "representation": {
+      "capture_coverage": {
+        "bound_reached": false,
+        "bounds": {
+          "max_selections": 20,
+          "max_total_bytes": 67108864
+        },
+        "complete_within_declared_scope": true,
+        "errors": [],
+        "limitations": [
+          "HTTP success does not prove the missing historical work was recovered.",
+          "Candidate provenance does not independently authenticate authorship.",
+          "No recursive link crawl, model inference, training or human approval."
+        ],
+        "parent_changed": false,
+        "pending_selections": [],
+        "refusals": [],
+        "schema": "lessons-reference-recovery/1",
+        "scope": "explicitly selected HTTP bodies only; no historical equivalence adjudication",
+        "unreviewed_original_targets": [
+          "https://21stcenturyprogressivism.com/american-cosmology-and-arlington-national-cemetery/",
+          "https://21stcenturyprogressivism.com/american-healthcare-and-the-caduceus-of-hermes/",
+          "https://21stcenturyprogressivism.com/death-comes-for-everyone/",
+          "https://21stcenturyprogressivism.com/life-in-the-age-of-pisces/",
+          "https://21stcenturyprogressivism.com/meltdown/",
+          "https://21stcenturyprogressivism.com/mercy-and-judgment-in-2025/",
+          "https://21stcenturyprogressivism.com/religion-must-guide-the-political-moment/",
+          "https://21stcenturyprogressivism.com/series/the-book-of-james-with-commentary-by-james-b-adamson/"
+        ]
+      },
+      "external_reference_targets": 15,
+      "limitations": [
+        "External reference contents are not acquired by listing their URLs.",
+        "Image/OCR and historical/private/deleted material are not established.",
+        "Source tokens preserve decoded originals; readable prose has explicit transformations.",
+        "Syntax and search are not adaptive training or proven understanding."
+      ],
+      "pdf_extraction": [],
+      "processing_failures": [],
+      "reference_occurrences": 614,
+      "representation_complete": true,
+      "schema": "lessons-corpus/1",
+      "source_count": 8,
+      "syntax_nodes": 7748,
+      "wordpress_content_whitespace_words": 0
+    },
+    "response_bytes": 1183647,
+    "rights": "Private source investigation; separate-host redistribution and training rights not established.",
+    "selected_candidates": 8,
+    "snapshot_id": "460a510a9bfd4394a78d36289df3a9d8",
+    "source_round_trips": [
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000001",
+        "source_sha256": "4121c5eb1b2886ea6e95aa3cf5bb6eb73d3713c7b13e960e95a6ce0522ca2797",
+        "text_sha256": "48b5a6ccd784197dfa78432d0ddf2fe4e34b269fe7f6fd4c6b97df7de3a30b5d"
+      },
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000002",
+        "source_sha256": "af86df525f88745d62a95ad6abb5a54ec7d1412d23d9f5b46a941afb60bee181",
+        "text_sha256": "b1f9f8181646719fac0adc9f1fe19ffe393c46469a53e1fd6d7abde4432332f8"
+      },
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000003",
+        "source_sha256": "2f7d26aa241d9dd19e54cdb105d83ab33d3b6337e057ca3180e7e4a59e89e2e3",
+        "text_sha256": "c02058d52cb2413c6dfc6e8b707ddd51be4d4d53e27f0cea5f215bd3be24bde8"
+      },
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000004",
+        "source_sha256": "bfc49da33122384e593a66c30461395fc7db1801b2bab03bf41dc9a3accc1e1f",
+        "text_sha256": "774ea5e4153618e26266ba62df323b2eca3445c9526e14e0fe7f9dc8b549f41f"
+      },
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000005",
+        "source_sha256": "a8ea0203e9de2c58fff8bc92235c94f9e9f3d91977ab24c1e9d0c6f0f2476751",
+        "text_sha256": "9c2a99302a5628d2f49960f9dadae6f36eb90c5e6573f153088781e363baab02"
+      },
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000006",
+        "source_sha256": "06dede7b0a2d507d5b9e407a2d3953a10b24a3e6fc18c4508fb07428045c44a2",
+        "text_sha256": "9556ffcf3e22be23828e028ac846bbc237cc433154f4091cff5cac6dd63da074"
+      },
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000007",
+        "source_sha256": "3a7eb14d639cc64a3cc2cb34f72d081665f0529b84fb25886f96b0738643b0fe",
+        "text_sha256": "6148e6c9e677507cc2b5f6a1795d2855888eb80760665ddc2be7512a46261ab7"
+      },
+      {
+        "round_trip_exact": true,
+        "source_id": "html:recovery:460a510a9bfd4394a78d36289df3a9d8:000008",
+        "source_sha256": "6efc10572a2bc224b0110dda2cbceb8713b8f56f6a7834630908584a613519de",
+        "text_sha256": "d8258cba32e7968a7614e1a767a842534f4de0a80e22674b41ec880a907c6de9"
+      }
+    ],
+    "verification": {
+      "artifact_files": 28,
+      "meaning": "capture integrity; not truth or completeness of the world",
+      "original_responses": 8,
+      "sources": 8,
+      "status": "verified"
+    }
+  },
+  "remaining_gaps": [
+    "Eight original seed 404 targets remain historically unresolved.",
+    "Current related series index is not the missing legacy series body.",
+    "Seventeen related archive-index rows have no replay bodies fetched or verified.",
+    "Original media API advertised 108 records but returned 104; discrepancy remains.",
+    "Original Contact form hidden-value drift warning remains.",
+    "Human review and empirical outcome evaluation of lesson proposals remain pending."
+  ],
+  "rest_probe": {
+    "authenticated_routes_checked": 5,
+    "browser_origin_status": 403,
+    "candidate_qualification_checked": [
+      "catalog",
+      "source",
+      "search"
+    ],
+    "citations_verified": true,
+    "transport": "in-process ASGI; no listener",
+    "unauthenticated_status": 401
+  },
+  "runtime": {
+    "machine": "arm64",
+    "python": "3.14.8",
+    "sqlite": "3.54.0"
+  },
+  "runtime_model_identity": "unavailable",
+  "schema": "lessons-recovery-acceptance/1",
+  "training_performed": false
+}
