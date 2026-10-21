@@ -1,3 +1,3 @@
 # Optional local evidence image validation and synthetic image fixtures.
 # Text-only workspaces and their durable store do not require Pillow.
-pillow==12.2.0
+pillow==13.0.0

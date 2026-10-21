@@ -5,3 +5,15 @@
 # False positive: grading-key.json is a SHA-256 artifact digest, verified against
 # the retained grading file. Exact historical location only; no credential exemption.
 16c8a408c9db60d413f58ed4f6ec9cb2575fd91e:benchmarks/reports/2026-10-03/pilot-raw-manifest.json:generic-api-key:42
+
+# Reviewed October 21 synchronization findings: five explicit synthetic test
+# capabilities and three matching source/source-token SHA-256 digests.
+# Exact commit/file/rule/line only; future locations remain scanned.
+34e77a938bdf549d40d4682334de99150e225d2e:test_evidence_workspace_http.py:generic-api-key:25
+6255ffc9bfbb202683b9fc30c2d4fade1cd40563:test_lessons_server.py:generic-api-key:21
+6255ffc9bfbb202683b9fc30c2d4fade1cd40563:benchmarks/reports/2026-10-14/lessons-corpus/live-acceptance.json:generic-api-key:154
+6255ffc9bfbb202683b9fc30c2d4fade1cd40563:benchmarks/reports/2026-10-14/lessons-corpus/live-acceptance.json:generic-api-key:160
+6255ffc9bfbb202683b9fc30c2d4fade1cd40563:benchmarks/reports/2026-10-14/lessons-corpus/live-acceptance.json:generic-api-key:166
+3cba19314039f72e09008a33bd0a47854b15f534:scripts/check_task_cockpit_ui.cjs:generic-api-key:15
+3cba19314039f72e09008a33bd0a47854b15f534:scripts/check_task_cockpit_ui.cjs:generic-api-key:16
+3cba19314039f72e09008a33bd0a47854b15f534:test_task_cockpit_http.py:generic-api-key:27
