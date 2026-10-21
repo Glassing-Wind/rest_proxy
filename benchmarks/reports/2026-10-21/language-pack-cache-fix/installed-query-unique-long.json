@@ -1,0 +1,4839 @@
+{
+  "mode": "query_unique",
+  "warmup_calls": 600,
+  "samples": [
+    {
+      "calls": 0,
+      "rss": 43073536,
+      "python_current": 168,
+      "python_peak": 20806,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 100,
+      "rss": 43073536,
+      "python_current": 576,
+      "python_peak": 24462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 200,
+      "rss": 43073536,
+      "python_current": 944,
+      "python_peak": 24734,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 300,
+      "rss": 43073536,
+      "python_current": 1376,
+      "python_peak": 25102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 400,
+      "rss": 43073536,
+      "python_current": 1776,
+      "python_peak": 25534,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 500,
+      "rss": 43073536,
+      "python_current": 2208,
+      "python_peak": 25966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 600,
+      "rss": 43073536,
+      "python_current": 2608,
+      "python_peak": 26366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 700,
+      "rss": 43073536,
+      "python_current": 3008,
+      "python_peak": 26766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 800,
+      "rss": 43073536,
+      "python_current": 3408,
+      "python_peak": 27166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 900,
+      "rss": 43073536,
+      "python_current": 3872,
+      "python_peak": 27630,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1000,
+      "rss": 43073536,
+      "python_current": 4272,
+      "python_peak": 28030,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1100,
+      "rss": 43089920,
+      "python_current": 4672,
+      "python_peak": 28430,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1200,
+      "rss": 43089920,
+      "python_current": 5072,
+      "python_peak": 28830,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1300,
+      "rss": 43089920,
+      "python_current": 5472,
+      "python_peak": 29230,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1400,
+      "rss": 43089920,
+      "python_current": 5872,
+      "python_peak": 29630,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1500,
+      "rss": 43089920,
+      "python_current": 6272,
+      "python_peak": 30030,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1600,
+      "rss": 43089920,
+      "python_current": 6672,
+      "python_peak": 30430,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1700,
+      "rss": 43089920,
+      "python_current": 7136,
+      "python_peak": 30894,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1800,
+      "rss": 43089920,
+      "python_current": 7536,
+      "python_peak": 31294,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1900,
+      "rss": 43089920,
+      "python_current": 7936,
+      "python_peak": 31694,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2000,
+      "rss": 43089920,
+      "python_current": 8336,
+      "python_peak": 32094,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2100,
+      "rss": 43089920,
+      "python_current": 8736,
+      "python_peak": 32494,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2200,
+      "rss": 43089920,
+      "python_current": 9136,
+      "python_peak": 32894,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2300,
+      "rss": 43089920,
+      "python_current": 9536,
+      "python_peak": 33294,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2400,
+      "rss": 43122688,
+      "python_current": 9936,
+      "python_peak": 33694,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2500,
+      "rss": 43122688,
+      "python_current": 10400,
+      "python_peak": 34158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2600,
+      "rss": 43122688,
+      "python_current": 10800,
+      "python_peak": 34558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2700,
+      "rss": 43122688,
+      "python_current": 11200,
+      "python_peak": 34958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2800,
+      "rss": 43122688,
+      "python_current": 11600,
+      "python_peak": 35358,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2900,
+      "rss": 43122688,
+      "python_current": 12000,
+      "python_peak": 35758,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3000,
+      "rss": 43122688,
+      "python_current": 12400,
+      "python_peak": 36158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3100,
+      "rss": 43122688,
+      "python_current": 12800,
+      "python_peak": 36558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3200,
+      "rss": 43122688,
+      "python_current": 13200,
+      "python_peak": 36958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3300,
+      "rss": 43122688,
+      "python_current": 13664,
+      "python_peak": 37422,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3400,
+      "rss": 43139072,
+      "python_current": 14064,
+      "python_peak": 37822,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3500,
+      "rss": 43139072,
+      "python_current": 14464,
+      "python_peak": 38222,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3600,
+      "rss": 43139072,
+      "python_current": 14864,
+      "python_peak": 38622,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3700,
+      "rss": 43139072,
+      "python_current": 15264,
+      "python_peak": 39022,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3800,
+      "rss": 43139072,
+      "python_current": 15664,
+      "python_peak": 39422,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3900,
+      "rss": 43139072,
+      "python_current": 16064,
+      "python_peak": 39822,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4000,
+      "rss": 43139072,
+      "python_current": 16464,
+      "python_peak": 40222,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4100,
+      "rss": 43139072,
+      "python_current": 16960,
+      "python_peak": 40718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4200,
+      "rss": 43139072,
+      "python_current": 17360,
+      "python_peak": 41118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4300,
+      "rss": 43139072,
+      "python_current": 17760,
+      "python_peak": 41518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4400,
+      "rss": 43139072,
+      "python_current": 18160,
+      "python_peak": 41918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4500,
+      "rss": 43139072,
+      "python_current": 18560,
+      "python_peak": 42318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4600,
+      "rss": 43139072,
+      "python_current": 18960,
+      "python_peak": 42718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4700,
+      "rss": 43139072,
+      "python_current": 19360,
+      "python_peak": 43118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4800,
+      "rss": 43139072,
+      "python_current": 19760,
+      "python_peak": 43518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4900,
+      "rss": 43139072,
+      "python_current": 20160,
+      "python_peak": 43918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5000,
+      "rss": 43139072,
+      "python_current": 20560,
+      "python_peak": 44318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5100,
+      "rss": 43139072,
+      "python_current": 20960,
+      "python_peak": 44718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5200,
+      "rss": 43139072,
+      "python_current": 21360,
+      "python_peak": 45118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5300,
+      "rss": 43139072,
+      "python_current": 21856,
+      "python_peak": 45614,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5400,
+      "rss": 43139072,
+      "python_current": 22256,
+      "python_peak": 46014,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5500,
+      "rss": 43139072,
+      "python_current": 22656,
+      "python_peak": 46414,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5600,
+      "rss": 43139072,
+      "python_current": 23056,
+      "python_peak": 46814,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5700,
+      "rss": 43155456,
+      "python_current": 23456,
+      "python_peak": 47214,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5800,
+      "rss": 43155456,
+      "python_current": 23856,
+      "python_peak": 47614,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5900,
+      "rss": 43155456,
+      "python_current": 24256,
+      "python_peak": 48014,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6000,
+      "rss": 43155456,
+      "python_current": 24656,
+      "python_peak": 48414,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6100,
+      "rss": 43155456,
+      "python_current": 25056,
+      "python_peak": 48814,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6200,
+      "rss": 43155456,
+      "python_current": 25456,
+      "python_peak": 49214,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6300,
+      "rss": 43155456,
+      "python_current": 25856,
+      "python_peak": 49614,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6400,
+      "rss": 43155456,
+      "python_current": 26256,
+      "python_peak": 50014,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6500,
+      "rss": 43155456,
+      "python_current": 26752,
+      "python_peak": 50510,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6600,
+      "rss": 43155456,
+      "python_current": 27152,
+      "python_peak": 50910,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6700,
+      "rss": 43155456,
+      "python_current": 27552,
+      "python_peak": 51310,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6800,
+      "rss": 43155456,
+      "python_current": 27952,
+      "python_peak": 51710,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6900,
+      "rss": 43155456,
+      "python_current": 28352,
+      "python_peak": 52110,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7000,
+      "rss": 43171840,
+      "python_current": 28752,
+      "python_peak": 52510,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7100,
+      "rss": 43171840,
+      "python_current": 29152,
+      "python_peak": 52910,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7200,
+      "rss": 43171840,
+      "python_current": 29552,
+      "python_peak": 53310,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7300,
+      "rss": 43171840,
+      "python_current": 29952,
+      "python_peak": 53710,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7400,
+      "rss": 43171840,
+      "python_current": 30352,
+      "python_peak": 54110,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7500,
+      "rss": 43171840,
+      "python_current": 30752,
+      "python_peak": 54510,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7600,
+      "rss": 43171840,
+      "python_current": 31152,
+      "python_peak": 54910,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7700,
+      "rss": 43171840,
+      "python_current": 31680,
+      "python_peak": 55438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7800,
+      "rss": 43171840,
+      "python_current": 32080,
+      "python_peak": 55838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7900,
+      "rss": 44630016,
+      "python_current": 32480,
+      "python_peak": 56238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8000,
+      "rss": 44646400,
+      "python_current": 32880,
+      "python_peak": 56638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8100,
+      "rss": 44646400,
+      "python_current": 33280,
+      "python_peak": 57038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8200,
+      "rss": 44662784,
+      "python_current": 33680,
+      "python_peak": 57438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8300,
+      "rss": 44662784,
+      "python_current": 34080,
+      "python_peak": 57838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8400,
+      "rss": 44662784,
+      "python_current": 34480,
+      "python_peak": 58238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8500,
+      "rss": 44662784,
+      "python_current": 34880,
+      "python_peak": 58638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8600,
+      "rss": 44662784,
+      "python_current": 35280,
+      "python_peak": 59038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8700,
+      "rss": 44662784,
+      "python_current": 35680,
+      "python_peak": 59438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8800,
+      "rss": 44662784,
+      "python_current": 36080,
+      "python_peak": 59838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8900,
+      "rss": 44662784,
+      "python_current": 36480,
+      "python_peak": 60238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9000,
+      "rss": 44662784,
+      "python_current": 36880,
+      "python_peak": 60638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9100,
+      "rss": 44662784,
+      "python_current": 37280,
+      "python_peak": 61038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9200,
+      "rss": 44662784,
+      "python_current": 37680,
+      "python_peak": 61438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9300,
+      "rss": 44662784,
+      "python_current": 38208,
+      "python_peak": 61966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9400,
+      "rss": 44662784,
+      "python_current": 38608,
+      "python_peak": 62366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9500,
+      "rss": 44662784,
+      "python_current": 39008,
+      "python_peak": 62766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9600,
+      "rss": 44662784,
+      "python_current": 39408,
+      "python_peak": 63166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9700,
+      "rss": 44662784,
+      "python_current": 39808,
+      "python_peak": 63566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9800,
+      "rss": 44662784,
+      "python_current": 40208,
+      "python_peak": 63966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9900,
+      "rss": 44662784,
+      "python_current": 40608,
+      "python_peak": 64366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10000,
+      "rss": 44662784,
+      "python_current": 41008,
+      "python_peak": 64766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10100,
+      "rss": 44662784,
+      "python_current": 41408,
+      "python_peak": 65166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10200,
+      "rss": 44662784,
+      "python_current": 41808,
+      "python_peak": 65566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10300,
+      "rss": 44662784,
+      "python_current": 42208,
+      "python_peak": 65966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10400,
+      "rss": 44662784,
+      "python_current": 42608,
+      "python_peak": 66366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10500,
+      "rss": 44662784,
+      "python_current": 43008,
+      "python_peak": 66766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10600,
+      "rss": 44662784,
+      "python_current": 43408,
+      "python_peak": 67166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10700,
+      "rss": 44662784,
+      "python_current": 43808,
+      "python_peak": 67566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10800,
+      "rss": 44662784,
+      "python_current": 44208,
+      "python_peak": 67966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10900,
+      "rss": 44662784,
+      "python_current": 44768,
+      "python_peak": 68526,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11000,
+      "rss": 44662784,
+      "python_current": 45168,
+      "python_peak": 68926,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11100,
+      "rss": 44662784,
+      "python_current": 45568,
+      "python_peak": 69326,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11200,
+      "rss": 44662784,
+      "python_current": 45968,
+      "python_peak": 69726,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11300,
+      "rss": 44662784,
+      "python_current": 46368,
+      "python_peak": 70126,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11400,
+      "rss": 44695552,
+      "python_current": 46768,
+      "python_peak": 70526,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11500,
+      "rss": 44695552,
+      "python_current": 47168,
+      "python_peak": 70926,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11600,
+      "rss": 44695552,
+      "python_current": 47568,
+      "python_peak": 71326,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11700,
+      "rss": 44695552,
+      "python_current": 47968,
+      "python_peak": 71726,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11800,
+      "rss": 44695552,
+      "python_current": 48368,
+      "python_peak": 72126,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11900,
+      "rss": 44695552,
+      "python_current": 48768,
+      "python_peak": 72526,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12000,
+      "rss": 44695552,
+      "python_current": 49168,
+      "python_peak": 72926,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12100,
+      "rss": 44695552,
+      "python_current": 49568,
+      "python_peak": 73326,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12200,
+      "rss": 44695552,
+      "python_current": 49968,
+      "python_peak": 73726,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12300,
+      "rss": 44695552,
+      "python_current": 50368,
+      "python_peak": 74126,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12400,
+      "rss": 44695552,
+      "python_current": 50768,
+      "python_peak": 74526,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12500,
+      "rss": 44695552,
+      "python_current": 51168,
+      "python_peak": 74926,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12600,
+      "rss": 44695552,
+      "python_current": 51568,
+      "python_peak": 75326,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12700,
+      "rss": 44695552,
+      "python_current": 51968,
+      "python_peak": 75726,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12800,
+      "rss": 44744704,
+      "python_current": 52368,
+      "python_peak": 76126,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12900,
+      "rss": 44744704,
+      "python_current": 52928,
+      "python_peak": 76686,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13000,
+      "rss": 44744704,
+      "python_current": 53328,
+      "python_peak": 77086,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13100,
+      "rss": 44744704,
+      "python_current": 53728,
+      "python_peak": 77486,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13200,
+      "rss": 44744704,
+      "python_current": 54128,
+      "python_peak": 77886,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13300,
+      "rss": 44744704,
+      "python_current": 54528,
+      "python_peak": 78286,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13400,
+      "rss": 44744704,
+      "python_current": 54928,
+      "python_peak": 78686,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13500,
+      "rss": 44761088,
+      "python_current": 55328,
+      "python_peak": 79086,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13600,
+      "rss": 44761088,
+      "python_current": 55728,
+      "python_peak": 79486,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13700,
+      "rss": 44761088,
+      "python_current": 56128,
+      "python_peak": 79886,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13800,
+      "rss": 44761088,
+      "python_current": 56528,
+      "python_peak": 80286,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 13900,
+      "rss": 44761088,
+      "python_current": 56928,
+      "python_peak": 80686,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14000,
+      "rss": 44761088,
+      "python_current": 57328,
+      "python_peak": 81086,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14100,
+      "rss": 44761088,
+      "python_current": 57728,
+      "python_peak": 81486,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14200,
+      "rss": 44761088,
+      "python_current": 58128,
+      "python_peak": 81886,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14300,
+      "rss": 44777472,
+      "python_current": 58528,
+      "python_peak": 82286,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14400,
+      "rss": 44777472,
+      "python_current": 58928,
+      "python_peak": 82686,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14500,
+      "rss": 44777472,
+      "python_current": 59328,
+      "python_peak": 83086,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14600,
+      "rss": 44777472,
+      "python_current": 59728,
+      "python_peak": 83486,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14700,
+      "rss": 44777472,
+      "python_current": 60128,
+      "python_peak": 83886,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14800,
+      "rss": 44777472,
+      "python_current": 60528,
+      "python_peak": 84286,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 14900,
+      "rss": 44777472,
+      "python_current": 61120,
+      "python_peak": 84878,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15000,
+      "rss": 44777472,
+      "python_current": 61520,
+      "python_peak": 85278,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15100,
+      "rss": 44777472,
+      "python_current": 61920,
+      "python_peak": 85678,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15200,
+      "rss": 44777472,
+      "python_current": 62320,
+      "python_peak": 86078,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15300,
+      "rss": 44777472,
+      "python_current": 62720,
+      "python_peak": 86478,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15400,
+      "rss": 44777472,
+      "python_current": 63120,
+      "python_peak": 86878,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15500,
+      "rss": 44777472,
+      "python_current": 63520,
+      "python_peak": 87278,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15600,
+      "rss": 44777472,
+      "python_current": 63920,
+      "python_peak": 87678,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15700,
+      "rss": 44777472,
+      "python_current": 64320,
+      "python_peak": 88078,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15800,
+      "rss": 44777472,
+      "python_current": 64720,
+      "python_peak": 88478,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 15900,
+      "rss": 44777472,
+      "python_current": 65120,
+      "python_peak": 88878,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16000,
+      "rss": 44777472,
+      "python_current": 65520,
+      "python_peak": 89278,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16100,
+      "rss": 44777472,
+      "python_current": 65920,
+      "python_peak": 89678,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16200,
+      "rss": 44777472,
+      "python_current": 66320,
+      "python_peak": 90078,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16300,
+      "rss": 44777472,
+      "python_current": 66720,
+      "python_peak": 90478,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16400,
+      "rss": 44777472,
+      "python_current": 67120,
+      "python_peak": 90878,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16500,
+      "rss": 44777472,
+      "python_current": 67520,
+      "python_peak": 91278,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16600,
+      "rss": 44777472,
+      "python_current": 67920,
+      "python_peak": 91678,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16700,
+      "rss": 44777472,
+      "python_current": 68320,
+      "python_peak": 92078,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16800,
+      "rss": 44777472,
+      "python_current": 68720,
+      "python_peak": 92478,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 16900,
+      "rss": 44777472,
+      "python_current": 69120,
+      "python_peak": 92878,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17000,
+      "rss": 44777472,
+      "python_current": 69520,
+      "python_peak": 93278,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17100,
+      "rss": 44777472,
+      "python_current": 69920,
+      "python_peak": 93678,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17200,
+      "rss": 44777472,
+      "python_current": 70320,
+      "python_peak": 94078,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17300,
+      "rss": 44777472,
+      "python_current": 70944,
+      "python_peak": 94702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17400,
+      "rss": 44777472,
+      "python_current": 71344,
+      "python_peak": 95102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17500,
+      "rss": 44777472,
+      "python_current": 71744,
+      "python_peak": 95502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17600,
+      "rss": 44793856,
+      "python_current": 72144,
+      "python_peak": 95902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17700,
+      "rss": 44793856,
+      "python_current": 72544,
+      "python_peak": 96302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17800,
+      "rss": 44793856,
+      "python_current": 72944,
+      "python_peak": 96702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 17900,
+      "rss": 44793856,
+      "python_current": 73344,
+      "python_peak": 97102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18000,
+      "rss": 44793856,
+      "python_current": 73744,
+      "python_peak": 97502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18100,
+      "rss": 44793856,
+      "python_current": 74144,
+      "python_peak": 97902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18200,
+      "rss": 44793856,
+      "python_current": 74544,
+      "python_peak": 98302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18300,
+      "rss": 44793856,
+      "python_current": 74944,
+      "python_peak": 98702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18400,
+      "rss": 44793856,
+      "python_current": 75344,
+      "python_peak": 99102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18500,
+      "rss": 44793856,
+      "python_current": 75744,
+      "python_peak": 99502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18600,
+      "rss": 44793856,
+      "python_current": 76144,
+      "python_peak": 99902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18700,
+      "rss": 44793856,
+      "python_current": 76544,
+      "python_peak": 100302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18800,
+      "rss": 44793856,
+      "python_current": 76944,
+      "python_peak": 100702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 18900,
+      "rss": 44793856,
+      "python_current": 77344,
+      "python_peak": 101102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19000,
+      "rss": 44793856,
+      "python_current": 77744,
+      "python_peak": 101502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19100,
+      "rss": 44793856,
+      "python_current": 78144,
+      "python_peak": 101902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19200,
+      "rss": 44793856,
+      "python_current": 78544,
+      "python_peak": 102302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19300,
+      "rss": 44793856,
+      "python_current": 78944,
+      "python_peak": 102702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19400,
+      "rss": 44793856,
+      "python_current": 79344,
+      "python_peak": 103102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19500,
+      "rss": 44793856,
+      "python_current": 79744,
+      "python_peak": 103502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19600,
+      "rss": 44793856,
+      "python_current": 80144,
+      "python_peak": 103902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19700,
+      "rss": 44793856,
+      "python_current": 80544,
+      "python_peak": 104302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19800,
+      "rss": 44793856,
+      "python_current": 80944,
+      "python_peak": 104702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 19900,
+      "rss": 44793856,
+      "python_current": 81344,
+      "python_peak": 105102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20000,
+      "rss": 44793856,
+      "python_current": 81744,
+      "python_peak": 105502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20100,
+      "rss": 44793856,
+      "python_current": 82400,
+      "python_peak": 106158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20200,
+      "rss": 44793856,
+      "python_current": 82800,
+      "python_peak": 106558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20300,
+      "rss": 44793856,
+      "python_current": 83200,
+      "python_peak": 106958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20400,
+      "rss": 44793856,
+      "python_current": 83600,
+      "python_peak": 107358,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20500,
+      "rss": 44793856,
+      "python_current": 84000,
+      "python_peak": 107758,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20600,
+      "rss": 44793856,
+      "python_current": 84400,
+      "python_peak": 108158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20700,
+      "rss": 44793856,
+      "python_current": 84800,
+      "python_peak": 108558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20800,
+      "rss": 44793856,
+      "python_current": 85200,
+      "python_peak": 108958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 20900,
+      "rss": 44793856,
+      "python_current": 85600,
+      "python_peak": 109358,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21000,
+      "rss": 44793856,
+      "python_current": 86000,
+      "python_peak": 109758,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21100,
+      "rss": 44793856,
+      "python_current": 86400,
+      "python_peak": 110158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21200,
+      "rss": 44793856,
+      "python_current": 86800,
+      "python_peak": 110558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21300,
+      "rss": 44810240,
+      "python_current": 87200,
+      "python_peak": 110958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21400,
+      "rss": 44810240,
+      "python_current": 87600,
+      "python_peak": 111358,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21500,
+      "rss": 44810240,
+      "python_current": 88000,
+      "python_peak": 111758,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21600,
+      "rss": 44810240,
+      "python_current": 88400,
+      "python_peak": 112158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21700,
+      "rss": 44810240,
+      "python_current": 88800,
+      "python_peak": 112558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21800,
+      "rss": 44810240,
+      "python_current": 89200,
+      "python_peak": 112958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 21900,
+      "rss": 44810240,
+      "python_current": 89600,
+      "python_peak": 113358,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22000,
+      "rss": 44810240,
+      "python_current": 90000,
+      "python_peak": 113758,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22100,
+      "rss": 44810240,
+      "python_current": 90400,
+      "python_peak": 114158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22200,
+      "rss": 44810240,
+      "python_current": 90800,
+      "python_peak": 114558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22300,
+      "rss": 44810240,
+      "python_current": 91200,
+      "python_peak": 114958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22400,
+      "rss": 44810240,
+      "python_current": 91600,
+      "python_peak": 115358,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22500,
+      "rss": 44810240,
+      "python_current": 92000,
+      "python_peak": 115758,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22600,
+      "rss": 44810240,
+      "python_current": 92400,
+      "python_peak": 116158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22700,
+      "rss": 44810240,
+      "python_current": 92800,
+      "python_peak": 116558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22800,
+      "rss": 44810240,
+      "python_current": 93200,
+      "python_peak": 116958,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 22900,
+      "rss": 44810240,
+      "python_current": 93600,
+      "python_peak": 117358,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23000,
+      "rss": 44810240,
+      "python_current": 94000,
+      "python_peak": 117758,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23100,
+      "rss": 44810240,
+      "python_current": 94400,
+      "python_peak": 118158,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23200,
+      "rss": 44810240,
+      "python_current": 94800,
+      "python_peak": 118558,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23300,
+      "rss": 44810240,
+      "python_current": 95488,
+      "python_peak": 119246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23400,
+      "rss": 44810240,
+      "python_current": 95888,
+      "python_peak": 119646,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23500,
+      "rss": 44826624,
+      "python_current": 96288,
+      "python_peak": 120046,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23600,
+      "rss": 44826624,
+      "python_current": 96688,
+      "python_peak": 120446,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23700,
+      "rss": 44826624,
+      "python_current": 97088,
+      "python_peak": 120846,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23800,
+      "rss": 44826624,
+      "python_current": 97488,
+      "python_peak": 121246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 23900,
+      "rss": 44826624,
+      "python_current": 97888,
+      "python_peak": 121646,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24000,
+      "rss": 44826624,
+      "python_current": 98288,
+      "python_peak": 122046,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24100,
+      "rss": 44826624,
+      "python_current": 98688,
+      "python_peak": 122446,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24200,
+      "rss": 44826624,
+      "python_current": 99088,
+      "python_peak": 122846,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24300,
+      "rss": 44826624,
+      "python_current": 99488,
+      "python_peak": 123246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24400,
+      "rss": 44826624,
+      "python_current": 99888,
+      "python_peak": 123646,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24500,
+      "rss": 44826624,
+      "python_current": 100288,
+      "python_peak": 124046,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24600,
+      "rss": 44826624,
+      "python_current": 100688,
+      "python_peak": 124446,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24700,
+      "rss": 44826624,
+      "python_current": 101088,
+      "python_peak": 124846,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24800,
+      "rss": 44826624,
+      "python_current": 101488,
+      "python_peak": 125246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 24900,
+      "rss": 44826624,
+      "python_current": 101888,
+      "python_peak": 125646,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25000,
+      "rss": 44826624,
+      "python_current": 102288,
+      "python_peak": 126046,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25100,
+      "rss": 44826624,
+      "python_current": 102688,
+      "python_peak": 126446,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25200,
+      "rss": 44826624,
+      "python_current": 103088,
+      "python_peak": 126846,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25300,
+      "rss": 44826624,
+      "python_current": 103488,
+      "python_peak": 127246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25400,
+      "rss": 44826624,
+      "python_current": 103888,
+      "python_peak": 127646,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25500,
+      "rss": 44826624,
+      "python_current": 104288,
+      "python_peak": 128046,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25600,
+      "rss": 44826624,
+      "python_current": 104688,
+      "python_peak": 128446,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25700,
+      "rss": 44826624,
+      "python_current": 105088,
+      "python_peak": 128846,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25800,
+      "rss": 44826624,
+      "python_current": 105488,
+      "python_peak": 129246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 25900,
+      "rss": 44826624,
+      "python_current": 105888,
+      "python_peak": 129646,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26000,
+      "rss": 44826624,
+      "python_current": 106288,
+      "python_peak": 130046,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26100,
+      "rss": 44826624,
+      "python_current": 106688,
+      "python_peak": 130446,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26200,
+      "rss": 44826624,
+      "python_current": 107088,
+      "python_peak": 130846,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26300,
+      "rss": 44826624,
+      "python_current": 107488,
+      "python_peak": 131246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26400,
+      "rss": 44826624,
+      "python_current": 107888,
+      "python_peak": 131646,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26500,
+      "rss": 44826624,
+      "python_current": 108288,
+      "python_peak": 132046,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26600,
+      "rss": 44826624,
+      "python_current": 108688,
+      "python_peak": 132446,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26700,
+      "rss": 44826624,
+      "python_current": 109088,
+      "python_peak": 132846,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26800,
+      "rss": 44826624,
+      "python_current": 109488,
+      "python_peak": 133246,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 26900,
+      "rss": 44826624,
+      "python_current": 110208,
+      "python_peak": 133966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27000,
+      "rss": 44826624,
+      "python_current": 110608,
+      "python_peak": 134366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27100,
+      "rss": 44843008,
+      "python_current": 111008,
+      "python_peak": 134766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27200,
+      "rss": 44843008,
+      "python_current": 111408,
+      "python_peak": 135166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27300,
+      "rss": 44843008,
+      "python_current": 111808,
+      "python_peak": 135566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27400,
+      "rss": 44843008,
+      "python_current": 112208,
+      "python_peak": 135966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27500,
+      "rss": 44843008,
+      "python_current": 112608,
+      "python_peak": 136366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27600,
+      "rss": 44843008,
+      "python_current": 113008,
+      "python_peak": 136766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27700,
+      "rss": 44843008,
+      "python_current": 113408,
+      "python_peak": 137166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27800,
+      "rss": 44843008,
+      "python_current": 113808,
+      "python_peak": 137566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 27900,
+      "rss": 44843008,
+      "python_current": 114208,
+      "python_peak": 137966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28000,
+      "rss": 44859392,
+      "python_current": 114608,
+      "python_peak": 138366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28100,
+      "rss": 44859392,
+      "python_current": 115008,
+      "python_peak": 138766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28200,
+      "rss": 44859392,
+      "python_current": 115408,
+      "python_peak": 139166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28300,
+      "rss": 44859392,
+      "python_current": 115808,
+      "python_peak": 139566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28400,
+      "rss": 44859392,
+      "python_current": 116208,
+      "python_peak": 139966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28500,
+      "rss": 44859392,
+      "python_current": 116608,
+      "python_peak": 140366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28600,
+      "rss": 44859392,
+      "python_current": 117008,
+      "python_peak": 140766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28700,
+      "rss": 44859392,
+      "python_current": 117408,
+      "python_peak": 141166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28800,
+      "rss": 44859392,
+      "python_current": 117808,
+      "python_peak": 141566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 28900,
+      "rss": 44859392,
+      "python_current": 118208,
+      "python_peak": 141966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29000,
+      "rss": 44859392,
+      "python_current": 118608,
+      "python_peak": 142366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29100,
+      "rss": 44875776,
+      "python_current": 119008,
+      "python_peak": 142766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29200,
+      "rss": 44875776,
+      "python_current": 119408,
+      "python_peak": 143166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29300,
+      "rss": 44875776,
+      "python_current": 119808,
+      "python_peak": 143566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29400,
+      "rss": 44875776,
+      "python_current": 120208,
+      "python_peak": 143966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29500,
+      "rss": 44875776,
+      "python_current": 120608,
+      "python_peak": 144366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29600,
+      "rss": 44875776,
+      "python_current": 121008,
+      "python_peak": 144766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29700,
+      "rss": 44875776,
+      "python_current": 121408,
+      "python_peak": 145166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29800,
+      "rss": 44875776,
+      "python_current": 121808,
+      "python_peak": 145566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 29900,
+      "rss": 44875776,
+      "python_current": 122208,
+      "python_peak": 145966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30000,
+      "rss": 44875776,
+      "python_current": 122608,
+      "python_peak": 146366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30100,
+      "rss": 44875776,
+      "python_current": 123008,
+      "python_peak": 146766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30200,
+      "rss": 44875776,
+      "python_current": 123408,
+      "python_peak": 147166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30300,
+      "rss": 44875776,
+      "python_current": 123808,
+      "python_peak": 147566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30400,
+      "rss": 44875776,
+      "python_current": 124208,
+      "python_peak": 147966,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30500,
+      "rss": 44875776,
+      "python_current": 124608,
+      "python_peak": 148366,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30600,
+      "rss": 44875776,
+      "python_current": 125008,
+      "python_peak": 148766,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30700,
+      "rss": 44875776,
+      "python_current": 125408,
+      "python_peak": 149166,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30800,
+      "rss": 44875776,
+      "python_current": 125808,
+      "python_peak": 149566,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 30900,
+      "rss": 44875776,
+      "python_current": 126560,
+      "python_peak": 150318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31000,
+      "rss": 44875776,
+      "python_current": 126960,
+      "python_peak": 150718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31100,
+      "rss": 44875776,
+      "python_current": 127360,
+      "python_peak": 151118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31200,
+      "rss": 44875776,
+      "python_current": 127760,
+      "python_peak": 151518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31300,
+      "rss": 44875776,
+      "python_current": 128160,
+      "python_peak": 151918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31400,
+      "rss": 44875776,
+      "python_current": 128560,
+      "python_peak": 152318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31500,
+      "rss": 44875776,
+      "python_current": 128960,
+      "python_peak": 152718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31600,
+      "rss": 44875776,
+      "python_current": 129360,
+      "python_peak": 153118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31700,
+      "rss": 44875776,
+      "python_current": 129760,
+      "python_peak": 153518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31800,
+      "rss": 44875776,
+      "python_current": 130160,
+      "python_peak": 153918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 31900,
+      "rss": 44875776,
+      "python_current": 130560,
+      "python_peak": 154318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32000,
+      "rss": 44875776,
+      "python_current": 130960,
+      "python_peak": 154718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32100,
+      "rss": 44875776,
+      "python_current": 131360,
+      "python_peak": 155118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32200,
+      "rss": 44875776,
+      "python_current": 131760,
+      "python_peak": 155518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32300,
+      "rss": 44875776,
+      "python_current": 132160,
+      "python_peak": 155918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32400,
+      "rss": 44875776,
+      "python_current": 132560,
+      "python_peak": 156318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32500,
+      "rss": 44875776,
+      "python_current": 132960,
+      "python_peak": 156718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32600,
+      "rss": 44875776,
+      "python_current": 133360,
+      "python_peak": 157118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32700,
+      "rss": 44875776,
+      "python_current": 133760,
+      "python_peak": 157518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32800,
+      "rss": 44875776,
+      "python_current": 134160,
+      "python_peak": 157918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 32900,
+      "rss": 44875776,
+      "python_current": 134560,
+      "python_peak": 158318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33000,
+      "rss": 44875776,
+      "python_current": 134960,
+      "python_peak": 158718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33100,
+      "rss": 44875776,
+      "python_current": 135360,
+      "python_peak": 159118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33200,
+      "rss": 44875776,
+      "python_current": 135760,
+      "python_peak": 159518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33300,
+      "rss": 44875776,
+      "python_current": 136160,
+      "python_peak": 159918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33400,
+      "rss": 44875776,
+      "python_current": 136560,
+      "python_peak": 160318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33500,
+      "rss": 44875776,
+      "python_current": 136960,
+      "python_peak": 160718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33600,
+      "rss": 44875776,
+      "python_current": 137360,
+      "python_peak": 161118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33700,
+      "rss": 44875776,
+      "python_current": 137760,
+      "python_peak": 161518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33800,
+      "rss": 44875776,
+      "python_current": 138160,
+      "python_peak": 161918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 33900,
+      "rss": 44875776,
+      "python_current": 138560,
+      "python_peak": 162318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34000,
+      "rss": 44875776,
+      "python_current": 138960,
+      "python_peak": 162718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34100,
+      "rss": 44875776,
+      "python_current": 139360,
+      "python_peak": 163118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34200,
+      "rss": 44875776,
+      "python_current": 139760,
+      "python_peak": 163518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34300,
+      "rss": 44875776,
+      "python_current": 140160,
+      "python_peak": 163918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34400,
+      "rss": 44875776,
+      "python_current": 140560,
+      "python_peak": 164318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34500,
+      "rss": 44875776,
+      "python_current": 140960,
+      "python_peak": 164718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34600,
+      "rss": 44892160,
+      "python_current": 141360,
+      "python_peak": 165118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34700,
+      "rss": 44892160,
+      "python_current": 141760,
+      "python_peak": 165518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34800,
+      "rss": 44892160,
+      "python_current": 142160,
+      "python_peak": 165918,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 34900,
+      "rss": 44892160,
+      "python_current": 142560,
+      "python_peak": 166318,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35000,
+      "rss": 44892160,
+      "python_current": 142960,
+      "python_peak": 166718,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35100,
+      "rss": 44892160,
+      "python_current": 143360,
+      "python_peak": 167118,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35200,
+      "rss": 44892160,
+      "python_current": 143760,
+      "python_peak": 167518,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35300,
+      "rss": 44892160,
+      "python_current": 144544,
+      "python_peak": 168302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35400,
+      "rss": 44892160,
+      "python_current": 144944,
+      "python_peak": 168702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35500,
+      "rss": 44892160,
+      "python_current": 145344,
+      "python_peak": 169102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35600,
+      "rss": 44892160,
+      "python_current": 145744,
+      "python_peak": 169502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35700,
+      "rss": 44892160,
+      "python_current": 146144,
+      "python_peak": 169902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35800,
+      "rss": 44892160,
+      "python_current": 146544,
+      "python_peak": 170302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 35900,
+      "rss": 44892160,
+      "python_current": 146944,
+      "python_peak": 170702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36000,
+      "rss": 44892160,
+      "python_current": 147344,
+      "python_peak": 171102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36100,
+      "rss": 44892160,
+      "python_current": 147744,
+      "python_peak": 171502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36200,
+      "rss": 44892160,
+      "python_current": 148144,
+      "python_peak": 171902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36300,
+      "rss": 44892160,
+      "python_current": 148544,
+      "python_peak": 172302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36400,
+      "rss": 44892160,
+      "python_current": 148944,
+      "python_peak": 172702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36500,
+      "rss": 44908544,
+      "python_current": 149344,
+      "python_peak": 173102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36600,
+      "rss": 44908544,
+      "python_current": 149744,
+      "python_peak": 173502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36700,
+      "rss": 44908544,
+      "python_current": 150144,
+      "python_peak": 173902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36800,
+      "rss": 44908544,
+      "python_current": 150544,
+      "python_peak": 174302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 36900,
+      "rss": 44924928,
+      "python_current": 150944,
+      "python_peak": 174702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37000,
+      "rss": 44924928,
+      "python_current": 151344,
+      "python_peak": 175102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37100,
+      "rss": 44924928,
+      "python_current": 151744,
+      "python_peak": 175502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37200,
+      "rss": 44924928,
+      "python_current": 152144,
+      "python_peak": 175902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37300,
+      "rss": 44924928,
+      "python_current": 152544,
+      "python_peak": 176302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37400,
+      "rss": 44924928,
+      "python_current": 152944,
+      "python_peak": 176702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37500,
+      "rss": 44924928,
+      "python_current": 153344,
+      "python_peak": 177102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37600,
+      "rss": 44924928,
+      "python_current": 153744,
+      "python_peak": 177502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37700,
+      "rss": 44924928,
+      "python_current": 154144,
+      "python_peak": 177902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37800,
+      "rss": 44924928,
+      "python_current": 154544,
+      "python_peak": 178302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 37900,
+      "rss": 44924928,
+      "python_current": 154944,
+      "python_peak": 178702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38000,
+      "rss": 44924928,
+      "python_current": 155344,
+      "python_peak": 179102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38100,
+      "rss": 44924928,
+      "python_current": 155744,
+      "python_peak": 179502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38200,
+      "rss": 44924928,
+      "python_current": 156144,
+      "python_peak": 179902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38300,
+      "rss": 44924928,
+      "python_current": 156544,
+      "python_peak": 180302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38400,
+      "rss": 44924928,
+      "python_current": 156944,
+      "python_peak": 180702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38500,
+      "rss": 44924928,
+      "python_current": 157344,
+      "python_peak": 181102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38600,
+      "rss": 44924928,
+      "python_current": 157744,
+      "python_peak": 181502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38700,
+      "rss": 44924928,
+      "python_current": 158144,
+      "python_peak": 181902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38800,
+      "rss": 44924928,
+      "python_current": 158544,
+      "python_peak": 182302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 38900,
+      "rss": 44924928,
+      "python_current": 158944,
+      "python_peak": 182702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39000,
+      "rss": 44924928,
+      "python_current": 159344,
+      "python_peak": 183102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39100,
+      "rss": 44924928,
+      "python_current": 159744,
+      "python_peak": 183502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39200,
+      "rss": 44924928,
+      "python_current": 160144,
+      "python_peak": 183902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39300,
+      "rss": 44924928,
+      "python_current": 160544,
+      "python_peak": 184302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39400,
+      "rss": 44924928,
+      "python_current": 160944,
+      "python_peak": 184702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39500,
+      "rss": 44924928,
+      "python_current": 161344,
+      "python_peak": 185102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39600,
+      "rss": 44924928,
+      "python_current": 161744,
+      "python_peak": 185502,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39700,
+      "rss": 44924928,
+      "python_current": 162144,
+      "python_peak": 185902,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39800,
+      "rss": 44941312,
+      "python_current": 162544,
+      "python_peak": 186302,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 39900,
+      "rss": 44941312,
+      "python_current": 162944,
+      "python_peak": 186702,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40000,
+      "rss": 44941312,
+      "python_current": 163344,
+      "python_peak": 187102,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40100,
+      "rss": 44941312,
+      "python_current": 164192,
+      "python_peak": 187950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40200,
+      "rss": 44941312,
+      "python_current": 164592,
+      "python_peak": 188350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40300,
+      "rss": 44941312,
+      "python_current": 164992,
+      "python_peak": 188750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40400,
+      "rss": 44941312,
+      "python_current": 165392,
+      "python_peak": 189150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40500,
+      "rss": 44941312,
+      "python_current": 165792,
+      "python_peak": 189550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40600,
+      "rss": 44941312,
+      "python_current": 166192,
+      "python_peak": 189950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40700,
+      "rss": 44941312,
+      "python_current": 166592,
+      "python_peak": 190350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40800,
+      "rss": 44941312,
+      "python_current": 166992,
+      "python_peak": 190750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 40900,
+      "rss": 44941312,
+      "python_current": 167392,
+      "python_peak": 191150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41000,
+      "rss": 44941312,
+      "python_current": 167792,
+      "python_peak": 191550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41100,
+      "rss": 44941312,
+      "python_current": 168192,
+      "python_peak": 191950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41200,
+      "rss": 44941312,
+      "python_current": 168592,
+      "python_peak": 192350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41300,
+      "rss": 44941312,
+      "python_current": 168992,
+      "python_peak": 192750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41400,
+      "rss": 44941312,
+      "python_current": 169392,
+      "python_peak": 193150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41500,
+      "rss": 44941312,
+      "python_current": 169792,
+      "python_peak": 193550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41600,
+      "rss": 44941312,
+      "python_current": 170192,
+      "python_peak": 193950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41700,
+      "rss": 44941312,
+      "python_current": 170592,
+      "python_peak": 194350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41800,
+      "rss": 44941312,
+      "python_current": 170992,
+      "python_peak": 194750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 41900,
+      "rss": 44941312,
+      "python_current": 171392,
+      "python_peak": 195150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42000,
+      "rss": 44941312,
+      "python_current": 171792,
+      "python_peak": 195550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42100,
+      "rss": 44941312,
+      "python_current": 172192,
+      "python_peak": 195950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42200,
+      "rss": 44941312,
+      "python_current": 172592,
+      "python_peak": 196350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42300,
+      "rss": 44941312,
+      "python_current": 172992,
+      "python_peak": 196750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42400,
+      "rss": 44941312,
+      "python_current": 173392,
+      "python_peak": 197150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42500,
+      "rss": 44941312,
+      "python_current": 173792,
+      "python_peak": 197550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42600,
+      "rss": 44941312,
+      "python_current": 174192,
+      "python_peak": 197950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42700,
+      "rss": 44941312,
+      "python_current": 174592,
+      "python_peak": 198350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42800,
+      "rss": 44941312,
+      "python_current": 174992,
+      "python_peak": 198750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 42900,
+      "rss": 44957696,
+      "python_current": 175392,
+      "python_peak": 199150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43000,
+      "rss": 44957696,
+      "python_current": 175792,
+      "python_peak": 199550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43100,
+      "rss": 44957696,
+      "python_current": 176192,
+      "python_peak": 199950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43200,
+      "rss": 44957696,
+      "python_current": 176592,
+      "python_peak": 200350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43300,
+      "rss": 44957696,
+      "python_current": 176992,
+      "python_peak": 200750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43400,
+      "rss": 44957696,
+      "python_current": 177392,
+      "python_peak": 201150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43500,
+      "rss": 44957696,
+      "python_current": 177792,
+      "python_peak": 201550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43600,
+      "rss": 44957696,
+      "python_current": 178192,
+      "python_peak": 201950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43700,
+      "rss": 44957696,
+      "python_current": 178592,
+      "python_peak": 202350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43800,
+      "rss": 44957696,
+      "python_current": 178992,
+      "python_peak": 202750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 43900,
+      "rss": 44957696,
+      "python_current": 179392,
+      "python_peak": 203150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44000,
+      "rss": 44957696,
+      "python_current": 179792,
+      "python_peak": 203550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44100,
+      "rss": 44957696,
+      "python_current": 180192,
+      "python_peak": 203950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44200,
+      "rss": 44957696,
+      "python_current": 180592,
+      "python_peak": 204350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44300,
+      "rss": 44957696,
+      "python_current": 180992,
+      "python_peak": 204750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44400,
+      "rss": 44957696,
+      "python_current": 181392,
+      "python_peak": 205150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44500,
+      "rss": 44957696,
+      "python_current": 181792,
+      "python_peak": 205550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44600,
+      "rss": 44957696,
+      "python_current": 182192,
+      "python_peak": 205950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44700,
+      "rss": 44974080,
+      "python_current": 182592,
+      "python_peak": 206350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44800,
+      "rss": 44974080,
+      "python_current": 182992,
+      "python_peak": 206750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 44900,
+      "rss": 44974080,
+      "python_current": 183392,
+      "python_peak": 207150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45000,
+      "rss": 44974080,
+      "python_current": 183792,
+      "python_peak": 207550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45100,
+      "rss": 44974080,
+      "python_current": 184192,
+      "python_peak": 207950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45200,
+      "rss": 44974080,
+      "python_current": 184592,
+      "python_peak": 208350,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45300,
+      "rss": 44974080,
+      "python_current": 184992,
+      "python_peak": 208750,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45400,
+      "rss": 44974080,
+      "python_current": 185392,
+      "python_peak": 209150,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45500,
+      "rss": 44974080,
+      "python_current": 185792,
+      "python_peak": 209550,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45600,
+      "rss": 44974080,
+      "python_current": 186192,
+      "python_peak": 209950,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45700,
+      "rss": 44974080,
+      "python_current": 187104,
+      "python_peak": 210862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45800,
+      "rss": 44974080,
+      "python_current": 187504,
+      "python_peak": 211262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 45900,
+      "rss": 44974080,
+      "python_current": 187904,
+      "python_peak": 211662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46000,
+      "rss": 44974080,
+      "python_current": 188304,
+      "python_peak": 212062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46100,
+      "rss": 44974080,
+      "python_current": 188704,
+      "python_peak": 212462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46200,
+      "rss": 44974080,
+      "python_current": 189104,
+      "python_peak": 212862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46300,
+      "rss": 44974080,
+      "python_current": 189504,
+      "python_peak": 213262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46400,
+      "rss": 44974080,
+      "python_current": 189904,
+      "python_peak": 213662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46500,
+      "rss": 44974080,
+      "python_current": 190304,
+      "python_peak": 214062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46600,
+      "rss": 44974080,
+      "python_current": 190704,
+      "python_peak": 214462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46700,
+      "rss": 44974080,
+      "python_current": 191104,
+      "python_peak": 214862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46800,
+      "rss": 44974080,
+      "python_current": 191504,
+      "python_peak": 215262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 46900,
+      "rss": 44974080,
+      "python_current": 191904,
+      "python_peak": 215662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47000,
+      "rss": 44974080,
+      "python_current": 192304,
+      "python_peak": 216062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47100,
+      "rss": 44974080,
+      "python_current": 192704,
+      "python_peak": 216462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47200,
+      "rss": 44974080,
+      "python_current": 193104,
+      "python_peak": 216862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47300,
+      "rss": 44974080,
+      "python_current": 193504,
+      "python_peak": 217262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47400,
+      "rss": 44974080,
+      "python_current": 193904,
+      "python_peak": 217662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47500,
+      "rss": 44974080,
+      "python_current": 194304,
+      "python_peak": 218062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47600,
+      "rss": 44974080,
+      "python_current": 194704,
+      "python_peak": 218462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47700,
+      "rss": 44974080,
+      "python_current": 195104,
+      "python_peak": 218862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47800,
+      "rss": 44974080,
+      "python_current": 195504,
+      "python_peak": 219262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 47900,
+      "rss": 44974080,
+      "python_current": 195904,
+      "python_peak": 219662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48000,
+      "rss": 44974080,
+      "python_current": 196304,
+      "python_peak": 220062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48100,
+      "rss": 44974080,
+      "python_current": 196704,
+      "python_peak": 220462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48200,
+      "rss": 44974080,
+      "python_current": 197104,
+      "python_peak": 220862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48300,
+      "rss": 44974080,
+      "python_current": 197504,
+      "python_peak": 221262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48400,
+      "rss": 44974080,
+      "python_current": 197904,
+      "python_peak": 221662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48500,
+      "rss": 44974080,
+      "python_current": 198304,
+      "python_peak": 222062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48600,
+      "rss": 44974080,
+      "python_current": 198704,
+      "python_peak": 222462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48700,
+      "rss": 44990464,
+      "python_current": 199104,
+      "python_peak": 222862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48800,
+      "rss": 44990464,
+      "python_current": 199504,
+      "python_peak": 223262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 48900,
+      "rss": 44990464,
+      "python_current": 199904,
+      "python_peak": 223662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49000,
+      "rss": 45006848,
+      "python_current": 200304,
+      "python_peak": 224062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49100,
+      "rss": 45006848,
+      "python_current": 200704,
+      "python_peak": 224462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49200,
+      "rss": 45006848,
+      "python_current": 201104,
+      "python_peak": 224862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49300,
+      "rss": 45006848,
+      "python_current": 201504,
+      "python_peak": 225262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49400,
+      "rss": 45006848,
+      "python_current": 201904,
+      "python_peak": 225662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49500,
+      "rss": 45006848,
+      "python_current": 202304,
+      "python_peak": 226062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49600,
+      "rss": 45006848,
+      "python_current": 202704,
+      "python_peak": 226462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49700,
+      "rss": 45006848,
+      "python_current": 203104,
+      "python_peak": 226862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49800,
+      "rss": 45006848,
+      "python_current": 203504,
+      "python_peak": 227262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 49900,
+      "rss": 45006848,
+      "python_current": 203904,
+      "python_peak": 227662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50000,
+      "rss": 45006848,
+      "python_current": 204304,
+      "python_peak": 228062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50100,
+      "rss": 45006848,
+      "python_current": 204704,
+      "python_peak": 228462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50200,
+      "rss": 45006848,
+      "python_current": 205104,
+      "python_peak": 228862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50300,
+      "rss": 45006848,
+      "python_current": 205504,
+      "python_peak": 229262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50400,
+      "rss": 45006848,
+      "python_current": 205904,
+      "python_peak": 229662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50500,
+      "rss": 45006848,
+      "python_current": 206304,
+      "python_peak": 230062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50600,
+      "rss": 45006848,
+      "python_current": 206704,
+      "python_peak": 230462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50700,
+      "rss": 45006848,
+      "python_current": 207104,
+      "python_peak": 230862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50800,
+      "rss": 45006848,
+      "python_current": 207504,
+      "python_peak": 231262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 50900,
+      "rss": 45006848,
+      "python_current": 207904,
+      "python_peak": 231662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51000,
+      "rss": 45006848,
+      "python_current": 208304,
+      "python_peak": 232062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51100,
+      "rss": 45006848,
+      "python_current": 208704,
+      "python_peak": 232462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51200,
+      "rss": 45006848,
+      "python_current": 209104,
+      "python_peak": 232862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51300,
+      "rss": 45006848,
+      "python_current": 209504,
+      "python_peak": 233262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51400,
+      "rss": 45006848,
+      "python_current": 209904,
+      "python_peak": 233662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51500,
+      "rss": 45006848,
+      "python_current": 210304,
+      "python_peak": 234062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51600,
+      "rss": 45006848,
+      "python_current": 210704,
+      "python_peak": 234462,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51700,
+      "rss": 45023232,
+      "python_current": 211104,
+      "python_peak": 234862,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51800,
+      "rss": 45023232,
+      "python_current": 211504,
+      "python_peak": 235262,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 51900,
+      "rss": 45023232,
+      "python_current": 211904,
+      "python_peak": 235662,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52000,
+      "rss": 45023232,
+      "python_current": 212304,
+      "python_peak": 236062,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52100,
+      "rss": 45023232,
+      "python_current": 213280,
+      "python_peak": 237038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52200,
+      "rss": 45023232,
+      "python_current": 213680,
+      "python_peak": 237438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52300,
+      "rss": 45023232,
+      "python_current": 214080,
+      "python_peak": 237838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52400,
+      "rss": 45023232,
+      "python_current": 214480,
+      "python_peak": 238238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52500,
+      "rss": 45039616,
+      "python_current": 214880,
+      "python_peak": 238638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52600,
+      "rss": 45056000,
+      "python_current": 215280,
+      "python_peak": 239038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52700,
+      "rss": 45056000,
+      "python_current": 215680,
+      "python_peak": 239438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52800,
+      "rss": 45056000,
+      "python_current": 216080,
+      "python_peak": 239838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 52900,
+      "rss": 45056000,
+      "python_current": 216480,
+      "python_peak": 240238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53000,
+      "rss": 45056000,
+      "python_current": 216880,
+      "python_peak": 240638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53100,
+      "rss": 45056000,
+      "python_current": 217280,
+      "python_peak": 241038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53200,
+      "rss": 45056000,
+      "python_current": 217680,
+      "python_peak": 241438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53300,
+      "rss": 45056000,
+      "python_current": 218080,
+      "python_peak": 241838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53400,
+      "rss": 45056000,
+      "python_current": 218480,
+      "python_peak": 242238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53500,
+      "rss": 45056000,
+      "python_current": 218880,
+      "python_peak": 242638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53600,
+      "rss": 45056000,
+      "python_current": 219280,
+      "python_peak": 243038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53700,
+      "rss": 45056000,
+      "python_current": 219680,
+      "python_peak": 243438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53800,
+      "rss": 45056000,
+      "python_current": 220080,
+      "python_peak": 243838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 53900,
+      "rss": 45056000,
+      "python_current": 220480,
+      "python_peak": 244238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54000,
+      "rss": 45056000,
+      "python_current": 220880,
+      "python_peak": 244638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54100,
+      "rss": 45056000,
+      "python_current": 221280,
+      "python_peak": 245038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54200,
+      "rss": 45056000,
+      "python_current": 221680,
+      "python_peak": 245438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54300,
+      "rss": 45056000,
+      "python_current": 222080,
+      "python_peak": 245838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54400,
+      "rss": 45056000,
+      "python_current": 222480,
+      "python_peak": 246238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54500,
+      "rss": 45056000,
+      "python_current": 222880,
+      "python_peak": 246638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54600,
+      "rss": 45056000,
+      "python_current": 223280,
+      "python_peak": 247038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54700,
+      "rss": 45056000,
+      "python_current": 223680,
+      "python_peak": 247438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54800,
+      "rss": 45056000,
+      "python_current": 224080,
+      "python_peak": 247838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 54900,
+      "rss": 45056000,
+      "python_current": 224480,
+      "python_peak": 248238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55000,
+      "rss": 45056000,
+      "python_current": 224880,
+      "python_peak": 248638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55100,
+      "rss": 45056000,
+      "python_current": 225280,
+      "python_peak": 249038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55200,
+      "rss": 45056000,
+      "python_current": 225680,
+      "python_peak": 249438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55300,
+      "rss": 45056000,
+      "python_current": 226080,
+      "python_peak": 249838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55400,
+      "rss": 45056000,
+      "python_current": 226480,
+      "python_peak": 250238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55500,
+      "rss": 45056000,
+      "python_current": 226880,
+      "python_peak": 250638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55600,
+      "rss": 45056000,
+      "python_current": 227280,
+      "python_peak": 251038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55700,
+      "rss": 45056000,
+      "python_current": 227680,
+      "python_peak": 251438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55800,
+      "rss": 45056000,
+      "python_current": 228080,
+      "python_peak": 251838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 55900,
+      "rss": 45056000,
+      "python_current": 228480,
+      "python_peak": 252238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56000,
+      "rss": 45056000,
+      "python_current": 228880,
+      "python_peak": 252638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56100,
+      "rss": 45056000,
+      "python_current": 229280,
+      "python_peak": 253038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56200,
+      "rss": 45056000,
+      "python_current": 229680,
+      "python_peak": 253438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56300,
+      "rss": 45056000,
+      "python_current": 230080,
+      "python_peak": 253838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56400,
+      "rss": 45056000,
+      "python_current": 230480,
+      "python_peak": 254238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56500,
+      "rss": 45056000,
+      "python_current": 230880,
+      "python_peak": 254638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56600,
+      "rss": 45056000,
+      "python_current": 231280,
+      "python_peak": 255038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56700,
+      "rss": 45056000,
+      "python_current": 231680,
+      "python_peak": 255438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56800,
+      "rss": 45056000,
+      "python_current": 232080,
+      "python_peak": 255838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 56900,
+      "rss": 45056000,
+      "python_current": 232480,
+      "python_peak": 256238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57000,
+      "rss": 45056000,
+      "python_current": 232880,
+      "python_peak": 256638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57100,
+      "rss": 45056000,
+      "python_current": 233280,
+      "python_peak": 257038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57200,
+      "rss": 45056000,
+      "python_current": 233680,
+      "python_peak": 257438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57300,
+      "rss": 45056000,
+      "python_current": 234080,
+      "python_peak": 257838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57400,
+      "rss": 45056000,
+      "python_current": 234480,
+      "python_peak": 258238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57500,
+      "rss": 45056000,
+      "python_current": 234880,
+      "python_peak": 258638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57600,
+      "rss": 45056000,
+      "python_current": 235280,
+      "python_peak": 259038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57700,
+      "rss": 45056000,
+      "python_current": 235680,
+      "python_peak": 259438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57800,
+      "rss": 45056000,
+      "python_current": 236080,
+      "python_peak": 259838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 57900,
+      "rss": 45056000,
+      "python_current": 236480,
+      "python_peak": 260238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58000,
+      "rss": 45056000,
+      "python_current": 236880,
+      "python_peak": 260638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58100,
+      "rss": 45056000,
+      "python_current": 237280,
+      "python_peak": 261038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58200,
+      "rss": 45056000,
+      "python_current": 237680,
+      "python_peak": 261438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58300,
+      "rss": 45056000,
+      "python_current": 238080,
+      "python_peak": 261838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58400,
+      "rss": 45056000,
+      "python_current": 238480,
+      "python_peak": 262238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58500,
+      "rss": 45056000,
+      "python_current": 238880,
+      "python_peak": 262638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58600,
+      "rss": 45056000,
+      "python_current": 239280,
+      "python_peak": 263038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58700,
+      "rss": 45056000,
+      "python_current": 239680,
+      "python_peak": 263438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58800,
+      "rss": 45056000,
+      "python_current": 240080,
+      "python_peak": 263838,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 58900,
+      "rss": 45056000,
+      "python_current": 240480,
+      "python_peak": 264238,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59000,
+      "rss": 45056000,
+      "python_current": 240880,
+      "python_peak": 264638,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59100,
+      "rss": 45056000,
+      "python_current": 241280,
+      "python_peak": 265038,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59200,
+      "rss": 45056000,
+      "python_current": 241680,
+      "python_peak": 265438,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59300,
+      "rss": 45056000,
+      "python_current": 242720,
+      "python_peak": 266478,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59400,
+      "rss": 45056000,
+      "python_current": 243120,
+      "python_peak": 266878,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59500,
+      "rss": 45056000,
+      "python_current": 243520,
+      "python_peak": 267278,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59600,
+      "rss": 45056000,
+      "python_current": 243920,
+      "python_peak": 267678,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59700,
+      "rss": 45056000,
+      "python_current": 244320,
+      "python_peak": 268078,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59800,
+      "rss": 45056000,
+      "python_current": 244720,
+      "python_peak": 268478,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 59900,
+      "rss": 45056000,
+      "python_current": 245120,
+      "python_peak": 268878,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 60000,
+      "rss": 45056000,
+      "python_current": 245520,
+      "python_peak": 269278,
+      "fds": 3,
+      "threads": 1
+    }
+  ],
+  "summary": {
+    "rss_start": 43073536,
+    "rss_end": 45056000,
+    "rss_delta": 1982464,
+    "steady_rss_median_delta": 1982464,
+    "python_delta": 245352,
+    "fds_start": 3,
+    "fds_end": 3,
+    "threads_start": 1,
+    "threads_end": 1
+  },
+  "seconds": 34.77874649997102,
+  "python": "3.14.8 (main, Sep 30 2026, 17:55:09) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "distribution_version": "1.20.0",
+  "asset_sha256": {
+    "python": "a0aca809ab8a578209f465128464b561ed0fd124088c12a49f08777fed76bd53",
+    "typescript": "6966cb024d24a85290fba333b9dc0da21c6f77f117c810e36d9b2354d1804eb2",
+    "swift": "d439e58a91e4ffcafaec096e42c9ed73c6df8de6ff861b3c5f4288a757823e4e"
+  },
+  "limits": [
+    "RSS includes allocator caching; not a native allocation proof.",
+    "Current process RSS, not peak RSS, measured after Python GC.",
+    "No USS or native allocation stack instrumentation.",
+    "Only three cached languages and bounded synthetic inputs."
+  ]
+}

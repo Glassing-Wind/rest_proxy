@@ -1,0 +1,199 @@
+{
+  "mode": "payload",
+  "warmup_calls": 600,
+  "samples": [
+    {
+      "calls": 0,
+      "rss": 55279616,
+      "python_current": 1568,
+      "python_peak": 33795,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 600,
+      "rss": 55279616,
+      "python_current": 2040,
+      "python_peak": 38587,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1200,
+      "rss": 55279616,
+      "python_current": 2440,
+      "python_peak": 38891,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 1800,
+      "rss": 55296000,
+      "python_current": 2840,
+      "python_peak": 39291,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 2400,
+      "rss": 55296000,
+      "python_current": 3240,
+      "python_peak": 39691,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3000,
+      "rss": 55296000,
+      "python_current": 3672,
+      "python_peak": 40123,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 3600,
+      "rss": 55296000,
+      "python_current": 4072,
+      "python_peak": 40523,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4200,
+      "rss": 55296000,
+      "python_current": 4472,
+      "python_peak": 40923,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 4800,
+      "rss": 55296000,
+      "python_current": 4872,
+      "python_peak": 41323,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 5400,
+      "rss": 55296000,
+      "python_current": 5336,
+      "python_peak": 41787,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6000,
+      "rss": 55296000,
+      "python_current": 5736,
+      "python_peak": 42187,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 6600,
+      "rss": 55296000,
+      "python_current": 6136,
+      "python_peak": 42587,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7200,
+      "rss": 55296000,
+      "python_current": 6536,
+      "python_peak": 42987,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 7800,
+      "rss": 55296000,
+      "python_current": 6936,
+      "python_peak": 43387,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 8400,
+      "rss": 55296000,
+      "python_current": 7336,
+      "python_peak": 43787,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9000,
+      "rss": 55296000,
+      "python_current": 7736,
+      "python_peak": 44187,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 9600,
+      "rss": 55296000,
+      "python_current": 8136,
+      "python_peak": 44587,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10200,
+      "rss": 55296000,
+      "python_current": 8600,
+      "python_peak": 45051,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 10800,
+      "rss": 55296000,
+      "python_current": 9000,
+      "python_peak": 45451,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 11400,
+      "rss": 55296000,
+      "python_current": 9400,
+      "python_peak": 45851,
+      "fds": 3,
+      "threads": 1
+    },
+    {
+      "calls": 12000,
+      "rss": 55296000,
+      "python_current": 9800,
+      "python_peak": 46251,
+      "fds": 3,
+      "threads": 1
+    }
+  ],
+  "summary": {
+    "rss_start": 55279616,
+    "rss_end": 55296000,
+    "rss_delta": 16384,
+    "steady_rss_median_delta": 0,
+    "python_delta": 8232,
+    "fds_start": 3,
+    "fds_end": 3,
+    "threads_start": 1,
+    "threads_end": 1
+  },
+  "seconds": 9.071401332970709,
+  "python": "3.14.8 (main, Sep 30 2026, 17:55:09) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "distribution_version": "1.20.0",
+  "asset_sha256": {
+    "python": "a0aca809ab8a578209f465128464b561ed0fd124088c12a49f08777fed76bd53",
+    "typescript": "6966cb024d24a85290fba333b9dc0da21c6f77f117c810e36d9b2354d1804eb2",
+    "swift": "d439e58a91e4ffcafaec096e42c9ed73c6df8de6ff861b3c5f4288a757823e4e"
+  },
+  "limits": [
+    "RSS includes allocator caching; not a native allocation proof.",
+    "Current process RSS, not peak RSS, measured after Python GC.",
+    "No USS or native allocation stack instrumentation.",
+    "Only three cached languages and bounded synthetic inputs."
+  ]
+}

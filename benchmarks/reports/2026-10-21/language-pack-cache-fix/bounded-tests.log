@@ -1,0 +1,9 @@
+warning: tree-sitter-language-pack@1.20.0: TSLP_OFFLINE set; refusing to download parser sources
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (target/debug/deps/tree_sitter_language_pack-46dc40d8bec3b136)
+
+running 2 tests
+test query::tests::bounded_cache_reuses_existing_and_skips_large_keys ... ok
+test query::tests::bounded_cache_evicts_and_releases_ownership ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 319 filtered out; finished in 0.00s

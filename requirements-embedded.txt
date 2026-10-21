@@ -3,4 +3,4 @@ ladybug==0.21.2
 lancedb==0.39.0
 # The prebuilt fork wheel is installed with --no-deps; declare its runtime dependency.
 tree-sitter==0.25.2
-tree_sitter_language_pack @ git+https://github.com/Zmaroo/tree-sitter-language-pack.git@6fcead43fc13b0049481ea5b5c491e02eab4ac68#subdirectory=crates/ts-pack-python
+tree_sitter_language_pack @ git+https://github.com/Zmaroo/tree-sitter-language-pack.git@d10c656bce9e5ac9e8c282230b7ea83295e7ab12#subdirectory=crates/ts-pack-python
