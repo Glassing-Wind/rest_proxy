@@ -1,0 +1,92 @@
+{
+  "initial_hosted_failures": {
+    "dependency_audit": {
+      "run": 39655673989,
+      "unbaselined_advisory_records": 18,
+      "packages": {
+        "aiohttp": [
+          "3.13.4",
+          "3.14.4"
+        ],
+        "certifi": [
+          "2026.2.25",
+          "2026.10.19"
+        ],
+        "mcp": [
+          "1.26.0",
+          "1.30.0"
+        ],
+        "pillow": [
+          "12.2.0",
+          "13.0.0"
+        ]
+      }
+    },
+    "minimal_arm_install": {
+      "run": 39655690082,
+      "job": 119415188133,
+      "error": "tree-sitter-language-pack requires tree-sitter, which is not installed",
+      "fix": "Declare tree-sitter==0.25.2 in requirements-embedded.txt"
+    },
+    "gitleaks": {
+      "run": 39655673989,
+      "findings": 8,
+      "classification": "Five source-visible synthetic test capabilities, three matching source/source-token SHA-256 digests; no operational credential in these eight findings",
+      "exact_locations": [
+        {
+          "commit": "34e77a938bdf549d40d4682334de99150e225d2e",
+          "path": "test_evidence_workspace_http.py",
+          "line": 25
+        },
+        {
+          "commit": "6255ffc9bfbb202683b9fc30c2d4fade1cd40563",
+          "path": "test_lessons_server.py",
+          "line": 21
+        },
+        {
+          "commit": "6255ffc9bfbb202683b9fc30c2d4fade1cd40563",
+          "path": "benchmarks/reports/2026-10-14/lessons-corpus/live-acceptance.json",
+          "line": 154
+        },
+        {
+          "commit": "6255ffc9bfbb202683b9fc30c2d4fade1cd40563",
+          "path": "benchmarks/reports/2026-10-14/lessons-corpus/live-acceptance.json",
+          "line": 160
+        },
+        {
+          "commit": "6255ffc9bfbb202683b9fc30c2d4fade1cd40563",
+          "path": "benchmarks/reports/2026-10-14/lessons-corpus/live-acceptance.json",
+          "line": 166
+        },
+        {
+          "commit": "3cba19314039f72e09008a33bd0a47854b15f534",
+          "path": "scripts/check_task_cockpit_ui.cjs",
+          "line": 15
+        },
+        {
+          "commit": "3cba19314039f72e09008a33bd0a47854b15f534",
+          "path": "scripts/check_task_cockpit_ui.cjs",
+          "line": 16
+        },
+        {
+          "commit": "3cba19314039f72e09008a33bd0a47854b15f534",
+          "path": "test_task_cockpit_http.py",
+          "line": 27
+        }
+      ]
+    }
+  },
+  "environment": "Existing project venv and production services unchanged; patched dependency runtime acceptance delegated to fresh hosted installs. Shell DNS prevents local fetching.",
+  "upstream_sources": [
+    "https://github.com/aio-libs/aiohttp/releases/tag/v3.14.4",
+    "https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-84m7-p3x7-pcfv",
+    "https://pypi.org/project/certifi/2026.10.19/",
+    "https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html"
+  ],
+  "limits": [
+    "Dependency pins are candidates pending fresh resolution and compatibility checks.",
+    "No vulnerability baseline expanded.",
+    "Existing secret-scanner detections remain enabled; exemptions are exact historical fingerprints only.",
+    "Original dirty checkout and private local state unchanged."
+  ]
+}
