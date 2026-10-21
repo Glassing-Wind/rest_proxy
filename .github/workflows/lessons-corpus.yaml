@@ -1,0 +1,45 @@
+name: Lessons corpus offline checks
+
+on:
+  pull_request:
+    paths:
+      - 'graphrag_core/lessons_corpus/**'
+      - 'scripts/lessons_corpus.py'
+      - 'scripts/free_man.py'
+      - 'scripts/james_pilot.py'
+      - 'scripts/extract_lessons_pdf.py'
+      - 'test_lessons_*.py'
+      - '.github/workflows/lessons-corpus.yaml'
+      - 'requirements-core.txt'
+  push:
+    branches: [main]
+    paths:
+      - 'graphrag_core/lessons_corpus/**'
+      - 'scripts/lessons_corpus.py'
+      - 'scripts/free_man.py'
+      - 'scripts/james_pilot.py'
+      - 'scripts/extract_lessons_pdf.py'
+      - 'test_lessons_*.py'
+      - '.github/workflows/lessons-corpus.yaml'
+      - 'requirements-core.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Install core and optional PDF test runtime
+        run: python -m pip install -r requirements-core.txt starlette==0.52.1 pypdf==6.10.0 ruff==0.15.7
+      - name: Check lessons corpus source
+        run: python -m ruff check graphrag_core/lessons_corpus scripts/lessons_corpus.py scripts/free_man.py scripts/james_pilot.py scripts/extract_lessons_pdf.py test_lessons_*.py
+      - name: Run synthetic corpus, ledger, HTTP and PDF acceptance
+        run: python -W error::ResourceWarning -m unittest test_lessons_ast test_lessons_acquisition test_lessons_ledger test_lessons_corpus test_lessons_server test_lessons_cli test_lessons_frontier test_lessons_recovery test_lessons_ledger_reader test_lessons_exchange test_lessons_investigation test_lessons_scripture test_lessons_james_pilot test_lessons_james_investigation test_lessons_mcp test_lessons_pdf

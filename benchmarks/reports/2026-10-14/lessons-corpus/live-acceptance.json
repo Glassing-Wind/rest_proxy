@@ -1,0 +1,177 @@
+{
+  "audited_pending_html_urls": [
+    "https://21stcenturyprogressivism.com/american-cosmology-and-arlington-national-cemetery/",
+    "https://21stcenturyprogressivism.com/american-healthcare-and-the-caduceus-of-hermes/",
+    "https://21stcenturyprogressivism.com/death-comes-for-everyone/",
+    "https://21stcenturyprogressivism.com/life-in-the-age-of-pisces/",
+    "https://21stcenturyprogressivism.com/meltdown/",
+    "https://21stcenturyprogressivism.com/mercy-and-judgment-in-2025/",
+    "https://21stcenturyprogressivism.com/religion-must-guide-the-political-moment/",
+    "https://21stcenturyprogressivism.com/series/the-book-of-james-with-commentary-by-james-b-adamson/"
+  ],
+  "authored_reference_occurrences": 2061,
+  "authored_reference_unique_targets": 1884,
+  "capture_acquisitions": 984,
+  "capture_bound_reached": false,
+  "capture_changed_endpoints": [
+    "page"
+  ],
+  "capture_code_note": "The full capture process started before the final commit. Two coverage/discovery fixes apply to future captures; successful HTML rows were audited independently here. No snapshot files were rewritten.",
+  "capture_complete_within_declared_scope": false,
+  "capture_errors": [
+    {
+      "endpoint": "media",
+      "error": "REST pagination incomplete or inconsistent",
+      "phase": "initial"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/american-cosmology-and-arlington-national-cemetery/"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/american-healthcare-and-the-caduceus-of-hermes/"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/death-comes-for-everyone/"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/life-in-the-age-of-pisces/"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/meltdown/"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/mercy-and-judgment-in-2025/"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/religion-must-guide-the-political-moment/"
+    },
+    {
+      "purpose": "public_html",
+      "status": 404,
+      "url": "https://21stcenturyprogressivism.com/series/the-book-of-james-with-commentary-by-james-b-adamson/"
+    },
+    {
+      "endpoint": "media",
+      "error": "REST pagination incomplete or inconsistent",
+      "phase": "drift"
+    }
+  ],
+  "capture_pending_pdf_urls": [],
+  "document_counts": {
+    "author": 2,
+    "category": 23,
+    "comment": 6,
+    "media": 104,
+    "page": 7,
+    "post": 116,
+    "series": 4,
+    "tag": 743
+  },
+  "draft_lessons": [
+    {
+      "human_review": "pending",
+      "lesson_id": "help-without-humiliation",
+      "revision": 1,
+      "revision_sha256": "b5b0712e75616056d064b1d75fd3e9f590ac59c767bde6e6edadb50e3e3448b4",
+      "runtime_model_identity": "unavailable",
+      "status": "proposed"
+    },
+    {
+      "human_review": "pending",
+      "lesson_id": "intentions-and-context",
+      "revision": 1,
+      "revision_sha256": "99f4e83d2a547df30a3ce5648994e42474664fb36bd6fccd1f4613865e90820d",
+      "runtime_model_identity": "unavailable",
+      "status": "proposed"
+    }
+  ],
+  "limitations": [
+    "External reference contents are not acquired by listing their URLs.",
+    "Image/OCR and historical/private/deleted material are not established.",
+    "Source tokens preserve decoded originals; readable prose has explicit transformations.",
+    "Syntax and search are not adaptive training or proven understanding."
+  ],
+  "pipeline_model_calls": 0,
+  "private_case_records_included": false,
+  "reference_status_counts": {
+    "acquired_original": 44244,
+    "excluded_admin_or_login": 26,
+    "external_unacquired": 12151,
+    "not_fetchable_or_unresolved": 1175,
+    "same_site_unacquired": 39918
+  },
+  "representation": {
+    "external_reference_targets": 477,
+    "pdf_extraction": [
+      {
+        "acquisition_id": "acquisition:000966",
+        "blank_pages": [],
+        "extractor": "pypdf/6.10.0",
+        "pages": 29
+      },
+      {
+        "acquisition_id": "acquisition:000967",
+        "blank_pages": [],
+        "extractor": "pypdf/6.10.0",
+        "pages": 31
+      }
+    ],
+    "processing_failures": [],
+    "reference_occurrences": 97514,
+    "representation_complete": true,
+    "source_count": 5261,
+    "syntax_nodes": 969969,
+    "wordpress_content_whitespace_words": 184557
+  },
+  "response_bytes": 100704776,
+  "rest_probe": {
+    "authenticated_routes_checked": 5,
+    "browser_origin_status": 403,
+    "citations_verified": true,
+    "transport": "in-process ASGI; no listener",
+    "unauthenticated_status": 401
+  },
+  "seed_url": "https://21stcenturyprogressivism.com/",
+  "source_round_trip_samples": [
+    {
+      "round_trip_exact": true,
+      "source_id": "post:8814:content_html",
+      "source_sha256": "6a58352417762ed906bc89322d0642f86b4ae9a638965eeaed3a6e7f68f481ca",
+      "source_tokens_sha256": "6a58352417762ed906bc89322d0642f86b4ae9a638965eeaed3a6e7f68f481ca"
+    },
+    {
+      "round_trip_exact": true,
+      "source_id": "page:7433:content_html",
+      "source_sha256": "c972d068c8b10609394af38fe1eaec715c6b130778c87613a3885e8799f4b2df",
+      "source_tokens_sha256": "c972d068c8b10609394af38fe1eaec715c6b130778c87613a3885e8799f4b2df"
+    },
+    {
+      "round_trip_exact": true,
+      "source_id": "page:8810:content_html",
+      "source_sha256": "0041059e7e3b6c8f74783297bd92fcc189d66406d25b7cb66e7c171af5fdeb3e",
+      "source_tokens_sha256": "0041059e7e3b6c8f74783297bd92fcc189d66406d25b7cb66e7c171af5fdeb3e"
+    }
+  ],
+  "training_performed": false,
+  "verification": {
+    "artifact_files": 10291,
+    "meaning": "capture integrity; not truth or completeness of the world",
+    "original_responses": 984,
+    "sources": 5261,
+    "status": "verified"
+  }
+}

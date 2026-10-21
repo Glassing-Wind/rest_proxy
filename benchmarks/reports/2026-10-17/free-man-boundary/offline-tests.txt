@@ -1,0 +1,11 @@
+...................................................................................................................................................................Tool 'index_workspace' not listed, no validation will be performed
+Tool 'review' not listed, no validation will be performed
+Tool 'propose' not listed, no validation will be performed
+Tool 'capture' not listed, no validation will be performed
+Tool 'bootstrap' not listed, no validation will be performed
+Tool 'free_man_unknown' not listed, no validation will be performed
+........
+----------------------------------------------------------------------
+Ran 171 tests in 2.372s
+
+OK

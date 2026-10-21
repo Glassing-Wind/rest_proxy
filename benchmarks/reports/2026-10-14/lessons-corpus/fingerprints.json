@@ -1,0 +1,35 @@
+{
+  "capture_metadata_sha256": {
+    "acquisitions.jsonl": "83c05ad7d90e38b6275cfe59feaa05ee3b2441d2b9f147a8221d3f5fc692a2c1",
+    "coverage.json": "3d428c151e980c1a00423aeaaa726da023edce08d6dfd1ba42cc549d4ae55092",
+    "documents.jsonl": "d4727df4d9c6f758acfc7d9e4f99e6e6864c89fa97bb58f6eba617fa20909476",
+    "inventory.json": "7d9251b3595011bcb4f1f92d1e654847dcb717c3cff302dc756ae62e7c6fce61"
+  },
+  "capture_name": "21stcenturyprogressivism-20261014",
+  "code_files_sha256": {
+    "graphrag_core/lessons_corpus/__init__.py": "9a748e527d8b00afb2d51e0bf01bb8e06481cfcfc5d9a448183c33bbbcd37aca",
+    "graphrag_core/lessons_corpus/acquire.py": "b6a5e1ff80eb33177b7c82fe6d311173e936525336981e51eb7b1df421cbc323",
+    "graphrag_core/lessons_corpus/ast.py": "53b79ff2fb2d0a1edf27e2b72a8c1d330fa5365811ea5cafb92ef327c8889604",
+    "graphrag_core/lessons_corpus/corpus.py": "19dd331577b099ed2796f6ae8f5068378c1778a1c654ee2edbe3753aebf9fd34",
+    "graphrag_core/lessons_corpus/ledger.py": "47ee85a278447331b1cf00eb844fd4f0df0b79ffed8bbbfa5458b8739a37300a",
+    "graphrag_core/lessons_corpus/server.py": "235360aee1acb09ad537a9a1c1d50355a37de5ab54a913eb0f1aa4f707b7234b",
+    "scripts/extract_lessons_pdf.py": "2f9d3352a653a0bd4330799fd7a98664650a93cf8101b1f4ad1db80a2c62a4ed",
+    "scripts/lessons_corpus.py": "dfe3278784a727e171fd2917aab39c2da3a41e285bd10574175a43829ccd5b71",
+    "test_lessons_acquisition.py": "b1e210386d0e7840a74874f413e8b902335c0f63729919ebb97a3b998783d90a",
+    "test_lessons_ast.py": "cd7b7b201d846a964a11e1c8b982f63fe1d25d8554938056ae34c27d6ddc6638",
+    "test_lessons_cli.py": "903cafd9fb1f593a26397c1ab0f954a6534d6169e56e77e0ad89342ffefae8fa",
+    "test_lessons_corpus.py": "ffe62d522fb7451e8838a44675c1719de0027e534bcae9a35de89879ce639345",
+    "test_lessons_ledger.py": "897c05fe3d2cfb29245d3e4660794a00ef285fcb95208fe92c5d0e097f507695",
+    "test_lessons_pdf.py": "31a6fcef746a933042dab2bb0ad7b1cef54a157c9831563e29faf02797dc3bdd",
+    "test_lessons_server.py": "bfab78a864949cbd260da9fbb241cf6f58174d358668a030b3dd21755bde907e"
+  },
+  "lesson_ledger_sha256": "3963dc20ff7c9cf0d558f15edd26cf833898a46b9e80c77601f2885e08f653e4",
+  "meaning": "artifact integrity fingerprints; not independent authorship attestation or truth",
+  "representation_manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+  "runtime": {
+    "architecture": "arm64",
+    "python": "3.14.8",
+    "sqlite": "3.54.0"
+  },
+  "verified_at_utc": "2026-10-15T17:42:52.718016+00:00"
+}

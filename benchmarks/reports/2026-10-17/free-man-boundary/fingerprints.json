@@ -1,0 +1,29 @@
+{
+  "implementation_files": {
+    "graphrag_core/lessons_corpus/exchange.py": "95d1f248559d5b8484d1b795e4633bff2ad52333d64b11f0c6e711dea2afed4b",
+    "graphrag_core/lessons_corpus/ledger_reader.py": "cfb40b4a334619d6aa9e46c70411da82bb50a34c7d44d40ebd1e0a7b371ec3bc",
+    "graphrag_core/lessons_corpus/mcp.py": "4ce8a72db6452e67814a377414967fcd5648d0eca383f6dc381502d92fa000f8",
+    "graphrag_core/lessons_corpus/reads.py": "caa380e338f0bf676c1e599ffe3174cc6fee445689b387c0f9c9536ee045fa94",
+    "graphrag_core/lessons_corpus/server.py": "161b7e363d2a0e1286fc370443df5f4810a22064f304427f6ac50b646195b7e9",
+    "scripts/free_man.py": "e482871c822d7cafe014fb853f050e2945c0e334c388a36cf598a5571208db45",
+    "scripts/lessons_corpus.py": "56904a48caba2b58bf2b098e3a0ba69a5e0f6d1cc33da241c42721832bea8b43",
+    "test_lessons_exchange.py": "7a6f436c73b6c3614e5decb5d72b817332ce0aceaf4b3b9c2e18ba60efdfcef5",
+    "test_lessons_ledger_reader.py": "ed22a111799234a9317c09bb44744cfd980ec38d14b1c6dff248f38609c690e1",
+    "test_lessons_mcp.py": "1ba1b578d33d2eff40d7cf8a6941c476e9b5b78ae702cadc614940b9e414e472"
+  },
+  "parent_manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+  "private_review_artifacts": {
+    "first-lessons-review-packet.json": "6f3a2b1ab4a06fce615d4f2ec11a0e371510bc72872a4c52b339092e7138506c",
+    "human-review.json": "7988b0ff200a9ebca76a28c56b986ac4af344aa34a11d450609a1ff4dacb69a4",
+    "selections.json": "f039e6522fc215bc9fcacead9c41002175a304951c7b6c813947b9cad4518c2b"
+  },
+  "public_receipts": {
+    "live-acceptance.json": "405f948840fff3973ea90b86f1df88f59706e6e67371bb5e119d65ae28eb43fc",
+    "offline-tests.txt": "9f80bf8d38c3c1f79139d1570bd120f6195364e428267de95c9e49b59f0dc5bd",
+    "pdf-tests.txt": "5ceacd6878163bf2e4cfa8f1431b4640c5e92f535513dfe0ece212251ae23460",
+    "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "reference_recovery_manifest_sha256": "e2208a82c92ec188d412421378eb53597d43204ad9d4a32984062203dd9e685b",
+  "schema": "free-man-boundary-fingerprints/1",
+  "unchanged_lesson_ledger_sha256": "55a10da0c63e8c1f5093061f9a6febbf636e39890a5a7856c50aee12c3f930cb"
+}

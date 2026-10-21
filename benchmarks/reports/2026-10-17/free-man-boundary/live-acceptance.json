@@ -1,0 +1,147 @@
+{
+  "checked_at": "2026-10-17T16:50:48.706744+00:00",
+  "client_date": "2026-10-17",
+  "corpus_verification": {
+    "reference_candidates": {
+      "artifact_files": 28,
+      "meaning": "capture integrity; not truth or completeness of the world",
+      "original_responses": 8,
+      "sources": 8,
+      "status": "verified"
+    },
+    "seed": {
+      "artifact_files": 10291,
+      "meaning": "capture integrity; not truth or completeness of the world",
+      "original_responses": 984,
+      "sources": 5261,
+      "status": "verified"
+    }
+  },
+  "isolation": "fixed application read surface and explicit state selection; not an OS sandbox",
+  "lesson_ledger_sha256_after": "55a10da0c63e8c1f5093061f9a6febbf636e39890a5a7856c50aee12c3f930cb",
+  "lesson_ledger_sha256_before": "55a10da0c63e8c1f5093061f9a6febbf636e39890a5a7856c50aee12c3f930cb",
+  "limitations": [
+    "No evaluated reasoning/learning improvement or superintelligence claim.",
+    "No authenticated reviewer identity, independent historical truth or external rights verification.",
+    "Bundle inspection checks historical artifact consistency, not current ledger status.",
+    "No bundle import into operational memory, prompt injection, tool grant or model training.",
+    "Actual lesson proposals remain pending as the user requested."
+  ],
+  "operational_client_configuration_changed": false,
+  "parent_manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+  "persistent_service_activated": false,
+  "pipeline_model_calls": 0,
+  "private_case_records_included": false,
+  "recovery_manifest_sha256": "e2208a82c92ec188d412421378eb53597d43204ad9d4a32984062203dd9e685b",
+  "review": {
+    "actual_release_created": false,
+    "current_revisions": [
+      {
+        "lesson_id": "help-without-humiliation",
+        "revision": 3,
+        "revision_sha256": "b0121ac568c45eca78a86f3f29e0160328484718eb7c713f432d9ca54d9b7120",
+        "status": "proposed"
+      },
+      {
+        "lesson_id": "intentions-and-context",
+        "revision": 3,
+        "revision_sha256": "7692b1c1130907138246dc21e0b5f5461c6c7d337a46c53b67f9cb4d1a02cda7",
+        "status": "proposed"
+      }
+    ],
+    "human_acceptance_recorded": false,
+    "lesson_count": 2,
+    "pending_release_refused": true,
+    "user_decision": "keep_both_pending"
+  },
+  "review_decision_sha256": "7988b0ff200a9ebca76a28c56b986ac4af344aa34a11d450609a1ff4dacb69a4",
+  "review_packet_sha256": "6f3a2b1ab4a06fce615d4f2ec11a0e371510bc72872a4c52b339092e7138506c",
+  "runtime": {
+    "machine": "arm64",
+    "mcp_sdk": "1.26.0",
+    "python": "3.14.8",
+    "sqlite": "3.54.0"
+  },
+  "schema": "free-man-boundary-acceptance/1",
+  "stdio_probes": {
+    "reference_candidates": {
+      "candidate_qualification_checked": true,
+      "checks": {
+        "free_man_list_references": "passed",
+        "free_man_list_sources": "passed",
+        "free_man_read_source": "passed",
+        "free_man_search_sources": "passed"
+      },
+      "exact_citations_checked": 4,
+      "forbidden_tool_requests_rejected": 5,
+      "server_name": "free-man-corpus",
+      "server_version": "1",
+      "status": {
+        "capture_complete_within_declared_scope": true,
+        "interpretation_status": "attributed_source_evidence; not verified claim or training",
+        "manifest_sha256": "e2208a82c92ec188d412421378eb53597d43204ad9d4a32984062203dd9e685b",
+        "read_only": true,
+        "representation_complete": true,
+        "source_count": 8,
+        "surface": "free-man-source-corpus",
+        "verification": "checked_catalog_and_coverage; original_bytes_checked_on_source_read"
+      },
+      "strict_boolean_limit_rejected": true,
+      "tool_names": [
+        "free_man_list_references",
+        "free_man_list_sources",
+        "free_man_read_source",
+        "free_man_search_sources",
+        "free_man_status"
+      ],
+      "transport": "actual disposable subprocess STDIO JSON-RPC"
+    },
+    "seed": {
+      "candidate_qualification_checked": false,
+      "checks": {
+        "free_man_list_references": "passed",
+        "free_man_list_sources": "passed",
+        "free_man_read_source": "passed",
+        "free_man_search_sources": "passed"
+      },
+      "exact_citations_checked": 4,
+      "forbidden_tool_requests_rejected": 5,
+      "server_name": "free-man-corpus",
+      "server_version": "1",
+      "status": {
+        "capture_complete_within_declared_scope": false,
+        "interpretation_status": "attributed_source_evidence; not verified claim or training",
+        "manifest_sha256": "541e16a9ce3dc3877680bb3235f2d7f03499111501828728fcf77595f055559b",
+        "read_only": true,
+        "representation_complete": true,
+        "source_count": 5261,
+        "surface": "free-man-source-corpus",
+        "verification": "checked_catalog_and_coverage; original_bytes_checked_on_source_read"
+      },
+      "strict_boolean_limit_rejected": true,
+      "tool_names": [
+        "free_man_list_references",
+        "free_man_list_sources",
+        "free_man_read_source",
+        "free_man_search_sources",
+        "free_man_status"
+      ],
+      "transport": "actual disposable subprocess STDIO JSON-RPC"
+    }
+  },
+  "subprocess_environment": {
+    "application_credentials_supplied": false,
+    "explicit_additions": [
+      "PYTHONNOUSERSITE"
+    ],
+    "sdk_inherited_variable_names": [
+      "HOME",
+      "LOGNAME",
+      "PATH",
+      "SHELL",
+      "TERM",
+      "USER"
+    ]
+  },
+  "training_performed": false
+}

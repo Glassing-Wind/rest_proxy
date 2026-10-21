@@ -1,0 +1,254 @@
+{
+  "base_commit": "be54d35f5c77c37bc51cd98a233c305fde782ea5",
+  "boundaries": {
+    "automatic_operational_graph_publication": false,
+    "cross_reference_votes_treated_as_confidence": false,
+    "existing_seed_corpus_or_lessons_mutated": false,
+    "human_lesson_approval_recorded": false,
+    "inference_provider_calls_by_pilot_command": 0,
+    "investigation_completeness_or_theological_truth_established": false,
+    "other_books_represented": false,
+    "running_services_or_indexes_changed": false,
+    "training_performed": false
+  },
+  "distinct_tests_verified": 234,
+  "real_execution": {
+    "command": "python -m scripts.james_pilot --acquisitions <pinned local receipt> --output <fresh private path>",
+    "cross_references": {
+      "dataset_rows": 344799,
+      "selected_rows": 2149,
+      "target_status_counts": {
+        "outside_pilot_scope": 2003,
+        "resolved_address_only; equivalence_not_established": 146
+      }
+    },
+    "edition_verse_counts": {
+      "eng-asv": 108,
+      "engwebp": 108
+    },
+    "elapsed_seconds": 18.711,
+    "exit_code": 0,
+    "verification": {
+      "artifact_files": 13,
+      "meaning": "capture integrity; not truth or completeness of the world",
+      "original_responses": 3,
+      "sources": 3,
+      "status": "verified"
+    }
+  },
+  "real_source_acceptance": {
+    "changed_finding_blocks_unchanged_lesson_in_disposable_copy": true,
+    "cross_reference_row_round_trips": 2149,
+    "finding_count": 4,
+    "finding_review_kind": "model",
+    "human_review_recorded": false,
+    "lesson_status": "proposed",
+    "manifest_sha256_unchanged": "28bad58907e266f4eb461949cf03b431ee6cfa1d09d0e679d7710890ffb94613",
+    "old_history_readable_in_disposable_copy": true,
+    "pending_release_refused": true,
+    "real_ledger_sha256_unchanged": "15fdc5318d4ec634ffe48df893e378490a0a610cf94b94ff41ca6e2619ea1bd9",
+    "review_document_sha256": "aacdd96b8d5d4b8d892446d85fb85af5bafed3f96b0df5d376c19e0ac7496b98",
+    "review_packet_sha256": "aabc2e9b87493b4cd6f83803c723e74c693b8dda8c75f6a1563c989ab1dc16e3",
+    "schema": "james-real-source-acceptance/1",
+    "separate_process_checks": [
+      {
+        "exit_code": 0,
+        "subcommand": "verify"
+      },
+      {
+        "exit_code": 0,
+        "subcommand": "search"
+      }
+    ],
+    "verse_round_trips": 216
+  },
+  "recorded_at": "2026-10-20T04:26:01.341350+00:00",
+  "result_basis": "Observed command results and captured private real-source acceptance; receipt writer reruns no tests.",
+  "retained_failures_and_corrections": [
+    {
+      "correction": "Caller created a canonical-path derivative receipt; original bytes, acquisition times and URLs unchanged.",
+      "result": "Canonical path guard refused macOS /var alias before output creation.",
+      "stage": "Initial real import"
+    },
+    {
+      "correction": "Restore original fixture bytes, preserving the identity the test intends to exercise.",
+      "errors": 1,
+      "result": "Fixture rebuilt a timestamp-bearing ZIP and no longer matched its original receipt hash.",
+      "skipped": 4,
+      "stage": "First full offline suite",
+      "tests_run": 234
+    },
+    {
+      "correction": "Freeze bounded receipt bytes once; regression replaces receipt during import and verifies original hash.",
+      "result": "Receipt parsing and hash used separate reads.",
+      "stage": "Independent review"
+    }
+  ],
+  "runtime": {
+    "machine": "arm64",
+    "python": "3.14.8"
+  },
+  "schema": "james-pilot-acceptance/1",
+  "scope": "James in two editions; one OpenBible dataset; one model-authored investigation; pending lesson.",
+  "selected_sources": [
+    {
+      "metadata": {
+        "archive_member": "89-JASengwebp.usfm",
+        "book": "JAS",
+        "edition_id": "engwebp",
+        "edition_title": "World English Bible, Protestant edition (engwebp)",
+        "language": "eng",
+        "member_sha256": "2e6d1b344d32994baa8be95a7ebb019719b5db35ca8bd40c778f4e5cd2ce29d9",
+        "rights_basis": "Publisher-declared public domain",
+        "rights_url": "https://ebible.org/engwebp/copyright.htm",
+        "source_url": "https://ebible.org/Scriptures/engwebp_usfm.zip",
+        "transformation": "UTF-8 USFM member selection; other books not represented",
+        "versification": "JAS marker numbering; cross-edition equivalence not established"
+      },
+      "source_id": "scripture:engwebp:JAS",
+      "source_kind": "scripture_book",
+      "source_sha256": "2e6d1b344d32994baa8be95a7ebb019719b5db35ca8bd40c778f4e5cd2ce29d9",
+      "text_sha256": "333b41c5fd850c847b79f1460bf4bbe6de214fe671c4e011a4b7bf97aed4270f"
+    },
+    {
+      "metadata": {
+        "archive_member": "89-JASeng-asv.usfm",
+        "book": "JAS",
+        "edition_id": "eng-asv",
+        "edition_title": "American Standard Version (1901), eBible eng-asv",
+        "language": "eng",
+        "member_sha256": "2863aa3c38fb6be8c5c736e34565110245d097b2f246f4a03dc277bdd50c966e",
+        "rights_basis": "Publisher-declared public domain",
+        "rights_url": "https://ebible.org/eng-asv/copyright.htm",
+        "source_url": "https://ebible.org/Scriptures/eng-asv_usfm.zip",
+        "transformation": "UTF-8 USFM member selection; other books not represented",
+        "versification": "JAS marker numbering; cross-edition equivalence not established"
+      },
+      "source_id": "scripture:eng-asv:JAS",
+      "source_kind": "scripture_book",
+      "source_sha256": "2863aa3c38fb6be8c5c736e34565110245d097b2f246f4a03dc277bdd50c966e",
+      "text_sha256": "88f5486cc3fd180d2a7fd6f660de37954ff8af05983ef906d4bd7c0175460b74"
+    },
+    {
+      "metadata": {
+        "archive_member": "cross_references.txt",
+        "attribution": "Cross-reference data by OpenBible.info; James-outbound rows selected without changing votes.",
+        "dataset_rows": 344799,
+        "header": "From Verse\tTo Verse\tVotes\t#www.openbible.info CC-BY 2026-10-19",
+        "interpretation": "Attributed editorial/thematic links; votes are not truth, independence or confidence.",
+        "license": "CC BY 4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "member_sha256": "8cff4d0eb417cfda226ea82759a1481a392977dea5d511e70157d753e40d2c73",
+        "scope": "James-outbound references only",
+        "selected_rows": 2149,
+        "source_url": "https://www.openbible.info/labs/cross-references/",
+        "transformation": "openbible-james-outbound/1"
+      },
+      "source_id": "scripture:openbible:JAS-outbound",
+      "source_kind": "scripture_cross_references",
+      "source_sha256": "fe6609feb344280b62762d3e79e6b39174b496f19efb09e35b1420f1640028a6",
+      "text_sha256": "fe6609feb344280b62762d3e79e6b39174b496f19efb09e35b1420f1640028a6"
+    }
+  ],
+  "source_archives": [
+    {
+      "body_sha256": "732c17d3325563fc5d8d98157a6c3d128c887f6b8e5a5ad0f71f58e5d5eebfcb",
+      "captured_at": "2026-10-20T04:14:43.530643+00:00",
+      "headers": {
+        "content-type": "application/zip",
+        "etag": "\"6ad44c3f-2c500c\"",
+        "last-modified": "Sun, 18 Oct 2026 04:34:07 GMT"
+      },
+      "id": "scripture:engwebp",
+      "requested_url": "https://ebible.org/Scriptures/engwebp_usfm.zip"
+    },
+    {
+      "body_sha256": "fa116257643253288c48a46f499faaaa501dfdd8381c78e1c67b745a9e1a999a",
+      "captured_at": "2026-10-20T04:14:44.099843+00:00",
+      "headers": {
+        "content-type": "application/zip",
+        "etag": "\"6ad44b10-2bcea1\"",
+        "last-modified": "Sun, 18 Oct 2026 04:29:04 GMT"
+      },
+      "id": "scripture:eng-asv",
+      "requested_url": "https://ebible.org/Scriptures/eng-asv_usfm.zip"
+    },
+    {
+      "body_sha256": "5f61f4525156b7c7b8f7ae07e3a4225038cf4b60def39247df8b92916e14c56f",
+      "captured_at": "2026-10-20T04:14:44.678928+00:00",
+      "headers": {
+        "content-type": "application/zip",
+        "etag": "\"23cb803667822d8dc86f33e81cbff928\"",
+        "last-modified": "Mon, 19 Oct 2026 09:25:15 GMT"
+      },
+      "id": "scripture:openbible",
+      "requested_url": "https://a.openbible.info/data/cross-references.zip"
+    }
+  ],
+  "source_sha256": {
+    ".github/workflows/lessons-corpus.yaml": "903e71abf382e889d1d67a9a8c6d844a74cf873c6617b2c2bc539f2eaf2b3b71",
+    "graphrag_core/lessons_corpus/__init__.py": "9a748e527d8b00afb2d51e0bf01bb8e06481cfcfc5d9a448183c33bbbcd37aca",
+    "graphrag_core/lessons_corpus/acquire.py": "b6a5e1ff80eb33177b7c82fe6d311173e936525336981e51eb7b1df421cbc323",
+    "graphrag_core/lessons_corpus/ast.py": "53b79ff2fb2d0a1edf27e2b72a8c1d330fa5365811ea5cafb92ef327c8889604",
+    "graphrag_core/lessons_corpus/corpus.py": "cba3758a6fe745a4c7e6fc84a5dc72db92af929ab6743f742a2fc76035d57660",
+    "graphrag_core/lessons_corpus/exchange.py": "74d1af170fee2bb1cfe7335fa9cedbf76f1823687533ba1d8d3496218fe50ac2",
+    "graphrag_core/lessons_corpus/frontier.py": "e11b7a3877dc59941696ee85c03a818fbe41e94047744741d4e767769343f7bd",
+    "graphrag_core/lessons_corpus/james_investigation.py": "6cdea9144c68920bf3ddeba2031c3833c42d7b6fd477a07138e774385289ec25",
+    "graphrag_core/lessons_corpus/ledger.py": "d5a6e040c851e874f3b0cbc5b39f65a22aa28098b54349c83e9af1b18080e972",
+    "graphrag_core/lessons_corpus/ledger_reader.py": "e12a08dd19eb3dd617bf150a6096d8b71239a601aa6eeba7340e9ef19f634080",
+    "graphrag_core/lessons_corpus/mcp.py": "4ce8a72db6452e67814a377414967fcd5648d0eca383f6dc381502d92fa000f8",
+    "graphrag_core/lessons_corpus/reads.py": "caa380e338f0bf676c1e599ffe3174cc6fee445689b387c0f9c9536ee045fa94",
+    "graphrag_core/lessons_corpus/recovery.py": "2fb463b80d4310d9995e40c66854d2aa713cf480f942441d514984a31fb3ca00",
+    "graphrag_core/lessons_corpus/scripture.py": "4b8b9d36fadc8adc8c43a5737ce3a0fc094f68954346a53b9d1745bd3b47d869",
+    "graphrag_core/lessons_corpus/scripture_pilot.py": "da0d6f7630cdc81bbdf51e9f08caabd4e9e03e296195b4c29ca70f2532525a90",
+    "graphrag_core/lessons_corpus/server.py": "161b7e363d2a0e1286fc370443df5f4810a22064f304427f6ac50b646195b7e9",
+    "scripts/extract_lessons_pdf.py": "2f9d3352a653a0bd4330799fd7a98664650a93cf8101b1f4ad1db80a2c62a4ed",
+    "scripts/free_man.py": "e482871c822d7cafe014fb853f050e2945c0e334c388a36cf598a5571208db45",
+    "scripts/james_pilot.py": "d56812f718069227f64ce5a92cc51d065338e2a3f41e8285e2649a47876e9edb",
+    "scripts/lessons_corpus.py": "fa0677776d17a815f9dbc4dff10a895040bf810852d03692489d16427398f3df",
+    "test_lessons_acquisition.py": "b1e210386d0e7840a74874f413e8b902335c0f63729919ebb97a3b998783d90a",
+    "test_lessons_ast.py": "cd7b7b201d846a964a11e1c8b982f63fe1d25d8554938056ae34c27d6ddc6638",
+    "test_lessons_cli.py": "903cafd9fb1f593a26397c1ab0f954a6534d6169e56e77e0ad89342ffefae8fa",
+    "test_lessons_corpus.py": "ffdd1768c71037cec7be2b9c651024518754d47971605ace3df1bac02e53ee5d",
+    "test_lessons_exchange.py": "8663a7513410033cbce5135bdee8a4dec64052b1a2857025b84f4682ba08798d",
+    "test_lessons_frontier.py": "08929871d8e28abc72ebf66ad2c60effd8cc57156347aacf7a9c140cd354738c",
+    "test_lessons_investigation.py": "56fa0182f288f0690fd75d1d62ea57b5cbf48add8e28a2bab1f12781d5b26d10",
+    "test_lessons_james_investigation.py": "ddd7939f7ef70fc2ac1a1f314ec5412adb5dd181fab5462ded5f03185c59682b",
+    "test_lessons_james_pilot.py": "3a6a997c506ab0bd0c545e2848e88d6da8f6bd57f062da1184fb68cfc91d0c50",
+    "test_lessons_ledger.py": "f564cf7b508f7d3dea4ba084625a534983acc6c8a0829899e4976e2a0f8adf94",
+    "test_lessons_ledger_reader.py": "abc7289fcc6a868e7e73761fe423744735b6d4b9d02e0878502104b7bec3be20",
+    "test_lessons_mcp.py": "1ba1b578d33d2eff40d7cf8a6941c476e9b5b78ae702cadc614940b9e414e472",
+    "test_lessons_pdf.py": "31a6fcef746a933042dab2bb0ad7b1cef54a157c9831563e29faf02797dc3bdd",
+    "test_lessons_recovery.py": "724400fa4fb1db5ca321dd340cdf1d8cbc02ba5a9b857a8b977ecb54a99540b6",
+    "test_lessons_scripture.py": "7ba0608bf4ba622a5e73386604e2b24be53bacad49131c89f85b621895400859",
+    "test_lessons_server.py": "bfab78a864949cbd260da9fbb241cf6f58174d358668a030b3dd21755bde907e"
+  },
+  "validation": [
+    {
+      "command": ".venv/bin/python -W error::ResourceWarning -m unittest test_lessons_ast test_lessons_acquisition test_lessons_ledger test_lessons_corpus test_lessons_server test_lessons_cli test_lessons_frontier test_lessons_recovery test_lessons_ledger_reader test_lessons_exchange test_lessons_investigation test_lessons_scripture test_lessons_james_pilot test_lessons_james_investigation test_lessons_mcp test_lessons_pdf",
+      "elapsed_seconds": 4.859,
+      "exit_code": 0,
+      "passed": 230,
+      "skip_reason": "Optional pypdf absent from project environment; cases verified separately.",
+      "skipped": 4,
+      "tests_run": 234
+    },
+    {
+      "command": "<existing bundled Python> -W error::ResourceWarning -m unittest test_lessons_pdf",
+      "elapsed_seconds": 0.281,
+      "exit_code": 0,
+      "passed": 4,
+      "skipped": 0,
+      "tests_run": 4
+    },
+    {
+      "command": ".venv/bin/python -m ruff check graphrag_core/lessons_corpus scripts/lessons_corpus.py scripts/free_man.py scripts/james_pilot.py scripts/extract_lessons_pdf.py test_lessons_*.py",
+      "exit_code": 0,
+      "result": "All checks passed!"
+    },
+    {
+      "command": "git diff --check -- <implementation files>",
+      "exit_code": 0
+    }
+  ]
+}
