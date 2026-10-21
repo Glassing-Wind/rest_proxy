@@ -1230,13 +1230,22 @@ async def watch_project(
 
 async def get_indexing_health(workspace_id: str, audit: bool = False) -> str:
     """
-    Check the status of the structural index (Neo4j) and semantic index (Postgres).
-    Compares disk mtime with recorded 'indexed_at' and 'vector_indexed_at' timestamps.
+    Check indexing health using the selected storage route.
+    Embedded mode checks only published manifest freshness and the latest owned
+    attempt, without a model or external database servers. Service-backed mode
+    compares disk mtime with Neo4j/Postgres indexing timestamps.
 
     Args:
         workspace_id: Logical workspace ID or absolute path.
-        audit: If True, perform a Level 2 Deep Audit of parsing fidelity and structural integrity.
+        audit: Request the service-backed Level 2 deep audit. Embedded mode reports
+            that this deeper parsing/integrity audit is unsupported.
     """
+    from memory.storage_config import embedded_graph_selected
+    if embedded_graph_selected():
+        from memory.embedded_runtime import get_embedded_runtime
+        result = await get_embedded_runtime().workspace_indexing_health(workspace_id, audit=audit)
+        return json.dumps(result, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+
     project_path = get_workspace_path(workspace_id)
     if not os.path.exists(project_path):
         return f"Error: Path does not exist: {project_path}"

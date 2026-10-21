@@ -124,6 +124,7 @@ jobs:
           python test_embedded_ladybug.py
           python test_embedded_outline_indexing.py
           python test_embedded_repository.py
+          python test_embedded_tool_bridges.py
 
   embedded-native-arm:
     name: Embedded native ARM (${{ matrix.runner }})
@@ -178,6 +179,7 @@ jobs:
           python test_embedded_ladybug.py
           python test_embedded_outline_indexing.py
           python test_embedded_repository.py
+          python test_embedded_tool_bridges.py
       - name: Record model-free native ARM observations
         run: |
           python scripts/benchmark_embedded_arm.py --files 12 --trials 1 --queries 5 --warm-reindexes 1 --output .runtime/arm-validation/benchmark.json
