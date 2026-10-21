@@ -10,6 +10,7 @@ import sys
 
 from memory.task_dispatch import TaskDispatcher
 from memory.task_registry import TaskRegistry
+from memory.task_review import TaskReviewer
 
 
 def main() -> int:
@@ -27,10 +28,14 @@ def main() -> int:
             raise ValueError('Arguments must be an object')
         registry = TaskRegistry(options.state)
         operations = {name: getattr(registry, name) for name in
-                      ('create', 'get', 'inspect', 'claim', 'checkpoint', 'cancel', 'reclaim', 'submit', 'review', 'record_assessment')}
+                      ('create', 'get', 'inspect', 'claim', 'checkpoint', 'cancel', 'reclaim', 'submit', 'review', 'record_assessment', 'escalate_review')}
         dispatcher = TaskDispatcher(registry)
         operations['read_source'] = dispatcher.read_source
         operations['submit_finding'] = dispatcher.submit_finding
+        reviewer = TaskReviewer(registry)
+        operations['prepare_review'] = reviewer.prepare_review
+        operations['review_agent'] = reviewer.review_agent
+        operations['review_sum_fixture'] = reviewer.review_sum_fixture
         operation = request['operation']
         if not isinstance(operation, str) or operation not in operations:
             raise ValueError('Unsupported operation')

@@ -1,0 +1,32 @@
+ M .github/workflows/ci.yaml
+ M AGENTS.md
+ M README.md
+ M docs/README.md
+ M docs/agent-integration-research.md
+ M docs/configuration.md
+ M docs/embedded-mcp-owner.md
+ M docs/graphrag_tool_usage.md
+ M docs/paid-investigation-pilot.md
+ M memory/embedded_runtime.py
+ M scripts/run_ci_checks.sh
+ M tools/brain/search/semantic.py
+ M tools/hands/indexing.py
+?? .codex/
+?? benchmarks/reports/2026-10-11/FIRE-Audit-Evidence.zip
+?? benchmarks/reports/2026-10-11/embedded-tool-routing.json
+?? benchmarks/reports/2026-10-11/embedded-tool-routing.md
+?? benchmarks/reports/2026-10-11/work-routing.md
+?? config/
+?? docs/capability-priorities.md
+?? docs/chatgpt-codex-workflow.md
+?? docs/fire-repository-audit-offer.md
+?? docs/samples/
+?? docs/shadowrocket-gateway.md
+?? memory/embedded_health.py
+?? memory/embedded_search.py
+?? scripts/manage_forward_gateway.py
+?? scripts/patches/
+?? test_embedded_health.py
+?? test_embedded_search.py
+?? test_embedded_tool_bridges.py
+?? test_forward_gateway.py

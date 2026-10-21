@@ -1,0 +1,142 @@
+{
+  "tested_commit": "da01b790737dc0341964bce3c8f78cf0c6e97b6e",
+  "python": "3.14.8 (main, Sep 30 2026, 17:55:09) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "requested_model": "qwen3.6-35b-a3b-splash",
+  "max_tokens": 4096,
+  "elapsed_seconds": 9.522317,
+  "returncode": 0,
+  "fixture": "def total(values):\n    return sum(values)\n",
+  "fixture_sha256": "3251dbf18617cd67c47707cb9bd1611dbac212ff0ee9814a75b8ce1f34b85aad",
+  "task_id": "ef8db8e87e344ff2b7ba3f6159a49639",
+  "state_directory_private": "0o700",
+  "started_at_utc": "2026-10-15T17:55:07Z",
+  "human_review": {
+    "status": "recorded",
+    "decision": "request_correction",
+    "requested_change": "Keep the answer and qualify the unsupported limits.",
+    "authorization": "Direct user response to the fixture semantic-review question in the executing chat.",
+    "reviewer_label": "owner-human-via-codex",
+    "identity_boundary": "Caller-supplied label; no authenticated reviewer identity is claimed.",
+    "review_record": {
+      "at": 1792087710.791753,
+      "decision": "request_correction",
+      "reason": "Human requested correction: keep the answer and qualify the unsupported limits. The claim that the function does not handle non-numeric data is broader than fixture.py lines 1-2 establish; describe the observed call and qualify type assumptions.",
+      "reviewer": "owner-human-via-codex",
+      "submission": 1
+    },
+    "recorded_at_utc": "2026-10-15T18:08:30.845631+00:00"
+  },
+  "result": {
+    "task_id": "ef8db8e87e344ff2b7ba3f6159a49639",
+    "project": "fixture",
+    "revision": 4,
+    "status": "review_pending",
+    "inference_calls": 1,
+    "independent_review": false,
+    "usage_measured": false,
+    "generation": {
+      "requested_model": "qwen3.6-35b-a3b-splash",
+      "returned_model": "qwen3.6-35b-a3b-splash",
+      "usage": {
+        "prompt_tokens": 432,
+        "completion_tokens": 1723
+      },
+      "usage_source": "provider-reported",
+      "requests": 1,
+      "tools_enabled": false,
+      "attestation": "trusted adapter report; not independent metering"
+    },
+    "finding": {
+      "answer": "The function total(values) returns the sum of the elements in the values iterable.",
+      "citations": [
+        {
+          "end_line": 2,
+          "path": "fixture.py",
+          "sha256": "3251dbf18617cd67c47707cb9bd1611dbac212ff0ee9814a75b8ce1f34b85aad",
+          "start_line": 1
+        }
+      ],
+      "limits": [
+        "The function assumes values is an iterable.",
+        "The function relies on the built-in sum() function.",
+        "The function does not handle non-numeric data."
+      ],
+      "retained_evidence": [
+        {
+          "end_line": 2,
+          "historical": false,
+          "observed_at": 1792086916.552896,
+          "path": "fixture.py",
+          "project": "fixture",
+          "revision": 3,
+          "sha256": "3251dbf18617cd67c47707cb9bd1611dbac212ff0ee9814a75b8ce1f34b85aad",
+          "source": "1: def total(values):\n2:     return sum(values)",
+          "start_line": 1,
+          "task_id": "ef8db8e87e344ff2b7ba3f6159a49639",
+          "total_lines": 2
+        }
+      ],
+      "schema_version": 1,
+      "validation": "source identity/range only; semantic review pending"
+    }
+  },
+  "reopen": {
+    "separate_process": true,
+    "status": "review_pending",
+    "revision": 4,
+    "finding_equal": true,
+    "generation_equal": true,
+    "retained_evidence_equal": true,
+    "review_count": 0
+  },
+  "schema_version": 1,
+  "httpx_version": "0.28.1",
+  "lm_studio_version": "0.4.25+1",
+  "lms_cli_commit": "69d945a",
+  "source_snapshot": "git archive of exact published PR head; no local dirty source or .env copied",
+  "source_snapshot_verified_paths": 27,
+  "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+  "provider_state_before": {
+    "status": "idle",
+    "queued": 0
+  },
+  "provider_state_after": {
+    "status": "idle",
+    "queued": 0
+  },
+  "assertions": {
+    "structured_json_accepted": true,
+    "citation_matches_fixture_sha256_and_exact_lines": true,
+    "retained_source_matches_fixture": true,
+    "exact_requested_returned_model": true,
+    "one_documented_cli_invocation": true,
+    "adapter_reported_requests": 1,
+    "no_tools": true,
+    "review_pending_after_separate_process_reopen": true,
+    "finding_evidence_generation_retained": true,
+    "human_semantic_review_recorded": true,
+    "review_and_original_evidence_retained_after_separate_process_reopen": true
+  },
+  "assistant_semantic_assessment": "The answer matches the function body. The statement that the function does not handle non-numeric data is broader than the two-line source establishes. Recommended human decision: request_correction to qualify limitations. This assessment is not a human review.",
+  "gate_status": "PASS_WITH_HUMAN_CORRECTION_REQUESTED",
+  "limits": [
+    "Generation identity/usage are trusted provider/adapter reports, not authenticated attestation or independent metering.",
+    "One synthetic fixture does not establish general semantic reliability, savings, or production readiness.",
+    "Human requested correction, not semantic acceptance. Original finding retained; no retry, recovery, or further inference was performed."
+  ],
+  "post_review_reopen": {
+    "separate_process": true,
+    "state_equal_to_review_result": true,
+    "revision": 5,
+    "status": "queued",
+    "review_count": 1,
+    "review_equal": true,
+    "all_submissions_unchanged": true,
+    "finding_equal": true,
+    "generation_equal": true,
+    "retained_evidence_equal": true,
+    "checkpoint_unchanged": true,
+    "attempts": 1,
+    "additional_inference_calls": 0
+  }
+}
