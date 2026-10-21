@@ -1,0 +1,16 @@
+{
+  "files": {
+    "docs/cockpit-evaluation.md": "9cebaccaef0c93c09af81db3d9a1ba6619f8e14795893e1f2f7647ecdc653d40",
+    "graphrag_core/cockpit_eval.py": "42c9fd95d95cdd16a965ad638bc4d8b557ed1f1ebad1ff244f1fa110f8254fab",
+    "scripts/evaluate_cockpit_models.py": "9c13d59a352fd32fd76d878de5acea0a90979708b1a4586d0ba7aec37d3ef4e6",
+    "test_cockpit_eval.py": "9f445bb6b76f8bd56d30cfc5c0d7f128370e6a78b3973e9f0048d15d183d077b"
+  },
+  "meaning": "final implementation and documentation, after compatibility probes; not a claim that all live conditions used this final version",
+  "schema": "cockpit-pilot-final-source-fingerprints/1",
+  "validation": {
+    "full_operational_ci": "not_run",
+    "offline_tests_passed": 40,
+    "py_compile": "passed",
+    "ruff": "passed"
+  }
+}

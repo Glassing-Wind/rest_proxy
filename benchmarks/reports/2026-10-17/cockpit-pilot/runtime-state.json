@@ -1,0 +1,64 @@
+{
+  "baseline": [
+    {
+      "contextLength": 32768,
+      "format": "safetensors",
+      "identifier": "microsoft/phi-4-reasoning-plus",
+      "modelKey": "microsoft/phi-4-reasoning-plus",
+      "path": "microsoft/phi-4-reasoning-plus",
+      "quantization": {
+        "bits": 4,
+        "name": "4bit"
+      },
+      "selectedVariant": "microsoft/phi-4-reasoning-plus@4bit",
+      "sizeBytes": 8256411728,
+      "type": "llm"
+    },
+    {
+      "contextLength": 8192,
+      "format": "gguf",
+      "identifier": "text-embedding-jina-embeddings-v2-base-code",
+      "modelKey": "text-embedding-jina-embeddings-v2-base-code",
+      "path": "second-state/jina-embeddings-v2-base-code-GGUF/jina-embeddings-v2-base-code-f16.gguf",
+      "quantization": {
+        "bits": 16,
+        "name": "F16"
+      },
+      "selectedVariant": null,
+      "sizeBytes": 322999136,
+      "type": "embedding"
+    }
+  ],
+  "baseline_identity_and_context_preserved": true,
+  "final": [
+    {
+      "contextLength": 32768,
+      "format": "safetensors",
+      "identifier": "microsoft/phi-4-reasoning-plus",
+      "modelKey": "microsoft/phi-4-reasoning-plus",
+      "path": "microsoft/phi-4-reasoning-plus",
+      "quantization": {
+        "bits": 4,
+        "name": "4bit"
+      },
+      "selectedVariant": "microsoft/phi-4-reasoning-plus@4bit",
+      "sizeBytes": 8256411728,
+      "type": "llm"
+    },
+    {
+      "contextLength": 8192,
+      "format": "gguf",
+      "identifier": "text-embedding-jina-embeddings-v2-base-code",
+      "modelKey": "text-embedding-jina-embeddings-v2-base-code",
+      "path": "second-state/jina-embeddings-v2-base-code-GGUF/jina-embeddings-v2-base-code-f16.gguf",
+      "quantization": {
+        "bits": 16,
+        "name": "F16"
+      },
+      "selectedVariant": null,
+      "sizeBytes": 322999136,
+      "type": "embedding"
+    }
+  ],
+  "owned_instances_unloaded": true
+}

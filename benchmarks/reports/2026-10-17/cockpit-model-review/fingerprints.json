@@ -1,0 +1,11 @@
+{
+  "client_date": "2026-10-17",
+  "files": {
+    "benchmarks/reports/2026-10-17/cockpit-model-review/README.md": "a1d4824da0371b78e0747ab6cb5bddb36e6b5929c7772e27400425d6b366c509",
+    "benchmarks/reports/2026-10-17/cockpit-model-review/evaluation-plan.json": "ad859831de68da6da25944e833533ccea390d3c595e98ef8d9af310c17f5ae12",
+    "benchmarks/reports/2026-10-17/cockpit-model-review/inventory.json": "cf8365e0d4f95fdd893db108b658b0baed3c56addb9ea1fa0269aa0a875dca9f",
+    "docs/cockpit-model-routing.md": "7c7b546f147a7a4720f6bf8eed8b0f2624368451987f14409debcf20d359efdf"
+  },
+  "meaning": "local review artifact consistency; no model performance or source authenticity attestation",
+  "schema": "cockpit-model-review-fingerprints/1"
+}

@@ -1,0 +1,12 @@
+{
+  "archive_sha512": "839af33b7285543ab9c06f8d1f9d2be6fab28298b6dd5aabe66bd31c79a21ff4554a747589c3fbffaa36455209b53a9116d650003e81bcc97d349effabaa353c",
+  "archive_sha512_verified": true,
+  "cached_authentication_tested": false,
+  "codesign_verified_by_root": true,
+  "download_url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.4.0-5281842794987520/darwin-arm/cli_mac_arm64.tar.gz",
+  "global_path_or_config_changed": false,
+  "platform": "darwin-arm64",
+  "schema": "native-cli-install-receipt/1",
+  "signing_team": "EQHXZ8M8AV",
+  "version": "1.4.0"
+}

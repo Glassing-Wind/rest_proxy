@@ -1,0 +1,16 @@
+{
+  "attempts_per_case_per_condition": 1,
+  "local_conditions": [
+    "microsoft/phi-4-reasoning-plus",
+    "owned Qwen3.6 Splash instance",
+    "owned Phi-4-mini-instruct 4bit instance"
+  ],
+  "max_output_tokens": 2048,
+  "native_condition": "one separate six-case batch only if supported no-tools policy and cached native authentication can be verified",
+  "posthoc_retry": false,
+  "savings": "unmeasured",
+  "schema": "cockpit-pilot-conditions/1",
+  "scope": "six frozen synthetic cases",
+  "supervisor_direct_blinded_baseline": "not_run; evaluator has seen ground truth",
+  "timeout_seconds_per_http_phase": 90
+}

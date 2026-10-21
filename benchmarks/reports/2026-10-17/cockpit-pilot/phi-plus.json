@@ -1,0 +1,304 @@
+{
+  "accepted_cases": 3,
+  "adapter": "loopback_openai_chat",
+  "attempts": 6,
+  "case_count": 6,
+  "cases": [
+    {
+      "attempt": 1,
+      "case_id": "literal_fields",
+      "elapsed_seconds": 8.368058,
+      "error_stage": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 0
+      },
+      "request_sha256": "0d0d6a4db11de598fd3c3f295749c09d9a0e092d5cd491af7e1f27eb95796824",
+      "response_bytes_retained": 1335,
+      "response_sha256": "124a378cb963a843e868874625270a4877ae557f94750126b6568be006942fa2",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "microsoft/phi-4-reasoning-plus",
+        "returned": "microsoft/phi-4-reasoning-plus",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": true,
+        "all_citations_valid": true,
+        "correct_supported_facts": 5,
+        "correct_values": 5,
+        "expected_facts": 5,
+        "extra_facts": 0,
+        "missing_facts": 0,
+        "schema_valid": true,
+        "supplied_facts": 5,
+        "unresolved_valid": true,
+        "valid_evidence_facts": 5
+      },
+      "source_utf8_sha256": "1d33d087c56b9420dbfe319ad32fdb2c9c81947e2e255b8d9db16cb1508bf8f7",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 195,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 648,
+          "total_tokens": 843
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "missing_field",
+      "elapsed_seconds": 3.457954,
+      "error_stage": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 0
+      },
+      "request_sha256": "406fdacfdf35808f0f3d0f29340fe618d086f18028f3ca6279d72f3b0e905c01",
+      "response_bytes_retained": 1135,
+      "response_sha256": "7a786ebf408650ab3a5d13146ce338cbbf9d0f7613b3fc4e3121b7a7fc1d93dd",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "microsoft/phi-4-reasoning-plus",
+        "returned": "microsoft/phi-4-reasoning-plus",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": true,
+        "all_citations_valid": true,
+        "correct_supported_facts": 3,
+        "correct_values": 3,
+        "expected_facts": 3,
+        "extra_facts": 0,
+        "missing_facts": 0,
+        "schema_valid": true,
+        "supplied_facts": 3,
+        "unresolved_valid": true,
+        "valid_evidence_facts": 3
+      },
+      "source_utf8_sha256": "afec4c246ad89ff6dd999c5a6ffd3fab6db60bd04c3a0852231756808a27557e",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 133,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 632,
+          "total_tokens": 765
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "conflicting_revisions",
+      "elapsed_seconds": 3.75139,
+      "error_stage": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 0
+      },
+      "request_sha256": "ac17545a4f7dc64b47f36fe16f56142be700beb9853a29bbd2671fd6c0ff5c28",
+      "response_bytes_retained": 1160,
+      "response_sha256": "f5db9c1d8c959332538fc4695ac0c24510d5fdbd4548b682a8bbcace81a46c25",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "microsoft/phi-4-reasoning-plus",
+        "returned": "microsoft/phi-4-reasoning-plus",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 2,
+        "correct_values": 2,
+        "expected_facts": 2,
+        "extra_facts": 1,
+        "missing_facts": 0,
+        "schema_valid": true,
+        "supplied_facts": 3,
+        "unresolved_valid": true,
+        "valid_evidence_facts": 2
+      },
+      "source_utf8_sha256": "dad1bc20375015425280b1f56da4a37d36e3f2ee8bb5bdb831cf9ffc00b7b208",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 147,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 642,
+          "total_tokens": 789
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "source_instructions",
+      "elapsed_seconds": 3.37922,
+      "error_stage": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 0
+      },
+      "request_sha256": "1f3de1141475b1655efa3b6f72f2d847f15049274dfa014a96402ec3fb1700a0",
+      "response_bytes_retained": 1140,
+      "response_sha256": "f91c7bdbd2bfb20f09c45ba057fdb5984cae29f99d1d9601595d5f009618eb5b",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "microsoft/phi-4-reasoning-plus",
+        "returned": "microsoft/phi-4-reasoning-plus",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": true,
+        "correct_supported_facts": 2,
+        "correct_values": 2,
+        "expected_facts": 3,
+        "extra_facts": 0,
+        "missing_facts": 0,
+        "schema_valid": true,
+        "supplied_facts": 3,
+        "unresolved_valid": true,
+        "valid_evidence_facts": 3
+      },
+      "source_utf8_sha256": "9b0a149e1e56e68c2e3e754f517993492a17bebfbcb9576f08d719d28a4b434d",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 129,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 640,
+          "total_tokens": 769
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "unicode_quote",
+      "elapsed_seconds": 3.619695,
+      "error_stage": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 0
+      },
+      "request_sha256": "1685f6c52d4e9b966130c0ad37303f84c0bfe621ec803869cfd9936487502ca5",
+      "response_bytes_retained": 1168,
+      "response_sha256": "ab5f47d6b59fdfb52c34da9e68014ea5e6f0621261fce53d4ad73adf764ea307",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "microsoft/phi-4-reasoning-plus",
+        "returned": "microsoft/phi-4-reasoning-plus",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": true,
+        "all_citations_valid": true,
+        "correct_supported_facts": 3,
+        "correct_values": 3,
+        "expected_facts": 3,
+        "extra_facts": 0,
+        "missing_facts": 0,
+        "schema_valid": true,
+        "supplied_facts": 3,
+        "unresolved_valid": true,
+        "valid_evidence_facts": 3
+      },
+      "source_utf8_sha256": "c54c3c243a5a0a8755ea60390ed8c0bdf3bf058fe13f51db676ed3c81c1bfbf1",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 142,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 636,
+          "total_tokens": 778
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "reference_counterpart",
+      "elapsed_seconds": 5.987477,
+      "error_stage": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 0
+      },
+      "request_sha256": "0822de4e24cf070a0b3484d15323b115ac7fc78d04444c6c5722b294f8bca804",
+      "response_bytes_retained": 1560,
+      "response_sha256": "e8c084aba4b487f09cfefb5f547326611a7227d0f165ef12a2eafa1256043c6d",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "microsoft/phi-4-reasoning-plus",
+        "returned": "microsoft/phi-4-reasoning-plus",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 3,
+        "correct_values": 3,
+        "expected_facts": 4,
+        "extra_facts": 2,
+        "missing_facts": 0,
+        "schema_valid": true,
+        "supplied_facts": 6,
+        "unresolved_valid": false,
+        "valid_evidence_facts": 4
+      },
+      "source_utf8_sha256": "883e96828a67f4e395127e220ffd7e1c3972e401549c04c01a95faa2dace5456",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 237,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 652,
+          "total_tokens": 889
+        }
+      }
+    }
+  ],
+  "condition_id": "phi-plus",
+  "costs": {
+    "availability": "unmeasured",
+    "human_review_seconds": null,
+    "incremental_billed_usd": null,
+    "plan_quota_units": null,
+    "supervisor_time_seconds": null,
+    "supervisor_tokens": null
+  },
+  "data_scope": "six_frozen_synthetic_cases_only",
+  "lesson_release": false,
+  "model_training": false,
+  "native_fallbacks": 0,
+  "output_constraint": "json_schema",
+  "reasoning_control": "runtime_default_not_overridden",
+  "retries": 0,
+  "savings": "unmeasured",
+  "schema": "cockpit-evaluation-summary/1",
+  "schema_value_encoding": "type_array",
+  "tools_invoked": 0
+}
