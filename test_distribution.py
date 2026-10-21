@@ -88,14 +88,14 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual(set(metadata.get_all('Provides-Extra', [])),
                                  {'embedded', 'full', 'dev', 'telemetry', 'evidence'})
                 evidence = [item for item in dependencies if 'extra == "evidence"' in item]
-                self.assertEqual(evidence, ['pillow==12.2.0; extra == "evidence"'])
+                self.assertEqual(evidence, ['pillow==13.0.0; extra == "evidence"'])
                 full_pillow = next(item for item in dependencies
                                    if item.lower().startswith('pillow==') and 'extra == "full"' in item)
                 self.assertEqual(full_pillow.split(';', 1)[0], evidence[0].split(';', 1)[0])
                 for name in ('opentelemetry-api', 'opentelemetry-sdk', 'opentelemetry-exporter-otlp-proto-common'):
                     self.assertTrue(any(name + '==1.40.0' in item and 'telemetry' in item for item in dependencies))
                 self.assertTrue(any('ladybug==0.21.2' in item and 'embedded' in item for item in dependencies))
-                self.assertTrue(any('6fcead43fc13b0049481ea5b5c491e02eab4ac68' in item
+                self.assertTrue(any('d10c656bce9e5ac9e8c282230b7ea83295e7ab12' in item
                                     and 'embedded' in item for item in dependencies))
             sdist = next((source / 'dist').glob('*.tar.gz'))
             with tarfile.open(sdist) as archive:
