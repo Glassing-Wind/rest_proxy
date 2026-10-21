@@ -151,8 +151,10 @@ def register(mcp: FastMCP) -> None:
             include_debug: Include clone-dedup debug entry in output (default False).
             max_per_file: Max results per file when dedupe is off (default 0 = disable).
             max_per_dir: Max results per top-level directory (default 2, 0=disable).
-            meta_boost: Additive boost per metadata field present (default 0.005).
-            mode: "precise" (default) or "broad" to expand coverage when query is exploratory.
+            meta_boost: Service-backed additive metadata boost (default 0.005).
+                Embedded accepts the legacy default/0 for compatibility and applies no boost.
+            mode: Service-backed "precise"/"broad" ranking profiles. Embedded supports
+                "text"/"vector"/"hybrid"; "precise" aliases native hybrid without legacy policy parity.
             fallback: "none" (default) or "grep" to add exact-match paths when results are overly concentrated.
             fallback_ratio: Trigger fallback when unique files / results <= ratio (default 0.4).
             fallback_max: Maximum fallback file paths to show (default 12).
@@ -168,6 +170,29 @@ def register(mcp: FastMCP) -> None:
             exclude_paths: Optional list of glob patterns to exclude (file_path).
         """
         try:
+            from memory.storage_config import embedded_graph_selected
+
+            if embedded_graph_selected():
+                from memory.embedded_search import prepare_search
+                from memory.embedded_runtime import get_embedded_runtime
+                if workspace_ids is not None and not isinstance(workspace_ids, list):
+                    raise ValueError('workspace_ids must be a list')
+                workspaces = list(workspace_ids or [])
+                if workspace_id is not None:
+                    workspaces.append(workspace_id)
+                options = dict(k=k, include_metadata=include_metadata, dedupe_files=dedupe_files,
+                    include_debug=include_debug, max_per_file=max_per_file, max_per_dir=max_per_dir,
+                    meta_boost=meta_boost, mode=mode, fallback=fallback, fallback_ratio=fallback_ratio,
+                    fallback_max=fallback_max, fallback_glob=fallback_glob, exclude_tests=exclude_tests,
+                    languages=languages, min_imports=min_imports, min_symbols=min_symbols,
+                    require_diagnostics=require_diagnostics, require_context=require_context,
+                    crate_contains=crate_contains, include_paths=include_paths, exclude_paths=exclude_paths)
+                request = prepare_search(workspaces, query, **options)
+                if request.get('status') == 'unsupported-options':
+                    return json.dumps(request, ensure_ascii=False, sort_keys=True)
+                result = await get_embedded_runtime().workspace_search(workspaces, query, **options)
+                return json.dumps(result, ensure_ascii=False, sort_keys=True)
+
             from embedding_service import get_embedding_service
 
             memory_store, _, _, _, _ = get_memory_modules()

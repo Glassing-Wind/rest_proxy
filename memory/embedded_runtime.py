@@ -89,6 +89,34 @@ class EmbeddedRuntime:
         async with self._lock:
             return await (await self._get_owner()).describe_file(project_id, file_path, **bounds)
 
+    async def workspace_search(self, workspace_ids, query, **options):
+        from memory.embedded_search import prepare_search, workspace_search
+        request = prepare_search(workspace_ids, query, **options)
+        if request.get('status') == 'unsupported-options':
+            return request
+        async with self._lock:
+            owner = await self._get_owner()
+            query_vector = None
+
+            async def retrieve(project_id, publication, text, mode, limit):
+                nonlocal query_vector
+                encoder_id = publication['retrieval']['encoder_id']
+                if mode != 'text':
+                    encoder = await self._get_encoder()
+                    if encoder.encoder_id != encoder_id:
+                        raise ValueError('Query encoder must match the published embedding identity')
+                    if query_vector is None:
+                        query_vector = (await encoder.embed_texts([text]))[0]
+                return await owner.search(project_id, encoder_id=encoder_id, text=text,
+                                          vector=query_vector, mode=mode, limit=limit)
+
+            return await workspace_search(owner, retrieve, request)
+
+    async def workspace_indexing_health(self, workspace_id: str, *, audit: bool = False):
+        from memory.embedded_health import workspace_indexing_health
+        async with self._lock:
+            return await workspace_indexing_health(await self._get_owner(), workspace_id, audit=audit)
+
     async def overview(self, project_id: str):
         async with self._lock:
             return await (await self._get_owner()).overview(project_id)
