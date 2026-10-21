@@ -164,7 +164,7 @@ async def search_codebase(
     k: int = 5,
 ) -> List[Dict[str, Any]]:
     """
-    Hybrid retrieval: Postgres pgvector cosine ANN + BM25 tsvector, fused via RRF.
+    Hybrid retrieval: Postgres pgvector cosine ANN + full-text ts_rank, fused via RRF.
     Falls back to Neo4j native vector search if Postgres is unavailable.
     Results are augmented with Neo4j structural graph context.
     """

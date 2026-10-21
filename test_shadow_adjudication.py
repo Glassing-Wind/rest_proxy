@@ -65,7 +65,7 @@ class LegacyAdjudicationTests(unittest.TestCase):
         self.old = self.project + ":old"
         self.new = self.project + ":new"
         self.ns = self.project + "::shadow::" + self.old
-        self.session = self.driver.session(database=os.getenv("LM_PROXY_NEO4J_DB", "proxy"))
+        self.session = self.driver.session(database=os.getenv("LM_PROXY_NEO4J_DB", "neo4j"))
         self.params = dict(pid=self.project, old=self.old, new=self.new, ns=self.ns)
         self.evidence = {"failed": {"started_at": 1, "finished_at": 2},
                          "superseding": {"started_at": 3, "finished_at": 4}}

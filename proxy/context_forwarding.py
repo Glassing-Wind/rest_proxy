@@ -11,6 +11,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from memory.context_bundle import canonical
+from proxy.http_clients import http_client
 
 
 def loopback(url, path):
@@ -99,7 +100,7 @@ async def context_chat(request: Request):
         headers = {}
         if os.getenv('LMSTUDIO_API_KEY', '').strip():
             headers['Authorization'] = 'Bearer ' + os.environ['LMSTUDIO_API_KEY'].strip()
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120, connect=5)) as client:
+        async with http_client("context-forwarding", timeout=httpx.Timeout(120, connect=5)) as client:
             assembled = await client.post(owner_url, json={'tool': 'assemble_fire_context_bundle' if incoming.get('fire') else 'assemble_context_bundle', 'arguments': arguments})
             assembled.raise_for_status()
             bundle = assembled.json()

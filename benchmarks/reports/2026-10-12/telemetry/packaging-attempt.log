@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_offline_build_and_isolated_install (__main__.DistributionTests.test_offline_build_and_isolated_install)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/michaelmarler/Projects/rest_proxy/test_distribution.py", line 68, in test_offline_build_and_isolated_install
+    self.assertTrue(REQUIRED <= names, REQUIRED - names)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'requirements-telemetry.txt'}
+
+----------------------------------------------------------------------
+Ran 1 test in 0.870s
+
+FAILED (failures=1)

@@ -1,4 +1,4 @@
-"""Opt-in bounded REST reads through the daemon's registered MCP tools."""
+"""Opt-in bounded REST evidence reads and explicitly configured learning mutations."""
 import json
 
 from pydantic import ValidationError
@@ -9,18 +9,37 @@ READ_TOOLS = frozenset({
     'assemble_fire_context_bundle',
     'list_embedded_projects', 'get_embedded_overview', 'describe_embedded_file',
     'get_embedded_file_facts', 'get_embedded_relationships', 'search_embedded_repository',
+    'get_repository_learning_profile', 'compare_repository_learning_profiles',
+    'get_learned_repository_patterns', 'suggest_learned_repository_patterns',
+})
+LEARNING_WRITE_TOOLS = frozenset({
+    'learn_repository_patterns', 'learn_text_patterns', 'delete_repository_learning',
+    'learn_configuration_patterns',
 })
 MAX_REQUEST_BYTES = 16000
+MAX_WRITE_REQUEST_BYTES = 20 * 1024
 MAX_RESPONSE_BYTES = 48000
 
 
 def make_read_endpoint(mcp):
     """Reuse tool validation and shared ownership; never create another runtime."""
-    async def read(request):
+    return _make_endpoint(mcp, READ_TOOLS, MAX_REQUEST_BYTES, 'unsupported-read-tool',
+                          'embedded-tool-unavailable', 'evidence-read-unavailable')
+
+
+def make_write_endpoint(mcp):
+    """Route only explicit learning mutations; never allow general/admin tool dispatch."""
+    return _make_endpoint(mcp, LEARNING_WRITE_TOOLS, MAX_WRITE_REQUEST_BYTES,
+                          'unsupported-learning-write-tool', 'learning-tool-unavailable',
+                          'learning-write-unavailable')
+
+
+def _make_endpoint(mcp, allowed_tools, max_request_bytes, unsupported_error, unavailable_error, execution_error):
+    async def invoke(request):
         raw = bytearray()
         async for chunk in request.stream():
             raw.extend(chunk)
-            if len(raw) > MAX_REQUEST_BYTES:
+            if len(raw) > max_request_bytes:
                 return JSONResponse({'error': 'request-too-large'}, status_code=413)
         try:
             payload = json.loads(raw)
@@ -29,8 +48,8 @@ def make_read_endpoint(mcp):
         if not isinstance(payload, dict) or set(payload) != {'tool', 'arguments'}:
             return JSONResponse({'error': 'expected-tool-and-arguments'}, status_code=422)
         name, arguments = payload['tool'], payload['arguments']
-        if not isinstance(name, str) or name not in READ_TOOLS:
-            return JSONResponse({'error': 'unsupported-read-tool'}, status_code=422)
+        if not isinstance(name, str) or name not in allowed_tools:
+            return JSONResponse({'error': unsupported_error}, status_code=422)
         if not isinstance(arguments, dict):
             return JSONResponse({'error': 'arguments-must-be-object'}, status_code=422)
         if name == 'search_embedded_repository':
@@ -39,7 +58,7 @@ def make_read_endpoint(mcp):
             arguments['mode'] = 'text'
         tool = mcp._tool_manager.get_tool(name)
         if tool is None:
-            return JSONResponse({'error': 'embedded-tool-unavailable'}, status_code=503)
+            return JSONResponse({'error': unavailable_error}, status_code=503)
         if set(arguments) - set(tool.parameters.get('properties', {})):
             return JSONResponse({'error': 'unknown-tool-arguments'}, status_code=422)
         try:
@@ -52,5 +71,5 @@ def make_read_endpoint(mcp):
         except (ValidationError, ValueError):
             return JSONResponse({'error': 'invalid-tool-arguments-or-limits'}, status_code=422)
         except Exception:
-            return JSONResponse({'error': 'evidence-read-unavailable'}, status_code=503)
-    return read
+            return JSONResponse({'error': execution_error}, status_code=503)
+    return invoke

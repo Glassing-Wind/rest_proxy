@@ -1,0 +1,99 @@
+{
+  "base_revision": "8bc9bdf2bcd147accc4af1661afce5b258c0a9f6",
+  "branch": "codex/task-provider-adapter",
+  "limits": [
+    "Neo4j 5.26 minor image tag remains patch-mutable.",
+    "Native ARM CI configuration has no hosted acceptance yet.",
+    "No measured GPU/ANE use or ARM-versus-x86/agent productivity advantage.",
+    "Application readiness, inbound authentication, OTel, backups and complete embedded parity remain separate work."
+  ],
+  "schema_version": 1,
+  "source_sha256": {
+    ".github/workflows/ci.yaml": "4fcd00ba6129fc9c469c1da27904d05b6f2621a6d80de02f7dfa74e61e269364",
+    "README.md": "29de7d337746af440237e8ed501423f3d4b41958b609874e326215e46ede4867",
+    "docker-compose.yml": "40f05d9dba411da4c2e170b9b4f9a5afce8daba436b7e928d8be0381286cc3ae",
+    "docs/README.md": "598fc920ceeccec3c86881d08a32437b569205ce7b8cc9c446e5c83e8c4ab517",
+    "docs/arm-validation.md": "61fda45a9698829e50c2ca7e74b435ebec516947782f2e32621808bc581dfeba",
+    "docs/configuration.md": "4c8761350b70b66c2558dfd13af9eb10b2c0342708c2a6bdfeded37efaca4f10",
+    "docs/current-architecture.md": "84f9aafb9f590328fe0d0e59d94b30a0ac65c6d8e39ca4cb6bf7c7ba9d4ebc3e",
+    "graph_bootstrap.py": "15044cb32925e020c9e9f025d24e7d3a7fb33df731c257c6ae26201a528eb9c1",
+    "graphrag_core/indexing/embedded_repository.py": "f54dbe1550c4866e75873ad288f25814359c4eccaf66e1647de9c1142de553e6",
+    "memory/bootstrap.py": "a95e9a5339ef5f2f7d50169fae88590d8637f0b7cbb41931c308dd20058a82d4",
+    "memory/embedded_health.py": "07c1c4ff7773c8c0ab4b6c7e973ba20771cbe264ccd9d1a28152ae3b77a420ab",
+    "memory/embedded_ladybug.py": "9fe680dbefe652aad67815945226709dc2273642431596bf1639f50199405c72",
+    "memory/embedded_runtime.py": "2400fa62b439ef90b75f2c1cf570ca604a5b6a778ab20d0e19e6a32993a37ec9",
+    "memory/embedded_search.py": "aaf59283236fd318e207c17dee97e4cf20077dc5dfd288c381576bc13b6539e8",
+    "memory/store_search.py": "777250a151cc491c08d1ec611382bc2f37bf601be1419d336e371b5a1bfae622",
+    "proxy/app.py": "361e69a477ddebfcca89837d46c53a5180fe75838bb79c9929026a49e8866c33",
+    "proxy/context_forwarding.py": "187ed888da77847cb409e3ebdfb0ea9d2f08922d73e7f92d9f43788207fa7100",
+    "proxy/handlers_chat.py": "5067867092430d0556da9a2ddf494a94dbd3b75a9a1a11f4c49cda78dd4438a3",
+    "proxy/handlers_responses.py": "a3a9f4eba7285752511b780f9fd73d0d1dcd273c053db30c2f792032f34eb7c9",
+    "proxy/handlers_streaming.py": "6cff1f7fcd5746d09146cceb265725ebe94cc56a450c0de1cdb99b683209e34b",
+    "proxy/http_clients.py": "e2f1501a4ef523a52cee55347561c2d4188e8e74d16f77e7d6038cc05d610717",
+    "proxy/models.py": "1dba0b7cab19efa6057980f5a423aa13a552b152d32bc8033fae81cec9b6c0bd",
+    "proxy/openai_provider.py": "01e38f16915111d75061632fab54558c773cb0dae8d9c43b0d08680a7209e7b0",
+    "scripts/adjudicate_legacy_shadow.py": "d860cf0d03c9f09094e5cc47c519c17ab06fc1c2198d2dbcf548dafbd8835cdc",
+    "scripts/benchmark_embedded_arm.py": "1e46d5de6e67a624a13b7eca0dfb8bb6203743439c3bc9e12aa4bfbc34614f8d",
+    "scripts/index_workspace.py": "b048f3f18df16ced039d663894cb2e71f006311617e3db8de9649aa686909589",
+    "scripts/manage_forward_gateway.py": "c672ed35c8cd4e246001e2632b43ca25c343cee53681c0430541dcea0b8b438f",
+    "scripts/recover_owned_shadow.py": "56a527d7425425dfe412efa5106a378c34c6826ca51f54eaad42baff158953b4",
+    "scripts/run_ci_checks.sh": "e95e1897dabc69648554a57e8c143384c411ddfbbfbd9063edff7ae8f34fd2e0",
+    "scripts/run_struct_index.py": "ccb2535738ec8ae1470494073011d499d7dcfcadfa7b698aac4ef7cfe13bd7bb",
+    "scripts/runtime_hardware.py": "b7f40ddbf28caa1427c8eddb8b17ec2da514a3180d4dc32bbfbacb9bc77a417c",
+    "test_arm_benchmark.py": "b1653c8a5e8bbb715162e53546ff1af5e78ccaed9a2e5b6a756b2a1e0cec7600",
+    "test_cross_project_identity_live.py": "6bd2342e54fa38a7c9f069b4e50c061d9515a5bd9d30761daed142889476a707",
+    "test_distribution.py": "5ba3b9b8deec6271c70e902265e179500c79419e2cdbfef0d2beb40f866570c0",
+    "test_embedded_health.py": "6cc33901e7443876bd546bfb666bae48f9a0c3eb611928d353a71f87057f912e",
+    "test_embedded_ladybug.py": "ecf0469a9b1136b2f86b2d5f77cdfbef47d1210857799e1753af719d7637052f",
+    "test_embedded_search.py": "9e570c0d4b29dea62a05c5dc5c8c3d9b9f67ba634359ffb436d16499033a2c72",
+    "test_embedded_tool_bridges.py": "414b26af19e8eb7b0820217b2a108f566794c0e346301de7a578b1a63e076d53",
+    "test_forward_gateway.py": "8a93a826857848c7bccc470c319286c7a80f1f9fe63e385f5e6f322d9632588f",
+    "test_graph_bootstrap_driver.py": "79771247131809e6d6462d46a469f92cbfc8fff9bd02f63ccf86d9dcc5de8502",
+    "test_handlers_persistence.py": "52319c4631ddb755251c3e8a4e5892d49b0970a24eb53c38f103d7ca7c782c9a",
+    "test_proxy_lifespan.py": "00a2176e7c070dbee490c7a319c4da0507fbab2610b74660d2ec7cf7e88bf2b4",
+    "test_runtime_hardware.py": "552110c781f65e2e30d2e78f86c65fa21db409d4f753261713e3c39950867130",
+    "test_shadow_adjudication.py": "f5024ac19504959b2cca0c3374f0b3f35155e809dcc418432d2fa489dabe8e37",
+    "test_shadow_lifecycle.py": "de78e564a6a9286384b44fdf97b5aa93e348d5af40456d38d9fe5b551a93c534",
+    "tools/brain/search/semantic.py": "1786198b9efb7a4dc75ee3958cb628e66f5fa83d56509fab548620ccebce8917",
+    "tools/hands/indexing.py": "30622abf0de71419041c5b10ec346bcf0c67ca77e64454cbaf99c0f37faa9757"
+  },
+  "validation": {
+    "additional_native_tests": {
+      "common_tool_bridges": 5,
+      "ladybug": 7,
+      "outlines": 4,
+      "repository": 23
+    },
+    "compose_configuration_dummy_credentials": "passed",
+    "deployment_focused_tests": {
+      "live_skipped": 10,
+      "offline_passed": 46
+    },
+    "diff_whitespace": "passed",
+    "full_ci_gate": {
+      "command": [
+        "bash",
+        "scripts/run_ci_checks.sh"
+      ],
+      "current_changed_python_matches_tested_snapshot": true,
+      "dependency_environment_reinstalled": false,
+      "elapsed_seconds": 44.22769941703882,
+      "exit_code": 0,
+      "failed_test_executions": 0,
+      "operational_daemon_restarted": false,
+      "skipped_test_executions": 9,
+      "temporary_mcp_server_stopped": true,
+      "unittest_suite_executions": 100,
+      "unittest_test_executions": 892,
+      "warnings": [
+        "ResourceWarning: unclosed SQLite connections in existing fixture tests"
+      ]
+    },
+    "hosted_arm_jobs": "not-dispatched",
+    "real_embedding_benchmark": "not-run",
+    "ruff_production_scope": "passed",
+    "shell_syntax": "passed",
+    "workflow_yaml_arm_matrix": "passed"
+  },
+  "working_tree_changes": true
+}

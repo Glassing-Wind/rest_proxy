@@ -7,8 +7,33 @@ Neo4j query/schema corpus remain outside this adapter's acceptance scope.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
+
+from graphrag_core.telemetry import operation
+
+
+DEFAULT_LADYBUG_THREADS = 2
+MAX_LADYBUG_THREADS = 64
+
+
+def resolve_ladybug_threads(override: int | None = None) -> int:
+    """Validate an explicit override or LM_PROXY_LADYBUG_THREADS before opening state."""
+    if override is not None and type(override) is not int:
+        raise ValueError('Ladybug thread override must be an integer between 1 and 64')
+    value = override if override is not None else os.getenv('LM_PROXY_LADYBUG_THREADS', '')
+    if override is None and (value is None or not value.strip()):
+        return DEFAULT_LADYBUG_THREADS
+    if isinstance(value, str):
+        value = value.strip()
+        # Reject floats, signs, enormous strings and Unicode numeric lookalikes.
+        if not value.isascii() or not value.isdecimal() or len(value) > 2:
+            raise ValueError('LM_PROXY_LADYBUG_THREADS must be an integer between 1 and 64')
+        value = int(value)
+    if type(value) is not int or not 1 <= value <= MAX_LADYBUG_THREADS:
+        raise ValueError('Ladybug thread count must be an integer between 1 and 64')
+    return value
 
 
 async def _finish_thread(operation):
@@ -113,14 +138,18 @@ class LadybugSession:
                 tx._active = False
 
     async def execute_read(self, callback, *args, **kwargs):
-        return await self._execute(callback, True, *args, **kwargs)
+        with operation('graph', 'graph.execute_read', backend='ladybug'):
+            return await self._execute(callback, True, *args, **kwargs)
 
     async def execute_write(self, callback, *args, **kwargs):
-        return await self._execute(callback, False, *args, **kwargs)
+        with operation('graph', 'graph.execute_write', backend='ladybug'):
+            return await self._execute(callback, False, *args, **kwargs)
 
 
 class LadybugGraphDriver:
-    def __init__(self, db_path: str, *, buffer_pool_size: int = 64 * 1024 * 1024):
+    def __init__(self, db_path: str, *, buffer_pool_size: int = 64 * 1024 * 1024,
+                 max_num_threads: int | None = None):
+        self.max_num_threads = resolve_ladybug_threads(max_num_threads)
         import ladybug
 
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -130,7 +159,7 @@ class LadybugGraphDriver:
         self._engine = ladybug
         try:
             self._database = ladybug.Database(self.db_path, buffer_pool_size=buffer_pool_size,
-                                             max_num_threads=2)
+                                             max_num_threads=self.max_num_threads)
         except BaseException:
             self._owner.close()
             raise

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from memory.embedded_ladybug import _finish_thread
 from memory.embedded_owner import EmbeddedOwnerLock
+from graphrag_core.telemetry import operation
 
 
 def _literal(value: str) -> str:
@@ -96,7 +97,8 @@ class LanceRunStore:
                 raise RuntimeError('Staged run row count does not match the supplied complete run')
             return count
 
-        return await self._call(write)
+        with operation('vector', 'vector.stage', backend='lancedb'):
+            return await self._call(write)
 
     async def search(self, project_id: str, run_id: str, *, text: str = '', vector=None,
                      mode: str = 'hybrid', limit: int = 10) -> list[dict]:
@@ -128,16 +130,25 @@ class LanceRunStore:
                     raise RuntimeError('Retrieval escaped the published scope')
             return rows
 
-        return await self._call(read)
+        # The validated mode chooses a fixed label; query text and vectors stay private.
+        name = {'text': 'vector.search_text', 'vector': 'vector.search_vector',
+                'hybrid': 'vector.search_hybrid'}[mode]
+        with operation('vector', name, backend='lancedb') as scope:
+            rows = await self._call(read)
+            if not rows:
+                scope.set_outcome('empty')
+            return rows
 
     async def count(self, project_id: str, run_id: str) -> int:
-        return await self._call(lambda: self._table.count_rows(_scope(project_id, run_id)))
+        with operation('vector', 'vector.count', backend='lancedb'):
+            return await self._call(lambda: self._table.count_rows(_scope(project_id, run_id)))
 
     async def cleanup(self, project_id: str, keep_run: str | None) -> None:
         predicate = f'project_id = {_literal(project_id)}'
         if keep_run is not None:
             predicate += f' AND run_id != {_literal(keep_run)}'
-        await self._call(lambda: self._table.delete(predicate))
+        with operation('vector', 'vector.cleanup', backend='lancedb'):
+            await self._call(lambda: self._table.delete(predicate))
 
     async def close(self):
         async with self._lock:

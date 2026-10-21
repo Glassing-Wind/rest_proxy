@@ -1,5 +1,87 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Optional operation telemetry — October 12
+
+The authorized architecture follow-up now has a first private OpenTelemetry layer
+for MCP/REST and inference requests, tool execution, embedded native parse/facts,
+graph/vector storage, publication/retrieval, analyzer work and pattern memory.
+Fixed-label duration/count metrics distinguish syntax and structural learning from
+embedding work. Runtime tracing is opt-in; an explicit OTLP/HTTP endpoint enables
+export without ambient endpoint/header/resource settings. SDK absence and export
+failures keep requests usable. Lifespan leases own resources and bound shutdown.
+
+Stateful HTTP calls use their exact request context, including concurrent calls;
+private spans cannot receive accidental attributes from global instrumentation.
+Telemetry excludes source, prompts, arguments, paths, identities and exception
+details. Health details describe configuration and capped acknowledgement failures.
+See [setup and scope](telemetry.md) and
+[disposable acceptance](../benchmarks/reports/2026-10-12/telemetry/README.md).
+No operational configuration, service or index activation is part of this change.
+
+Next telemetry work must be driven by the actual workload: pool acquisition,
+PostgreSQL/Redis/provider and legacy-index coverage, then useful operational SLOs.
+Authentication, operational backup/recovery and broader storage parity remain
+separate architecture gaps. Functional tracing checks are not performance or
+coding-outcome measurements.
+
+## Persistent repository learning and analyzer components — October 12
+
+The user authorized persistent patterns, custom plaintext AST observations and a
+genuine GithubAnalyzer component after the profile/comparison gateway (`5cd5199`).
+Explicit learning retains normalized pattern artifacts, per-source occurrences,
+distinct-source support, source/backend hashes, historical profiles and immutable
+revisions in private SQLite memory selected by `LM_PROXY_REPOSITORY_LEARNING_STATE`.
+Repository writes require the exact publication run and memory revision; reindexing
+during analysis refuses the commit. Embedded deletion/reindex leaves learning history
+intact. Explicit learning deletion removes retained payloads and advances a tombstone.
+
+RepoAnalyzer's actual authored regex extractor/node factory produces a bounded
+custom plaintext document AST; full parser initialization/adaptation/AI are excluded.
+GithubAnalyzer's actual requirements/gitignore components run from fixed unmodified
+source copies in disposable scratch, avoiding broad package startup and DB stubs.
+Provided text/configuration originals remain private with source-kind/hash provenance.
+No clone, dependency solver, effective ignore evaluation or full GithubAnalyzer
+runtime is included. Read inspection and transfer suggestions use `/evidence/read`;
+`/learning/write` permits only the four explicit learning/delete operations. Limits
+include 16 KiB supplied UTF-8 text, 128 matched plaintext children and 256 configuration
+declarations. No operational configuration activation, service/model restart or
+automatic reindex is required by this code change.
+
+See [setup and contracts](repository-learning.md),
+[initial profile acceptance](../benchmarks/reports/2026-10-12/repository-learning/README.md)
+and [persistent acceptance](../benchmarks/reports/2026-10-12/persistent-learning/README.md).
+These capabilities establish bounded artifact extraction/persistence and historical
+reuse; they do not establish adaptive training, an OS sandbox, a shared-service
+authorization boundary or better coding outcomes. Telemetry and controlled outcome
+measurements remain independent gaps. Historical Github serializer/acquisition paths
+require separate repair before broader adoption.
+
+## Explicit architecture follow-up — October 11
+
+The user authorized implementation and commits for the supplied architecture review.
+Architecture/deployment cleanup, provider lifespan ownership and native ARM controls/
+validation are committed as `d6cb1b0`. Explicit liveness and required-dependency
+readiness, including the Compose health check, are committed as `8b13a0f`; their
+[staged-source acceptance](../benchmarks/reports/2026-10-11/readiness/README.md)
+records the full isolated gate and limits. Operational services/models/indexes and
+unrelated working-tree work were preserved. Hosted ARM acceptance still requires
+an authorized push/run. Application telemetry is the next architecture gap; inbound
+authentication, operational backups and complete embedded parity remain separate work.
+The outcome-first pilot below remains a separate product decision, not a blocker to
+this explicitly requested maintenance. Historical architecture recommendations are
+not authorization for an unbounded database/provider/framework migration.
+
+The user's AST clarification expands the architecture's representation model:
+repository learning includes syntax/relationship facts and reusable code, documentation
+and architecture patterns alongside embeddings. The
+[GraphRAG-assisted source audit](../benchmarks/reports/2026-10-11/ast-learning.md)
+records RepoAnalyzer's plaintext AST and reference learning workflow, Rest-proxy's
+native extraction boundaries and a possible GithubAnalyzer AST-child serialization
+gap. Before integrating those projects, verify nested-tree preservation and ingestion
+coverage at the owning project. Telemetry should distinguish parser/fact production,
+pattern extraction/recommendations and vector retrieval. No analyzer cutover or
+cross-project implementation is established by this documentation update.
+
 ## TurboTenant introduction sent — October 8
 
 User explicitly authorized sending the reviewed short introduction. Gmail displayed

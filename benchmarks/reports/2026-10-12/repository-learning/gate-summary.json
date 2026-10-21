@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 52.301,
+  "unittest_suite_executions": 104,
+  "unittest_test_executions": 922,
+  "skipped_test_executions": 9,
+  "real_repoanalyzer_checkout_enabled": true,
+  "operational_daemon_preserved": true,
+  "temporary_daemon_stopped": true,
+  "staged_tree": "879948e5a6c77c81da4c81a2910f9d656f7e8ca1"
+}

@@ -8,9 +8,9 @@ from typing import Any, Dict, List
 
 import httpx
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
 
 from proxy.logging import debug_log
+from proxy.http_clients import ProviderStreamingResponse, acquire_http_client, close_http_stream
 from proxy.state import STATE, save_state
 from proxy.handlers_utils import history_key
 
@@ -27,29 +27,24 @@ async def stream_openai_compatible_response(
     Optionally updates the global STATE with the resulting response_id for continuity.
     """
     timeout = httpx.Timeout(900.0, connect=30.0)
-    client = httpx.AsyncClient(timeout=timeout)
-    req = client.build_request("POST", url, json=payload)
-
+    client, owned_client = acquire_http_client("lmstudio", timeout=timeout)
+    r = None
     try:
+        req = client.build_request("POST", url, json=payload)
         r = await client.send(req, stream=True)
-    except Exception as exc:
-        await client.aclose()
-        if fallback_func and original_body is not None:
+        if r.status_code >= 400:
+            detail = await r.aread()
+            raise HTTPException(r.status_code, detail.decode("utf-8", errors="replace"))
+    except BaseException as exc:
+        await close_http_stream(r, client, owned_client)
+        if isinstance(exc, Exception) and fallback_func and original_body is not None:
             debug_log("streaming_failed_fallback", error=str(exc))
             return await fallback_func(original_body)
+        if isinstance(exc, HTTPException):
+            raise
+        if not isinstance(exc, Exception):
+            raise
         raise HTTPException(status_code=500, detail=str(exc))
-
-    if r.status_code >= 400:
-        detail = await r.aread()
-        err_text = detail.decode("utf-8", errors="replace")
-        await r.aclose()
-        await client.aclose()
-        if fallback_func and original_body is not None:
-            debug_log(
-                "streaming_rejected_fallback", status=r.status_code, error=err_text
-            )
-            return await fallback_func(original_body)
-        raise HTTPException(r.status_code, err_text)
 
     async def event_generator():
         last_id = None
@@ -225,8 +220,7 @@ async def stream_openai_compatible_response(
             yield f"data: {json.dumps(err_dict)}\n\n"
             yield "data: [DONE]\n\n"
         finally:
-            await r.aclose()
-            await client.aclose()
+            await close_http_stream(r, client, owned_client)
 
         # Save state if we captured an ID and we have the history context
         if last_id and messages:
@@ -235,8 +229,11 @@ async def stream_openai_compatible_response(
             # Fire-and-forget save
             asyncio.create_task(asyncio.to_thread(save_state))
 
-    return StreamingResponse(
+    return ProviderStreamingResponse(
         event_generator(),
+        upstream=r,
+        client=client,
+        owned=owned_client,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -54,7 +54,7 @@ def main() -> int:
                 raise RuntimeError('Recovery refused: project index lock is held')
         with GraphDatabase.driver(os.environ['LM_PROXY_NEO4J_URI'],
                 auth=(os.environ['LM_PROXY_NEO4J_USER'], os.environ['LM_PROXY_NEO4J_PASSWORD'])) as driver:
-            with driver.session(database=os.getenv('LM_PROXY_NEO4J_DB', 'proxy')) as session:
+            with driver.session(database=os.getenv('LM_PROXY_NEO4J_DB', 'neo4j')) as session:
                 preview = session.execute_read(lambda tx: recovery_preview(tx, args.namespace))
                 digest = snapshot_digest(preview)
                 check_jobs(project, preview['owner']['pid'])

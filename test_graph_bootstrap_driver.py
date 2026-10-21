@@ -1,3 +1,5 @@
+"""Offline driver/schema checks using a fake Neo4j driver; no services or env vars required."""
+
 import asyncio
 import contextlib
 import io
@@ -112,6 +114,18 @@ def _load_module(*, fail_verify: bool = False, tx=None):
 
 
 class GraphBootstrapDriverTests(unittest.TestCase):
+    def test_bootstrap_selects_default_or_explicit_database(self):
+        for selected, expected in ((None, "neo4j"), ("proxy", "proxy"), ("custom", "custom")):
+            with self.subTest(selected=selected):
+                env = {"LM_PROXY_GRAPH_ENABLED": "1"}
+                if selected is not None:
+                    env["LM_PROXY_NEO4J_DB"] = selected
+                with mock.patch.dict("os.environ", env, clear=True):
+                    module, driver_calls, fake_driver = _load_module()
+                    asyncio.run(module.init_graph_db())
+                self.assertEqual(len(driver_calls), 1)
+                self.assertEqual(fake_driver.session_calls[0]["database"], expected)
+
     def test_embedded_selects_ladybug_once_without_neo4j(self):
         fake = _FakeDriver()
         fake.initialize_schema = mock.AsyncMock()

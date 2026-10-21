@@ -1,0 +1,58 @@
+{
+  "base_revision": "9b6b160bf263f7672e33257e8117faa7793297c1",
+  "final_packaging_test": "passed",
+  "independent_review": "no remaining material issues",
+  "limits": [
+    "macOS ARM64 local validation only; hosted/platform matrix not run.",
+    "Synthetic vectors verify publication plumbing; no generation/embedding quality measurement.",
+    "Profiles/comparisons only; persistent/custom plaintext/adaptive learning remains separate.",
+    "Trusted analyzer checkout, isolated process and API guards; no OS sandbox claim.",
+    "No operational services, indexes, models, .env, dependencies or sibling sources changed."
+  ],
+  "production_python_identical_to_full_gate": true,
+  "repoanalyzer_source_sha256": {
+    "context_adapters/graphrag_brain.py": "b98c529ad47c151a152ce08b3d61358468f47e5205a4a57a864ed72aff7b2106",
+    "context_adapters/models.py": "c1616d0d7eeb3b543a9f5ea1eefb1a47e101fc0613e6a538f12c40f0092562b1",
+    "ingestion/local_repository.py": "c7edce6cc848e35e5700603b000dc6f00ac26ddaf315759ecd2c252700dd9dd1",
+    "learning_core/framework_profiles.py": "878aebfa7661756b4a9f9c8ff6ea6c43c1a3937d086ef6f6fb4a2f291a3307ba",
+    "learning_core/models.py": "4d8ab8e62d7557bd8ee52567245d3d7d47f48b5c44d185163e071eda5f7799f8",
+    "learning_core/service.py": "a42070094c89d3dd3c21443b50e79419482ef140a3056a762fcc6ee1479f8f4b"
+  },
+  "schema_version": 1,
+  "source_sha256": {
+    ".env.example": "7a684db6a28733fe569c484d97ec0a281a69c343645aaab93ab1eb80bdc666da",
+    "docs/current-architecture.md": "0ab4154f7abdbcd0e62b2dde9016717715b27c3e37625251c43b0ba8ebe8bac1",
+    "docs/next-session-roadmap.md": "e7be82978a2aafc3a1f8d0020e743a90c474c110cce038169b6feda0998a4feb",
+    "docs/repository-learning.md": "deffeabba8f7b31f78faa1a3e2bfaf61ed041313af0e62892b75319a3371a5f8",
+    "graphrag_core/indexing/embedded_outlines.py": "9b7e2ea19b23cbdec0ac1c89fe11bfea102e42f702de4910f68dd51067147121",
+    "graphrag_core/indexing/embedded_repository.py": "e6f994c1d9202fe8a40ad348e4f05687e8ff651ef1dd08b5178661ae2ab648a6",
+    "graphrag_core/repository_learning/__init__.py": "d2d34f98b9dad334d675e268dc20a2ba692057397c1cf505085365aea42d0ee2",
+    "graphrag_core/repository_learning/adapter.py": "2dfd3f21c30a895a3234481e34cac0fb988d056a28a7f65ffd072c7050a6710f",
+    "graphrag_core/repository_learning/service.py": "082a479058fd341c8c9b50ae0e952dcfa67fc64c24f593ff4e7248339f18eea9",
+    "graphrag_core/repository_learning/snapshot.py": "34bb433f0e57e5939634b06c9ae69fa764ffdb51f2340ceba7d1cecd95c313a9",
+    "graphrag_core/repository_learning/worker.py": "024fd34933ae19a9093a7cee43cf63692c70491f4d8f1face689e2f033026c54",
+    "memory/embedded_runtime.py": "527e3dd9c835a7e48543891bc61c76257b5528437ae134684e9c790abc787b41",
+    "scripts/run_ci_checks.sh": "4773a6d69c24abaeef6a3e98e2fc5d498b9623533c1e787cf46315eda474bd8d",
+    "test_distribution.py": "145cbcc29403444b608950d2c9435772c1452c5830dc99a080a5a6f2f924ff58",
+    "test_repoanalyzer_adapter.py": "64f0fc65ddeddf8c1e197c3f4da0158bc969f827bf4a636a769e96944b0c95c8",
+    "test_repository_learning.py": "dcb797303d0efdf6f6fef8ba9b496b2a596792496e31c99776f0ff89701d3b86",
+    "test_repository_learning_integration.py": "6c5be8c2a71263431614423e9c357d7bedcd1cff87ab66b73309a07e3edf1d01",
+    "test_repository_learning_tools.py": "a4cbb593134b397ffbd1d5859652a8be58399a18d1050b75ef02a7d65e6c79d4",
+    "tools/__init__.py": "02e2fc27a2d9fcccca1ea1a3be8b116057e91528c8e5598ec07486268b4c57f1",
+    "tools/brain/embedded_rest.py": "24632a43225f61bb6a010e6917d43395d0822ce5604ae07d8976f6d232b4d27a",
+    "tools/brain/primary.py": "c0798e75c254e23970fc7b879c18c9ebab4e8d4f7d88be17c5729b6501c7a3eb",
+    "tools/brain/repository_learning.py": "dd4ca35c049454e145a1135eb47bd70e86f7b2a65408e4cbcb2249a6d080895b",
+    "tools/brain/tool_catalog.py": "b9f6002c6950db20172ed1c0e90ca9328e60cfc90e71f0f644229a51c4f98c55"
+  },
+  "validation": {
+    "elapsed_seconds": 52.301,
+    "exit_code": 0,
+    "operational_daemon_preserved": true,
+    "real_repoanalyzer_checkout_enabled": true,
+    "skipped_test_executions": 9,
+    "staged_tree": "879948e5a6c77c81da4c81a2910f9d656f7e8ca1",
+    "temporary_daemon_stopped": true,
+    "unittest_suite_executions": 104,
+    "unittest_test_executions": 922
+  }
+}

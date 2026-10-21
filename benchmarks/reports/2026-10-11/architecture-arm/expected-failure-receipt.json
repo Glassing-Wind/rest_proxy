@@ -1,0 +1,129 @@
+{
+  "corpus": {
+    "files": [
+      {
+        "bytes": 332,
+        "path": "module_0000.py",
+        "sha256": "e7737ad5270dfe3c425d5c9967b48373ad8ff847a6cd8607b0945f828904d6db"
+      }
+    ],
+    "kind": "built-in-public-deterministic-python-v1",
+    "sha256": "fd5eef2fc837a3675737a66d7c45f7abb5297432ea2b2a7f2a32205bf7f1ae0c",
+    "text_query": "absentlexicaltokentestxyz"
+  },
+  "created_at_utc": "2026-10-11T19:04:22.922157+00:00",
+  "failure": {
+    "returncode": 1,
+    "stderr_bytes": 1489,
+    "stderr_sha256": "f9f29bccc8ca0f58f221c3d21c5fbd8e9d2631ddd930e928c237708f473556db",
+    "threads": 2,
+    "trial": 1,
+    "type": "worker-exit"
+  },
+  "policy": {
+    "cold_definition": "fresh process and empty state; OS/disk/parser cache not cleared",
+    "comparative_acceleration_claim": false,
+    "concurrent_machine_activity_isolated": false,
+    "existing_state_used": false,
+    "inference_calls": false,
+    "model_loading": false
+  },
+  "runtime": {
+    "acceleration": {
+      "ane_execution": "not-measured",
+      "gpu_backend": "not-probed",
+      "inference_runtime": "not-probed",
+      "simd_execution": "not-measured"
+    },
+    "hardware": {
+      "arm64_process": true,
+      "cpu_model": "Apple M3 Max",
+      "efficiency_cores": 4,
+      "logical_cpus": 16,
+      "machine": "arm64",
+      "memory_bytes": 137438953472,
+      "performance_cores": 12,
+      "rosetta_translated": 0,
+      "system": "Darwin"
+    },
+    "packages": {
+      "ladybug": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 19468216,
+          "name": "_lbug.cpython-314-darwin.so",
+          "sha256": "361a01c260be9698c3a8b6cd776c42e7ae246f46482a6916eb85c09d92d2bbdb"
+        },
+        "version": "0.21.2",
+        "wheel_metadata_sha256": "a21bbd93e1306004457242d4c9dd429c835253baf88f33e16efeec5e2066d2c4",
+        "wheel_tags": [
+          "cp314-cp314-macosx_15_0_arm64"
+        ]
+      },
+      "lancedb": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 145904976,
+          "name": "_lancedb.abi3.so",
+          "sha256": "e38ffa297625dcb8d11e4b5519d5c02f3b7e75416338bd55cf6a9560ee2a3983"
+        },
+        "version": "0.39.0",
+        "wheel_metadata_sha256": "5adc30dd0f44f4ac5c84c7a443469fbf4fdabbd3d1ab7b98d59b68d42763cdcc",
+        "wheel_tags": [
+          "cp310-abi3-macosx_11_0_arm64"
+        ]
+      },
+      "pyarrow": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 3576904,
+          "name": "lib.cpython-314-darwin.so",
+          "sha256": "0ddccd9f88457e2b418db1d3922169ed1a16c2eeb6328f5fbda9568997042602"
+        },
+        "version": "25.0.1",
+        "wheel_metadata_sha256": "9daf8f61735dea2717d9164d966a9e8a7724b4f7f3a778f6575bcf7c2cf1e5d9",
+        "wheel_tags": [
+          "cp314-cp314-macosx_12_0_arm64"
+        ]
+      },
+      "tree-sitter-language-pack": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 13802568,
+          "name": "_native.abi3.so",
+          "sha256": "6689787bdfc5e5a32193b707ae4c8c720d8dd2a64aa41e151f4ac18d954aac58"
+        },
+        "version": "1.20.0",
+        "wheel_metadata_sha256": "8d64a536aad2a28ad2f2325edaf4d91f02fa687f9bfd6e84a4d1fdeae1deb1f3",
+        "wheel_tags": [
+          "cp310-abi3-macosx_11_0_arm64"
+        ]
+      }
+    },
+    "python": {
+      "executable_architectures": [
+        "arm64"
+      ],
+      "implementation": "CPython",
+      "version": "3.14.8"
+    }
+  },
+  "schema_version": 1,
+  "source_sha256": {
+    "graphrag_core/indexing/embedded_repository.py": "f54dbe1550c4866e75873ad288f25814359c4eccaf66e1647de9c1142de553e6",
+    "memory/embedded_ladybug.py": "9fe680dbefe652aad67815945226709dc2273642431596bf1639f50199405c72",
+    "requirements-embedded.txt": "0749d981324e3d4a829a0160b06a46b6de488f7f6e71cb33b71bafa814ee5177",
+    "scripts/benchmark_embedded_arm.py": "1e46d5de6e67a624a13b7eca0dfb8bb6203743439c3bc9e12aa4bfbc34614f8d",
+    "scripts/runtime_hardware.py": "b7f40ddbf28caa1427c8eddb8b17ec2da514a3180d4dc32bbfbacb9bc77a417c"
+  },
+  "status": "failed",
+  "trials": []
+}

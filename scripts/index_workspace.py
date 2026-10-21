@@ -586,7 +586,7 @@ def _get_latest_successful_struct_run_id(project_id: str) -> str | None:
     neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
     neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
     neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
-    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "neo4j")
     driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
     try:
         with driver.session(database=neo4j_db) as session:
@@ -623,7 +623,7 @@ def _set_semantic_run_status(
     neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
     neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
     neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
-    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "neo4j")
     driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
     try:
         with driver.session(database=neo4j_db) as session:
@@ -762,7 +762,7 @@ async def _promote_semantic_file_roles_to_graph(
     neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
     neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
     neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
-    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+    neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "neo4j")
     driver = neo4j.GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
     try:
         with driver.session(database=neo4j_db) as session:

@@ -97,7 +97,7 @@ def main() -> int:
                   os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")),
             user_agent=f"rest-proxy/legacy-shadow-admin pid={os.getpid()}",
         ) as driver:
-            with driver.session(database=os.getenv("LM_PROXY_NEO4J_DB", "proxy")) as session:
+            with driver.session(database=os.getenv("LM_PROXY_NEO4J_DB", "neo4j")) as session:
                 snapshot = session.execute_read(lambda tx: snapshot_shadow(tx, args.namespace))
                 published = session.execute_read(lambda tx: tx.run(
                     "MATCH (p:Project {id:$pid}) MATCH (r:IndexRun {id:p.struct_active_run_id}) "

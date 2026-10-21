@@ -15,6 +15,7 @@ from proxy.config import (
     OPENAI_BASE,
 )
 from proxy.logging import debug_log
+from proxy.http_clients import http_client
 from proxy.state import STATE, save_state
 from proxy.handlers_memory import _derive_session_id, _persist_memory_best_effort
 from proxy.handlers_utils import history_key
@@ -57,7 +58,7 @@ async def forward_openai_chat_completion(body: Dict[str, Any]) -> Any:
             f"{OPENAI_BASE}/chat/completions", body, body.get("messages", [])
         )
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with http_client("lmstudio", timeout=timeout) as client:
         r = await client.post(f"{OPENAI_BASE}/chat/completions", json=body)
         if r.status_code >= 400:
             raise HTTPException(r.status_code, r.text)

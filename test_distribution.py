@@ -22,6 +22,15 @@ REQUIRED = {
     'scripts/index_workspace.py', 'scripts/run_struct_index.py',
     'memory/fire_store.py', 'memory/context_bundle.py',
     'proxy/context_forwarding.py', 'mcp_server.py', 'brain_server.py', 'ts_diagnostics.py',
+    'proxy/http_clients.py', 'scripts/runtime_hardware.py', 'scripts/benchmark_embedded_arm.py',
+    'graphrag_core/readiness.py',
+    'graphrag_core/telemetry.py', 'graphrag_core/telemetry_transport.py',
+    'graphrag_core/repository_learning/adapter.py', 'graphrag_core/repository_learning/worker.py',
+    'graphrag_core/repository_learning/service.py', 'graphrag_core/repository_learning/snapshot.py',
+    'graphrag_core/repository_learning/pattern_store.py', 'graphrag_core/repository_learning/patterns.py',
+    'graphrag_core/repository_learning/github_configuration.py',
+    'graphrag_core/repository_learning/github_worker.py',
+    'tools/brain/repository_learning.py',
 }
 
 
@@ -35,7 +44,9 @@ class DistributionTests(unittest.TestCase):
                 ['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
             # Include the new package marker before its first commit, too.
             paths.append('scripts/__init__.py')
-            paths.extend(['requirements-core.txt', 'requirements-embedded.txt', 'requirements-dev.txt'])
+            paths.extend(['requirements-core.txt', 'requirements-embedded.txt', 'requirements-dev.txt',
+                          'requirements-telemetry.txt'])
+            paths.extend(REQUIRED)
             for name in sorted(set(paths)):
                 original = ROOT / name
                 if not name or not original.is_file():
@@ -62,7 +73,9 @@ class DistributionTests(unittest.TestCase):
                 core = [item for item in dependencies if ';' not in item]
                 self.assertEqual(len(core), 6)
                 self.assertFalse(any('crawlee' in item or 'lancedb' in item for item in core))
-                self.assertEqual(set(metadata.get_all('Provides-Extra', [])), {'embedded', 'full', 'dev'})
+                self.assertEqual(set(metadata.get_all('Provides-Extra', [])), {'embedded', 'full', 'dev', 'telemetry'})
+                for name in ('opentelemetry-api', 'opentelemetry-sdk', 'opentelemetry-exporter-otlp-proto-common'):
+                    self.assertTrue(any(name + '==1.40.0' in item and 'telemetry' in item for item in dependencies))
                 self.assertTrue(any('ladybug==0.21.2' in item and 'embedded' in item for item in dependencies))
                 self.assertTrue(any('6fcead43fc13b0049481ea5b5c491e02eab4ac68' in item
                                     and 'embedded' in item for item in dependencies))
@@ -70,6 +83,7 @@ class DistributionTests(unittest.TestCase):
             with tarfile.open(sdist) as archive:
                 names = {name.split('/', 1)[-1] for name in archive.getnames()}
                 self.assertTrue(REQUIRED <= names, REQUIRED - names)
+                self.assertIn('requirements-telemetry.txt', names)
             installed = base / 'installed'
             result = subprocess.run(
                 [sys.executable, '-m', 'pip', 'install', '--no-deps', '--no-index',
@@ -80,6 +94,13 @@ class DistributionTests(unittest.TestCase):
 import json, pathlib, sys
 sys.path.insert(0, sys.argv[1])
 import memory.fire_store, memory.context_bundle
+from graphrag_core.repository_learning.adapter import RepoAnalyzerAdapter
+from graphrag_core.repository_learning.service import RepositoryLearningGateway
+from graphrag_core.repository_learning.pattern_store import RepositoryPatternStore
+from graphrag_core.repository_learning.github_configuration import GithubConfigurationAdapter
+import graphrag_core.telemetry as telemetry
+import graphrag_core.repository_learning.worker as learning_worker
+import graphrag_core.repository_learning.github_worker as github_worker
 root = pathlib.Path(sys.argv[1])
 import os
 runtime = (root.parent / 'runtime').resolve()
@@ -89,10 +110,24 @@ assert _jobs._ensure_jobs_runtime_dir() == runtime / 'jobs'
 assert _jobs._ensure_project_locks_dir() == runtime / 'project_locks'
 assert pathlib.Path(memory.fire_store.__file__).is_relative_to(root)
 assert pathlib.Path(memory.context_bundle.__file__).is_relative_to(root)
+assert pathlib.Path(learning_worker.__file__).is_relative_to(root)
+assert pathlib.Path(github_worker.__file__).is_relative_to(root)
+assert RepoAnalyzerAdapter().availability() == {'status': 'disabled'}
+assert GithubConfigurationAdapter().availability() == {'status': 'disabled'}
+assert pathlib.Path(telemetry.__file__).is_relative_to(root)
+assert telemetry.status()['exporter'] == 'none'
+with telemetry.operation('parser', 'repository.parse', backend='ts_pack'):
+    pass
+assert 'opentelemetry.sdk' not in sys.modules
+learning_directory = (root.parent / 'learning-memory').resolve()
+assert RepositoryPatternStore(str(learning_directory)).read('project')['status'] == 'not-learned'
+assert not learning_directory.exists()
+assert callable(RepositoryLearningGateway.profile)
 for name in json.loads(sys.argv[2]):
     path = root / name
     assert path.is_file(), name
-    compile(path.read_text(), str(path), 'exec')
+    if path.suffix == '.py':
+        compile(path.read_text(), str(path), 'exec')
 print('isolated artifact imports and worker compilation passed')
 """
             result = subprocess.run(

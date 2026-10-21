@@ -50,6 +50,9 @@ from starlette.routing import Mount, Route
 
 from _mcp import mcp
 from _tool_fingerprint import compute_tool_fingerprint
+from graphrag_core.readiness import ReadinessMonitor
+from graphrag_core.telemetry import start as start_telemetry, status as telemetry_status, stop as stop_telemetry
+from graphrag_core.telemetry_transport import RequestTelemetryMiddleware
 from mcp.shared.version import SUPPORTED_PROTOCOL_VERSIONS
 from mcp.types import LATEST_PROTOCOL_VERSION
 
@@ -144,7 +147,9 @@ def _append_debug_headers(headers: list[tuple[bytes, bytes]], *, session_id: str
 # ---------------------------------------------------------------------------
 
 @asynccontextmanager
-async def lifespan(app: Starlette):
+async def _application_lifespan(app: Starlette):
+    monitor = ReadinessMonitor()
+    app.state.readiness = monitor
     from tools.hands import indexing as _idx
     from tools.hands.indexing import index_workspace
     import _jobs
@@ -176,7 +181,11 @@ async def lifespan(app: Starlette):
 
     try:
         async with mcp.session_manager.run():
-            yield
+            monitor.activate()
+            try:
+                yield
+            finally:
+                await monitor.close()
     finally:
         # Shutdown.
         await _idx.stop_watcher()
@@ -189,6 +198,16 @@ async def lifespan(app: Starlette):
             pass
         print("[brain-server] Shutdown complete.", file=sys.stderr)
 
+
+@asynccontextmanager
+async def lifespan(app: Starlette):
+    """Own optional telemetry for the same lifetime as the MCP resources."""
+    handle = start_telemetry(service="mcp")
+    try:
+        async with _application_lifespan(app):
+            yield
+    finally:
+        await stop_telemetry(handle)
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +299,24 @@ class MCPRequestLoggingMiddleware:
 # Health endpoint
 # ---------------------------------------------------------------------------
 
+async def live(request: Request) -> JSONResponse:
+    """Respond without storage, provider or model work."""
+    return JSONResponse({"live": True, "application": "mcp"})
+
+
+async def readiness(request: Request) -> JSONResponse:
+    monitor = getattr(request.app.state, "readiness", None) or ReadinessMonitor()
+    status, payload = await monitor.check()
+    return JSONResponse(payload, status_code=status, headers={"Cache-Control": "no-store"})
+
+
+async def health_details(request: Request) -> JSONResponse:
+    monitor = getattr(request.app.state, "readiness", None) or ReadinessMonitor()
+    _, payload = await monitor.check()
+    payload["telemetry"] = telemetry_status()
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
 async def health(request: Request) -> JSONResponse:
     tool_count = 0
     try:
@@ -339,17 +376,28 @@ if os.getenv('LM_PROXY_EMBEDDED_REST_ENABLED', '0').strip().lower() in {'1', 'tr
     if embedded_graph_selected():
         from tools.brain.embedded_rest import make_read_endpoint
         _evidence_routes.append(Route('/evidence/read', make_read_endpoint(mcp), methods=['POST']))
+        if os.getenv('LM_PROXY_REPOSITORY_LEARNING_STATE', '').strip():
+            from tools.brain.embedded_rest import make_write_endpoint
+            _evidence_routes.append(Route('/learning/write', make_write_endpoint(mcp), methods=['POST']))
 
 app = Starlette(
     routes=[
         Route("/", health),          # health check — matched first
         Route("/health", health),    # also at /health
+        Route("/live", live),
+        Route("/ready", readiness),
+        Route("/health/details", health_details),
         Route("/fingerprint", server_fingerprint),
         *_evidence_routes,
         Mount("/", app=_mcp_starlette),  # pass-through; MCP handles /mcp
     ],
     lifespan=lifespan,
     middleware=[
+        Middleware(RequestTelemetryMiddleware, surface="mcp", routes={
+            "/": "health", "/health": "health", "/live": "live", "/ready": "ready",
+            "/health/details": "health.details", "/fingerprint": "fingerprint",
+            "/mcp": "mcp.http", "/evidence/read": "evidence.read", "/learning/write": "learning.write",
+        }),
         Middleware(SessionContextMiddleware),
         Middleware(MCPRequestLoggingMiddleware),
     ],

@@ -13,9 +13,10 @@ def register_all(mcp: FastMCP) -> None:
     from tools.brain.graph import core as graph_tools
     from tools.brain.search import tools as search_tools
     from tools.hands import dev, indexing, project
-    from tools.brain import embedded
+    from tools.brain import embedded, repository_learning
 
     embedded.register(mcp)
+    repository_learning.register(mcp)
     from tools.brain import fire
     fire.register(mcp)
     from tools.brain import context

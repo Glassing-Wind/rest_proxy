@@ -60,7 +60,7 @@ class CrossProjectIdentityLiveTests(unittest.TestCase):
             os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687"),
             auth=(os.getenv("LM_PROXY_NEO4J_USER", "neo4j"), password),
         )
-        database = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+        database = os.getenv("LM_PROXY_NEO4J_DB", "neo4j")
         with driver, driver.session(database=database) as session:
             tx = session.begin_transaction(timeout=30, metadata={"test": "cross_project_identity"})
             try:

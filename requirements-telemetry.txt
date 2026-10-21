@@ -1,0 +1,5 @@
+# Optional tracing/metrics and OTLP protobuf codecs; no models or database servers.
+# HTTPX comes from the core profile. These pins match the existing full/CI profiles.
+opentelemetry-api==1.40.0
+opentelemetry-sdk==1.40.0
+opentelemetry-exporter-otlp-proto-common==1.40.0

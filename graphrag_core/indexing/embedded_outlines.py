@@ -14,6 +14,7 @@ import uuid
 
 from memory.embedded_schema import SYMBOL_LABELS
 from ts_diagnostics import normalize_ts_pack_result
+from graphrag_core.telemetry import operation
 
 
 def _json(value) -> str:
@@ -53,9 +54,10 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
         ts_pack.get_parser(language)
         config = ts_pack.ProcessConfig(language)
         config.diagnostics = True
-        result = normalize_ts_pack_result(source, language, ts_pack.process(source, config))
-        if (result.get('metrics') or {}).get('error_count', 0):
-            raise ValueError('Source parsing errors prevent outline publication')
+        with operation('parser', 'repository.parse', backend='ts_pack'):
+            result = normalize_ts_pack_result(source, language, ts_pack.process(source, config))
+            if (result.get('metrics') or {}).get('error_count', 0):
+                raise ValueError('Source parsing errors prevent outline publication')
         file_id = f'{project_id}:file:{relative}'
         symbols = []
 
@@ -84,8 +86,14 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
                 walk(item.get('children') or [], ancestry + (name,))
 
         walk(result.get('structure') or [])
+        from graphrag_core.repository_learning.snapshot import outline_hash
+        outline_sha256 = outline_hash([
+            {'id': symbol['id'], 'kind': symbol['kind'], 'name': symbol['name'],
+             'start_line': symbol['start'], 'end_line': symbol['end'],
+             'signature': symbol['signature']} for symbol in symbols])
         from graphrag_core.indexing.embedded_facts import build_file_facts
-        facts = build_file_facts(ts_pack, source, language, relative, result, symbols)
+        with operation('parser', 'repository.facts', backend='ts_pack'):
+            facts = build_file_facts(ts_pack, source, language, relative, result, symbols)
         facts_json = _json(facts)
         fact_count += len(facts['calls']) + len(facts['imports'])
         fact_bytes += len(facts_json.encode())
@@ -93,11 +101,12 @@ def build_outline_snapshot(root_path: str, project_id: str, paths: list[str]) ->
             raise ValueError('Snapshot exceeds bounded parser fact budget')
         files.append({'id': file_id, 'path': relative, 'sha256': hashlib.sha256(raw).hexdigest(),
                       'content': source, 'language': language, 'symbols': symbols,
+                      'outline_sha256': outline_sha256,
                       'facts_json': facts_json,
                       'facts_sha256': hashlib.sha256(facts_json.encode()).hexdigest()})
     from graphrag_core.indexing.embedded_relationships import build_relationships
     relationships = build_relationships(files)
-    manifest = {'files': [{key: file[key] for key in ('path', 'sha256', 'language', 'facts_sha256')}
+    manifest = {'files': [{key: file[key] for key in ('path', 'sha256', 'language', 'facts_sha256', 'outline_sha256')}
                           for file in files], 'symbols': symbol_count,
                 'unsupported_symbols': skipped_count, 'source_bytes': used_bytes,
                 'relationships': {'version': 1, 'count': len(relationships),

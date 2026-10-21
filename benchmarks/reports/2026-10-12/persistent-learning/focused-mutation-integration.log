@@ -1,0 +1,269 @@
+Executing <Task pending name='Task-2' coro=<ActualLearningIntegration.test_native_profiles_and_comparison_through_both_transports() running at /Users/michaelmarler/Projects/rest_proxy/test_repository_learning_integration.py:131> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/tasks.py:1010, Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:460> cb=[_run_until_complete_cb() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:181] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py:110> took 0.765 seconds
+[10/12/26 21:33:15] INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66853 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66853 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66854 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66854 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+[10/12/26 21:33:16] INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66855 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66855 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66856 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66856 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+.                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66859 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+[10/12/26 21:33:17] INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66859 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66860 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66860 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66861 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66861 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66862 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+[10/12/26 21:33:18] INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66862 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=66865 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+[10/12/26 21:33:27] INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=66865 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+.
+----------------------------------------------------------------------
+Ran 2 tests in 13.741s
+
+OK

@@ -3,8 +3,6 @@
 import json
 from typing import Any, Dict, List
 
-import httpx
-
 from proxy.config import (
     ENABLE_MODEL_VALIDATION,
     FALLBACK_MODEL,
@@ -12,6 +10,7 @@ from proxy.config import (
     MODEL_ALIASES_ENV,
 )
 from proxy.logging import debug_log
+from proxy.http_clients import http_client
 
 
 def parse_model_aliases() -> Dict[str, str]:
@@ -57,7 +56,7 @@ def extract_model_keys(models_payload: Any) -> List[str]:
 
 
 async def fetch_lmstudio_models() -> Dict[str, Any]:
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with http_client("lmstudio", timeout=60) as client:
         r = await client.get(f"{LM_BASE}/api/v1/models")
         r.raise_for_status()
         return r.json()

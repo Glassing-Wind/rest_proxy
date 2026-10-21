@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi.responses import JSONResponse
 
+from proxy.http_clients import http_client
 from proxy.config import OPENAI_BASE, ENABLE_DEBUG_LOGGING
 from proxy.logging import debug_log
 from proxy.handlers_memory import _derive_session_id, _persist_memory_best_effort
@@ -228,7 +229,7 @@ async def forward_responses_api_completion(
             fallback_func=forward_openai_chat_completion,
         )
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with http_client("lmstudio", timeout=timeout) as client:
         try:
             r = await client.post(f"{OPENAI_BASE}/responses", json=payload)
             r.raise_for_status()

@@ -1,7 +1,9 @@
 import sys
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List
 
 import httpx
+from anyio import CancelScope
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -28,19 +30,20 @@ from proxy.config import (
 import os
 
 from graphrag_core.app_state import get_runtime_dir
+from graphrag_core.readiness import ReadinessMonitor
+from graphrag_core.telemetry import start as start_telemetry, status as telemetry_status, stop as stop_telemetry
+from graphrag_core.telemetry_transport import RequestTelemetryMiddleware
+from proxy.http_clients import http_client, http_client_lifespan
 
 _RUNTIME_DIR = get_runtime_dir()
 _PROXY_PID_FILE = _RUNTIME_DIR / "proxy.pid"
 
-app = FastAPI(title="LM Studio Stateful Chat Proxy")
-if os.getenv('LM_PROXY_CONTEXT_FORWARD_ENABLED', '0').strip().lower() in {'1', 'true', 'yes', 'on'}:
-    from proxy.context_forwarding import context_chat
-    app.add_api_route('/v1/context/chat/completions', context_chat, methods=['POST'])
 
-
-@app.on_event("startup")
-async def _startup_event() -> None:
-    """Run idempotent schema bootstrap and open the Postgres connection pool on startup."""
+@asynccontextmanager
+async def _application_lifespan(app: FastAPI):
+    """Own provider connections, optional memory pools and the supervisor PID."""
+    monitor = ReadinessMonitor(default_required=("inference",))
+    app.state.readiness = monitor
     # Write PID for the 'Hot Reload' supervisor
     try:
         _RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
@@ -48,25 +51,56 @@ async def _startup_event() -> None:
     except OSError:
         pass
 
-    if _MEMORY_ENABLED and _memory_store is not None and _MEMORY_PERSIST_ENABLED:
-        # Open Neo4j connection / bootstrap schema
-        try:
-            await _memory_store.open_pool()
-        except Exception as _pool_exc:
-            print(
-                f"[lm-proxy] memory_init_error error={_pool_exc}",
-                file=sys.stderr,
-                flush=True,
-            )
-
-@app.on_event("shutdown")
-async def _shutdown_event() -> None:
-    """Clean up the proxy PID file on exit."""
+    memory_active = _MEMORY_ENABLED and _memory_store is not None and _MEMORY_PERSIST_ENABLED
     try:
-        if _PROXY_PID_FILE.exists():
-            _PROXY_PID_FILE.unlink()
-    except OSError:
-        pass
+        async with http_client_lifespan():
+            if memory_active:
+                try:
+                    await _memory_store.open_pool()
+                except Exception as exc:
+                    print(f"[lm-proxy] memory_init_error error_type={type(exc).__name__}", file=sys.stderr)
+            monitor.activate()
+            try:
+                yield
+            finally:
+                await monitor.close()
+    finally:
+        try:
+            if memory_active:
+                try:
+                    with CancelScope(shield=True):
+                        await _memory_store.close_pool()
+                except Exception as exc:
+                    print(f"[lm-proxy] memory_close_error error_type={type(exc).__name__}", file=sys.stderr)
+        finally:
+            try:
+                _PROXY_PID_FILE.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Flush optional telemetry after provider and memory resources close."""
+    handle = start_telemetry(service="proxy")
+    try:
+        async with _application_lifespan(app):
+            yield
+    finally:
+        await stop_telemetry(handle)
+
+
+app = FastAPI(title="LM Studio Stateful Chat Proxy", lifespan=lifespan)
+app.add_middleware(RequestTelemetryMiddleware, surface="proxy", routes={
+    "/v1/models": "proxy.models", "/api/v1/models": "proxy.models",
+    "/v1/local-models": "proxy.local_models", "/debug/state": "proxy.debug_state",
+    "/v1/chat/completions": "proxy.chat", "/v1/context/chat/completions": "proxy.context_chat",
+    "/v1/embeddings": "proxy.embeddings", "/live": "live", "/ready": "ready",
+    "/health/details": "health.details", "/health": "health",
+})
+if os.getenv('LM_PROXY_CONTEXT_FORWARD_ENABLED', '0').strip().lower() in {'1', 'true', 'yes', 'on'}:
+    from proxy.context_forwarding import context_chat
+    app.add_api_route('/v1/context/chat/completions', context_chat, methods=['POST'])
 
 
 from proxy.logging import debug_log
@@ -118,7 +152,7 @@ async def list_models() -> Any:
         ]
         return JSONResponse({"object": "list", "data": data})
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with http_client("lmstudio", timeout=60) as client:
         r = await client.get(f"{OPENAI_BASE}/models")
         r.raise_for_status()
         return JSONResponse(r.json())
@@ -136,6 +170,27 @@ async def list_local_llm_models() -> Any:
 
 
 # --- Lightweight debug endpoints
+@app.get("/live")
+async def live() -> Any:
+    """Respond without querying the inference provider or optional storage."""
+    return JSONResponse({"live": True, "application": "inference"})
+
+
+@app.get("/ready")
+async def readiness(request: Request) -> Any:
+    monitor = getattr(request.app.state, "readiness", None) or ReadinessMonitor(default_required=("inference",))
+    status, payload = await monitor.check()
+    return JSONResponse(payload, status_code=status, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/health/details")
+async def health_details(request: Request) -> Any:
+    monitor = getattr(request.app.state, "readiness", None) or ReadinessMonitor(default_required=("inference",))
+    _, payload = await monitor.check()
+    payload["telemetry"] = telemetry_status()
+    return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/health")
 async def health() -> Any:
     return JSONResponse(
@@ -318,7 +373,7 @@ async def chat_completions(request: Request) -> Any:
 async def embeddings(body: Dict[str, Any]) -> Any:
     # Pass through embeddings request to LM Studio's /v1/embeddings.
     timeout = httpx.Timeout(60.0, connect=30.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with http_client("lmstudio", timeout=timeout) as client:
         r = await client.post(f"{OPENAI_BASE}/embeddings", json=body)
         if r.status_code >= 400:
             raise HTTPException(r.status_code, r.text)

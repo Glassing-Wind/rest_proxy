@@ -49,7 +49,7 @@ class LiveShadowTests(unittest.TestCase):
         self.uri = os.getenv('LM_PROXY_NEO4J_URI', 'bolt://127.0.0.1:7687')
         self.user = os.getenv('LM_PROXY_NEO4J_USER', 'neo4j')
         self.password = os.getenv('LM_PROXY_NEO4J_PASSWORD', 'password')
-        self.db = os.getenv('LM_PROXY_NEO4J_DB', 'proxy')
+        self.db = os.getenv('LM_PROXY_NEO4J_DB', 'neo4j')
         self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
         self.project = 'shadow-safety-test-' + uuid.uuid4().hex
         self.run_id = self.project + ':run'

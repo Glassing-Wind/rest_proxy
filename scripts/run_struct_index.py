@@ -617,7 +617,7 @@ def main() -> int:
     parser.add_argument(
         "--neo4j-pass", default=os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
     )
-    parser.add_argument("--neo4j-db", default=os.getenv("LM_PROXY_NEO4J_DB", "proxy"))
+    parser.add_argument("--neo4j-db", default=os.getenv("LM_PROXY_NEO4J_DB", "neo4j"))
     args = parser.parse_args()
     from memory.storage_config import embedded_graph_selected, EMBEDDED_INDEXING_UNAVAILABLE
     if embedded_graph_selected():
