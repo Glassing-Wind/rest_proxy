@@ -58,6 +58,9 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_appliance_entrypoint.py
 "$PYTHON_BIN" test_appliance_bootstrap.py
 "$PYTHON_BIN" test_appliance_telemetry.py
+"$PYTHON_BIN" test_telemetry.py
+"$PYTHON_BIN" test_telemetry_transport.py
+"$PYTHON_BIN" test_telemetry_boundaries.py
 "$PYTHON_BIN" test_dev_tools.py
 "$PYTHON_BIN" test_docs_admin_family.py
 "$PYTHON_BIN" test_docs_research.py
@@ -74,6 +77,11 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_memory_mode.py
 "$PYTHON_BIN" test_fire_context.py
 "$PYTHON_BIN" test_openai_provider.py
+"$PYTHON_BIN" test_proxy_lifespan.py
+"$PYTHON_BIN" test_readiness.py
+"$PYTHON_BIN" test_health_endpoints.py
+"$PYTHON_BIN" test_runtime_hardware.py
+"$PYTHON_BIN" test_arm_benchmark.py
 "$PYTHON_BIN" test_lmstudio_provider.py
 "$PYTHON_BIN" test_strict_lmstudio_encoder.py
 "$PYTHON_BIN" test_qwen_worker_trial.py
@@ -83,6 +91,14 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_embedded_route_overview.py
 "$PYTHON_BIN" test_embedded_symbol_imports.py
 "$PYTHON_BIN" test_embedded_rest.py
+"$PYTHON_BIN" test_repository_learning.py
+"$PYTHON_BIN" test_repository_learning_tools.py
+"$PYTHON_BIN" test_repoanalyzer_adapter.py
+"$PYTHON_BIN" test_repository_learning_integration.py
+"$PYTHON_BIN" test_repository_pattern_store.py
+"$PYTHON_BIN" test_repository_pattern_learning.py
+"$PYTHON_BIN" test_github_configuration.py
+"$PYTHON_BIN" test_repository_configuration_learning.py
 "$PYTHON_BIN" test_fire_store.py
 "$PYTHON_BIN" test_context_bundle.py
 "$PYTHON_BIN" test_fire_context_bundle.py

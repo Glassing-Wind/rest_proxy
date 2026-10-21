@@ -93,6 +93,17 @@ class EmbeddedRuntime:
         async with self._lock:
             return await (await self._get_owner()).overview(project_id)
 
+    async def capture_learning_snapshots(self, project_ids: list[str], *, max_files: int = 20):
+        """Release runtime/owner locks after immutable inputs are captured, before analysis."""
+        async with self._lock:
+            return await (await self._get_owner()).learning_snapshots(project_ids, max_files=max_files)
+
+    async def commit_learning_record(self, store, project_id: str, run_id: str,
+                                     record: dict, expected_revision: int):
+        async with self._lock:
+            return await (await self._get_owner()).commit_learning_record(
+                store, project_id, run_id, record, expected_revision)
+
     async def workspace_symbol_context(self, workspace_id: str, symbol_name: str,
                                        *, call_chain: bool = False, **bounds):
         async with self._lock:

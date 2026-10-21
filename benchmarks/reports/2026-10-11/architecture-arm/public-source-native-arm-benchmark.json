@@ -1,0 +1,386 @@
+{
+  "corpus": {
+    "files": [
+      {
+        "bytes": 16788,
+        "path": "graphrag_core/indexing/embedded_repository.py",
+        "sha256": "f54dbe1550c4866e75873ad288f25814359c4eccaf66e1647de9c1142de553e6"
+      },
+      {
+        "bytes": 9322,
+        "path": "memory/embedded_ladybug.py",
+        "sha256": "9fe680dbefe652aad67815945226709dc2273642431596bf1639f50199405c72"
+      },
+      {
+        "bytes": 6626,
+        "path": "memory/embedded_lance_runs.py",
+        "sha256": "04442f4524522b7bdb6d8cd1e9c152a3b47e01aa781f8de2e531e51321fc97fa"
+      }
+    ],
+    "kind": "explicit-frozen-python-manifest-v1",
+    "sha256": "254ae17d0ec20dfe51457e20c1e9646ee3b1962079c75ca961bc353dac9708ad",
+    "text_query": "publication"
+  },
+  "created_at_utc": "2026-10-11T19:03:39.606941+00:00",
+  "policy": {
+    "cold_definition": "fresh process and empty state; OS/disk/parser cache not cleared",
+    "comparative_acceleration_claim": false,
+    "concurrent_machine_activity_isolated": false,
+    "existing_state_used": false,
+    "inference_calls": false,
+    "model_loading": false
+  },
+  "runtime": {
+    "acceleration": {
+      "ane_execution": "not-measured",
+      "gpu_backend": "not-probed",
+      "inference_runtime": "not-probed",
+      "simd_execution": "not-measured"
+    },
+    "hardware": {
+      "arm64_process": true,
+      "cpu_model": "Apple M3 Max",
+      "efficiency_cores": 4,
+      "logical_cpus": 16,
+      "machine": "arm64",
+      "memory_bytes": 137438953472,
+      "performance_cores": 12,
+      "rosetta_translated": 0,
+      "system": "Darwin"
+    },
+    "packages": {
+      "ladybug": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 19468216,
+          "name": "_lbug.cpython-314-darwin.so",
+          "sha256": "361a01c260be9698c3a8b6cd776c42e7ae246f46482a6916eb85c09d92d2bbdb"
+        },
+        "version": "0.21.2",
+        "wheel_metadata_sha256": "a21bbd93e1306004457242d4c9dd429c835253baf88f33e16efeec5e2066d2c4",
+        "wheel_tags": [
+          "cp314-cp314-macosx_15_0_arm64"
+        ]
+      },
+      "lancedb": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 145904976,
+          "name": "_lancedb.abi3.so",
+          "sha256": "e38ffa297625dcb8d11e4b5519d5c02f3b7e75416338bd55cf6a9560ee2a3983"
+        },
+        "version": "0.39.0",
+        "wheel_metadata_sha256": "5adc30dd0f44f4ac5c84c7a443469fbf4fdabbd3d1ab7b98d59b68d42763cdcc",
+        "wheel_tags": [
+          "cp310-abi3-macosx_11_0_arm64"
+        ]
+      },
+      "pyarrow": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 3576904,
+          "name": "lib.cpython-314-darwin.so",
+          "sha256": "0ddccd9f88457e2b418db1d3922169ed1a16c2eeb6328f5fbda9568997042602"
+        },
+        "version": "25.0.1",
+        "wheel_metadata_sha256": "9daf8f61735dea2717d9164d966a9e8a7724b4f7f3a778f6575bcf7c2cf1e5d9",
+        "wheel_tags": [
+          "cp314-cp314-macosx_12_0_arm64"
+        ]
+      },
+      "tree-sitter-language-pack": {
+        "native_binary": {
+          "architectures": [
+            "arm64"
+          ],
+          "bytes": 13802568,
+          "name": "_native.abi3.so",
+          "sha256": "6689787bdfc5e5a32193b707ae4c8c720d8dd2a64aa41e151f4ac18d954aac58"
+        },
+        "version": "1.20.0",
+        "wheel_metadata_sha256": "8d64a536aad2a28ad2f2325edaf4d91f02fa687f9bfd6e84a4d1fdeae1deb1f3",
+        "wheel_tags": [
+          "cp310-abi3-macosx_11_0_arm64"
+        ]
+      }
+    },
+    "python": {
+      "executable_architectures": [
+        "arm64"
+      ],
+      "implementation": "CPython",
+      "version": "3.14.8"
+    }
+  },
+  "schema_version": 1,
+  "source_sha256": {
+    "graphrag_core/indexing/embedded_repository.py": "f54dbe1550c4866e75873ad288f25814359c4eccaf66e1647de9c1142de553e6",
+    "memory/embedded_ladybug.py": "9fe680dbefe652aad67815945226709dc2273642431596bf1639f50199405c72",
+    "requirements-embedded.txt": "0749d981324e3d4a829a0160b06a46b6de488f7f6e71cb33b71bafa814ee5177",
+    "scripts/benchmark_embedded_arm.py": "1e46d5de6e67a624a13b7eca0dfb8bb6203743439c3bc9e12aa4bfbc34614f8d",
+    "scripts/runtime_hardware.py": "b7f40ddbf28caa1427c8eddb8b17ec2da514a3180d4dc32bbfbacb9bc77a417c"
+  },
+  "status": "passed",
+  "summary": {
+    "2": {
+      "cold_index": {
+        "median_seconds": 0.15893035402405076,
+        "p95_seconds": 0.16109333303757012,
+        "samples": 2
+      },
+      "warm_index": {
+        "median_seconds": 0.144597625505412,
+        "p95_seconds": 0.15357791702263057,
+        "samples": 4
+      }
+    },
+    "4": {
+      "cold_index": {
+        "median_seconds": 0.16068620848818682,
+        "p95_seconds": 0.1652342500165105,
+        "samples": 2
+      },
+      "warm_index": {
+        "median_seconds": 0.14649147901218385,
+        "p95_seconds": 0.1479451660416089,
+        "samples": 4
+      }
+    },
+    "8": {
+      "cold_index": {
+        "median_seconds": 0.16721116649569012,
+        "p95_seconds": 0.16941912501351908,
+        "samples": 2
+      },
+      "warm_index": {
+        "median_seconds": 0.15357312551350333,
+        "p95_seconds": 0.15392824995797127,
+        "samples": 4
+      }
+    }
+  },
+  "trials": [
+    {
+      "chunks": 28,
+      "cold_index_seconds": 0.16109333303757012,
+      "cold_open_seconds": 0.572742415999528,
+      "cold_text_query_seconds": 0.005504291970282793,
+      "encoder": {
+        "model_calls": 0,
+        "semantic_quality_measured": false,
+        "synthetic": true
+      },
+      "encoder_setup_seconds": 0.0,
+      "files": 3,
+      "first_manifest_sha256": "7243c04ac89c4eb4f22aa183ddd54c5c8b0035db62f62423016bf7f252e9d924",
+      "import_preflight_seconds": 0.008012124977540225,
+      "integrity": {
+        "active_run": true,
+        "durable_reopen": true,
+        "source_hashes": true
+      },
+      "peak_process_rss_bytes": 317014016,
+      "process_wall_seconds": 1.3070772910141386,
+      "reopen_and_text_query_seconds": 0.05617791600525379,
+      "state_bytes": 2006832,
+      "symbols": 68,
+      "threads": 2,
+      "trial": 1,
+      "warm_index_seconds": [
+        0.15357791702263057,
+        0.14250570902368054
+      ],
+      "warm_text_query": {
+        "median_seconds": 0.0027941040170844644,
+        "p95_seconds": 0.003028000006452203,
+        "samples": 10
+      }
+    },
+    {
+      "chunks": 28,
+      "cold_index_seconds": 0.1652342500165105,
+      "cold_open_seconds": 0.5725630839588121,
+      "cold_text_query_seconds": 0.005248624947853386,
+      "encoder": {
+        "model_calls": 0,
+        "semantic_quality_measured": false,
+        "synthetic": true
+      },
+      "encoder_setup_seconds": 0.0,
+      "files": 3,
+      "first_manifest_sha256": "449473911b4f8e10946d8be3ff09b86f02780bae48ad2b1f7ab90fdc2f62376b",
+      "import_preflight_seconds": 0.007243084022775292,
+      "integrity": {
+        "active_run": true,
+        "durable_reopen": true,
+        "source_hashes": true
+      },
+      "peak_process_rss_bytes": 316325888,
+      "process_wall_seconds": 1.2978555830195546,
+      "reopen_and_text_query_seconds": 0.05813445901731029,
+      "state_bytes": 2007599,
+      "symbols": 68,
+      "threads": 4,
+      "trial": 1,
+      "warm_index_seconds": [
+        0.1479451660416089,
+        0.14616212499095127
+      ],
+      "warm_text_query": {
+        "median_seconds": 0.0023635620018467307,
+        "p95_seconds": 0.002574165991973132,
+        "samples": 10
+      }
+    },
+    {
+      "chunks": 28,
+      "cold_index_seconds": 0.16941912501351908,
+      "cold_open_seconds": 0.5779799590236507,
+      "cold_text_query_seconds": 0.005389875033870339,
+      "encoder": {
+        "model_calls": 0,
+        "semantic_quality_measured": false,
+        "synthetic": true
+      },
+      "encoder_setup_seconds": 0.0,
+      "files": 3,
+      "first_manifest_sha256": "102a7a7f4d1f2bfd2a2537c3fa2cb364ad99dc425ad98daf4f426139226461c4",
+      "import_preflight_seconds": 0.007284166000317782,
+      "integrity": {
+        "active_run": true,
+        "durable_reopen": true,
+        "source_hashes": true
+      },
+      "peak_process_rss_bytes": 317816832,
+      "process_wall_seconds": 1.3214666250278242,
+      "reopen_and_text_query_seconds": 0.059206874982919544,
+      "state_bytes": 2005677,
+      "symbols": 68,
+      "threads": 8,
+      "trial": 1,
+      "warm_index_seconds": [
+        0.1522748339921236,
+        0.15388554200762883
+      ],
+      "warm_text_query": {
+        "median_seconds": 0.002537936990847811,
+        "p95_seconds": 0.002760958974249661,
+        "samples": 10
+      }
+    },
+    {
+      "chunks": 28,
+      "cold_index_seconds": 0.15613816695986316,
+      "cold_open_seconds": 0.5732901660376228,
+      "cold_text_query_seconds": 0.0049049159861169755,
+      "encoder": {
+        "model_calls": 0,
+        "semantic_quality_measured": false,
+        "synthetic": true
+      },
+      "encoder_setup_seconds": 0.0,
+      "files": 3,
+      "first_manifest_sha256": "9975690477f01af44b9b0629659680d45015144a8e013b6b4f244d1f34aa3ec0",
+      "import_preflight_seconds": 0.007206832990050316,
+      "integrity": {
+        "active_run": true,
+        "durable_reopen": true,
+        "source_hashes": true
+      },
+      "peak_process_rss_bytes": 315736064,
+      "process_wall_seconds": 1.284327541012317,
+      "reopen_and_text_query_seconds": 0.05810341698816046,
+      "state_bytes": 2005744,
+      "symbols": 68,
+      "threads": 4,
+      "trial": 2,
+      "warm_index_seconds": [
+        0.14682083303341642,
+        0.1434991669957526
+      ],
+      "warm_text_query": {
+        "median_seconds": 0.0025219370436389,
+        "p95_seconds": 0.0028993330197408795,
+        "samples": 10
+      }
+    },
+    {
+      "chunks": 28,
+      "cold_index_seconds": 0.16500320797786117,
+      "cold_open_seconds": 0.5742355420370586,
+      "cold_text_query_seconds": 0.005007499945349991,
+      "encoder": {
+        "model_calls": 0,
+        "semantic_quality_measured": false,
+        "synthetic": true
+      },
+      "encoder_setup_seconds": 0.0,
+      "files": 3,
+      "first_manifest_sha256": "c99009cfd2fd530f4359133dd492395202f26ebd8f8c6deed8e2b1104c53368e",
+      "import_preflight_seconds": 0.007240834005642682,
+      "integrity": {
+        "active_run": true,
+        "durable_reopen": true,
+        "source_hashes": true
+      },
+      "peak_process_rss_bytes": 317456384,
+      "process_wall_seconds": 1.3359852920402773,
+      "reopen_and_text_query_seconds": 0.06441883300431073,
+      "state_bytes": 2006704,
+      "symbols": 68,
+      "threads": 8,
+      "trial": 2,
+      "warm_index_seconds": [
+        0.15392824995797127,
+        0.15326070901937783
+      ],
+      "warm_text_query": {
+        "median_seconds": 0.0026041874662041664,
+        "p95_seconds": 0.003015834023244679,
+        "samples": 10
+      }
+    },
+    {
+      "chunks": 28,
+      "cold_index_seconds": 0.1567673750105314,
+      "cold_open_seconds": 0.5706740830210038,
+      "cold_text_query_seconds": 0.005250957969110459,
+      "encoder": {
+        "model_calls": 0,
+        "semantic_quality_measured": false,
+        "synthetic": true
+      },
+      "encoder_setup_seconds": 0.0,
+      "files": 3,
+      "first_manifest_sha256": "b50cf0a343f07bbee32cfab81f8273bb0f52b2a1f895f0b76e9363404a83a80f",
+      "import_preflight_seconds": 0.007276709016878158,
+      "integrity": {
+        "active_run": true,
+        "durable_reopen": true,
+        "source_hashes": true
+      },
+      "peak_process_rss_bytes": 313655296,
+      "process_wall_seconds": 1.278199249994941,
+      "reopen_and_text_query_seconds": 0.055398917000275105,
+      "state_bytes": 2006189,
+      "symbols": 68,
+      "threads": 2,
+      "trial": 2,
+      "warm_index_seconds": [
+        0.14668954198714346,
+        0.14244858303572983
+      ],
+      "warm_text_query": {
+        "median_seconds": 0.002409375476418063,
+        "p95_seconds": 0.002693084010388702,
+        "samples": 10
+      }
+    }
+  ]
+}

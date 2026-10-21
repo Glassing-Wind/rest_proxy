@@ -14,6 +14,10 @@ PRIMARY_TOOL_NAMES: frozenset[str] = frozenset({
 })
 
 OPTIONAL_PRIMARY_TOOL_NAMES = frozenset({
+    "get_repository_learning_profile", "compare_repository_learning_profiles",
+    "get_learned_repository_patterns", "suggest_learned_repository_patterns",
+    "learn_repository_patterns", "learn_text_patterns", "delete_repository_learning",
+    "learn_configuration_patterns",
     "search_embedded_repository", "describe_embedded_file", "get_embedded_overview",
     "resolve_embedded_session", "get_embedded_workspace_activity", "get_embedded_indexing_attempt", "get_embedded_project_metadata", "list_embedded_projects", "get_embedded_file_facts", "get_embedded_relationships",
 })

@@ -18,6 +18,7 @@ dependencies = { file = ["requirements-core.txt"] }
 optional-dependencies.embedded = { file = ["requirements-embedded.txt"] }
 optional-dependencies.full = { file = ["requirements.txt"] }
 optional-dependencies.dev = { file = ["requirements-dev.txt"] }
+optional-dependencies.telemetry = { file = ["requirements-telemetry.txt"] }
 
 [tool.setuptools]
 py-modules = [

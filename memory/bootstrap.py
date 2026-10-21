@@ -62,7 +62,7 @@ _CODEBASE_DDL_STEPS = [
     _CODEBASE_EMBEDDINGS_DDL,
     # HNSW index for ANN vector search
     "CREATE INDEX IF NOT EXISTS idx_ce_hnsw       ON codebase_embeddings USING hnsw (embedding vector_cosine_ops)",
-    # GIN index for BM25 full-text search
+    # GIN index for PostgreSQL full-text search (retrieval ranks with ts_rank)
     "CREATE INDEX IF NOT EXISTS idx_ce_fts        ON codebase_embeddings USING gin  (search_vec)",
     # Btree for project-scoped deletes / incremental re-index
     "CREATE INDEX IF NOT EXISTS idx_ce_project    ON codebase_embeddings (project_id, file_path)",

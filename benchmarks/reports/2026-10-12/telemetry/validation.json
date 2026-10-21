@@ -1,0 +1,44 @@
+{
+  "context_acceptance": "Real stateful MCP initialize plus sequential/concurrent calls have distinct correct request parents",
+  "dependency_environment_changed": false,
+  "final_production_bytes_match_gate": true,
+  "gate_staged_tree": "d4ad3ae47c6ae6dcf51d90b9b200c8945f4de5ef",
+  "graphrag_investigation": {
+    "current_source_verification": "Direct known-file reads; index not rebuilt",
+    "indexed_files": 484,
+    "newer_files_not_indexed": 46,
+    "run_alignment": "aligned"
+  },
+  "independent_review": "Transport/core/storage privacy, cancellation and resource ownership reviewed; findings fixed and regressed",
+  "installed_versions": {
+    "httpx": "0.28.1",
+    "ladybug": "0.21.2",
+    "lancedb": "0.39.0",
+    "mcp": "1.26.0",
+    "opentelemetry-api": "1.40.0",
+    "opentelemetry-exporter-otlp-proto-common": "1.40.0",
+    "opentelemetry-proto": "1.40.0",
+    "opentelemetry-sdk": "1.40.0"
+  },
+  "machine": "arm64",
+  "new_test_executions": {
+    "boundaries": 7,
+    "core": 20,
+    "transport": 14
+  },
+  "optional_dependency_acceptance": "Bare installed import/scopes need no SDK; telemetry extra metadata and sdist profile verified",
+  "otlp_acceptance": "Real SDK protobuf traces and metrics sent only to disposable loopback HTTP fixture",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "privacy_acceptance": "Fixed five attributes, private trace context, no global provider/current-span mutation, no exemplars/events/links",
+  "production_activation": false,
+  "push_or_hosted_ci_dispatch": false,
+  "python": "3.14.8",
+  "runtime_gate_mode": "Local telemetry enabled; explicit endpoint blank; no external export",
+  "scope_limits": [
+    "Not all PostgreSQL/Redis/provider/legacy parser paths",
+    "No pool-wait instrumentation or SLO/outcome/performance claim",
+    "No inbound header/baggage or cross-process trace propagation",
+    "Best-effort export and bounded shutdown"
+  ],
+  "temporary_listener_closed": true
+}

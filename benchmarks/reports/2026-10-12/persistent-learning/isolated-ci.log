@@ -1,0 +1,1362 @@
+[ci] Running Ruff across production Python and operational scripts...
+All checks passed!
+[ci] Running offline shared-task acceptance...
+............
+----------------------------------------------------------------------
+Ran 12 tests in 0.028s
+
+OK
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.113s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.767s
+
+OK
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 1.070s
+
+OK
+............
+----------------------------------------------------------------------
+Ran 12 tests in 0.015s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.112s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.006s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.006s
+
+OK
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.000s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.048s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+OK
+[ci] Running GraphRAG regression suite...
+[graph-check] Running parser fact precision checks...
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.000s
+
+OK
+[graph-check] Running semantic indexer helper checks...
+..[lm-proxy:indexer] Semantic phase — 1 files (device=cpu, embed_batch=2, write_batch=1024, chunk_concurrency=64)
+[lm-proxy:indexer] Semantic chunking — native ts-pack manifest path
+[lm-proxy:indexer] Chunked 1 files in 0.00s
+[lm-proxy:indexer] File parse summary — parsed=1 skipped=0
+[lm-proxy:indexer] Total rebuild requested — wiped project 'proj123'
+[lm-proxy:indexer] Pruned 2 orphaned files (ghosts)
+[lm-proxy:indexer] 0 chunks already indexed — skipping unchanged
+[lm-proxy:indexer] Done — 3 new / 0 skipped / 1 files in 0.05s (parsed=1 skipped_files=0)
+[lm-proxy:indexer] Ingest timing — embed=0.00s/0 calls/0 chunks, pg_write=0.00s/0 calls/0 chunks, neo4j_link=0.00s/0 refs
+..[lm-proxy:indexer] Semantic phase — 1 files (device=cpu, embed_batch=2, write_batch=1024, chunk_concurrency=64)
+[lm-proxy:indexer] Semantic chunking — native ts-pack manifest path
+[lm-proxy:indexer] Chunked 1 files in 0.00s
+[lm-proxy:indexer] File parse summary — parsed=1 skipped=0
+[lm-proxy:indexer] 0 chunks already indexed — skipping unchanged
+[lm-proxy:indexer] Done — 1 new / 0 skipped / 1 files in 0.04s (parsed=1 skipped_files=0)
+[lm-proxy:indexer] Ingest timing — embed=0.00s/0 calls/0 chunks, pg_write=0.00s/0 calls/0 chunks, neo4j_link=0.00s/0 refs
+..[lm-proxy:indexer] Semantic phase — 1 files (device=cpu, embed_batch=2, write_batch=16, chunk_concurrency=64)
+[lm-proxy:indexer] Semantic chunking — native ts-pack manifest path
+[lm-proxy:indexer] Chunked 1 files in 0.00s
+[lm-proxy:indexer] File parse summary — parsed=1 skipped=0
+[lm-proxy:indexer] 0 chunks already indexed — skipping unchanged
+[lm-proxy:indexer] Done — 0 new / 0 skipped / 1 files in 0.04s (parsed=1 skipped_files=0)
+[lm-proxy:indexer] Ingest timing — embed=0.00s/0 calls/0 chunks, pg_write=0.00s/0 calls/0 chunks, neo4j_link=0.00s/0 refs
+..[lm-proxy:indexer] Semantic file role graph promotion — matched=2 files=2 non_empty=1
+...............
+----------------------------------------------------------------------
+Ran 23 tests in 0.338s
+
+OK
+[graph-check] Running semantic Postgres row checks...
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.040s
+
+OK
+[graph-check] Running duplication helper checks...
+..........................
+----------------------------------------------------------------------
+Ran 26 tests in 0.001s
+
+OK
+[graph-check] Running duplication query checks...
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+[graph-check] Running duplication report checks...
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.005s
+
+OK
+[graph-check] Running telemetry evaluator checks...
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.001s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.206s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.204s
+
+OK
+[graph-check] Running semantic helper checks...
+..................................................................................................................
+----------------------------------------------------------------------
+Ran 114 tests in 0.161s
+
+OK
+[graph-check] Running search summary checks...
+.....................
+----------------------------------------------------------------------
+Ran 21 tests in 0.011s
+
+OK
+[graph-check] Running raw graph query checks...
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+[graph-check] Running graph utility checks...
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.005s
+
+OK
+[graph-check] Running graph core inline checks...
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+[graph-check] Running manifest coverage checks...
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.013s
+
+OK
+[graph-check] Running flow summary checks...
+......................................
+----------------------------------------------------------------------
+Ran 38 tests in 0.031s
+
+OK
+[graph-check] Running graph tool overview checks...
+......................................
+----------------------------------------------------------------------
+Ran 38 tests in 0.088s
+
+OK
+[graph-check] Running code intel graph tool checks...
+...............................................................................
+----------------------------------------------------------------------
+Ran 79 tests in 0.374s
+
+OK
+[graph-check] Running code intel helper checks...
+.................................
+----------------------------------------------------------------------
+Ran 33 tests in 0.204s
+
+OK
+[graph-check] All graph pipeline checks passed.
+[ci] Running MCP protocol checks...
+[lm-proxy:watcher] Disabled via LM_PROXY_WATCHER_ENABLED=0.
+[lm-proxy] STDIO Server Startup complete.
+[10/12/26 21:43:23] INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+[lm-proxy] Shutdown complete.
+MCP STDIO lifecycle check passed
+- tools available after startup delay: 60
+- post-delay tool call succeeded
+brain_server started pid=70582 port=50187 log=/private/var/folders/y8/9d5m83g10433dzmz_rjpmkrh0000gn/T/rest-proxy-persistent-gate-akzjrn6l/checkout/.runtime/brain_server.50187.log
+MCP protocol smoke check passed
+- initialize protocol version: 2025-11-25
+- session id returned: d46c125fccd54b5581ee2a5df3dc3576
+- headerless initialize negotiated: 2025-11-25
+- compatibility initialize negotiated: 2025-06-18
+- health standard: Streamable HTTP (2025-11-25)
+- boot id: 70582-2536ba04
+MCP stale-session restart check passed
+- stale session id rejected after restart: 7538c200f6f8476a9190090f102516e6
+- boot identity rotated: 70582-2536ba04 -> 70724-81f238a4
+- fresh session recovered after restart: ddea56ab4608418fb39e79a0a00eb7d7
+MCP roots integration check passed
+- session remained usable after delayed startup work
+- client root advertised and pinned: /private/var/folders/y8/9d5m83g10433dzmz_rjpmkrh0000gn/T/graphrag-mcp-root-p6_dtt8x
+- temporary root watch removed
+[ci] Running contract and service-surface tests...
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 0.029s
+
+OK
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.035s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.000s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.170s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.505s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.001s
+
+OK
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.018s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.003s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.003s
+
+OK
+.................
+----------------------------------------------------------------------
+Ran 17 tests in 0.020s
+
+OK
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 2.724s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+
+OK
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.544s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.196s
+
+OK
+.......................
+----------------------------------------------------------------------
+Ran 23 tests in 0.035s
+
+OK
+..sssss
+----------------------------------------------------------------------
+Ran 7 tests in 0.006s
+
+OK (skipped=5)
+.[ts-pack:struct] Done — 0 files indexed.
+[ts-pack:timing] index_workspace: 0.00s — files=0
+[ts-pack:timing] set_struct_run_status(finalize_failed): 0.00s
+[ts-pack:struct] WARNING: finalization/publication failed (RuntimeError).
+...ssss
+----------------------------------------------------------------------
+Ran 8 tests in 0.107s
+
+OK (skipped=4)
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.099s
+
+OK
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.077s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 1.012s
+
+OK
+Executing <Task finished name='Task-2' coro=<FireContextTests.test_assembly_preserves_ranked_provenance_and_distinct_shared_prefixes() done, defined at /private/var/folders/y8/9d5m83g10433dzmz_rjpmkrh0000gn/T/rest-proxy-persistent-gate-akzjrn6l/checkout/test_fire_context.py:21> result=None created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py:110> took 0.245 seconds
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.250s
+
+OK
+..................[lm-proxy] tool_defs_compacted tools=1 before=471 after=368 saved=103
+..
+----------------------------------------------------------------------
+Ran 20 tests in 0.027s
+
+OK
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 0.098s
+
+OK
+........Executing <Task pending name='Task-58' coro=<TemporaryResources.test_anyio_cancel_scope_does_not_interrupt_resource_cleanup() running at /private/var/folders/y8/9d5m83g10433dzmz_rjpmkrh0000gn/T/rest-proxy-persistent-gate-akzjrn6l/checkout/test_readiness.py:280> wait_for=<Future pending cb=[Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:460> cb=[_run_until_complete_cb() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:181] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py:110> took 0.107 seconds
+...........
+----------------------------------------------------------------------
+Ran 19 tests in 0.584s
+
+OK
+[brain-server] Startup complete. boot=70842-d1c4e4a3 tools=60 fp=414ed420ea6d
+[10/12/26 21:43:41] INFO     StreamableHTTP       streamable_http_manager.py:116
+                             session manager
+                             started
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+                    INFO     StreamableHTTP       streamable_http_manager.py:120
+                             session manager
+                             shutting down
+[brain-server] Shutdown complete.
+[brain-server] Startup complete. boot=70842-d1c4e4a3 tools=60 fp=414ed420ea6d
+                    INFO     StreamableHTTP       streamable_http_manager.py:116
+                             session manager
+                             started
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+                    INFO     StreamableHTTP       streamable_http_manager.py:120
+                             session manager
+                             shutting down
+[brain-server] Shutdown complete.
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+..[brain-server] Startup complete. boot=70842-d1c4e4a3 tools=60 fp=414ed420ea6d
+                    INFO     StreamableHTTP       streamable_http_manager.py:116
+                             session manager
+                             started
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             503 Service Unavailable"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+                    INFO     StreamableHTTP       streamable_http_manager.py:120
+                             session manager
+                             shutting down
+[brain-server] Shutdown complete.
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             503 Service Unavailable"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+.                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             503 Service Unavailable"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ "HTTP/1.1 200
+                             OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/live "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/ready "HTTP/1.1
+                             503 Service Unavailable"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health/details
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: GET                   _client.py:1025
+                             http://testserver/health "HTTP/1.1
+                             200 OK"
+.
+----------------------------------------------------------------------
+Ran 4 tests in 0.445s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+..........lmstudio embedding truncated 1/1 input texts to fit safe token budget=4 (context_length=4 chars_per_token=3)
+.
+----------------------------------------------------------------------
+Ran 11 tests in 0.340s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.006s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.006s
+
+OK
+.[10/12/26 21:43:42] WARNING  Executing <Task finished        base_events.py:2057
+                             name='Task-7'
+                             coro=<RuntimeTests.test_backend
+                             _route_summary_dispatch_and_uns
+                             upported_options() done,
+                             defined at
+                             /private/var/folders/y8/9d5m83g
+                             10433dzmz_rjpmkrh0000gn/T/rest-
+                             proxy-persistent-gate-akzjrn6l/
+                             checkout/test_embedded_runtime.
+                             py:12> result=None created at
+                             /opt/homebrew/Cellar/python@3.1
+                             4/3.14.8_2/Frameworks/Python.fr
+                             amework/Versions/3.14/lib/pytho
+                             n3.14/asyncio/runners.py:110>
+                             took 0.117 seconds
+.............
+----------------------------------------------------------------------
+Ran 14 tests in 0.248s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.004s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.006s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.013s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+[10/12/26 21:43:43] INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             503 Service Unavailable"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             503 Service Unavailable"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             413 Request Entity Too Large"
+.                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+..[10/12/26 21:43:44] INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             400 Bad Request"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             413 Request Entity Too Large"
+                    INFO     HTTP Request: GET                   _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             405 Method Not Allowed"
+.
+----------------------------------------------------------------------
+Ran 4 tests in 1.620s
+
+OK
+Executing <Task pending name='Task-1' coro=<RepositoryLearningTests.asyncSetUp() running at /private/var/folders/y8/9d5m83g10433dzmz_rjpmkrh0000gn/T/rest-proxy-persistent-gate-akzjrn6l/checkout/test_repository_learning.py:121> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/tasks.py:1010, Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:460> cb=[_run_until_complete_cb() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:181] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py:110> took 0.525 seconds
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 4.600s
+
+OK
+[10/12/26 21:43:49] INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+..[10/12/26 21:43:51] INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+.                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    WARNING  Tool 'delete_repository_learning' not server.py:488
+                             listed, no validation will be
+                             performed
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 503 Service Unavailable"
+.                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+.                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+[10/12/26 21:43:52] INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+.                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+.                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+.                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+..                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 422 Unprocessable Entity"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+.                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 413 Request Entity Too
+                             Large"
+                    INFO     HTTP Request: GET                   _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 405 Method Not Allowed"
+.
+----------------------------------------------------------------------
+Ran 12 tests in 2.389s
+
+OK
+.................
+----------------------------------------------------------------------
+Ran 17 tests in 36.027s
+
+OK
+Executing <Task pending name='Task-2' coro=<ActualLearningIntegration.test_native_profiles_and_comparison_through_both_transports() running at /private/var/folders/y8/9d5m83g10433dzmz_rjpmkrh0000gn/T/rest-proxy-persistent-gate-akzjrn6l/checkout/test_repository_learning_integration.py:131> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/tasks.py:1010, Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:460> cb=[_run_until_complete_cb() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:181] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py:110> took 0.507 seconds
+[10/12/26 21:44:29] INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=70989 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=70989 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=70990 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=70990 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=70993 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+[10/12/26 21:44:30] INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=70993 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=70994 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=70994 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+.                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=70995 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+[10/12/26 21:44:31] INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=70995 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=70996 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=70996 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     Processing request of type            server.py:720
+                             ListToolsRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=70999 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+                    INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=70999 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=71000 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+[10/12/26 21:44:32] INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=71000 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     execute program                 base_events.py:1818
+                             '/Users/michaelmarler/Projects/
+                             rest_proxy/.venv/bin/python':
+                             <_UnixSubprocessTransport
+                             pid=71001 running
+                             stdin=<_UnixWritePipeTransport
+                             fd=20 idle bufsize=0>
+                             stdout=<_UnixReadPipeTransport
+                             fd=21 polling>
+                             stderr=<_UnixReadPipeTransport
+                             fd=23 polling>>
+[10/12/26 21:44:40] INFO     <_UnixReadPipeTransport fd=23    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixReadPipeTransport fd=21    unix_events.py:560
+                             polling> was closed by peer
+                    INFO     <_UnixSubprocessTransport    base_subprocess.py:245
+                             pid=71001 running
+                             stdin=<_UnixWritePipeTranspo
+                             rt closed fd=20 closed>
+                             stdout=<_UnixReadPipeTranspo
+                             rt closing fd=21 idle>
+                             stderr=<_UnixReadPipeTranspo
+                             rt closing fd=23 idle>>
+                             exited with return code 0
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/learning/write
+                             "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST                  _client.py:1740
+                             http://fixture/evidence/read
+                             "HTTP/1.1 200 OK"
+                    INFO     Processing request of type            server.py:720
+                             CallToolRequest
+.
+----------------------------------------------------------------------
+Ran 2 tests in 12.223s
+
+OK
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 0.204s
+
+OK
+Executing <Task pending name='Task-1' coro=<RepositoryPatternLearningTests.asyncSetUp() running at /private/var/folders/y8/9d5m83g10433dzmz_rjpmkrh0000gn/T/rest-proxy-persistent-gate-akzjrn6l/checkout/test_repository_pattern_learning.py:110> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/tasks.py:1010, Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:460> cb=[_run_until_complete_cb() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:181] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py:110> took 0.540 seconds
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 30.348s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 1.484s
+
+OK
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.654s
+
+OK
+...../opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py:112: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10c9895d0>
+  doc = getattr(func, "__doc__", None)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.
+----------------------------------------------------------------------
+Ran 6 tests in 0.030s
+
+OK
+......[10/12/26 21:45:14] INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             200 OK"
+.
+----------------------------------------------------------------------
+Ran 7 tests in 0.018s
+
+OK
+..[10/12/26 21:45:14] INFO     HTTP Request: POST                  _client.py:1740
+                             http://test/evidence/read "HTTP/1.1
+                             200 OK"
+....
+----------------------------------------------------------------------
+Ran 6 tests in 0.044s
+
+OK
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.009s
+
+OK
+.
+----------------------------------------------------------------------
+Ran 1 test in 1.605s
+
+OK
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.005s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.006s
+
+OK
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.854s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.144s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.099s
+
+OK
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.012s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.003s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.007s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.007s
+
+OK
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.001s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 2.186s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.002s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.037s
+
+OK
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.004s
+
+OK
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.229s
+
+OK
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 0.957s
+
+OK
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.039s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.014s
+
+OK
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+OK
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.096s
+
+OK
+[ci] All gated checks passed.

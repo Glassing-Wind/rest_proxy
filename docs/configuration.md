@@ -2,6 +2,10 @@
 
 Configuration is loaded from environment variables and `.env`. Start from
 `.env.example`, but enable only the integrations you intend to run.
+See the [current architecture](current-architecture.md) for application entry points,
+deployment profiles and ownership/trust boundaries.
+See [health and readiness](health.md) for `/live`, `/ready`, `/health/details` and
+the optional `LM_PROXY_READY_REQUIRED` dependency contract.
 
 ## Memory modes
 
@@ -44,8 +48,28 @@ LM_PROXY_GRAPH_ENABLED=1
 LM_PROXY_NEO4J_URI=bolt://127.0.0.1:7687
 LM_PROXY_NEO4J_USER=neo4j
 LM_PROXY_NEO4J_PASSWORD=CHANGE_ME
-LM_PROXY_NEO4J_DB=proxy
+LM_PROXY_NEO4J_DB=neo4j
 ```
+
+When `LM_PROXY_NEO4J_DB` is omitted, the service-backed readers use **`neo4j`**,
+matching the Compose/CI database convention. Keep an explicit
+`LM_PROXY_NEO4J_DB=proxy` if that is the name of your existing configured database.
+The default change does not rename databases, move stored data or rewrite your
+machine's `.env`; check the selected database before enabling service-backed writes.
+
+Compose and live graph CI use the **Neo4j 5.26** server baseline. The minor image
+tag remains mutable; it is not a patch/digest reproducibility guarantee. Compose
+does not load APOC or grant unrestricted APOC procedures. New plugins require a
+concrete application need and an explicit compatible, restricted configuration.
+
+## Embedded graph thread budget
+
+`LM_PROXY_LADYBUG_THREADS` accepts an integer from **1 to 64**, validated before
+opening graph state. It sets the native Ladybug database thread budget; it does not
+add parallel application owners or configure embedding/GPU workers. Explicit
+`LadybugGraphDriver(..., max_num_threads=N)` takes precedence over the environment;
+`EmbeddedRepositoryOwner(..., graph_threads=N)` supplies that override. The default
+remains 2 until workload measurements justify another value.
 
 ## Local paths
 

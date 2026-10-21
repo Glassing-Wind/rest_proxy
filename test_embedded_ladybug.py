@@ -6,10 +6,50 @@ import threading
 import unittest
 from unittest import mock
 
-from memory.embedded_ladybug import LadybugGraphDriver, _finish_thread
+from memory.embedded_ladybug import LadybugGraphDriver, _finish_thread, resolve_ladybug_threads
+
+
+class ThreadConfiguration(unittest.TestCase):
+    def test_default_environment_and_explicit_override(self):
+        with mock.patch.dict('os.environ', {'LM_PROXY_LADYBUG_THREADS': ''}):
+            self.assertEqual(resolve_ladybug_threads(), 2)
+        with mock.patch.dict('os.environ', {'LM_PROXY_LADYBUG_THREADS': ' 8 '}):
+            self.assertEqual(resolve_ladybug_threads(), 8)
+            self.assertEqual(resolve_ladybug_threads(4), 4)
+        with mock.patch.dict('os.environ', {'LM_PROXY_LADYBUG_THREADS': 'invalid'}):
+            self.assertEqual(resolve_ladybug_threads(1), 1)
+
+    def test_invalid_settings_refuse_before_creating_state(self):
+        for value in ('0', '-1', '65', '1.5', 'eight', 'True', '١', '9' * 1000):
+            with self.subTest(value=value), mock.patch.dict('os.environ', {'LM_PROXY_LADYBUG_THREADS': value}):
+                with tempfile.TemporaryDirectory() as directory:
+                    parent = Path(directory) / 'absent'
+                    with self.assertRaises(ValueError):
+                        LadybugGraphDriver(str(parent / 'graph'))
+                    self.assertFalse(parent.exists())
+        for value in (True, False, 0, -1, 65, 2.5, '2'):
+            with self.subTest(override=value), self.assertRaises(ValueError):
+                resolve_ladybug_threads(value)
 
 
 class Transactions(unittest.IsolatedAsyncioTestCase):
+    async def test_thread_override_reaches_native_database(self):
+        import ladybug
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.dict(
+                'os.environ', {'LM_PROXY_LADYBUG_THREADS': '8'}):
+            with mock.patch.object(ladybug, 'Database', wraps=ladybug.Database) as database:
+                driver = LadybugGraphDriver(str(Path(directory) / 'graph'), max_num_threads=4)
+                try:
+                    self.assertEqual(driver.max_num_threads, 4)
+                    self.assertEqual(database.call_args.kwargs['max_num_threads'], 4)
+                    async with driver.session() as session:
+                        async def read(tx):
+                            return await (await tx.run('RETURN 1 AS value')).data()
+                        self.assertEqual(await session.execute_read(read), [{'value': 1}])
+                finally:
+                    await driver.close()
+
     async def test_native_bootstrap_and_reject_incompatible_schema(self):
         import graph_bootstrap
 

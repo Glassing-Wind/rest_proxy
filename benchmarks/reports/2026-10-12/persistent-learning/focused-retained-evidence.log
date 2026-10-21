@@ -1,0 +1,6 @@
+Executing <Task pending name='Task-1' coro=<RepositoryPatternLearningTests.asyncSetUp() running at /Users/michaelmarler/Projects/rest_proxy/test_repository_pattern_learning.py:110> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/tasks.py:1010, Task.task_wakeup()] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:460> cb=[_run_until_complete_cb() at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py:181] created at /opt/homebrew/Cellar/python@3.14/3.14.8_2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py:110> took 0.519 seconds
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 29.256s
+
+OK

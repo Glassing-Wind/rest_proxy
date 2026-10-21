@@ -7,6 +7,7 @@ mcp_server.py (STDIO) and brain_server.py (Streamable HTTP).
 
 from mcp.server.fastmcp import FastMCP
 from graphrag_core.config import load_env
+from graphrag_core.telemetry_transport import instrument_mcp_tools
 from tools import register_all
 
 # Ensure environment variables are loaded
@@ -22,6 +23,7 @@ mcp = FastMCP("graphrag-brain", stateless_http=False)
 
 # Register all tool groups (partitioned into tools/brain and tools/hands)
 register_all(mcp)
+instrument_mcp_tools(mcp)
 
 def get_mcp() -> FastMCP:
     """Returns the shared FastMCP instance."""

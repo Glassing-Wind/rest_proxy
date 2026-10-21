@@ -20,6 +20,22 @@ class ToolCatalogEntry:
 
 
 TOOL_CATALOG: dict[str, ToolCatalogEntry] = {
+    "get_repository_learning_profile": ToolCatalogEntry(
+        "primary", "repository learning", "Inspect bounded RepoAnalyzer patterns from a published embedded snapshot with source provenance."),
+    "compare_repository_learning_profiles": ToolCatalogEntry(
+        "primary", "repository learning", "Compare two published repository profiles and inspect cited structural transfer suggestions."),
+    "get_learned_repository_patterns": ToolCatalogEntry(
+        "primary", "repository learning", "Inspect bounded durable learned artifacts, frequency and historical source provenance."),
+    "suggest_learned_repository_patterns": ToolCatalogEntry(
+        "primary", "repository learning", "Compare an exact learned memory revision to bounded target evidence; suggestions never apply changes."),
+    "learn_repository_patterns": ToolCatalogEntry(
+        "admin", "repository learning", "Explicitly persist code/architecture artifacts from a selected publication with run and memory revision preconditions."),
+    "learn_text_patterns": ToolCatalogEntry(
+        "admin", "repository learning", "Explicitly persist caller-supplied plaintext AST/pattern artifacts into private learning memory with a revision precondition."),
+    "learn_configuration_patterns": ToolCatalogEntry(
+        "admin", "repository learning", "Explicitly persist GithubAnalyzer requirements/ignore observations from supplied text with source and component hashes."),
+    "delete_repository_learning": ToolCatalogEntry(
+        "admin", "repository learning", "Explicitly delete a project's private learning memory with an exact revision precondition."),
     'assemble_fire_context_bundle': ToolCatalogEntry('primary', 'FIRE bounded context', 'Recover one scoped checkpoint/original snapshot as historical candidates in a budgeted context bundle.'),
     'assemble_context_bundle': ToolCatalogEntry('primary', 'bounded context', 'Pack supplied instructions/messages/tools and cited evidence against a complete declared request budget.'),
     'save_fire_checkpoint': ToolCatalogEntry('admin', 'FIRE continuity', 'Persist explicit scoped task state and supporting originals before compaction.'),

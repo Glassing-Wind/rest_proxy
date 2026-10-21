@@ -10,6 +10,10 @@ the fastest option for known names; the indexed tools add value for architecture
 callers, implementations, request flow, related files, cross-project dependencies,
 and duplicate code.
 
+Start with the [current architecture](docs/current-architecture.md) for the MCP and
+optional inference boundaries, deployment profiles, storage ownership and acceptance
+limits. Dated research and benchmark reports describe their recorded revisions.
+
 ## Capabilities
 
 - Structural indexing backed by Neo4j.
@@ -26,7 +30,8 @@ Individual indexed features naturally require their corresponding service.
 
 ## Requirements
 
-- Python 3.14 recommended (3.11 remains the compatibility floor).
+- Python 3.14 is the reference CI/appliance runtime and recommended for development;
+  Python 3.11 remains the package compatibility floor.
 - `rg` (ripgrep) for exact-search fallbacks.
 - LM Studio or another compatible inference endpoint for proxy requests and
   local embeddings.
@@ -35,6 +40,10 @@ Individual indexed features naturally require their corresponding service.
 - Redis for optional hot session state and distributed indexing locks.
 
 You can run the HTTP proxy without enabling every indexed or memory feature.
+
+See [native ARM validation](docs/arm-validation.md) for artifact fingerprints,
+Ladybug thread budgets, the disposable benchmark and the new ARM CI matrix. Native
+execution and small-fixture timings do not establish a general speed advantage.
 
 ## Embedded installation
 
@@ -144,7 +153,8 @@ and the native-vs-MCP agent benchmark.
 - `memory/`: durable storage and retrieval policy.
 
 The current boundaries are described in
-[Retrieval architecture](docs/retrieval_architecture.md).
+[Current architecture](docs/current-architecture.md), with shared retrieval ownership
+in [Retrieval architecture](docs/retrieval_architecture.md).
 
 ## Documentation
 
@@ -177,6 +187,10 @@ portable Compose configuration and its validation limits.
 **FIRE — Find, Integrate, Retrieve, Explain** names the platform direction:
 persistent evidence and task continuity across context compaction, with a bounded
 working set for each model request. See [FIRE contracts and acceptance](docs/fire-platform.md).
+
+**GOOFY — Graph-Oriented Operations For You** is a proposed assistant/workflow name
+alongside the FIRE evidence core. Package names, APIs and MCP tools retain their
+current names; the proposal does not imply an autonomous supervisor is implemented.
 
 The planned native embedded distribution combines LadybugDB and LanceDB with
 persistent context and bounded, evidence-backed working sets. Context assembly

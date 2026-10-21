@@ -9,6 +9,8 @@ import asyncio
 import sys
 from _mcp import mcp
 from _tool_fingerprint import compute_tool_fingerprint
+from graphrag_core.telemetry import start as start_telemetry, stop as stop_telemetry
+from graphrag_core.telemetry_transport import transport_surface
 
 # --- MCP Protocol Guard ---
 # Redirect sys.stdout → stderr so third-party prints can't corrupt the JSON-RPC stream.
@@ -30,7 +32,7 @@ def _compute_tool_fingerprint() -> str:
 BOOT_FINGERPRINT: str = _compute_tool_fingerprint()
 
 
-async def main() -> None:
+async def _serve_stdio() -> None:
     """Main entrypoint: restore watched projects, start watcher, run MCP server (STDIO)."""
     from tools.hands import indexing as _idx
     import _jobs
@@ -60,6 +62,16 @@ async def main() -> None:
         except ImportError:
             pass
         print("[lm-proxy] Shutdown complete.", file=sys.stderr)
+
+
+async def main() -> None:
+    """Own telemetry for STDIO without writing protocol data to stdout."""
+    handle = start_telemetry(service="stdio")
+    try:
+        with transport_surface("stdio"):
+            await _serve_stdio()
+    finally:
+        await stop_telemetry(handle)
 
 if __name__ == "__main__":
     import argparse

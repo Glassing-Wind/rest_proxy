@@ -3,6 +3,27 @@
 This Compose stack is a local development deployment, not a production readiness
 claim. The brain daemon listens on port 8000 inside the container, published only
 on host loopback. Database services are available on the internal Compose network.
+The `rest_proxy` service launches `brain_server:app` for MCP and REST evidence reads.
+The separate FastAPI inference proxy is started with `uvicorn proxy:app`; this
+Compose profile does not launch that application.
+
+The container health check uses `/ready`. Compose explicitly requires read-only
+Neo4j, PostgreSQL and Redis checks after the MCP transport has started. `/live`
+remains independent of those services; `/health` retains its legacy diagnostic
+response. See [health and readiness](health.md) for limits and other profiles.
+
+Neo4j uses `neo4j:5.26`, matching the server version selected in CI. This is a minor
+version pin, not an immutable patch or digest; record the resolved image digest for
+reproducible deployment validation. APOC is not installed because the application
+has no required APOC procedure calls. Add a compatible plugin and only the required
+procedure permissions if a future feature demonstrates that need.
+
+The default database is `neo4j` throughout server bootstrap, indexing and recovery
+commands. Existing installations using `proxy` or another name must keep an explicit
+`LM_PROXY_NEO4J_DB` selection (or `--neo4j-db` for structural indexing). The default
+change does not rename a database, copy data or alter an existing `.env`; check the
+configured database before restarting an existing installation. Compose already
+selects `neo4j` explicitly for its own named volume.
 
 Set `LM_PROXY_APPLIANCE_PG_PASSWORD` and `LM_PROXY_APPLIANCE_NEO4J_PASSWORD` in your
 shell. Use a URL-safe PostgreSQL password because it is interpolated into a DSN.
@@ -13,7 +34,7 @@ Compose does not load the host `.env` into the image. Never commit credentials.
 ```sh
 docker compose config --quiet
 docker compose up --build -d
-curl --fail http://127.0.0.1:8000/health
+curl --fail http://127.0.0.1:8000/ready
 ```
 
 Initialize an MCP client at `http://127.0.0.1:8000/mcp`. Index `/workspace` using

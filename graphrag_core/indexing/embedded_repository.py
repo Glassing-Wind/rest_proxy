@@ -20,13 +20,15 @@ from memory.embedded_ladybug import LadybugGraphDriver
 from memory.embedded_lance_runs import LanceRunStore
 from memory.embedded_schema import SYMBOL_LABELS
 from memory import embedded_jobs
+from graphrag_core.telemetry import operation
 
 
 class EmbeddedRepositoryOwner:
-    def __init__(self, root: str, dimension: int):
+    def __init__(self, root: str, dimension: int, *, graph_threads: int | None = None):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.dimension = dimension
+        self.graph_threads = graph_threads
         self._lock = asyncio.Lock()
         self.graph = None
         self.vectors = None
@@ -34,7 +36,7 @@ class EmbeddedRepositoryOwner:
     async def __aenter__(self):
         if self.graph is not None:
             raise RuntimeError('Owner cannot be entered twice')
-        self.graph = LadybugGraphDriver(str(self.root / 'graph'))
+        self.graph = LadybugGraphDriver(str(self.root / 'graph'), max_num_threads=self.graph_threads)
         try:
             await self.graph.initialize_schema()
             await embedded_jobs.recover_attempts(self.graph)
@@ -70,23 +72,24 @@ class EmbeddedRepositoryOwner:
             raise ValueError('A nonempty project ID without colons is required')
         if not encoder_id or len(encoder_id) > 512:
             raise ValueError('An explicit embedding encoder identity is required')
-        async with self._lock:
-            self._require_open()
-            attempt_id = str(uuid.uuid4())
-            try:
-                await embedded_jobs.start_attempt(self.graph, project_id, attempt_id, str(Path(source_root).resolve()))
-                return await self._index_attempt(source_root, project_id, paths, embed=embed,
-                                                 encoder_id=encoder_id, encoder_metadata=encoder_metadata,
-                                                 attempt_id=attempt_id)
-            except BaseException as error:
+        with operation('publication', 'repository.index'):
+            async with self._lock:
+                self._require_open()
+                attempt_id = str(uuid.uuid4())
                 try:
-                    await embedded_jobs.drain(embedded_jobs.finish_failed_attempt(
-                        self.graph, project_id, attempt_id, cancelled=isinstance(error, asyncio.CancelledError),
-                        error_type=type(error).__name__))
-                except Exception:
-                    # Preserve the indexing error; reopen reconciles an unfinished journal entry.
-                    pass
-                raise
+                    await embedded_jobs.start_attempt(self.graph, project_id, attempt_id, str(Path(source_root).resolve()))
+                    return await self._index_attempt(source_root, project_id, paths, embed=embed,
+                                                     encoder_id=encoder_id, encoder_metadata=encoder_metadata,
+                                                     attempt_id=attempt_id)
+                except BaseException as error:
+                    try:
+                        await embedded_jobs.drain(embedded_jobs.finish_failed_attempt(
+                            self.graph, project_id, attempt_id, cancelled=isinstance(error, asyncio.CancelledError),
+                            error_type=type(error).__name__))
+                    except Exception:
+                        # Preserve the indexing error; reopen reconciles an unfinished journal entry.
+                        pass
+                    raise
 
     async def _index_attempt(self, source_root, project_id, paths, *, embed, encoder_id,
                              encoder_metadata, attempt_id):
@@ -112,17 +115,19 @@ class EmbeddedRepositoryOwner:
                 raise ValueError('Snapshot exceeds 50000 chunks')
             return chunks
 
-        chunks = await asyncio.to_thread(chunk_sources)
+        with operation('parser', 'repository.chunks', backend='ts_pack'):
+            chunks = await asyncio.to_thread(chunk_sources)
         await embedded_jobs.update_attempt(self.graph, project_id, attempt_id, phase='embedding', run_id=snapshot['run_id'])
         # Bound embed calls; callers choose the actual provider and model.
         for offset in range(0, len(chunks), 64):
             batch = chunks[offset:offset + 64]
-            vectors = await embed([chunk['content'] for chunk in batch])
-            if len(vectors) != len(batch):
-                raise ValueError('Embedding provider returned the wrong row count')
-            for chunk, vector in zip(batch, vectors):
-                self.vectors.validate_vector(vector)
-                chunk['vector'] = vector
+            with operation('embedding', 'repository.embed', backend='provider'):
+                vectors = await embed([chunk['content'] for chunk in batch])
+                if len(vectors) != len(batch):
+                    raise ValueError('Embedding provider returned the wrong row count')
+                for chunk, vector in zip(batch, vectors):
+                    self.vectors.validate_vector(vector)
+                    chunk['vector'] = vector
         await embedded_jobs.update_attempt(self.graph, project_id, attempt_id, phase='staging', run_id=snapshot['run_id'])
         count = await self.vectors.stage_run(project_id, snapshot['run_id'], chunks)
         snapshot['manifest']['retrieval'] = {'run_id': snapshot['run_id'], 'chunks': count,
@@ -134,28 +139,33 @@ class EmbeddedRepositoryOwner:
         snapshot['manifest']['sha256'] = hashlib.sha256(canonical.encode()).hexdigest()
         # The graph receipt is the sole visibility switch after durable vector staging.
         await embedded_jobs.update_attempt(self.graph, project_id, attempt_id, phase='publishing', run_id=snapshot['run_id'])
-        result = await publish_outline_snapshot(self.graph, snapshot)
+        with operation('publication', 'repository.publish', backend='ladybug'):
+            result = await publish_outline_snapshot(self.graph, snapshot)
         return dict(result, attempt_id=attempt_id)
 
     async def search(self, project_id: str, *, encoder_id: str, text: str = '', vector=None,
                      mode: str = 'hybrid', limit: int = 10) -> list[dict]:
-        async with self._lock:
-            self._require_open()
-            publication = await read_outline_publication(self.graph, project_id)
-            if publication is None:
-                return []
-            retrieval = publication['manifest'].get('retrieval')
-            if not retrieval or retrieval['encoder_id'] != encoder_id:
-                raise ValueError('Query encoder must match the published embedding identity')
-            rows = await self.vectors.search(project_id, publication['run_id'], text=text,
-                                              vector=vector, mode=mode, limit=limit)
-            hashes = {file['path']: file['sha256'] for file in publication['manifest']['files']}
-            for row in rows:
-                if hashes.get(row['file_path']) != row['source_sha256']:
-                    raise RuntimeError('Retrieved source citation does not match the publication')
-                if hashlib.sha256(row['content'].encode()).hexdigest() != row['metadata']['content_sha256']:
-                    raise RuntimeError('Retrieved chunk content hash mismatch')
-            return rows
+        with operation('retrieval', 'repository.search') as scope:
+            async with self._lock:
+                self._require_open()
+                publication = await read_outline_publication(self.graph, project_id)
+                if publication is None:
+                    scope.set_outcome('empty')
+                    return []
+                retrieval = publication['manifest'].get('retrieval')
+                if not retrieval or retrieval['encoder_id'] != encoder_id:
+                    raise ValueError('Query encoder must match the published embedding identity')
+                rows = await self.vectors.search(project_id, publication['run_id'], text=text,
+                                                  vector=vector, mode=mode, limit=limit)
+                if not rows:
+                    scope.set_outcome('empty')
+                hashes = {file['path']: file['sha256'] for file in publication['manifest']['files']}
+                for row in rows:
+                    if hashes.get(row['file_path']) != row['source_sha256']:
+                        raise RuntimeError('Retrieved source citation does not match the publication')
+                    if hashlib.sha256(row['content'].encode()).hexdigest() != row['metadata']['content_sha256']:
+                        raise RuntimeError('Retrieved chunk content hash mismatch')
+                return rows
 
     async def describe_file(self, project_id: str, file_path: str, **bounds):
         async with self._lock:
@@ -178,6 +188,36 @@ class EmbeddedRepositoryOwner:
                     'relationships': {key: value for key, value in manifest.get('relationships', {}).items() if key != 'ids'},
                     'capabilities': ['published-source', 'file-outlines', 'text', 'vector', 'hybrid']
                                     + (['static-relationships-v1'] if manifest.get('relationships') else [])}
+
+    async def learning_snapshots(self, project_ids: list[str], *, max_files: int = 20) -> list[dict]:
+        """Read immutable analyzer inputs while retaining this owner's publication lock."""
+        from graphrag_core.repository_learning.snapshot import capture_learning_snapshots
+        with operation('retrieval', 'repository.learning_snapshot', backend='ladybug') as scope:
+            async with self._lock:
+                self._require_open()
+                snapshots = await capture_learning_snapshots(self.graph, project_ids, max_files=max_files)
+                if not any(snapshot['sources'] for snapshot in snapshots):
+                    scope.set_outcome('empty')
+                return snapshots
+
+    async def commit_learning_record(self, store, project_id: str, run_id: str,
+                                     record: dict, expected_revision: int) -> dict:
+        """Fence the captured publication while committing the separate memory CAS."""
+        from graphrag_core.repository_learning.snapshot import _manifest, canonical
+        async with self._lock:
+            self._require_open()
+            current = await read_outline_publication(self.graph, project_id)
+            if current is None or current['run_id'] != run_id:
+                return {'status': 'publication-conflict'}
+            manifest = _manifest(canonical(current['manifest']))
+            if manifest['sha256'] != record['context']['citation']['manifest_sha256']:
+                return {'status': 'publication-conflict'}
+            from memory.embedded_ladybug import _finish_thread
+            with operation('persistence', 'learning.save', backend='sqlite') as scope:
+                result = await _finish_thread(lambda: store.save(project_id, record, expected_revision))
+                if result.get('status') == 'conflict':
+                    scope.set_outcome('conflict')
+                return result
 
     async def symbol_context(self, project_id: str, symbol_name: str, **bounds):
         from graphrag_core.indexing.embedded_symbols import symbol_context

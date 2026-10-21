@@ -1,0 +1,10 @@
+{
+  "exit_code": 1,
+  "elapsed_seconds": 40.698,
+  "unittest_suite_executions": 79,
+  "unittest_test_executions": 811,
+  "skipped_test_executions": 9,
+  "real_repoanalyzer_checkout_enabled": true,
+  "operational_daemon_preserved": true,
+  "temporary_daemon_stopped": true
+}

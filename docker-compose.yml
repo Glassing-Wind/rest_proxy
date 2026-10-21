@@ -15,13 +15,11 @@ services:
       retries: 5
 
   neo4j:
-    image: neo4j:5-community
+    # Match the server baseline exercised in CI; this minor tag remains mutable.
+    image: neo4j:5.26
     restart: unless-stopped
     environment:
       NEO4J_AUTH: "neo4j/${LM_PROXY_APPLIANCE_NEO4J_PASSWORD:?Set LM_PROXY_APPLIANCE_NEO4J_PASSWORD}"
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
-      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
       NEO4J_server_memory_heap_initial__size: "512m"
       NEO4J_server_memory_heap_max__size: "2G"
       NEO4J_server_memory_pagecache_size: "1G"
@@ -69,6 +67,7 @@ services:
       LM_PROXY_TOOL_PROFILE: "primary"
       LM_PROXY_DEBUG: "false"
       LM_PROXY_WATCHER_ENABLED: "0"
+      LM_PROXY_READY_REQUIRED: "neo4j,postgres,redis"
     ports:
       - "127.0.0.1:${LM_PROXY_APPLIANCE_PORT:-8000}:8000"
     volumes:

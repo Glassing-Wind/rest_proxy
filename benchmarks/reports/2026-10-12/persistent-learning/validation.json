@@ -1,0 +1,46 @@
+{
+  "actual_backend_tests_enabled": [
+    "RepoAnalyzer indexed profiles/comparison",
+    "RepoAnalyzer authored plaintext regex and node factory",
+    "GithubAnalyzer RequirementsParser and GitignoreParser"
+  ],
+  "backend_component_source_sha256": {
+    "GithubAnalyzer": {
+      "src/GithubAnalyzer/models/core/base_model.py": "ba3e6fe6b224c2ceb1962ae678a9f070488c65f26e55c1e393c833e952f28cec",
+      "src/GithubAnalyzer/models/core/parsers.py": "a32756bb9fc4ed89bc1b3c123707d9b1881f84871560fd2cc63c1b33719361f5",
+      "src/GithubAnalyzer/services/core/base_service.py": "c1db6d138b33d2db56af4bbdc2efcdb62cc307903621891902aaf25540b5dd45",
+      "src/GithubAnalyzer/services/parsers/core/custom_parsers.py": "8f5c8737ed8ca0662f11e0e0a8a7b07e5f1bd7ddb04df7fe234b735277437410",
+      "src/GithubAnalyzer/utils/logging/__init__.py": "07b5ca9904e758a879849462851a662b5c200159180235cf1dfca497ccbcbfc5"
+    },
+    "RepoAnalyzer": {
+      "context_adapters/graphrag_brain.py": "b98c529ad47c151a152ce08b3d61358468f47e5205a4a57a864ed72aff7b2106",
+      "context_adapters/models.py": "c1616d0d7eeb3b543a9f5ea1eefb1a47e101fc0613e6a538f12c40f0092562b1",
+      "ingestion/local_repository.py": "c7edce6cc848e35e5700603b000dc6f00ac26ddaf315759ecd2c252700dd9dd1",
+      "learning_core/framework_profiles.py": "878aebfa7661756b4a9f9c8ff6ea6c43c1a3937d086ef6f6fb4a2f291a3307ba",
+      "learning_core/models.py": "4d8ab8e62d7557bd8ee52567245d3d7d47f48b5c44d185163e071eda5f7799f8",
+      "learning_core/service.py": "a42070094c89d3dd3c21443b50e79419482ef140a3056a762fcc6ee1479f8f4b",
+      "parsers/base_parser.py": "f35d8236ce43ccd4391d7a1e372f6a1570bcf16bc801d3869f073d95faae41c3",
+      "parsers/custom_parsers/custom_plaintext_parser.py": "cadb8908aa24b336ea556de263838b112aa0b7d65f54273f693c42422d924592",
+      "parsers/query_patterns/enhanced_patterns_custom.py": "91b26c7028ad6e94cd125720cefba1c1cdafc6dd832d323309d944cba5be8c03",
+      "parsers/query_patterns/plaintext.py": "46fe0bf5ad2a4cf057ff7df123f87f0079ca1f3d3ad19b6131d8aa1ee49df46e"
+    }
+  },
+  "final_production_bytes_match_gate": true,
+  "final_read_review": "Stored profile scope and rebound citations checked against retained contexts; full final gate includes this regression.",
+  "gate_staged_tree": "cf02757fe4a1a87ee6260b6eb33a23756fd0a318",
+  "independent_review": "Store, transport, source identity and publication/cancellation boundaries reviewed; findings repaired and regressed.",
+  "installed_package_versions": {
+    "httpx": "0.28.1",
+    "ladybug": "0.21.2",
+    "lancedb": "0.39.0",
+    "mcp": "1.26.0",
+    "ts-pack": "unavailable"
+  },
+  "machine": "arm64",
+  "native_vectors": "synthetic three-dimensional fixtures; no live model evaluation",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "production_activation": false,
+  "push_or_hosted_ci_dispatch": false,
+  "python_version": "3.14.8",
+  "temporary_listener_closed": true
+}

@@ -805,7 +805,7 @@ async def index_workspace(workspace_id: str, mode: str = "incremental") -> str:
         neo4j_uri = os.getenv("LM_PROXY_NEO4J_URI", "bolt://127.0.0.1:7687")
         neo4j_user = os.getenv("LM_PROXY_NEO4J_USER", "neo4j")
         neo4j_pass = os.getenv("LM_PROXY_NEO4J_PASSWORD", "password")
-        neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "proxy")
+        neo4j_db = os.getenv("LM_PROXY_NEO4J_DB", "neo4j")
         runtime = resolve_python_runtime()
         python_cmd = list(runtime["cmd"])
 

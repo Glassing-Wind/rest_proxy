@@ -36,7 +36,7 @@ RUN chmod +x scripts/docker_entrypoint.sh
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -fsS http://localhost:8000/ready || exit 1
 
 ENTRYPOINT ["scripts/docker_entrypoint.sh"]

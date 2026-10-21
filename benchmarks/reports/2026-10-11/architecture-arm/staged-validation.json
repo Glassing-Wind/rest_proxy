@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "base_revision": "8bc9bdf2bcd147accc4af1661afce5b258c0a9f6",
+  "scope": "architecture-arm staged source excluding unrelated working-tree edits",
+  "validation": {
+    "full_ci_exit_code": 0,
+    "unittest_suite_executions": 98,
+    "unittest_test_executions": 870,
+    "skipped_test_executions": 9,
+    "elapsed_seconds": 39.59523620799882,
+    "changed_python_identical_to_tested_snapshot": true,
+    "temporary_mcp_server_stopped": true
+  },
+  "excluded": "preexisting embedded common search/health/bridge work, gateway/configuration/offer/workflow documentation",
+  "limits": [
+    "Hosted ARM jobs not dispatched",
+    "Existing operational services, models and indexes untouched"
+  ]
+}

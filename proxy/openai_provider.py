@@ -20,6 +20,7 @@ from proxy import config
 from proxy.handlers_memory import _derive_session_id, _persist_memory_best_effort
 from proxy.handlers_utils import _truncate_text, history_key
 from proxy.logging import debug_log, stable_json
+from proxy.http_clients import ProviderStreamingResponse, acquire_http_client, close_http_stream, http_client
 from proxy.models import parse_model_aliases
 
 _TIMEOUT = httpx.Timeout(900.0, connect=30.0)
@@ -333,7 +334,7 @@ async def _search(body: Dict[str, Any], call: Dict[str, Any]) -> str:
 
 async def _post(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with http_client("openai", timeout=_TIMEOUT) as client:
             response = await client.post(f"{config.OPENAI_API_BASE}/responses", headers=_headers(), json=payload)
         if response.is_error:
             raise HTTPException(
@@ -352,7 +353,7 @@ async def _post(payload: Dict[str, Any]) -> Dict[str, Any]:
 async def list_models() -> JSONResponse:
     """Discover models with the cloud credential, never via LM Studio admin APIs."""
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with http_client("openai", timeout=60) as client:
             response = await client.get(f"{config.OPENAI_API_BASE}/models", headers=_headers())
         if response.is_error:
             raise HTTPException(response.status_code, "OpenAI model discovery failed")
@@ -392,15 +393,15 @@ def _usage_chunk(completion: Dict[str, Any]) -> str:
 
 
 async def _stream(body: Dict[str, Any], payload: Dict[str, Any]) -> StreamingResponse:
-    client = httpx.AsyncClient(timeout=_TIMEOUT)
+    client, owned_client = acquire_http_client("openai", timeout=_TIMEOUT)
+    upstream = None
     try:
         request = client.build_request("POST", f"{config.OPENAI_API_BASE}/responses", headers=_headers(), json=payload)
         upstream = await client.send(request, stream=True)
         if upstream.is_error:
-            await upstream.aclose()
             raise HTTPException(upstream.status_code, "OpenAI streaming request rejected")
     except BaseException as exc:
-        await client.aclose()
+        await close_http_stream(upstream, client, owned_client)
         if isinstance(exc, httpx.HTTPError):
             raise HTTPException(502, "OpenAI streaming transport failed") from exc
         raise
@@ -471,11 +472,11 @@ async def _stream(body: Dict[str, Any], payload: Dict[str, Any]) -> StreamingRes
         except Exception:
             yield 'data: {"error":{"message":"OpenAI stream failed before completion","type":"proxy_stream_error"}}\n\n'
         finally:
-            await upstream.aclose()
-            await client.aclose()
+            await close_http_stream(upstream, client, owned_client)
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+    return ProviderStreamingResponse(events(), upstream=upstream, client=client, owned=owned_client,
+                                     media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
 async def forward_completion(body: Dict[str, Any]) -> Any:

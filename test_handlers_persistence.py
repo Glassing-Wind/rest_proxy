@@ -82,6 +82,9 @@ class HandlerPersistenceTests(unittest.TestCase):
 
         extra = {
             "httpx": httpx_mod,
+            "proxy.http_clients": types.SimpleNamespace(
+                http_client=lambda provider, **kwargs: httpx_mod.AsyncClient(**kwargs)
+            ),
             "fastapi": fastapi_mod,
             "fastapi.responses": fastapi_responses_mod,
             "proxy.config": types.SimpleNamespace(OPENAI_BASE="http://x/v1", ENABLE_DEBUG_LOGGING=False),
@@ -139,6 +142,9 @@ class HandlerPersistenceTests(unittest.TestCase):
 
         extra = {
             "httpx": httpx_mod,
+            "proxy.http_clients": types.SimpleNamespace(
+                http_client=lambda provider, **kwargs: httpx_mod.AsyncClient(**kwargs)
+            ),
             "fastapi": fastapi_mod,
             "fastapi.responses": fastapi_responses_mod,
             "proxy.config": types.SimpleNamespace(

@@ -1,0 +1,52 @@
+{
+  "base_revision": "d6cb1b029dfe2bd03f789542079b1903bbeb7aee",
+  "limits": [
+    "No hosted CI dispatch or real inference/dependency-service probe run.",
+    "Temporary read-only connectivity does not validate application pool health, schema/parity/FTS integrity or generation.",
+    "Native read and cleanup deadlines depend on engine cooperation.",
+    "Existing services, indexes and models were preserved; no push or dependency reinstall."
+  ],
+  "schema_version": 1,
+  "source_sha256": {
+    ".env.example": "742739344411d19eb045072deefda6495bf2adb29e188ec9afc69de88714bdef",
+    "Dockerfile": "b46d77ff9b7f54bca029addb1360fdbb8974e1f42594bd6849ae442c4ac56b96",
+    "brain_server.py": "ecbd72a5e6d5d5a4785ae396fddd6b39f3dea66fe6891223c597f8bc300fa68e",
+    "docker-compose.yml": "34eb4c684f6bb79f08d2659dc33a37f4d87d1daeedff5dd3cb18a58a96080770",
+    "docs/README.md": "e37de0afea2a03885ecfcf573320cfaa1f33621dd3e6a9ad776d2645f4a1cbed",
+    "docs/configuration.md": "1357fc597b05b769b98ba5f80206a6a5d5f9deebc0b4a1f3b6ca7236ade8b6b5",
+    "docs/current-architecture.md": "a6976f1ac3b184091c7d18c7f17bbe0dca43706d5c0e50b67f9c1d058bd2f326",
+    "docs/development-appliance.md": "ae683d0ff6da867f35357f4e3a8bc7b9fe7adb22ad9a00fbc9ea90e45225e256",
+    "docs/health.md": "a49f71ee1dbef7f0a3636dc70f059192e1a0b4c40456470f629523073d001dbe",
+    "graphrag_core/readiness.py": "d17b570681729cd4c7785b70bb24139977c584e6c1dca7d4cde113f05c0d9208",
+    "proxy/app.py": "36c704d54771f2e2d1251eeb36fa0bca1021c6d95ba770532bb1993d5f2d9ac1",
+    "scripts/run_ci_checks.sh": "2d35d91eefc3564aa04f98b6a41519675a3f1e9c89f7589319515a9b9770f631",
+    "test_distribution.py": "874c72efa008c1a095d15d335d827d79468faed647278aea4f3d63de2942a75f",
+    "test_health_endpoints.py": "b3e6b8d7ab8cc325b6bb28b578055df849d91500156d4477916bbeacfa7700c9",
+    "test_readiness.py": "856585ec1b6de211d643e88569e36e69afb03bdd580cce5a49d9b08f36396dc1"
+  },
+  "validation": {
+    "asgi_endpoint_checks": 4,
+    "compose_configuration": "passed with dummy credentials",
+    "elapsed_seconds": 40.19727416697424,
+    "focused_readiness_checks": 19,
+    "full_ci_exit_code": 0,
+    "independent_review": "no actionable findings",
+    "native_existing_owner": {
+      "graph_read": {
+        "check": "existing_owner_graph_read",
+        "reason": "probe_succeeded",
+        "status": "ready"
+      },
+      "models_used": false,
+      "monitor_close_preserved_existing_owner": true,
+      "readiness_sha256": "d17b570681729cd4c7785b70bb24139977c584e6c1dca7d4cde113f05c0d9208",
+      "state": "disposable",
+      "status": "passed"
+    },
+    "skipped_test_executions": 9,
+    "staged_files_identical_to_tested_snapshot": true,
+    "temporary_mcp_server_stopped": true,
+    "unittest_suite_executions": 100,
+    "unittest_test_executions": 893
+  }
+}
