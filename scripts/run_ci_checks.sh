@@ -100,6 +100,10 @@ echo "[ci] Running contract and service-surface tests..."
 "$PYTHON_BIN" test_github_configuration.py
 "$PYTHON_BIN" test_repository_configuration_learning.py
 "$PYTHON_BIN" test_fire_store.py
+"$PYTHON_BIN" test_evidence_workspace.py
+"$PYTHON_BIN" test_evidence_workspace_http.py
+"$PYTHON_BIN" test_evidence_workspace_launch.py
+node scripts/check_evidence_workspace_ui.cjs
 "$PYTHON_BIN" test_context_bundle.py
 "$PYTHON_BIN" test_fire_context_bundle.py
 "$PYTHON_BIN" test_context_forwarding.py

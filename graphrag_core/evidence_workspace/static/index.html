@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="referrer" content="no-referrer">
+    <title>Evidence workspace · Rest-proxy</title>
+    <link rel="stylesheet" href="./style.css">
+    <script src="./app.js" defer></script>
+</head>
+<body>
+    <a class="skip-link" href="#workspace">Skip to workspace</a>
+    <section id="auth-screen" class="auth-screen" aria-labelledby="auth-title">
+        <div class="auth-card">
+            <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <p class="eyebrow">REST-PROXY / LOCAL EVIDENCE</p>
+            <h1 id="auth-title">Every finding has a source.</h1>
+            <p class="auth-description">Inspect relationships, review the supporting evidence, and preserve a reproducible record in your private local workspace.</p>
+            <form id="token-form">
+                <label for="access-token">Local access token</label>
+                <input id="access-token" type="password" autocomplete="off" spellcheck="false" required aria-describedby="token-help">
+                <p id="token-help" class="help">Use the token provided by your local server. It stays in memory and is cleared when you disconnect or reload.</p>
+                <button class="button primary" type="submit">Open workspace <span aria-hidden="true">→</span></button>
+            </form>
+            <p id="auth-message" class="auth-message" role="status" aria-live="polite"></p>
+            <div class="local-note"><span class="status-dot" aria-hidden="true"></span>Local prototype · no model or blockchain calls</div>
+        </div>
+    </section>
+
+    <div id="app-shell" class="app-shell" hidden>
+        <aside class="sidebar" aria-label="Workspace navigation">
+            <div class="brand"><div class="brand-mark small" aria-hidden="true"><span></span><span></span><span></span><span></span></div><div><strong>Rest-proxy</strong><span>Evidence workspace</span></div></div>
+            <div class="sidebar-section">
+                <label class="sidebar-label" for="case-select">YOUR CASES</label>
+                <select id="case-select" aria-label="Select case"><option value="">Select a case</option></select>
+                <button id="refresh-cases" class="sidebar-button" type="button"><span aria-hidden="true">↻</span> Refresh cases</button>
+            </div>
+            <div class="sidebar-section">
+                <p class="sidebar-label">ACQUIRE</p>
+                <button id="import-button" class="sidebar-button" type="button"><span aria-hidden="true">＋</span> Import evidence package</button>
+                <button id="demo-button" class="sidebar-button" type="button"><span aria-hidden="true">◇</span> Open synthetic demo</button>
+                <button id="restore-button" class="sidebar-button" type="button"><span aria-hidden="true">↥</span> Restore recovery archive</button>
+            </div>
+            <div class="sidebar-section">
+                <p class="sidebar-label">PRESERVE</p>
+                <button id="report-button" class="sidebar-button" type="button" disabled><span aria-hidden="true">↓</span> Download reviewed report</button>
+                <button id="backup-button" class="sidebar-button" type="button" disabled><span aria-hidden="true">▣</span> Download recovery ZIP</button>
+                <p class="sidebar-help">Exports may contain sensitive data. The recovery ZIP includes originals and all review history. Store it privately.</p>
+            </div>
+            <div class="sidebar-footer">
+                <div class="private-label"><span class="status-dot" aria-hidden="true"></span> PRIVATE LOCAL WORKSPACE</div>
+                <p>Files stay with this local server. Imports are explicit; no external services are contacted.</p>
+                <button id="disconnect-button" class="sidebar-button compact" type="button">Disconnect</button>
+            </div>
+        </aside>
+
+        <main id="workspace" class="main" tabindex="-1">
+            <header class="page-header">
+                <div><p class="eyebrow">INVESTIGATE / REVIEW / PRESERVE</p><h1 id="case-title">Your evidence workspace</h1><p id="case-subtitle" class="subtitle">Start with the synthetic demo or import an evidence package.</p></div>
+                <div class="prototype-label">LOCAL PROTOTYPE</div>
+            </header>
+            <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+            <section id="coverage-panel" class="coverage-panel" aria-label="Coverage and integrity" hidden></section>
+
+            <section id="empty-workspace" class="empty-workspace">
+                <div class="empty-emblem" aria-hidden="true">◎</div>
+                <p class="eyebrow">A RECORD YOU CAN REVIEW</p>
+                <h2>Connect the finding to the evidence.</h2>
+                <p>Start with a synthetic case to explore source inspection, separate evidence and review states, and a complete export and restore workflow.</p>
+                <button id="empty-demo-button" class="button primary" type="button">Explore synthetic demo <span aria-hidden="true">→</span></button>
+                <p class="help">No personal evidence is loaded automatically.</p>
+            </section>
+
+            <div id="case-workspace" class="case-workspace" hidden>
+                <section class="relationships panel" aria-labelledby="relationship-heading">
+                    <div class="panel-header"><h2 id="relationship-heading">Relationships</h2><span id="relationship-count" class="count-label">0</span></div>
+                    <div class="list-controls">
+                        <label class="sr-only" for="relationship-search">Search relationships and entities</label>
+                        <input id="relationship-search" type="search" placeholder="Search findings, entities…" autocomplete="off">
+                        <label class="sr-only" for="review-filter">Filter by review status</label>
+                        <select id="review-filter"><option value="all">All review states</option><option value="unreviewed">Unreviewed</option><option value="accepted">Accepted</option><option value="amended">Amended</option><option value="rejected">Rejected</option></select>
+                    </div>
+                    <ul id="relationship-list" class="relationship-list" aria-label="Case relationships"></ul>
+                    <div id="no-relationships" class="small-empty" hidden>No relationships match this search.</div>
+                </section>
+
+                <section class="detail panel" aria-labelledby="detail-heading">
+                    <div class="panel-header"><h2 id="detail-heading">Relationship detail</h2><span class="section-label">FINDING</span></div>
+                    <div id="relationship-detail" class="detail-body"><p class="small-empty">Select a relationship to inspect its supporting sources.</p></div>
+                </section>
+
+                <section class="inspector panel" aria-labelledby="inspector-heading">
+                    <div class="panel-header"><h2 id="inspector-heading">Source inspector</h2><span class="section-label">EVIDENCE</span></div>
+                    <div class="source-picker"><label class="sr-only" for="source-select">Select source</label><select id="source-select"><option value="">Select a source</option></select></div>
+                    <div id="source-inspector" class="inspector-body"><p class="small-empty">Select a citation to inspect the original evidence.</p></div>
+                </section>
+            </div>
+            <footer class="workspace-footer">A reviewed relationship records a human judgment. It does not establish identity, ownership, authenticity, or payment by itself.</footer>
+        </main>
+    </div>
+
+    <dialog id="import-dialog" class="file-dialog" aria-labelledby="import-title">
+        <form id="import-form">
+            <div class="dialog-heading"><h2 id="import-title">Import evidence package</h2><button type="button" class="icon-button" data-close="import-dialog" aria-label="Close import dialog">×</button></div>
+            <p>Select a local JSON package containing entities, sources, and cited relationships. This creates a separate case in the local workspace.</p>
+            <label for="import-file">Evidence package (.json)</label><input id="import-file" type="file" accept=".json,application/json" required>
+            <p class="help">Only the selected file is read. Content and embedded source bytes are sent to this local server.</p>
+            <div class="dialog-actions"><button type="button" class="button secondary" data-close="import-dialog">Cancel</button><button type="submit" class="button primary">Import package</button></div>
+        </form>
+    </dialog>
+
+    <dialog id="restore-dialog" class="file-dialog" aria-labelledby="restore-title">
+        <form id="restore-form">
+            <div class="dialog-heading"><h2 id="restore-title">Restore a recovery archive</h2><button type="button" class="icon-button" data-close="restore-dialog" aria-label="Close restore dialog">×</button></div>
+            <p>Restore original source bytes, relationships, and review history into a case ID that does not already exist. Existing cases are preserved.</p>
+            <label for="restore-file">Private recovery archive (.zip)</label><input id="restore-file" type="file" accept=".zip,application/zip" required>
+            <label for="restore-case-id">New case ID <span class="optional">(optional)</span></label><input id="restore-case-id" type="text" placeholder="Use the archive's case ID" autocomplete="off" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_-]*">
+            <p class="help">Leave blank to retain the archive's case ID. If it already exists, choose a new ID. Recovery archives may contain sensitive originals and historical reviewer labels.</p>
+            <div class="dialog-actions"><button type="button" class="button secondary" data-close="restore-dialog">Cancel</button><button type="submit" class="button primary">Restore as new case</button></div>
+        </form>
+    </dialog>
+</body>
+</html>
