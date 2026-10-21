@@ -1,0 +1,34 @@
+{
+  "observed_at_utc": "2026-10-16T18:59:46.609130+00:00",
+  "desktop_version": "2.3.0",
+  "cli_version": "1.17.0",
+  "database_engine_version": "2026.02.2",
+  "instance": "repo",
+  "instance_id": "c278d536-bc62-4c16-b241-ceadac7139ac",
+  "database": "proxy",
+  "uri": "neo4j://127.0.0.1:7687",
+  "credential_route": "Desktop runtime secure-storage context via --credential desktop",
+  "separate_cli_profile_created": false,
+  "password_copied_or_printed": false,
+  "desktop_health_checks_passed": 7,
+  "startup": {
+    "initial_status": "stopped",
+    "final_status": "running",
+    "existing_instance_started": true
+  },
+  "read_only_verification": {
+    "schema_elapsed_seconds": 11.057,
+    "indexes": 20,
+    "constraints": 11,
+    "node_count": 1099553,
+    "relationship_count": 12778888
+  },
+  "graph_data_mutations": false,
+  "database_engine_upgraded": false,
+  "commands": [
+    "neo4j-cli desktop doctor --format toon",
+    "neo4j-cli desktop dbms start c278d536-bc62-4c16-b241-ceadac7139ac --rw",
+    "neo4j-cli query :schema --credential desktop --database proxy --format json",
+    "neo4j-cli query \"MATCH (n) RETURN count(n) AS node_count;\\nMATCH ()-[r]->() RETURN count(r) AS relationship_count\" --credential desktop --database proxy --format toon"
+  ]
+}

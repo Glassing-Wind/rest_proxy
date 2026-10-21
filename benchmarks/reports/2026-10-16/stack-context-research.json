@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "research_date": "2026-10-16",
+  "timezone": "America/Denver",
+  "scope": "Documentation and primary-source research; no runtime implementation or performance acceptance",
+  "repository": {
+    "head": "da67d5d201cd637b6f07b2acf88dbcd1ff3120e4",
+    "branch": "codex/task-provider-adapter",
+    "working_tree_changes_present": true,
+    "code_sha256": {
+      "memory/store_core.py": "686869bca78acb057505dcb7783ba93eb19b6f43d5ac0bc058f226fa6b68ccd9",
+      "memory/store_graph_ops.py": "a19dd7b92cae0539412a4d2daddc9b777c2046a55a41845a1f99199ce293123f",
+      "memory/store_embeddings.py": "fab02aeb1a0e88bbbe944c86f7cf39b6dffd14915540ed6d3b4214c48bf7ca0d",
+      "memory/bootstrap.py": "a95e9a5339ef5f2f7d50169fae88590d8637f0b7cbb41931c308dd20058a82d4",
+      "memory/summary.py": "044b029746062b5af00bbde7b1deb15538605d5d9ae9da99098fea7863cc268b",
+      "memory/retrieval.py": "666e04c1cbd51c13d8c60d50a1219ef25eaacc0ffa53a7ecb80cbef00bca89a3",
+      "memory/fire_store.py": "4230a31adc926dbf206aef83d22eb6b53d6f52a4518bb0712500295551392c6e",
+      "memory/fire_context.py": "0a0edeef97a1d2b2a1f338a1d44777d51d04ea2617b77f89af1c86c581dc45eb",
+      "memory/context_bundle.py": "9b33e369069fde71e847c6a9aa046498a4a793a70046ae96df2e2e053d67ede5",
+      "memory/embedded_runtime.py": "55b31e582eadf3594c0813a271a31f561ab4bf5c24b65dec8e30693062689113",
+      "proxy/config.py": "61ff7caa0e4115903fc7c09384c4142d35e8a0a64eeb7da91e3067a5821f5c57",
+      "proxy/handlers_memory.py": "23595ca6ae6d4111ec54fdc4015aa671a8213b73e3ecb84364aab0df875b3e45",
+      "proxy/handlers_chat.py": "5067867092430d0556da9a2ddf494a94dbd3b75a9a1a11f4c49cda78dd4438a3",
+      "proxy/handlers_streaming.py": "6cff1f7fcd5746d09146cceb265725ebe94cc56a450c0de1cdb99b683209e34b",
+      "proxy/context_forwarding.py": "187ed888da77847cb409e3ebdfb0ea9d2f08922d73e7f92d9f43788207fa7100",
+      "tools/brain/context.py": "dc82967a81abf641aab0a67fc7593743a16fb82ab16b9ef1a8e432aa05a1ebd6",
+      "tools/brain/fire.py": "16a7c4065703ec30335bd2660b61fd5980a367a79865d8908dd43ad7b554d752",
+      "graphrag_core/telemetry.py": "87bd1f6b58fb4549d5f604be1597c15269bd27cf11f84bfe5ae5ce7fe9940fbc"
+    }
+  },
+  "cross_repository": {
+    "name": "Trader1",
+    "head": "123c88434c77d32b3599ca72493edc09f5dab4ad",
+    "method": "Index reported no indexed files; bounded native authored-source reads; no build/install/runtime validation",
+    "source_sha256": {
+      "pgExt/micro_ext/micro_ext.c": "39410bceaf86b828a2ee0f5ad23733c8dd8d65d8fe74de57341d4fe17a69e8ad",
+      "pgExt/micro_ext/README.md": "b389c69c3f2c62ba8fc47b9c12661ce87d2eb10243fa248340a2701b4e11aa74",
+      "pgExt/xcorr_ext/xcorr_ext.c": "257a387383634f880ec46ecc7c5d00604e6d3b8f217ac8b051a0770abbdb7e80",
+      "pgExt/winfeat_ext/winfeat_ext.c": "c6980a4c3d3479ea364c4dd2854db9addf6444ad6e6b1057a67e445b8392fca8",
+      "pgExt/c_lag_ext/lag_ext.c": "e63b4cfe937aca65f2f94627f2346969d1cc970dab3e4fe810f9db608cb9ed29",
+      "pgExt/c_lag_ext/lag_ext--1.0.sql": "784d7b92892528de3a5774929b39d424fb2877ef196d7d79c21c034e5f155992",
+      "docs/psqlExt.md": "0a90cb3c1b9b52e43abc02f72727e49f08d77a607e749eb92dd5d241f5c5fdaf"
+    }
+  },
+  "ui_observations": {
+    "source": "Native app accessibility state observed earlier in this conversation on October16",
+    "shadowrocket": {
+      "dot_meaning": "default server",
+      "marked_label": "REST Proxy TCP + UDP",
+      "switch_on": true,
+      "routing": "Config",
+      "network_probe_performed": false
+    },
+    "dictionary": {
+      "provider": "Wikipedia",
+      "entries_read": [
+        "LAMP (software bundle)",
+        "Solution stack (LEAP selection redirected here)",
+        "LYME (software bundle)"
+      ],
+      "initial_LAMP_selection_restored": true
+    }
+  },
+  "primary_references": [
+    "https://lmstudio.ai/docs/app/basics/lmstudio-vs-llmster-vs-lms",
+    "https://lmstudio.ai/docs/developer/openai-compat",
+    "https://lmstudio.ai/docs/developer/rest/list",
+    "https://lmstudio.ai/docs/developer/rest/load",
+    "https://lmstudio.ai/docs/app/offline",
+    "https://lmstudio.ai/app-terms",
+    "https://github.com/lmstudio-ai/lms/blob/main/LICENSE",
+    "https://github.com/lmstudio-ai/mlx-engine",
+    "https://github.com/mit-han-lab/streaming-llm#faq",
+    "https://docs.python.org/3.14/library/collections.html#collections.deque",
+    "https://www.postgresql.org/docs/17/xaggr.html#XAGGR-MOVING-AGGREGATES",
+    "https://httpd.apache.org/docs/2.4/howto/reverse_proxy.html",
+    "https://caddyserver.com/docs/automatic-https",
+    "https://neo4j.com/docs/graphql/current/",
+    "https://jamstack.org/what-is-jamstack/",
+    "https://github.com/eucalyptus/eucalyptus",
+    "https://github.com/AppScale/gts",
+    "https://github.com/erlyaws/yaws",
+    "https://www.erlang.org/doc/apps/mnesia/mnesia_overview.html",
+    "https://www.erlang.org/doc/system/sup_princ.html",
+    "https://www.elastic.co/elastic-stack",
+    "https://prometheus.io/docs/guides/opentelemetry/",
+    "https://github.com/ggml-org/llama.cpp/tree/master/tools/server",
+    "https://github.com/ml-explore/mlx-lm",
+    "https://github.com/qdrant/fastembed",
+    "https://github.com/huggingface/text-embeddings-inference",
+    "https://lmstudio.ai/blog/splash-engine",
+    "https://inco.ai/blog/splash/"
+  ],
+  "decisions": {
+    "architecture": "Retain Python/MCP plus independent optional FastAPI inference gateway",
+    "storage": "Retain explicit embedded/service profiles; first investigate SQLite append under existing continuity ownership",
+    "lm_studio": "Retain optional model-serving and embedding adapter; exact distribution/model terms remain a gate",
+    "ring": "Bounded recent complete-exchange window or numeric metrics; archive acknowledgment and retrieval are separate requirements",
+    "native_extension": "Deferred pending measured bottleneck and compatibility",
+    "runtime_alternatives": "Conditional evaluation only; none installed or compared",
+    "metrics": "Retain optional OpenTelemetry; collector/dashboard only for demonstrated operational use"
+  },
+  "findings": {
+    "legacy_recent_cache": "Redis capped20 default, seven-day TTL, cached500-character message snippets",
+    "legacy_turn_backend": "Neo4j actual writes, despite older PostgreSQL comments",
+    "legacy_archive_before_eviction": false,
+    "legacy_persistence": "best-effort; cached continuations can skip; streaming helper lacks equivalent persistence hook",
+    "legacy_scope": "project-path sharing and namespace-derived preference scope require explicit isolation gate",
+    "legacy_summary": "previous-first capped merge can omit newer items",
+    "explicit_FIRE": "SQLite revisioned snapshots and hashed originals; 128,000-byte original budget; default one-day and maximum 30-day retention; not an append journal",
+    "context_builder": "Whole canonical request accounting; byte estimate by default; complete tool exchanges",
+    "context_forwarding": "Opt-in stateless, text-only, non-streaming; current bytes differ from the historical real-model receipt",
+    "trader_ring": "numeric aggregate/window state; no conversational queue or infiniteattention mechanism",
+    "trader_SQL": "Moving-window wiring uses INVFUNC; installed behavior was not verified"
+  },
+  "historical_evidence_read": [
+    "benchmarks/reports/2026-10-06/context-bundle-contract.json",
+    "benchmarks/reports/2026-10-06/fire-context-bundles.json",
+    "benchmarks/reports/2026-10-06/context-provider-forwarding.json",
+    "benchmarks/reports/2026-10-11/readiness/README.md",
+    "benchmarks/reports/2026-10-12/telemetry/README.md",
+    "benchmarks/reports/2026-10-15/lessons-recovery/README.md"
+  ],
+  "work_performed": {
+    "documentation_only": true,
+    "implementation_tests_run": false,
+    "model_calls": 0,
+    "dependency_installs": 0,
+    "service_or_model_lifecycle_changes": false,
+    "index_or_database_mutations": false,
+    "configuration_changes": false,
+    "commit_push_PR_mutations": false
+  },
+  "documentation_validation": {
+    "status": "passed",
+    "new_relative_links_checked": 46,
+    "case_sensitive_local_link_check": true,
+    "markdown_fences_balanced": true,
+    "research_receipt_json_valid": true,
+    "tracked_and_new_file_whitespace": "passed",
+    "local_source_hashes_verified": 18,
+    "Trader1_source_hashes_verified": 7,
+    "unrelated_tracked_diffs_unchanged": true,
+    "staged_diff_unchanged": true,
+    "forwarding_example": {
+      "method": "Pure build_context_bundle and original AST-extracted format_chat; network denied; no app/server startup",
+      "builder_status": "assembled",
+      "accounting": {
+        "method": "utf8-byte-estimate",
+        "serialized_input": 309,
+        "total_reserved": 949,
+        "context_capacity": 8192,
+        "chat_template_verified": false
+      },
+      "runtime_preconditions_exercised": false,
+      "complete_request_under_declared_byte_budget": true
+    },
+    "documents_sha256": {
+      "docs/README.md": "afd9c5dfa6630b0c5032898e40a34646c9e52ccbdf171399e4e60e80bc2ad8e6",
+      "docs/current-architecture.md": "879b6d2485fa0de2a2fa981bd7d2b26096237b5f5f9e9862c198dc38b9997160",
+      "docs/next-session-roadmap.md": "2a2f36bb39f779a66a176cb0e77ec84be6fefbd0d11ac0bf2fdbef7a26fcad15",
+      "docs/context-platform-direction.md": "83ece6a5d62582285a8ee761ba65920b70fdfad9c34b2646d2919a25a56b5106",
+      "docs/lm-studio.md": "be996565d05431a1f6a845318ee603524971e9b2bfa3184f06a95f6ac9014e13",
+      "docs/MEMORY.md": "329f13c4568daa696d4fd387c2dd8c2ac5066ae8893fadbdb3ce4f66b4c96356",
+      "docs/context-provider-forwarding.md": "d575baf520b6d946c4e1c3168e40c4632984d94e2e1ec1dae4d5724284876d6d",
+      "docs/stack-and-context-strategy.md": "6d606e687f70bc467df2c2e10226238fbcbd1908dd67544237f35fe12d4c77f7",
+      "docs/persistent-context-roadmap.md": "064aa1802d7124caf400c9c58056a0adc0a8cd4e6a53f8fa2a0813121d42438a"
+    },
+    "implementation_tests_run": false,
+    "full_CI_run": false,
+    "independent_review": "Source/architecture and primary-source review completed; reported documentation corrections applied"
+  },
+  "related_review_candidate_acceptance": {
+    "scope": "Previously executed separate isolated task-review candidate, not a context-memory acceptance or a new run in this documentation task",
+    "managed_worktree_name": "task-review-candidate",
+    "base_commit": "da01b790737dc0341964bce3c8f78cf0c6e97b6e",
+    "offline_tests": 113,
+    "live_status": "passed",
+    "model": "qwen3.6-35b-a3b-splash",
+    "inference_invocations": 1,
+    "actor_type": "automated",
+    "reopen": {
+      "separate_processes": true,
+      "revision": 5,
+      "status": "completed",
+      "original_submissions_equal": true,
+      "review_equal": true
+    },
+    "source_sha256": {
+      "README.md": "b9d6e4b21b1f48d3e40339274c66bebf3215f0bc207e3e6a147a08b11407cfc0",
+      "live-fixture.json": "39651611ebaffd8da860d3b4150a507b106b4537bfc9ce09572574fb7873e8d8",
+      "offline-validation.json": "70e8f17674b5c3f832df53e38ecdb70140bd2ee93646a7d06e0f70ebd8df9bb2",
+      "source-manifest.json": "2cf61527c2bbec34aa78f849c8ee3e97791fe2862261b1d1a5593c29ea3d8072"
+    },
+    "publication_status_at_planning": "Uncommitted and unpublished; retained in separate managed worktree"
+  }
+}

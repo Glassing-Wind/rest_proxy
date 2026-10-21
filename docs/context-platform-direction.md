@@ -1,5 +1,12 @@
 # Context platform direction — October 3, 2026
 
+October 16 status: use the [current stack/context decision record](stack-and-context-strategy.md)
+and [phased roadmap](persistent-context-roadmap.md) for implementation choices. The
+dated proposals below retain their history. Explicit FIRE recovery, snapshot-to-bundle
+adaptation and opt-in stateless LM Studio forwarding now exist; automatic acknowledged
+conversation archival, coordinated eviction and complete continuity acceptance remain
+open. See [current forwarding scope](context-provider-forwarding.md).
+
 Platform name: **FIRE — Find, Integrate, Retrieve, Explain**. The accepted
 [FIRE direction and compaction acceptance scenarios](fire-platform.md) make
 recoverable evidence and task continuity across compression explicit requirements.

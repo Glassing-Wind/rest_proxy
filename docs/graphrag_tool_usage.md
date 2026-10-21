@@ -4,6 +4,35 @@ This is the plain Markdown replacement for the removed `get_graph_usage_guide` M
 
 Use it to onboard new agents to the current GraphRAG tool surface and normal workflow.
 
+## Select the storage route
+
+The full health/search/indexing workflow below describes the service-backed
+Neo4j/Postgres path. Embedded LadybugDB/LanceDB users can discover
+`list_embedded_projects`, inspect `get_embedded_overview` and
+`get_embedded_indexing_attempt`, then use `search_embedded_repository` and
+`describe_embedded_file`. Specify `mode="text"` for model-free published search;
+real indexing and vector/hybrid queries currently require a local embedding model.
+
+Embedded `index_embedded_repository` takes an explicit complete replacement manifest;
+omitted files disappear from the next publication. Standard `index_workspace` is
+guarded in embedded mode. Common `search_codebase` and `get_indexing_health` now have
+bounded embedded routes. Search returns native JSON receipts with unchanged stored
+chunk bytes, run IDs and file/chunk hashes; `mode="text"` needs no model. Default
+`precise` maps to native hybrid. Native ranking interleaves per-project results,
+does not apply legacy metadata boosting/intent expansion/clone reranking, and
+explicitly rejects broad, Cargo, debug and grep-fallback options. Candidate windows
+are at most 100 per project (1..8 projects); filters/caps run within those windows
+and output is at most 48 KiB. An empty result is not exhaustive absence evidence.
+
+Health hashes only manifest-listed current files, with bounded issue details;
+unlisted files, parser/vector integrity and semantic quality are not checked.
+Symlinks are refused; platforms without the safe POSIX reader report unknown
+freshness. Deep `audit=true` is explicitly unsupported. Health is a sequential
+comparison, not an atomic filesystem snapshot. Selected overview/symbol/relationship tools have embedded
+bridges, with bounded static coverage. See [configuration](configuration.md) and
+[embedded MCP owner](embedded-mcp-owner.md) before using those tools. Full parity and
+automatic data migration are not established.
+
 See also:
 
 - [Tool product audit](tool_product_audit.md)
@@ -26,7 +55,14 @@ See also:
 `list_tool_catalog` recognizes concrete source filenames in an intent and directs
 those requests to `describe_file`. Semantic ranking itself is unchanged.
 
-## Index setup when needed
+The current-source reader above differs from the embedded repository owner's
+published-snapshot reader. A published snapshot can retain valid original hashes
+after live files change. Bind indexed findings to a revision/run and verify relevant
+current file hashes before acting on them; see the
+[publication demonstration](samples/fire-repository-audit.md). Historical snapshot
+integrity does not establish current-file freshness or semantic correctness.
+
+## Service-backed index setup when needed
 
 1. `index_workspace(workspace_id)`
    - Starts indexing and returns a `job_id`.
@@ -62,7 +98,9 @@ If multiple tools could answer the question, prefer these first:
 - `get_indexing_health`
 - `trace_graph_provenance`
 
-These are the tools that should normally beat raw grep, raw Cypher, or manual graph inspection.
+These tools present bounded repository evidence and relationships. Use exact search
+or direct reads when they answer the question with less work. This preference is
+workflow guidance, not a measured advantage over grep or manual graph inspection.
 
 ## Core Graph Tools
 

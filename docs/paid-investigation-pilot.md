@@ -1,8 +1,16 @@
 # Application workflow investigation — first practical offer
 
-Revised October 8, 2026. Recommended first offer for user review; no outreach,
-customer agreement, invoice or payment request has occurred. Price is a hypothesis,
-not a measured market rate.
+Scope revised October 8, 2026; status clarified October 11. Recommended first offer
+for user review; this priced offer has not been sent or accepted, and no customer
+agreement, invoice or payment request is recorded. The authorized October 8
+[TurboTenant introduction](commercial-direction.md#turbotenant-introduction-sent--october-8)
+contained no source or price. Price is a hypothesis, not a measured market rate.
+
+The separate [proposed $900 Repository Intelligence Audit](fire-repository-audit-offer.md)
+investigates one repository subsystem/issue and includes a public publication/evidence
+sample. It does not replace this $750 application-workflow scope or establish
+customer demand for either offer. Agree which deliverable the buyer needs before
+making a commercial commitment.
 
 ## Find out why users get stuck or their data changes unexpectedly
 

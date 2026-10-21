@@ -6,6 +6,12 @@ gated by environment variables. If an optional dependency such as Postgres,
 Redis, Neo4j, or pgvector is unavailable, request handling continues with safe
 fallbacks. Memory errors are logged but do not break the response path.
 
+October 16 source audit: this guide's legacy automatic memory path is distinct from
+the [explicit SQLite FIRE checkpoint/original store](fire-durable-continuity.md) and
+the [shared context builder](context-bundle-contract.md). It does not guarantee a
+complete transcript archive. See [current findings](stack-and-context-strategy.md)
+and the [persistent-context roadmap](persistent-context-roadmap.md).
+
 ---
 
 ## Architecture
@@ -30,15 +36,23 @@ POST /v1/chat/completions
        │
        ▼ (LM Studio / OpenAI response)
        │
-       ├─ non-stream path ──► _persist_memory_best_effort()  (asyncio.ensure_future)
+       ├─ eligible non-stream response ──► scheduled _persist_memory_best_effort()
        │
-       └─ stream path ──────► _persist_memory_best_effort()  (asyncio.ensure_future, after full stream)
+       └─ streaming helper ─────────────► response-ID state; no equivalent persistence hook
 ```
 
 `_persist_memory_best_effort` does:
 1. Appends user + assistant turns to Redis recent-turns list.
 2. Updates rolling summary (via LLM if configured, else deterministic).
-3. Inserts durable `conversation_turns` + `memory_summaries` rows into Postgres.
+3. Attempts durable turn/summary writes through the Neo4j graph helpers.
+
+Cached stateful continuations can return before persistence. The Redis cache stores
+500-character user/assistant snippets and is trimmed before durable writes; writes
+are best-effort and do not acknowledge an archive watermark. Current source is
+[handlers_memory.py](../proxy/handlers_memory.py),
+[handlers_streaming.py](../proxy/handlers_streaming.py) and
+[store_graph_ops.py](../memory/store_graph_ops.py). Older comments that describe
+these conversation writes as PostgreSQL are stale.
 
 ---
 
@@ -53,7 +67,7 @@ POST /v1/chat/completions
 | `LM_PROXY_NEO4J_PASSWORD` | - | Neo4j password |
 | `LM_PROXY_MEMORY_ENABLE_PERSISTENCE` | `1` | Allow durable persistence when the selected mode enables it |
 | `LM_PROXY_MEMORY_ENABLE_REDIS` | `1` | Allow Redis hot session state when the selected mode enables it |
-| `LM_PROXY_MEMORY_ENABLE_EMBEDDINGS` | `0` | Enable embedding + pgvector retrieval |
+| `LM_PROXY_MEMORY_ENABLE_EMBEDDINGS` | `0` | Enable optional embedding/vector operations under the selected memory mode |
 | `LM_PROXY_MEMORY_ENABLE_RETRIEVAL` | `1` | Enable retrieval when embeddings and the selected mode allow it |
 | `LM_PROXY_PG_DSN` | _(empty)_ | Postgres connection string (psycopg v3 format) |
 | `LM_PROXY_REDIS_URL` | `redis://localhost:6379/0` | Redis URL |
@@ -70,20 +84,22 @@ POST /v1/chat/completions
 
 ---
 
-## Postgres Schema
+## Durable storage roles
 
-Durable tables are created idempotently by `memory/bootstrap.py` and the
-storage helpers when the corresponding feature flags are enabled:
+Current helper implementations use these roles; the earlier PostgreSQL conversation
+table descriptions did not match the graph-write source:
 
-| Table | Purpose |
+| Store / source | Purpose |
 |---|---|
-| `conversation_turns` | Every user + assistant turn, with a compact column for retrieval |
-| `memory_summaries` | Rolling / checkpoint summaries |
-| `tool_outputs` | Raw + compact tool output records |
-| `memory_checkpoints` | Structured working memory snapshots |
-| `memory_embeddings` | pgvector embeddings for semantic retrieval |
+| Neo4j `MemoryTurn`, `MemorySummary`, `ToolOutput`, `MemoryCheckpoint` | Legacy conversation/summary/tool/checkpoint helper records; best-effort paths are not full-history guarantees. |
+| Neo4j memory embedding helpers | Optional vectors associated with legacy memory records. |
+| PostgreSQL `codebase_embeddings`, `doc_embeddings` | Service-backed repository/document vectors and full-text retrieval. |
+| SQLite FIRE snapshots/originals | Separate explicit scoped recovery with revision checks, retention and paged originals. |
 
-**pgvector** is required only if `LM_PROXY_MEMORY_ENABLE_EMBEDDINGS=1`. The bootstrap automatically runs `CREATE EXTENSION IF NOT EXISTS vector`.
+The [PostgreSQL bootstrap](../memory/bootstrap.py) creates the codebase/document
+tables and requests pgvector when that path is used. The
+[graph helpers](../memory/store_graph_ops.py) and
+[memory embedding helpers](../memory/store_embeddings.py) govern legacy memory writes.
 
 ### Minimal Postgres Setup
 
@@ -117,8 +133,14 @@ All keys have a 7-day TTL.
 
 Derived deterministically per request:
 1. **Explicit**: `session_id` or `x_session_id` field in the request body.
-2. **Derived**: SHA-256 hash of the system prompt + first user message (first 16 hex chars).  
-   Conversations that restart from the same system prompt naturally share memory.
+2. **Project fallback**: a sanitized/truncated project path extracted from the prompt;
+   this intentionally shares a memory bucket across conversations about that path.
+3. **Hash fallback**: SHA-256 of system prompt plus first-user prefix (first 16 hex chars).
+
+These heuristics are not authenticated identities or exact project/session/task scope.
+The legacy preference lookup also derives the project from the first colon-separated
+session component, which can be the namespace. The new continuity path should use
+explicit exact scope, as FIRE and the shared builder already do.
 
 ---
 
@@ -127,8 +149,9 @@ Derived deterministically per request:
 | Failure | Behavior |
 |---|---|
 | Redis unavailable | Turns/summary silently skipped; proxy continues normally |
-| Postgres unavailable | Durable inserts silently skipped; proxy continues normally |
-| pgvector not installed | Embedding table creation skipped; retrieval disabled |
+| Neo4j unavailable | Legacy conversation/summary/vector writes are skipped or return safe defaults; no durable save is implied |
+| Postgres unavailable | Service-backed repository/document retrieval degrades according to its optional-storage path |
+| pgvector not installed | PostgreSQL code/document vector schema or retrieval is unavailable; this does not disable Neo4j conversational or embedded retrieval |
 | Memory modules missing | Import error logged; proxy runs with `_MEMORY_ENABLED` effectively off |
 | Any memory error | Caught and logged via `debug_log`; never propagates to response |
 

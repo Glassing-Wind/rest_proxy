@@ -1,5 +1,14 @@
 # Agent interfaces and repository reuse — October 7, 2026
 
+Currentness note — October 11: this document retains the October 7 research and
+trial history. The [routing inspection](../benchmarks/reports/2026-10-11/work-routing.md)
+supersedes installation/intake status below: both FIRE shortcuts exist, Siri intake
+has a recorded voice trial, and Claude Code 2.1.296 is installed. The inspected shell
+reports Claude signed out; no Claude task adapter or successful inference was
+verified. Antigravity is configured as another client of the shared MCP daemon.
+The fixed Apple review bundle is documented stale. Use the
+[current workflow](chatgpt-codex-workflow.md) for delivery routing.
+
 ## Apple Intelligence advisory review prototype — October 7
 
 FIRE Review Evidence created with Use Model (Cloud) -> Show Content. Synthetic
@@ -87,13 +96,13 @@ Earlier “unverified” described pending results, not a failure. New changes n
 new hosted checks. Qwen has one synthetic source-validated finding in review_pending;
 no persistent multi-agent team, authenticated task endpoints or automatic supervisor.
 
-## Supported integration paths
+## Supported integration paths — October 7 research
 
 | Participant | Supported path and evidence | Our next acceptance |
 | --- | --- | --- |
 | Siri / Mac | [Apple Shortcuts](https://support.apple.com/en-euro/guide/shortcuts-mac/apdf22b0444c/mac): Siri can run a named shortcut. Local shell action can submit stdin to our task capture helper. | FIRE Capture Task configured in Shortcuts; user enabled scripting. Ask for Input -> stdin shell action -> Show Content. GUI test waits at runner input not exposed to automation; end-to-end/voice acceptance pending. |
 | iPhone / glasses | Separate app/Shortcut transport to an authenticated service; Mac shell action is Mac-specific. | No remotely reachable task intake. Do not use phone loopback to address Mac. |
-| Claude Code Desktop | [Current Desktop docs](https://code.claude.com/docs/en/desktop) describe MCP configuration through project/user settings and desktop connectors. Installing/running Desktop does not connect it to our task registry. | Add narrowly scoped task MCP interface and test claim/read/submit against disposable state, with review retained. No Claude settings or conversations changed. Standalone claude executable not on current shell PATH. |
+| Claude Code Desktop | [Desktop docs](https://code.claude.com/docs/en/desktop) describe MCP configuration through project/user settings and desktop connectors. Installing/running Desktop does not connect it to our task registry. | A task adapter remains unverified. The earlier CLI-absent observation is superseded by the October 11 inspection above; no Claude settings or conversations changed. |
 | Claude programmatic worker | [Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) exposes Claude Code loop in Python/TypeScript, MCP, permissions, sessions and hooks. Docs describe authentication/usage terms; desktop subscription is not evidence of permission to redistribute its login/limits in our product. | Explicit adapter permissions, credentials and budget; no SDK installed or paid inference invoked. |
 | Codex supervisor | [Official harness interfaces](https://developers.openai.com/blog/codex-as-a-platform): codex exec for bounded jobs, SDK for programmatic workflows, app-server for persistent sessions/events/approval handling. Local codex executable exists. | Read-only structured review fixture through exec first; SDK later if resume/stream needed. This chat is not an automatically invoked endpoint. |
 | Muse | Product identity unspecified. | User asked which app/website; API, authentication, export and webhook capabilities unverified. Manual structured handoff is possible in principle, not connected. |

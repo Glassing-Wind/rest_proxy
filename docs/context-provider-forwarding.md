@@ -10,7 +10,7 @@ that daemon's context and embedded REST flags; FIRE additionally needs its confi
 state store. Both owner and LM Studio endpoints must be HTTP loopback URLs with an
 explicit port. This slice uses the daemon's existing access boundary.
 
-Example body:
+Example body, assuming the configured FIRE scope has checkpoint revision 1:
 
 ```json
 {
@@ -18,20 +18,23 @@ Example body:
   "fire": true,
   "expected_revision": 1,
   "context_request": {
-    "scope": {"project": "example", "session": "session", "task": "investigation"},
+    "project_id": "example",
+    "session_id": "session",
+    "task_id": "investigation",
     "goal": "Explain helper's return value",
     "instructions": "Cite the supporting source.",
     "messages": [{"role": "user", "content": "What does helper return?"}],
     "tools": [],
     "context_capacity": 8192,
     "output_reserve": 128,
-    "framing_reserve": 256,
+    "framing_tokens": 256,
     "safety_margin": 256
   }
 }
 ```
 
-Omit `fire` for supplied-evidence assembly. Recovery options require FIRE selection;
+For supplied-evidence assembly, omit both `fire` and `expected_revision`, along with
+any other recovery options. Recovery options require FIRE selection;
 required FIRE snapshots must be current and unexpired. Source freshness is caller
 supplied through `current_hashes`; recovered originals remain historical evidence.
 See [bundle contracts](context-bundle-contract.md) and
@@ -77,3 +80,9 @@ measurement. Exact model/tokenizer/chat-template attestation, streaming, provide
 continuation, automatic retrieval/freshness, other providers and deployed TCP proxy
 acceptance remain open. Next validation should exercise controlled coding tasks
 with source grading, actual usage, latency and native fallback counts.
+
+October 16 source audit: this example now uses the builder's separate scope IDs and
+`framing_tokens`. The historical receipt above is unchanged. Current forwarding code
+uses the shared HTTP-client owner introduced after that run; this documentation update
+is not a new runtime validation. See the [persistent-context roadmap](persistent-context-roadmap.md)
+for archive/window integration and current acceptance gates.
