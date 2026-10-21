@@ -27,6 +27,8 @@ the present working tree or deployment.
 
 ## Use and evaluate the tools
 
+- [Local evidence workspace](evidence-workspace.md): opt-in source inspection,
+  relationship review, private recovery archives and synthetic acceptance.
 - [GraphRAG tool usage](graphrag_tool_usage.md): preferred investigation workflow.
 - [Evaluation](evaluation.md): local CI, live checks, and comparative benchmarking.
 - [MCP conformance](mcp_conformance_checklist.md): protocol behavior and known gaps.

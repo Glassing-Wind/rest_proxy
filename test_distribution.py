@@ -31,6 +31,14 @@ REQUIRED = {
     'graphrag_core/repository_learning/github_configuration.py',
     'graphrag_core/repository_learning/github_worker.py',
     'tools/brain/repository_learning.py',
+    'graphrag_core/evidence_workspace/__init__.py',
+    'graphrag_core/evidence_workspace/contracts.py',
+    'graphrag_core/evidence_workspace/demo.py',
+    'graphrag_core/evidence_workspace/server.py',
+    'graphrag_core/evidence_workspace/static/index.html',
+    'graphrag_core/evidence_workspace/static/app.js',
+    'graphrag_core/evidence_workspace/static/style.css',
+    'memory/evidence_workspace.py', 'scripts/evidence_workspace.py',
 }
 
 
@@ -45,7 +53,7 @@ class DistributionTests(unittest.TestCase):
             # Include the new package marker before its first commit, too.
             paths.append('scripts/__init__.py')
             paths.extend(['requirements-core.txt', 'requirements-embedded.txt', 'requirements-dev.txt',
-                          'requirements-telemetry.txt'])
+                          'requirements-telemetry.txt', 'requirements-evidence.txt'])
             paths.extend(REQUIRED)
             for name in sorted(set(paths)):
                 original = ROOT / name
@@ -73,7 +81,13 @@ class DistributionTests(unittest.TestCase):
                 core = [item for item in dependencies if ';' not in item]
                 self.assertEqual(len(core), 6)
                 self.assertFalse(any('crawlee' in item or 'lancedb' in item for item in core))
-                self.assertEqual(set(metadata.get_all('Provides-Extra', [])), {'embedded', 'full', 'dev', 'telemetry'})
+                self.assertEqual(set(metadata.get_all('Provides-Extra', [])),
+                                 {'embedded', 'full', 'dev', 'telemetry', 'evidence'})
+                evidence = [item for item in dependencies if 'extra == "evidence"' in item]
+                self.assertEqual(evidence, ['pillow==12.2.0; extra == "evidence"'])
+                full_pillow = next(item for item in dependencies
+                                   if item.lower().startswith('pillow==') and 'extra == "full"' in item)
+                self.assertEqual(full_pillow.split(';', 1)[0], evidence[0].split(';', 1)[0])
                 for name in ('opentelemetry-api', 'opentelemetry-sdk', 'opentelemetry-exporter-otlp-proto-common'):
                     self.assertTrue(any(name + '==1.40.0' in item and 'telemetry' in item for item in dependencies))
                 self.assertTrue(any('ladybug==0.21.2' in item and 'embedded' in item for item in dependencies))
@@ -84,6 +98,7 @@ class DistributionTests(unittest.TestCase):
                 names = {name.split('/', 1)[-1] for name in archive.getnames()}
                 self.assertTrue(REQUIRED <= names, REQUIRED - names)
                 self.assertIn('requirements-telemetry.txt', names)
+                self.assertIn('requirements-evidence.txt', names)
             installed = base / 'installed'
             result = subprocess.run(
                 [sys.executable, '-m', 'pip', 'install', '--no-deps', '--no-index',
@@ -94,6 +109,7 @@ class DistributionTests(unittest.TestCase):
 import json, pathlib, sys
 sys.path.insert(0, sys.argv[1])
 import memory.fire_store, memory.context_bundle
+import memory.evidence_workspace as evidence_workspace
 from graphrag_core.repository_learning.adapter import RepoAnalyzerAdapter
 from graphrag_core.repository_learning.service import RepositoryLearningGateway
 from graphrag_core.repository_learning.pattern_store import RepositoryPatternStore
@@ -110,6 +126,9 @@ assert _jobs._ensure_jobs_runtime_dir() == runtime / 'jobs'
 assert _jobs._ensure_project_locks_dir() == runtime / 'project_locks'
 assert pathlib.Path(memory.fire_store.__file__).is_relative_to(root)
 assert pathlib.Path(memory.context_bundle.__file__).is_relative_to(root)
+assert pathlib.Path(evidence_workspace.__file__).is_relative_to(root)
+assert callable(evidence_workspace.EvidenceWorkspaceStore)
+assert 'PIL' not in sys.modules
 assert pathlib.Path(learning_worker.__file__).is_relative_to(root)
 assert pathlib.Path(github_worker.__file__).is_relative_to(root)
 assert RepoAnalyzerAdapter().availability() == {'status': 'disabled'}

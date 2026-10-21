@@ -19,6 +19,7 @@ optional-dependencies.embedded = { file = ["requirements-embedded.txt"] }
 optional-dependencies.full = { file = ["requirements.txt"] }
 optional-dependencies.dev = { file = ["requirements-dev.txt"] }
 optional-dependencies.telemetry = { file = ["requirements-telemetry.txt"] }
+optional-dependencies.evidence = { file = ["requirements-evidence.txt"] }
 
 [tool.setuptools]
 py-modules = [
@@ -40,6 +41,9 @@ py-modules = [
 
 [tool.setuptools.packages.find]
 include = ["graphrag_core*", "local_embeddings*", "memory*", "proxy*", "tools*", "scripts"]
+
+[tool.setuptools.package-data]
+"graphrag_core.evidence_workspace" = ["static/index.html", "static/app.js", "static/style.css"]
 
 [tool.ruff]
 line-length = 120

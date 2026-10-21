@@ -1,5 +1,23 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Local evidence review workflow — October 14
+
+The user authorized continuing the evidence product improvements. The first local
+workspace now covers explicit package import, immutable originals and citations,
+separate evidence/review states, reasoned corrections with revision checks, dated
+operator-supplied freshness checks, reviewed Markdown export and full atomic case
+restore. A standalone loopback viewer uses a per-launch capability and its own
+private SQLite store; existing MCP/proxy/model/index services are unchanged.
+
+See [contracts and launch instructions](evidence-workspace.md) and the
+[synthetic acceptance record](../benchmarks/reports/2026-10-14/evidence-workspace/README.md).
+No personal fraud-case data is part of source, fixtures or screenshots. Email,
+Messages, Photos and Coinbase acquisition, GraphRAG query integration, encrypted
+backups and shared-service authorization remain separate work. Review acceptance
+does not establish source authenticity, identity, ownership or payment. The next
+product step is one user-selected investigation through this workflow, measuring
+traceability and review effort before expanding adapters or promising outcomes.
+
 ## Optional operation telemetry — October 12
 
 The authorized architecture follow-up now has a first private OpenTelemetry layer
