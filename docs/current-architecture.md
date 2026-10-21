@@ -1,6 +1,6 @@
 # Current architecture
 
-**Canonical operating guide, updated October 13, 2026.** This guide describes the
+**Canonical operating guide, updated October 16, 2026.** This guide describes the
 current source and its documented acceptance limits. Dated studies, implementation
 milestones and benchmark reports remain evidence for their recorded revisions;
 their old next steps do not override this guide or the active
@@ -174,6 +174,20 @@ outcomes.
 | Compose MCP appliance | `brain_server:app`, exposed on loopback by default | Neo4j, PostgreSQL/pgvector and Redis containers; bootstrap precedes application startup. | Service-backed development appliance; `/ready` requires read-only connectivity checks for the three declared services. |
 | Optional inference proxy | Separate `proxy:app` process | Configured inference endpoint; memory/persistence dependencies only for the enabled features. | Independent compatibility layer; selected repository storage does not make all inference-memory paths backend-neutral. |
 | Combined local workflow | MCP brain plus optional inference proxy on distinct ports | Requirements of the selected repository profile plus the selected inference features. | Both applications can be used; running both database stacks is unnecessary. |
+
+LM Studio fits the optional **model-serving layer**. Its desktop app or headless
+llmster can host models; `lms` is their CLI. Generation and embedding model selection
+are independent of the evidence/storage profile. Runtime KV caches are distinct from
+durable FIRE originals and task state. The current provider and strict encoder have
+specific contracts; a documented vendor feature is not automatically an integrated
+repository feature. See [LM Studio integration](lm-studio.md).
+
+The October 16 [stack/context research](stack-and-context-strategy.md) and
+[persistent-context roadmap](persistent-context-roadmap.md) retain these profiles.
+They propose acknowledged archival, complete-exchange windowing and recovery gates
+through existing FIRE/context interfaces. A ring does not enlarge model attention
+or establish full-history recall. These documents do not activate runtime settings,
+move data or establish a distributable LM Studio license.
 
 Select embedded repository storage with `LM_PROXY_STORAGE_BACKEND=embedded`,
 `LM_PROXY_GRAPH_BACKEND=ladybug` and `LM_PROXY_EMBEDDED_STATE`. Disable separate

@@ -16,6 +16,9 @@ the present working tree or deployment.
 ## Operate the system
 
 - [Configuration](configuration.md): feature modes, dependencies, and safe examples.
+- [Minimal embedded installation](minimal-embedded-install.md) and
+  [embedded MCP owner](embedded-mcp-owner.md): LadybugDB/LanceDB setup and explicit
+  tool routes; separate from the Neo4j/Postgres service profile.
 - [MCP and proxy operations](operations.md): daemon lifecycle and client setup.
 - [Health and readiness](health.md): process liveness, explicit dependencies and bounded checks.
 - [LM Studio embeddings](lm-studio.md): local model lifecycle and tuning.
@@ -29,6 +32,14 @@ the present working tree or deployment.
 
 - [Local evidence workspace](evidence-workspace.md): opt-in source inspection,
   relationship review, private recovery archives and synthetic acceptance.
+- [ChatGPT and Codex workflow](chatgpt-codex-workflow.md): architecture planning,
+  agent/workspace routing, implementation handoffs, tests and Git completion.
+- [October 11 routing inspection](../benchmarks/reports/2026-10-11/work-routing.md):
+  observed integrations, incomplete handoffs and evidence limits.
+- [Capability priorities](capability-priorities.md): cloud execution, Spark, Pillow
+  and existing capabilities worth demonstrating next.
+- [Repository Intelligence Audit](fire-repository-audit-offer.md): proposed $900
+  scope, public sample and reproducible evidence; distinct from the $750 workflow pilot.
 - [GraphRAG tool usage](graphrag_tool_usage.md): preferred investigation workflow.
 - [Evaluation](evaluation.md): local CI, live checks, and comparative benchmarking.
 - [MCP conformance](mcp_conformance_checklist.md): protocol behavior and known gaps.
@@ -37,6 +48,10 @@ the present working tree or deployment.
 
 ## Design records
 
+- [Stack and persistent-context decisions](stack-and-context-strategy.md): Dictionary
+  stack comparison, LM Studio's serving role, Trader1 ring findings and current memory gaps.
+- [Persistent-context roadmap](persistent-context-roadmap.md): archive/recovery,
+  bounded-window and provider-budget gates before outcome/distribution claims.
 - [Current architecture](current-architecture.md): canonical components, deployment
   profiles, publication protocol, local security boundary and measured limits.
 - [Retrieval architecture](retrieval_architecture.md): current ownership boundaries.

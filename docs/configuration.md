@@ -7,6 +7,19 @@ deployment profiles and ownership/trust boundaries.
 See [health and readiness](health.md) for `/live`, `/ready`, `/health/details` and
 the optional `LM_PROXY_READY_REQUIRED` dependency contract.
 
+## Choose a storage profile
+
+| Profile | Storage | Tool route |
+| --- | --- | --- |
+| Embedded | Local LadybugDB and LanceDB; no separate Neo4j/Postgres/Redis servers for the supported repository slice. | Explicit publication/source/relationship tools plus bounded common search and health bridges. |
+| Service-backed | Neo4j and Postgres/pgvector; Redis for optional session/lock features. | Existing `index_workspace`, `get_indexing_health` and `search_codebase` workflows. |
+
+These are selectable paths in the same application, with incomplete feature parity.
+There is no automatic data migration between them. Embedded selection does not
+disable the separate legacy inference-memory integrations; turn those off explicitly
+for an embedded-only deployment. See [embedded installation](minimal-embedded-install.md)
+for native dependencies and [embedded MCP owner](embedded-mcp-owner.md) for tool scope.
+
 ## Memory modes
 
 `LM_PROXY_MEMORY_MODE` controls automatic persistence and prompt augmentation:
@@ -31,7 +44,73 @@ LM_PROXY_GRAPH_ENABLED=0
 LM_PROXY_DEBUG=false
 ```
 
-## Full indexed configuration
+## Embedded repository configuration
+
+Install the embedded dependencies before using this profile. Replace the example
+absolute paths with private writable locations outside the installed package:
+
+```dotenv
+LM_PROXY_STORAGE_BACKEND=embedded
+LM_PROXY_GRAPH_BACKEND=ladybug
+LM_PROXY_EMBEDDED_STATE=/absolute/private-state
+LM_PROXY_RUNTIME_DIR=/absolute/private-runtime
+LM_PROXY_CONFIG_DIR=/absolute/private-config
+LM_PROXY_MEMORY_EMBEDDING_DIM=768
+# Optional Ladybug CPU thread budget; unset/blank defaults to 2:
+LM_PROXY_LADYBUG_THREADS=2
+
+LM_PROXY_MEMORY_ENABLED=0
+LM_PROXY_MEMORY_MODE=off
+LM_PROXY_MEMORY_ENABLE_PERSISTENCE=0
+LM_PROXY_MEMORY_ENABLE_REDIS=0
+LM_PROXY_MEMORY_ENABLE_EMBEDDINGS=0
+LM_PROXY_MEMORY_ENABLE_RETRIEVAL=0
+LM_PROXY_WATCHER_ENABLED=0
+LM_PROXY_EMBEDDED_WATCH_ENABLED=0
+
+# Required for real indexing and vector/hybrid queries, not published text/source reads:
+LM_PROXY_EMBEDDED_MODEL_ARTIFACT=/absolute/model.gguf
+```
+
+The dimension (768 in this example) must match both the stored schema and the
+configured embedding model. Those legacy memory switches do not disable explicit
+embedded embedding operations.
+Current MCP indexing/vector queries use an already loaded local LM Studio embedding
+model. The artifact path supplies a fingerprint; it does not load a model or attest
+the resident weights. Use `mode="text"` explicitly for model-free published search;
+the embedded search tool defaults to hybrid. The retained Neo4j Python client is an
+import dependency, not a requirement to run a Neo4j server in this profile.
+
+`LM_PROXY_LADYBUG_THREADS` accepts an integer from **1 to 64**, validated before
+opening graph state. It sets the native Ladybug database thread budget; it does not
+add parallel application owners or configure embedding/GPU workers. Explicit
+`LadybugGraphDriver(..., max_num_threads=N)` takes precedence over the environment;
+`EmbeddedRepositoryOwner(..., graph_threads=N)` supplies that override. The default
+remains 2 until workload measurements justify another value.
+
+Discover committed state with `list_embedded_projects`, `get_embedded_overview` and
+`get_embedded_indexing_attempt`; read with `describe_embedded_file` and
+`search_embedded_repository`. Common `get_indexing_health` now hashes only published
+manifest paths against current bytes and reports latest indexing attempts, without
+an encoder. It refuses symlink traversal; platforms lacking the safe POSIX reader
+report freshness as unknown. Deep `audit=true` fidelity/integrity checks remain
+unsupported. Common `search_codebase(mode="text")` is model-free; its default
+`precise` aliases native hybrid and requires the matching encoder. Native search
+returns JSON run/hash receipts, not the service-backed rendering/ranking contract.
+Standard indexing is still guarded in embedded mode. See
+[common-tool coverage](embedded-mcp-owner.md#october-11-common-tool-bridges).
+
+Use one owner process per embedded state directory. Multiple MCP clients can share
+one HTTP daemon; independent STDIO/HTTP processes cannot own the same state together.
+Keep endpoints on loopback unless authentication and project isolation are tested.
+Use disposable state for validation and agree source/provider/retention scope before
+processing customer data. REST evidence and context tools have separate opt-in flags;
+this example does not enable them or start a watcher.
+
+## Service-backed indexed configuration
+
+Unset the embedded storage/graph selectors in the process configuration when
+choosing this profile; merely enabling Neo4j or Postgres does not override them.
 
 ```dotenv
 LM_PROXY_MEMORY_ENABLED=1
@@ -61,15 +140,6 @@ Compose and live graph CI use the **Neo4j 5.26** server baseline. The minor imag
 tag remains mutable; it is not a patch/digest reproducibility guarantee. Compose
 does not load APOC or grant unrestricted APOC procedures. New plugins require a
 concrete application need and an explicit compatible, restricted configuration.
-
-## Embedded graph thread budget
-
-`LM_PROXY_LADYBUG_THREADS` accepts an integer from **1 to 64**, validated before
-opening graph state. It sets the native Ladybug database thread budget; it does not
-add parallel application owners or configure embedding/GPU workers. Explicit
-`LadybugGraphDriver(..., max_num_threads=N)` takes precedence over the environment;
-`EmbeddedRepositoryOwner(..., graph_threads=N)` supplies that override. The default
-remains 2 until workload measurements justify another value.
 
 ## Local paths
 

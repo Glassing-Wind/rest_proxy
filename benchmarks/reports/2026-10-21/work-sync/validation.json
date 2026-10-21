@@ -1,0 +1,316 @@
+{
+  "source_local_head": "0f56431",
+  "merged_main": "126dbe29d43be21a760aeb0615709743b5ccaaed",
+  "snapshot_policy": "Isolated clone; original checkout/index/branch untouched. Preserve published preparation-failure changes with three-way patches.",
+  "validation": {
+    "scripts": [
+      {
+        "test": "test_arm_benchmark.py",
+        "exit": 0,
+        "seconds": 0.09
+      },
+      {
+        "test": "test_cockpit_eval.py",
+        "exit": 0,
+        "seconds": 0.21
+      },
+      {
+        "test": "test_embedded_health.py",
+        "exit": 0,
+        "seconds": 0.69
+      },
+      {
+        "test": "test_embedded_ladybug.py",
+        "exit": 0,
+        "seconds": 1.2
+      },
+      {
+        "test": "test_embedded_runtime.py",
+        "exit": 0,
+        "seconds": 0.84
+      },
+      {
+        "test": "test_embedded_search.py",
+        "exit": 0,
+        "seconds": 0.37
+      },
+      {
+        "test": "test_embedded_tool_bridges.py",
+        "exit": 0,
+        "seconds": 3.41
+      },
+      {
+        "test": "test_evidence_workspace.py",
+        "exit": 0,
+        "seconds": 0.48
+      },
+      {
+        "test": "test_evidence_workspace_http.py",
+        "exit": 0,
+        "seconds": 0.32
+      },
+      {
+        "test": "test_evidence_workspace_launch.py",
+        "exit": 1,
+        "seconds": 0.24
+      },
+      {
+        "test": "test_forward_gateway.py",
+        "exit": 0,
+        "seconds": 0.13
+      },
+      {
+        "test": "test_github_configuration.py",
+        "exit": 0,
+        "seconds": 1.43
+      },
+      {
+        "test": "test_handlers_persistence.py",
+        "exit": 0,
+        "seconds": 0.08
+      },
+      {
+        "test": "test_health_endpoints.py",
+        "exit": 0,
+        "seconds": 0.75
+      },
+      {
+        "test": "test_lessons_acquisition.py",
+        "exit": 0,
+        "seconds": 0.33
+      },
+      {
+        "test": "test_lessons_ast.py",
+        "exit": 0,
+        "seconds": 0.08
+      },
+      {
+        "test": "test_lessons_cli.py",
+        "exit": 0,
+        "seconds": 0.14
+      },
+      {
+        "test": "test_lessons_corpus.py",
+        "exit": 0,
+        "seconds": 1.49
+      },
+      {
+        "test": "test_lessons_exchange.py",
+        "exit": 0,
+        "seconds": 0.86
+      },
+      {
+        "test": "test_lessons_frontier.py",
+        "exit": 0,
+        "seconds": 0.3
+      },
+      {
+        "test": "test_lessons_investigation.py",
+        "exit": 0,
+        "seconds": 1.92
+      },
+      {
+        "test": "test_lessons_james_investigation.py",
+        "exit": 0,
+        "seconds": 0.31
+      },
+      {
+        "test": "test_lessons_james_pilot.py",
+        "exit": 0,
+        "seconds": 0.33
+      },
+      {
+        "test": "test_lessons_ledger.py",
+        "exit": 0,
+        "seconds": 0.25
+      },
+      {
+        "test": "test_lessons_ledger_reader.py",
+        "exit": 0,
+        "seconds": 0.25
+      },
+      {
+        "test": "test_lessons_mcp.py",
+        "exit": 0,
+        "seconds": 1.04
+      },
+      {
+        "test": "test_lessons_pdf.py",
+        "exit": 0,
+        "seconds": 0.07
+      },
+      {
+        "test": "test_lessons_recovery.py",
+        "exit": 0,
+        "seconds": 0.33
+      },
+      {
+        "test": "test_lessons_scripture.py",
+        "exit": 0,
+        "seconds": 0.08
+      },
+      {
+        "test": "test_lessons_server.py",
+        "exit": 0,
+        "seconds": 0.51
+      },
+      {
+        "test": "test_proxy_lifespan.py",
+        "exit": 0,
+        "seconds": 0.37
+      },
+      {
+        "test": "test_readiness.py",
+        "exit": 0,
+        "seconds": 0.77
+      },
+      {
+        "test": "test_repoanalyzer_adapter.py",
+        "exit": 1,
+        "seconds": 2.01
+      },
+      {
+        "test": "test_repository_configuration_learning.py",
+        "exit": 0,
+        "seconds": 0.15
+      },
+      {
+        "test": "test_repository_learning.py",
+        "exit": 0,
+        "seconds": 5.86
+      },
+      {
+        "test": "test_repository_learning_integration.py",
+        "exit": 0,
+        "seconds": 0.31
+      },
+      {
+        "test": "test_repository_learning_tools.py",
+        "exit": 0,
+        "seconds": 3.29
+      },
+      {
+        "test": "test_repository_pattern_learning.py",
+        "exit": 0,
+        "seconds": 5.26
+      },
+      {
+        "test": "test_repository_pattern_store.py",
+        "exit": 0,
+        "seconds": 0.57
+      },
+      {
+        "test": "test_runtime_hardware.py",
+        "exit": 0,
+        "seconds": 0.09
+      },
+      {
+        "test": "test_task_cockpit_http.py",
+        "exit": 0,
+        "seconds": 0.48,
+        "subsequent_run": "24 tests passed after correcting preparation-failure metadata compatibility",
+        "initial_exit": 1,
+        "initial_failure_count": 6
+      },
+      {
+        "test": "test_task_cockpit_launch.py",
+        "exit": 1,
+        "seconds": 0.88
+      },
+      {
+        "test": "test_task_dispatch.py",
+        "exit": 0,
+        "seconds": 0.64
+      },
+      {
+        "test": "test_task_handoff.py",
+        "exit": 0,
+        "seconds": 1.05
+      },
+      {
+        "test": "test_task_inspect.py",
+        "exit": 0,
+        "seconds": 0.14
+      },
+      {
+        "test": "test_task_provider.py",
+        "exit": 0,
+        "seconds": 0.16
+      },
+      {
+        "test": "test_task_registry.py",
+        "exit": 0,
+        "seconds": 0.13
+      },
+      {
+        "test": "test_task_review.py",
+        "exit": 0,
+        "seconds": 0.97
+      },
+      {
+        "test": "test_task_review_fixture.py",
+        "exit": 1,
+        "seconds": 0.36
+      },
+      {
+        "test": "test_task_worker.py",
+        "exit": 0,
+        "seconds": 1.25
+      },
+      {
+        "test": "test_telemetry.py",
+        "exit": 1,
+        "seconds": 0.38
+      },
+      {
+        "test": "test_telemetry_boundaries.py",
+        "exit": 0,
+        "seconds": 1.41
+      },
+      {
+        "test": "test_telemetry_transport.py",
+        "exit": 0,
+        "seconds": 0.74
+      },
+      {
+        "test": "test_watcher.py",
+        "exit": 0,
+        "seconds": 0.12
+      }
+    ],
+    "blocked_scripts": [
+      "test_evidence_workspace_launch.py",
+      "test_repoanalyzer_adapter.py",
+      "test_task_cockpit_launch.py",
+      "test_task_review_fixture.py",
+      "test_telemetry.py"
+    ],
+    "production_ruff": "passed",
+    "cockpit_regression": "24 tests passed",
+    "shell_syntax": "passed",
+    "full_ci": "not run; manages shared services",
+    "live_inference": "not run",
+    "ui_browser_checks": "not rerun",
+    "additional_checks": {
+      "test_distribution.py": "1 test passed"
+    },
+    "optional_skips": "Several successful scripts skip optional external analyzer and PDF dependencies; see script output. Passing scripts do not imply all optional integrations exercised.",
+    "blocked_reasons": {
+      "test_evidence_workspace_launch.py": "Reproduced CLI failure: PermissionError binding numeric loopback socket.",
+      "test_task_cockpit_launch.py": "Sandbox prevents owned loopback listener startup.",
+      "test_repoanalyzer_adapter.py": "PermissionError executing ps to inspect orphan process state.",
+      "test_task_review_fixture.py": "Four fixture cases blocked by PermissionError binding loopback HTTP server.",
+      "test_telemetry.py": "Two cases blocked by PermissionError binding loopback HTTP server."
+    }
+  },
+  "publication": "Nine ordered draft PRs; each depends on its predecessor; no merges authorized. GitHub Git Data API used because shell DNS cannot resolve GitHub. Trees checked against local Git tree hashes.",
+  "exclusions": [
+    "machine-specific agent configuration and AWS editor rules",
+    "unreviewed FIRE-Audit-Evidence.zip",
+    "ignored runtime data, environments, private archives and databases"
+  ],
+  "security_review": "Credential-pattern scan of every group snapshot found zero matches for private-key, GitHub-token, AWS-access-key, API-key and literal bearer patterns. This is not a complete secret/security audit.",
+  "integration_fix": "Task cockpit accepts both known registry failure qualifiers and matched category/stage pairs, including preparation_error/preparation. Two regression tests added.",
+  "whitespace": "Audit sample EOF fixed. Vendored Go patch retains exact context whitespace so patch SHA-256 and reproducibility remain valid; diff-check diagnostics within this patch are expected.",
+  "local_git_scope": "No stash/reset/rebase/staging in original checkout. Isolated commits are grouped/replayed; original history retained locally."
+}

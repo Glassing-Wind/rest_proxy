@@ -141,3 +141,38 @@ preview and revision/publication-guarded project enable action.
 [Opt-in REST evidence reads](embedded-rest-evidence.md) now reuse this HTTP owner’s
 registered tools. The inference proxy does not open another embedded database;
 context-bundle assembly and inference integration remain unfinished.
+
+## October 11 common-tool bridges
+
+Common `search_codebase` and `get_indexing_health` now dispatch to the selected
+embedded owner before requesting legacy storage. No production daemon/backend
+switch was performed for this change.
+
+`search_codebase` supports explicit text/vector/hybrid modes; the existing default
+`precise` aliases native hybrid. Text stays model-free. Results are JSON receipts
+with raw stored chunk content, project/run/ref identity, source SHA256 and chunk
+SHA256. Chunks are indexed evidence, not manufactured exact file-line excerpts;
+use `describe_embedded_file` for published source. Requested roots/IDs resolve to
+committed publications, aliases deduplicate, ambiguous identities refuse, and
+receipt/run changes refuse rather than crossing a publication boundary.
+
+The bridge accepts 1..8 workspaces, queries of at most 8192 UTF-8 bytes, at most
+100 candidates per project and 48 KiB output. Metadata/path filters, test exclusion
+and project-scoped file/directory caps apply within those candidate windows. Native
+rank is interleaved across projects; cross-project scores are not treated as comparable.
+Whole chunks may be omitted for the output budget, with explicit truncation.
+Legacy metadata boost, intent expansion and clone reranking are not applied. The
+legacy boost default/zero is accepted for compatibility with `applied_meta_boost=0`.
+Broad mode, custom boost, debug, Cargo and grep-fallback policies are refused explicitly
+before engines/models open. Full ranking parity and exhaustive recall are not claimed.
+
+`get_indexing_health` returns active publication and latest attempt separately,
+then compares hashes of current manifest-listed files. Same-mtime edits are detected.
+Checks are bounded to 5000 files, 2 MiB/file, 64 MiB total and 50 issue details.
+The POSIX reader anchors directories and refuses symlink traversal; unsupported
+platforms or unreadable/budget-limited sources report unknown/incomplete checks.
+The filesystem is not an atomic snapshot and unlisted paths are never enumerated.
+The deeper `audit=true` parser/source/vector/graph integrity and quality checks
+remain unsupported; a matching manifest is not semantic-quality or release acceptance.
+
+[Dated acceptance and validation limits](../benchmarks/reports/2026-10-11/embedded-tool-routing.md).

@@ -23,14 +23,20 @@
 # force semantic discovery for exact lookups. Count native fallbacks in evaluations.
 # Passing tool contracts is not evidence of lower end-to-end latency, token usage,
 # or better coding outcomes; those claims require controlled paired measurements.
+#
+# ChatGPT/Codex workflow: read docs/chatgpt-codex-workflow.md for architecture
+# handoffs, acceptance criteria, validation and implementation feedback. ChatGPT
+# supplies reasoning; Codex verifies current source and carries authorized work
+# through implementation, tests and Git review. Chats do not synchronize themselves.
 
 # ------------------------------------------------------------------------------
 # Build / Run / Lint / Test Commands
 # ------------------------------------------------------------------------------
 # Environment
-# - Install deps:        pip install -r requirements.txt
+# - Existing runtime:   use .venv/bin/python (avoid reinstalling working deps).
+# - New environment:    ./scripts/setup_project_python.sh
 # - Optional: create .env from .env.example if present and set credentials.
-# - Python version:      3.11+ recommended (match production runtime).
+# - Python version:      3.14 recommended; 3.11 is the compatibility floor.
 # - Dev loop:            run one service at a time; both are standalone.
 # - Quick sanity check:  python -m py_compile proxy/app.py mcp_server.py brain_server.py
 #
@@ -44,22 +50,24 @@
 # - Uvicorn entry:       uvicorn proxy:app --host 0.0.0.0 --port 8000
 # - Package entry:       proxy/__init__.py exposes proxy.app:app
 #
-# Lint (optional; no enforced config in repo)
-# - Ruff:                ruff check .
-# - Pylint:              pylint proxy tools memory graphrag_core
-# - Lint subset (tool):  tools/dev.py exposes lint_project_subset for MCP use.
+# Lint (Ruff configuration in pyproject.toml; production checks enforced by CI)
+# - Changed Python:      .venv/bin/python -m ruff check <changed-paths>
+# - Production scope:    see scripts/run_ci_checks.sh for the gated file list.
+# - Lint subset (tool):  tools/hands/dev.py exposes lint_project_subset for MCP use.
 #
-# Tests (script-style, not a formal test framework)
-# - Run a single script: python test_neo4j.py
-# - Run a single script: python test_tool_stream_client.py
-# - Run a single script: python test_native_index.py
-# - Run a single script: python verify_streaming.py
-# - Pattern for one test: python test_<name>.py  (scripts live at repo root)
-# - Single test example: python test_native_index.py
+# Tests (executable scripts, commonly using unittest; not wired to pytest)
+# - Offline citations:  .venv/bin/python test_file_source_excerpt.py
+# - Offline retrieval:  .venv/bin/python test_search_codebase_tool.py
+# - Offline handoff:    .venv/bin/python test_task_handoff.py
+# - Graph regressions:  ./scripts/check_graph_pipeline.sh
+# - Live MCP protocol:  .venv/bin/python scripts/check_mcp_protocol.py
+# - Full gate:          ./scripts/run_ci_checks.sh
 #
 # Notes on tests
-# - These test_*.py files are executable scripts; they are not wired to pytest.
-# - Some scripts embed local paths or credentials; update before running.
+# - Select meaningful checks for the change; inspect live-test prerequisites.
+# - Full CI includes daemon start/stop and stale-session restart checks. Explain
+#   these operational changes before running; use offline checks for setup work.
+# - The live protocol check manages only its own MCP client sessions.
 # - Keep tests idempotent and avoid mutating production data.
 
 # ------------------------------------------------------------------------------
@@ -69,6 +77,11 @@
 # - Do not assume external services are available; guard integrations.
 # - Use Read/Glob/Grep before edits to confirm context and style.
 # - Avoid printing or logging secrets; redact tokens and credentials.
+# - Complete authorized reversible work without repeated permission questions.
+# - Inspect Git state first and preserve unrelated user changes. Explain proposed
+#   configuration, indexing and service changes before making them.
+# - Follow direct user authorization for commits, pushes and pull requests; stage
+#   only intended files, inspect the diff and use normal non-force pushes.
 
 # ------------------------------------------------------------------------------
 # Code Style Guidelines
@@ -171,3 +184,37 @@
 # ------------------------------------------------------------------------------
 # No Cursor rules (.cursor/rules/, .cursorrules) found in this repo.
 # No Copilot instructions (.github/copilot-instructions.md) found in this repo.
+
+
+## AWS Agent Toolkit (AWS work only)
+
+<!-- BEGIN AWS Agent Toolkit rules -->
+# AWS Guidance
+
+- Where these AWS rules conflict with the project's own instructions, the
+  project's instructions take precedence.
+- Prefer the AWS MCP Server for AWS interactions — it provides sandboxed
+  execution, observability, and audit logging. If unavailable, use the
+  AWS CLI directly.
+- Before starting a task, check whether a relevant AWS skill is available.
+  Load the skill with `retrieve_skill` and prefer its guidance over
+  general knowledge.
+- When uncertain about specific AWS details (API parameters, permissions,
+  limits, error codes), verify against documentation rather than guessing.
+  State uncertainty explicitly if you cannot confirm.
+- When creating infrastructure, prefer infrastructure-as-code (AWS CDK or
+  CloudFormation) over direct CLI commands.
+- When working with infrastructure, follow AWS Well-Architected Framework
+  principles.
+- Do not use em dashes in AWS resource names or descriptions. Use
+  hyphens instead.
+
+## Secret Safety
+
+- MUST load the `aws-secrets-manager` skill first for any secret,
+  credential, API key, token, or password task. MUST NOT call
+  `secretsmanager get-secret-value` or `batch-get-secret-value`, and MUST
+  NOT hit the Secrets Manager Agent daemon directly. MUST use
+  `{{resolve:secretsmanager:secret-id:SecretString:json-key}}` with
+  `asm-exec` so the secret resolves at runtime without entering context.
+<!-- END AWS Agent Toolkit rules -->

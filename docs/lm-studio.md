@@ -1,7 +1,22 @@
 # LM Studio integration
 
-Official documentation checked October 5, 2026. This guide separates LM Studio
-capabilities from our current implementation.
+Component roles, model API schema and stack references checked October 16, 2026.
+This guide separates LM Studio capabilities from our current implementation;
+runtime acceptance retains the dates and limits of its cited receipts.
+
+## Place in the stack
+
+LM Studio occupies the optional model-serving layer. The desktop app includes a
+GUI; llmster supplies headless serving; `lms` is the CLI for either. These products
+host selected models and inference engines. FIRE owns scoped originals, checkpoints
+and context assembly; runtime attention caches do not replace that durable evidence.
+[Official component roles](https://lmstudio.ai/docs/app/basics/lmstudio-vs-llmster-vs-lms).
+
+The desktop has its own [terms](https://lmstudio.ai/app-terms); open-source CLI/engine
+licenses do not establish desktop or standalone-daemon redistribution rights. Verify
+the exact deployment/artifact and model terms before bundling or customer hosting.
+See the [researched component decisions](stack-and-context-strategy.md) and
+[persistent-context roadmap](persistent-context-roadmap.md).
 
 LM Studio is an optional embedding adapter and a separate optional inference proxy
 backend. Our Ladybug/LanceDB owner accepts an embedding callback; selecting LM
@@ -85,8 +100,8 @@ control client batching/input normalization; they are not exact tokenizer counts
 Context length bounds each input. Strict embedded indexing rejects text altered by
 provider normalization.
 
-LM Studio documents `eval_batch_size` as effective only for LLMs using its
-llama.cpp engine; embedding load configuration contains `context_length`.
+LM Studio documents `eval_batch_size` as effective for LLMs and decision models
+using its llama.cpp engine; embedding load configuration contains `context_length`.
 Our general provider still sends this legacy setting and retries without it when
 the error explicitly identifies embedding-model rejection of that field. It is
 not a documented embedding throughput control.

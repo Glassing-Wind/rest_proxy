@@ -1,5 +1,29 @@
 # GraphRAG evaluation roadmap — revised 2026-09-06
 
+## Stack and persistent-context planning — October 16
+
+The user requested consolidation of the Shadowrocket, Dictionary stack, Trader1
+Postgres ring and persistent-context findings, further research and a roadmap.
+[Decision record](stack-and-context-strategy.md) maps components and evidence;
+[implementation roadmap](persistent-context-roadmap.md) defines dependency gates.
+LM Studio remains an optional model-serving/embedding adapter. Retain the Python/MCP
+architecture and explicit storage profiles; no bundle adoption or provider migration
+is a prerequisite. A bounded recent window needs acknowledged originals, checkpoints
+and targeted retrieval to provide continuity; it does not expand model attention.
+
+This is an authorized research/planning lane alongside the outcome-first delivery
+work below. The next implementation brief should pin one scoped continuity fixture,
+define archive acknowledgment/retention and exact event capture, then take a bounded
+archive-before-eviction slice. Subsequent gates cover recovery/corrections, complete
+request accounting, one local workflow, controlled outcomes and needed distribution.
+No ring/native extension, service/model/index/configuration change, paid run or
+operational migration was performed by this documentation work.
+
+The separate PR #4 review-policy candidate passed 113 offline checks and one pinned
+automated live fixture in an isolated worktree on October 16; it remains uncommitted
+and unpublished. Those results do not validate the proposed context pipeline. Keep
+that Git handoff separate from this planning work and preserve historical receipts.
+
 ## Local evidence review workflow — October 14
 
 The user authorized continuing the evidence product improvements. The first local

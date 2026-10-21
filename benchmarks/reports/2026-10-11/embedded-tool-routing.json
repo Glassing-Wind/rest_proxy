@@ -1,0 +1,145 @@
+{
+  "date": "2026-10-11",
+  "base_revision": "8bc9bdf2bcd147accc4af1661afce5b258c0a9f6",
+  "branch": "codex/task-provider-adapter",
+  "revision_scope": "base plus uncommitted file hashes",
+  "source_sha256": {
+    "memory/embedded_runtime.py": "2400fa62b439ef90b75f2c1cf570ca604a5b6a778ab20d0e19e6a32993a37ec9",
+    "tools/brain/search/semantic.py": "1786198b9efb7a4dc75ee3958cb628e66f5fa83d56509fab548620ccebce8917",
+    "tools/hands/indexing.py": "3ade1ff2a57c6f0f9f2468eb2eb26744e0a1c7093a1cd6f43bc2155f17d2fe02",
+    "scripts/run_ci_checks.sh": "76534a4bc7808c5401cee9055a33d06849e95ec49ba2861841c440be679d26e3",
+    ".github/workflows/ci.yaml": "b6a2cd5e20227a9556c13fb23bf09c8914b9d56cb4ee342627966435efcc2119",
+    "memory/embedded_search.py": "aaf59283236fd318e207c17dee97e4cf20077dc5dfd288c381576bc13b6539e8",
+    "memory/embedded_health.py": "07c1c4ff7773c8c0ab4b6c7e973ba20771cbe264ccd9d1a28152ae3b77a420ab",
+    "test_embedded_search.py": "9e570c0d4b29dea62a05c5dc5c8c3d9b9f67ba634359ffb436d16499033a2c72",
+    "test_embedded_health.py": "6cc33901e7443876bd546bfb666bae48f9a0c3eb611928d353a71f87057f912e",
+    "test_embedded_tool_bridges.py": "414b26af19e8eb7b0820217b2a108f566794c0e346301de7a578b1a63e076d53"
+  },
+  "patch_sha256": "2c5872b9d27ac22e3ca3ca8b03ce208c576722b0b77fc5f7b680f152cd03727d",
+  "runtime": {
+    "python": "3.14.8",
+    "platform": "macOS ARM64",
+    "ladybug": "0.21.2",
+    "lancedb": "0.39.0",
+    "pyarrow": "25.0.1",
+    "mcp": "1.26.0",
+    "tree_sitter_language_pack": "1.20.0",
+    "ruff": "0.15.7",
+    "parser_wheel_archive_sha256": "ccc6bf9e47b945ebef8353b59794af4a2e3d9f487f8fed7d691562e5232458d9",
+    "fresh_parser_build": false,
+    "python_grammar_sha256": "a0aca809ab8a578209f465128464b561ed0fd124088c12a49f08777fed76bd53"
+  },
+  "network_control": {
+    "policy": "(deny network*)",
+    "loopback_probe_denied": true,
+    "filesystem_sandbox": false
+  },
+  "tests": [
+    {
+      "script": "test_embedded_search.py",
+      "exit_code": 0,
+      "tests_run": 7,
+      "log_sha256": "2ded3ab9cd8d30af0366049762fb32723c9f2a94e7de6af068423a431b3f5baf"
+    },
+    {
+      "script": "test_embedded_health.py",
+      "exit_code": 0,
+      "tests_run": 15,
+      "log_sha256": "bd6831e74ad3e3c43d5cc8c23a8fbdac99edd618e4c1d52e955d20148b4e3db7"
+    },
+    {
+      "script": "test_embedded_tool_bridges.py",
+      "exit_code": 0,
+      "tests_run": 5,
+      "log_sha256": "aec14b35bbb5228a1310710e921c854d8d23ff5a190cfe933ea97d2944e5bb7e"
+    },
+    {
+      "script": "test_search_codebase_tool.py",
+      "exit_code": 0,
+      "tests_run": 15,
+      "log_sha256": "ef6286a645e163230b0fffeeda294639306a382b026b18278e1d5e5a4a96bec1"
+    },
+    {
+      "script": "test_indexing_health_alignment.py",
+      "exit_code": 0,
+      "tests_run": 23,
+      "log_sha256": "516f73e1d45e978ca8237657c0ed7640c2b9de6ced6ab4a86240f755c1debcca"
+    },
+    {
+      "script": "test_embedded_runtime.py",
+      "exit_code": 0,
+      "tests_run": 14,
+      "log_sha256": "721754630e518e360e4fb9f15a43f28592b61e77829f138fa842b105a44319e3"
+    }
+  ],
+  "tests_passed": 79,
+  "reported_skips": 0,
+  "first_native_attempt": {
+    "script": "test_embedded_tool_bridges.py",
+    "exit_code": 1,
+    "tests_run": 5,
+    "log_sha256": "e2abf239cf7da280cee4de930cbb3dcaebb449eeeefb62353d73d308358008eb"
+  },
+  "failure_resolution": "Fixture restores only three overridden module aliases; no native reimport cleanup.",
+  "checks": {
+    "changed_python_ruff": "passed",
+    "tracked_diff_whitespace": "passed",
+    "shell_syntax": "passed",
+    "complete_daemon_changing_gate": "not run",
+    "fresh_hosted_cloud_ci": "not run",
+    "real_embedding_acceptance": "not run",
+    "paired_investigation_benchmark": "not run"
+  },
+  "preservation": {
+    "agents_unchanged_since_initial_baseline": true,
+    "original_audit_import_hashes_unchanged": true,
+    "operational_daemon_backend_switched": false,
+    "node_updated": false,
+    "commit_push_or_external_message": false
+  },
+  "commands": [
+    [
+      "sandbox-exec",
+      "-f",
+      "network-deny.sb",
+      ".venv/bin/python",
+      "test_embedded_search.py"
+    ],
+    [
+      "sandbox-exec",
+      "-f",
+      "network-deny.sb",
+      ".venv/bin/python",
+      "test_embedded_health.py"
+    ],
+    [
+      "sandbox-exec",
+      "-f",
+      "network-deny.sb",
+      ".venv/bin/python",
+      "test_embedded_tool_bridges.py"
+    ],
+    [
+      "sandbox-exec",
+      "-f",
+      "network-deny.sb",
+      ".venv/bin/python",
+      "test_search_codebase_tool.py"
+    ],
+    [
+      "sandbox-exec",
+      "-f",
+      "network-deny.sb",
+      ".venv/bin/python",
+      "test_indexing_health_alignment.py"
+    ],
+    [
+      "sandbox-exec",
+      "-f",
+      "network-deny.sb",
+      ".venv/bin/python",
+      "test_embedded_runtime.py"
+    ]
+  ],
+  "command_environment": "Exact allowed environment and prepared parser cache are in reproduction/run_checks.py."
+}

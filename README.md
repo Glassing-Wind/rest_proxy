@@ -5,10 +5,11 @@ AI coding agents. It combines semantic retrieval, structural code relationships,
 documentation search, durable memory, and repository operations behind a Model
 Context Protocol (MCP) interface.
 
-It is most useful for large or unfamiliar repositories. Exact text search remains
-the fastest option for known names; the indexed tools add value for architecture,
+It supports investigation of large or unfamiliar repositories. Exact text search is
+appropriate for known names; the indexed tools support architecture,
 callers, implementations, request flow, related files, cross-project dependencies,
-and duplicate code.
+and duplicate code. Choose the smallest call that supplies the required evidence;
+speed and token advantages require comparable measurements.
 
 Start with the [current architecture](docs/current-architecture.md) for the MCP and
 optional inference boundaries, deployment profiles, storage ownership and acceptance
@@ -16,8 +17,9 @@ limits. Dated research and benchmark reports describe their recorded revisions.
 
 ## Capabilities
 
-- Structural indexing backed by Neo4j.
-- Semantic code and documentation retrieval backed by Postgres/pgvector.
+- Structural indexing through Neo4j or the explicit embedded LadybugDB path.
+- Semantic code retrieval through Postgres/pgvector or embedded LanceDB; the
+  authored-document retrieval pipeline remains service-backed.
 - Ranked search with exact fallbacks and duplicate-aware reranking.
 - Symbol context, definitions, references, callers, and call-chain traversal.
 - Project, directory, request-flow, and dependency summaries.
@@ -26,7 +28,30 @@ limits. Dated research and benchmark reports describe their recorded revisions.
 - Health, freshness, transport-parity, and retrieval-quality checks.
 
 External integrations are optional at proxy startup and should fail open.
-Individual indexed features naturally require their corresponding service.
+Choose one storage profile for the intended workflow; full tool parity between
+profiles is not established.
+
+## Storage profiles
+
+| Profile | Repository storage | Dependencies and current scope |
+| --- | --- | --- |
+| Embedded | LadybugDB graph and LanceDB chunks/vectors in a private local state directory. | No Neo4j, Postgres or Redis server is required for the supported embedded repository tools. Disable separate legacy memory/persistence/Redis paths. |
+| Service-backed | Neo4j graph and Postgres/pgvector retrieval; Redis is optional. | Retains the existing service-backed indexing, retrieval and memory workflows. Enable only the services those features use. |
+
+These are two paths in the same application/MCP architecture. Running both stacks
+is not required, and switching selectors does not migrate existing data or make
+every tool backend-neutral. Embedded real-vector indexing and vector/hybrid queries
+currently require a configured local LM Studio embedding service and model artifact
+identity. Published source, overview and text-search reads need no embedding model.
+An embedding service is separate from database storage.
+
+See [Configuration](docs/configuration.md), the
+[minimal embedded installation](docs/minimal-embedded-install.md) and
+[embedded MCP owner](docs/embedded-mcp-owner.md) for profile-specific setup and limits.
+
+See [native ARM validation](docs/arm-validation.md) for artifact fingerprints,
+Ladybug thread budgets, the disposable benchmark and the new ARM CI matrix. Native
+execution and small-fixture timings do not establish a general speed advantage.
 
 ## Requirements
 
@@ -35,15 +60,11 @@ Individual indexed features naturally require their corresponding service.
 - `rg` (ripgrep) for exact-search fallbacks.
 - LM Studio or another compatible inference endpoint for proxy requests and
   local embeddings.
-- Neo4j for structural graph features.
-- Postgres with pgvector for semantic retrieval and durable memory.
-- Redis for optional hot session state and distributed indexing locks.
+- Embedded profile: LadybugDB, LanceDB and the pinned modified parser fork.
+- Service-backed profile: Neo4j for its graph tools, Postgres with pgvector for
+  its retrieval/memory features, and Redis for optional session state/locks.
 
 You can run the HTTP proxy without enabling every indexed or memory feature.
-
-See [native ARM validation](docs/arm-validation.md) for artifact fingerprints,
-Ladybug thread budgets, the disposable benchmark and the new ARM CI matrix. Native
-execution and small-fixture timings do not establish a general speed advantage.
 
 ## Embedded installation
 
@@ -68,8 +89,8 @@ Create local configuration:
 cp .env.example .env
 ```
 
-Review `.env` and enable only the services you intend to use. Replace the Neo4j
-and Postgres placeholders before enabling graph or persistence features. See
+Review `.env` and select the storage profile you intend to use. Replace the Neo4j
+and Postgres placeholders only for the service-backed features you enable. See
 [Configuration](docs/configuration.md) for safe minimal examples.
 
 Start the shared MCP daemon:
@@ -79,9 +100,12 @@ Start the shared MCP daemon:
 ./scripts/brain_server_status.sh
 ```
 
-Connect an MCP client to `http://127.0.0.1:8001/mcp`, then call
-`get_indexing_health` and `index_workspace`. The latter accepts the absolute path
-of the repository to index.
+Connect an MCP client to `http://127.0.0.1:8001/mcp`. For the service-backed profile,
+use `get_indexing_health` and, when indexing is needed, `index_workspace` with the
+absolute repository path. For embedded setup, follow the explicit manifest/tools
+in [embedded MCP owner](docs/embedded-mcp-owner.md); standard health/search/indexing
+have different coverage: common health/search now have bounded embedded routes,
+while indexing still requires the explicit embedded manifest tool.
 
 Verify the daemon:
 
@@ -108,7 +132,16 @@ See [OpenAI setup, validation, and rollback](docs/openai.md).
 
 ## Recommended agent workflow
 
-For an indexed repository:
+For ChatGPT architecture planning and Codex implementation, start with the
+[ChatGPT and Codex workflow](docs/chatgpt-codex-workflow.md). It includes the roles
+of Antigravity, Claude, Siri, Linear and cloud execution, source orientation,
+reusable handoffs, focused checks and Git completion guidance.
+
+The proposed [Repository Intelligence Audit](docs/fire-repository-audit-offer.md)
+includes a revision-bound demonstration and evidence bundle. Its focused acceptance
+does not certify the current branch or establish investigation speed/token savings.
+
+For a service-backed indexed repository:
 
 1. `get_indexing_health` — verify freshness and alignment.
 2. `get_project_overview` — orient on the repository.
@@ -118,6 +151,20 @@ For an indexed repository:
 
 Use `grep_codebase` for exact text and `get_mcp_tool_catalog` when the correct
 specialized tool is unclear.
+
+For an embedded publication, begin with `list_embedded_projects`,
+`get_embedded_overview` and `get_embedded_indexing_attempt`. Use
+`search_embedded_repository(mode="text")` for stored text and
+`describe_embedded_file` for published source. `index_embedded_repository` accepts
+an explicit complete replacement manifest; omitted files disappear from the next
+publication. Verify relevant current source before acting on snapshot evidence.
+
+Common `get_indexing_health` now checks embedded manifest hashes against current
+files without a model; its deeper audit remains unsupported. Common
+`search_codebase(mode="text")` reads embedded chunks without external databases or
+an encoder, with run/hash receipts and explicit native-policy limits. Default
+`precise` maps to native hybrid and requires the matching local encoder. See the
+[bounded bridge acceptance](benchmarks/reports/2026-10-11/embedded-tool-routing.md).
 
 ## Validation
 
