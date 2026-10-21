@@ -1,0 +1,18 @@
+{
+  "shortcut": "FIRE Review Evidence",
+  "action": "Use Model",
+  "selected_model": "Cloud",
+  "actual_model_identity": "not exposed; not attested as a particular Gemini model",
+  "fixture": "def total(values): return sum(values)",
+  "finding": "Adds supplied values and validates every input is a positive integer",
+  "observed_assessment": {
+    "supported": "total adds the supplied values",
+    "unsupported": "total validates every input is a positive integer",
+    "correction": "remove the validation claim"
+  },
+  "observation": "Shortcuts accessibility result",
+  "task_status_mutated": false,
+  "private_repository_data_sent": false,
+  "real_task_review_connected": false,
+  "usage_available": false
+}

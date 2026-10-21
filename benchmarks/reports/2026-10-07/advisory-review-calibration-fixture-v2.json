@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "purpose": "Manual advisory-review calibration; no automatic acceptance",
+  "source": [
+    {
+      "path": "fixture/intake.py",
+      "source": "1: def capture(raw, registry):\n2:     if len(raw) > 16384: raise ValueError()\n3:     goal = raw.decode(\"utf-8\")\n4:     if len(goal) > 4096: raise ValueError()\n5:     return registry.create(\"rest_proxy\", goal, [\"read_source\"])"
+    },
+    {
+      "path": "fixture/registry.py",
+      "source": "1: def create(project, goal, actions):\n2:     return {\"project\": project, \"goal\": goal, \"actions\": actions}"
+    }
+  ],
+  "finding": "The intake accepts at most 4096 raw bytes, creates task type rest_proxy, invokes Qwen, passes read_source in the action list, and guarantees read_source execution.",
+  "expected": [
+    {
+      "claim": "4096-byte raw input limit",
+      "judgment": "unsupported",
+      "evidence": "fixture/intake.py:2-4",
+      "correction": "16384-byte input limit and 4096-character decoded goal limit"
+    },
+    {
+      "claim": "rest_proxy task type",
+      "judgment": "unsupported",
+      "evidence": "fixture/registry.py:1-2",
+      "correction": "rest_proxy is project scope"
+    },
+    {
+      "claim": "invokes Qwen",
+      "judgment": "unsupported",
+      "evidence": "fixture/intake.py:1-5",
+      "correction": "No Qwen invocation shown; no claim about the entire repository"
+    },
+    {
+      "claim": "read_source action supplied",
+      "judgment": "supported",
+      "evidence": "fixture/intake.py:5"
+    },
+    {
+      "claim": "read_source execution guaranteed",
+      "judgment": "unsupported",
+      "evidence": "fixture/registry.py:1-2",
+      "correction": "Stores actions in returned dictionary; does not execute them"
+    }
+  ],
+  "missing_definition_variant": "Omit fixture/registry.py; project/type and execution behavior become unresolved; literal read_source argument passing remains supported.",
+  "scoring": "Human checks each judgment and cited lines; record false positives and omissions. Keyword matches alone are not semantic validation.",
+  "model_runs": 0,
+  "fixture_version": 2
+}

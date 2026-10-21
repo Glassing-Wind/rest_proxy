@@ -1,0 +1,89 @@
+{
+  "trials": [
+    {
+      "variant": "full",
+      "prompt_sha256": "f519ffe38faee32caff38482d46178cb987f43922a862731c32c7e7a1a190f66",
+      "requested_model": "qwen3.6-35b-a3b-splash",
+      "max_tokens": 4096,
+      "http_status": 200,
+      "returned_model": "qwen3.6-35b-a3b-splash",
+      "usage": {
+        "prompt_tokens": 317,
+        "completion_tokens": 3623,
+        "total_tokens": 3940,
+        "completion_tokens_details": {
+          "reasoning_tokens": 3176
+        }
+      },
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "\n\n**Supported claims**\n- The intake creates task type `rest_proxy`. (`fixture/intake.py:4` passes `\"rest_proxy\"` as the `project` argument to `registry.create`; `fixture/registry.py:1` accepts it as `project`).\n- The intake supports `read_source`. (`fixture/intake.py:4` passes `[\"read_source\"]` as the `actions` argument to `registry.create`).\n\n**Unsupported or unresolved claims**\n- The intake reads at most 4096 bytes. (`fixture/intake.py:2-4`). The provided code enforces a 16384-byte limit on the raw input (`len(raw) > 16384` at line 2) and a 4096-character limit on the decoded UTF-8 string (`len(goal) > 4096` at line 4). The claim incorrectly equates the decoded character limit with a byte read limit.\n- The intake invokes Qwen. (Absent in provided excerpt). The excerpt shows `registry.create` returning a dictionary (`fixture/registry.py:1-2`). It does not show any invocation of Qwen. Missing source needed: Implementation of `registry.create` or downstream task execution logic to verify whether or how Qwen is invoked. Absence in this excerpt does not confirm absence across the repository.\n\n**Suggested corrections**\n- Replace \"reads at most 4096 bytes\" with \"enforces a 16384-byte input limit and validates the decoded string length against a 4096-character threshold\".\n- Remove \"invokes Qwen\" or supply source evidence demonstrating where Qwen is called (e.g., within `registry.create` or a separate executor module).\n- Clarify that `read_source` is provided as an action list to the registry constructor, indicating declared supported actions rather than direct execution by the intake function.\n- Note that `registry.create` currently returns a data structure (`fixture/registry.py:2`); implementation guarantees regarding task execution or model invocation are not defined in this excerpt and require additional source files to verify.",
+            "tool_calls": []
+          },
+          "logprobs": null,
+          "finish_reason": "stop"
+        }
+      ],
+      "elapsed_seconds": 17.404
+    },
+    {
+      "variant": "missing-definition",
+      "prompt_sha256": "082051456bf070ec294950cc74c8c6007f2f2a3f99c36169a74fb511b40392aa",
+      "requested_model": "qwen3.6-35b-a3b-splash",
+      "max_tokens": 4096,
+      "http_status": 200,
+      "returned_model": "qwen3.6-35b-a3b-splash",
+      "usage": {
+        "prompt_tokens": 272,
+        "completion_tokens": 2359,
+        "total_tokens": 2631,
+        "completion_tokens_details": {
+          "reasoning_tokens": 1964
+        }
+      },
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "\n\n**Supported claims**\n- \"creates task type rest_proxy\" -> `fixture/intake.py:5`. The code explicitly passes the literal string `\"rest_proxy\"` as the first argument to `registry.create()`, indicating the intended task type identifier.\n\n**Unsupported or unresolved claims**\n- \"reads at most 4096 bytes\" -> `fixture/intake.py:2-4`. The excerpt checks `len(raw)` against 16384 (byte count) before decoding, then checks `len(goal)` against 4096 (decoded character count). The claim conflates the byte threshold with the character threshold and misstates the byte limit. Unresolved.\n- \"invokes Qwen\" -> `fixture/intake.py:5`. The excerpt contains no reference to \"Qwen\". The call to `registry.create()` delegates execution to an external registry object. Unresolved.\n- \"supports read_source\" -> `fixture/intake.py:5`. The excerpt passes `[\"read_source\"]` as a capability list to `registry.create()`, which reflects caller intent/argument passing, not an implementation guarantee that the capability is actually enabled or functional. Unresolved.\n\n**Suggested corrections**\n- Replace \"reads at most 4096 bytes\" with \"rejects raw input exceeding 16384 bytes and decoded output exceeding 4096 characters\".\n- Remove \"invokes Qwen\" or replace with \"delegates task creation to a registry with an unspecified implementation\".\n- Replace \"supports read_source\" with \"passes 'read_source' as a requested capability to the registry\".\n- To resolve the byte/character distinction and registry behavior, provide the full `registry` implementation or documentation, including its `create` method signature, capability resolution logic, and any encoding/decoding specifications that define how `raw` and `goal` are processed.",
+            "tool_calls": []
+          },
+          "logprobs": null,
+          "finish_reason": "stop"
+        }
+      ],
+      "elapsed_seconds": 12.42
+    }
+  ],
+  "grading": {
+    "method": "Codex source inspection, qualitative; not independent blinded grading",
+    "full": {
+      "byte_character_error": "detected",
+      "task_type_error": "missed; falsely supported despite project signature",
+      "qwen_invocation": "questioned",
+      "citation_error": "intake call cited at line 4; actual line 5"
+    },
+    "missing-definition": {
+      "byte_character_error": "detected",
+      "task_type_uncertainty": "missed; inferred type without signature",
+      "qwen_invocation": "unresolved"
+    },
+    "fixture_limitation": "supports read_source is ambiguous between supplied action and implementation guarantee; do not assign aggregate accuracy from this fixture",
+    "conclusion": "Both trials fail project/type judgment. No automatic approval readiness or general accuracy claim."
+  },
+  "task_mutations": 0,
+  "transport": {
+    "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+    "timeout_seconds": 20,
+    "temperature": 0,
+    "trust_env": false,
+    "redirects": false,
+    "response_byte_cap": 65536,
+    "retries": 0,
+    "reasoning_text_retained": false
+  }
+}

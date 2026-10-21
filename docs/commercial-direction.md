@@ -1,5 +1,58 @@
 # Commercial direction and next steps — October 6, 2026
 
+## TurboTenant introduction sent — October 8
+
+User explicitly authorized sending the reviewed short introduction. Gmail displayed
+“Message sent” for the introduction to TurboTenant's publicly listed partnership
+address. It asked whether product/engineering would like a five-minute demonstration
+of findings in the user's rental platform. No attachments, source code or price
+were included. Send confirmation is not proof of delivery, response or buyer interest.
+
+This authorization covers that introduction only; follow-up messages, other recipients
+and commercial commitments still need user instruction. No reply inspection or
+scheduled outreach is authorized by this record. Next prepare the existing rental
+walkthrough for an interested reviewer and obtain one concrete workflow/problem
+before agreeing a pilot. Framework expansion remains parked.
+
+## First practical offer recommendation — October 8
+
+Reviewed the rental demonstration and narrowed the generic investigation offer to
+[one application workflow investigation](paid-investigation-pilot.md): reproduce,
+diagnose browser/API/persistence behavior, propose a narrow change and regressions,
+and walk through the evidence. Proposed $750, eight total delivery hours, up to
+three questions; implementation is separately scoped. Supports JavaScript/TypeScript
+or Python after a fit check, matching the actual rental demonstration.
+
+This is a recommended offer, not approved customer terms or evidence of demand.
+Next user-led problem conversation and fit check for one actual workflow. No
+outreach, invoice, commercial commitment or platform performance claim. Track all
+labor and direct costs in the first pilot; prior demonstration effort is unmeasured.
+
+## Outcome-first rental demonstration — October 7
+
+User accepted narrowing to a real useful investigation. Existing rental chat owns
+application behavior and has reached disposable PostgreSQL/browser acceptance; no
+need to invent another infrastructure prerequisite. [Compiled demonstration](../benchmarks/reports/2026-10-07/rental-outcome/demo.md)
+links original submission bug/fix, cleared-note fix, latest 30-test/browser receipt
+and limitations. This slice compiles evidence, not a new browser run or independent
+review. No paid-token/delivery-effort measurements exist. Rental changes untouched.
+Next rental-owned five-minute walkthrough and an agreed bounded pilot scope.
+Park new model/framework/gateway expansion unless needed for that delivery; keep
+five-priority gaps honest. No outreach or commercial commitments without approval.
+
+
+## Qwen helper role corrected — October 7
+
+User clarified local Qwen is for simple work and possible paid-token reduction,
+not supervision. [Helper direction](helper-agent-direction.md) assigns supervision
+to Codex/user and execution/validation to deterministic tools. Historical reviewer
+trials are not helper-quality evidence. Next isolated field-extraction trial with
+exact source quotes, supervisor verification and controlled paired accounting.
+No savings, automatic-team, framework installation or live-task retry claim.
+Gateway journal implementation remains independently open. All eight hosted checks
+for 41bdc09 passed. This milestone changes documentation only.
+
+
 The user's need for income is a product constraint. The recommended next direction
 is a small paid repository-investigation service built on the existing FIRE work,
 with a source-graded demonstration before offering it. Preserve CLARITY as the

@@ -1,0 +1,20 @@
+{
+  "task_id": "852f3af340d8442f8b04930bcfccc75d",
+  "project": "rest_proxy",
+  "status": "queued",
+  "revision": 1,
+  "actions": [
+    "read_source"
+  ],
+  "attempts": 0,
+  "claim_present": false,
+  "registry_reopen": true,
+  "siri_invocation_and_confirmation": "user screenshots",
+  "agent_invoked": false,
+  "dictation_errors_observed": true,
+  "requested_names_transcribed_as": {
+    "Qwen": "Quin",
+    "Codex": "Kodak Kodak"
+  },
+  "stored_goal_matches_visible_transcript": true
+}

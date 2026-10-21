@@ -1,0 +1,38 @@
+{
+  "task_id": "1214c5b2e644470197b691e7e8e849aa",
+  "status": "claimed",
+  "revision": 10,
+  "attempts": 3,
+  "error": {
+    "ok": false,
+    "error_type": "ReadTimeout",
+    "validation_stage": null,
+    "attempt": null
+  },
+  "sources": [
+    {
+      "path": "scripts/task_capture.py",
+      "start_line": 9,
+      "end_line": 13,
+      "sha256": "4559cc1f86ef5c74fc1d098fef66390dbeabc570d4a713d3f0f566e81783ce33"
+    },
+    {
+      "path": "memory/task_registry.py",
+      "start_line": 45,
+      "end_line": 67,
+      "sha256": "3e516715eec9a5b0fe2a4f09e1cd635152f80cebffce548e2d5b24c700737805"
+    },
+    {
+      "path": "memory/task_worker.py",
+      "start_line": 1,
+      "end_line": 26,
+      "sha256": "8601837e14ef24f1f5712f06268bbf79f9564658114f31879783d20016a0f53a"
+    }
+  ],
+  "old_checkpoint_archived": true,
+  "submissions_preserved": 1,
+  "reviews_preserved": 1,
+  "assessments_preserved": 1,
+  "inference_outcome": "No response received before read timeout; remote generation termination unknown",
+  "retry_loop": false
+}
