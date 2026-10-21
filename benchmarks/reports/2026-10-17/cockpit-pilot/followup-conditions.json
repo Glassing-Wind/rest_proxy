@@ -1,0 +1,23 @@
+{
+  "changes": [
+    {
+      "attempts_per_case": 1,
+      "condition": "phi-mini-anyof",
+      "schema_sha256": "957d353e6797ac4c3c8be926f3299f7640e3fa0f28ecf6de698b61c28a1f1e4c",
+      "schema_value_field": "semantically equivalent anyOf string/integer/boolean; same facts and limits"
+    },
+    {
+      "adapter": "native LM Studio api/v1/chat",
+      "attempts_per_case": 1,
+      "condition": "qwen-native-reasoning-off",
+      "integrations": [],
+      "output_constraint": "prompt-only JSON; NOT matched constrained-decoding condition",
+      "reasoning": "off",
+      "store": false
+    }
+  ],
+  "comparative_ranking": "not_established",
+  "original_results_retained": true,
+  "schema": "cockpit-pilot-followup-conditions/1",
+  "trigger": "all six Phi-mini OpenAI calls HTTP400: type must be a string; all six Qwen default-mode calls reached output budget"
+}

@@ -1,0 +1,112 @@
+{
+  "account_or_client_configuration_changes": false,
+  "antigravity": {
+    "account_plan": "not_determined",
+    "configured_graphrag_endpoint": "http://localhost:8001/mcp",
+    "desktop_bundle_version": "2.24.0",
+    "ide_bundle_version": "2.5.5",
+    "mcp_prompt_test_performed": false,
+    "overage_setting": "not_inspected",
+    "remaining_quota": "not_inspected",
+    "ui_model_menu_account_notice": "ineligible_for_higher_plan_rate_limits_at_this_time",
+    "ui_model_menu_argon_available": false,
+    "ui_observed_environment": "Local",
+    "ui_observed_model_label": "Gemini 3.8 Flash High",
+    "ui_observed_permission_preset": "Turbo",
+    "ui_observed_project": "rest_proxy",
+    "ui_runtime_model_id": "not_verified",
+    "user_agy_wrapper": {
+      "cause": "obsolete_main_app_Resources/app/bin/antigravity_target",
+      "status": "broken",
+      "version_exit_code": 127
+    },
+    "working_ide_cli": {
+      "binary": "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide",
+      "capability_observed": "IDE_UI_chat_launcher",
+      "chat_modes": [
+        "ask",
+        "edit",
+        "agent"
+      ],
+      "documented_native_headless_protocol_verified": false,
+      "version_report": [
+        "1.107.0",
+        "ecfbad74d93962fc8ca485d93ab9b4f3d4cb6cf8",
+        "arm64"
+      ]
+    }
+  },
+  "antigravity_prompts_sent": 0,
+  "client_date": "2026-10-17",
+  "credentials_exported": false,
+  "generation_requests": 0,
+  "hardware": {
+    "chip": "Apple M3 Max",
+    "logical_cpu_cores": 16,
+    "model": "MacBook Pro",
+    "physical_cpu_cores": 16,
+    "unified_memory_bytes": 137438953472
+  },
+  "lm_studio": {
+    "app_version": "0.4.26+4",
+    "artifact_hashes": "not_measured",
+    "catalog_endpoint": "http://127.0.0.1:1234/api/v1/models",
+    "cli_architecture": "arm64",
+    "discovery": "GET only; timeout8s; response cap256KiB; ambient HTTP proxies disabled",
+    "lms_cli_commit": "dcefd5a",
+    "models": [
+      {
+        "advertised_max_context": 32768,
+        "format": "MLX",
+        "id": "microsoft/phi-4-reasoning-plus",
+        "loaded": false,
+        "quantization": "4bit",
+        "size_bytes": 8256411728
+      },
+      {
+        "format": "Splash",
+        "id": "qwen3.6-35b-a3b-splash",
+        "loaded": true,
+        "loaded_context_capacity": 262144,
+        "quantization": "4bit",
+        "size_bytes": 20949478660
+      },
+      {
+        "format": "MLX",
+        "id": "Qwen3-Coder-Next",
+        "loaded": false,
+        "quantization": "4bit",
+        "size_bytes": 44856096359
+      },
+      {
+        "approximate_size_mb": 323,
+        "format": "GGUF",
+        "id": "Jina embeddings v2 base code",
+        "loaded": true,
+        "loaded_context_capacity": 8192,
+        "quantization": "F16"
+      }
+    ],
+    "per_request_runtime_attestation": "not_measured",
+    "resident_memory_or_generation_speed": "not_measured",
+    "selected_runtime_metadata": [
+      "llama.cpp-mac-arm64-apple-metal-advsimd@2.59.0",
+      "mlx-llm-mac-arm64-apple-metal-advsimd@1.13.1",
+      "splash-mac-arm64-apple-metal-advsimd@1.3.0"
+    ]
+  },
+  "mode": "read_only_observation_not_generation_acceptance",
+  "model_downloads": 0,
+  "models_loaded_or_unloaded": 0,
+  "new_model_cockpit_quality": "unmeasured",
+  "private_case_data_shared": false,
+  "repository": {
+    "automatic_gemini_task_adapter": "not_found_in_inspected_source",
+    "local_worker_route": "explicit numeric-loopback chat completions only",
+    "prior_helper_receipt": "benchmarks/reports/2026-10-07/qwen-helper-extraction-trial.json",
+    "starting_commit": "e850da3"
+  },
+  "savings": "unmeasured",
+  "schema": "cockpit-model-review-inventory/1",
+  "tests": "Documentation/review only; no implementation test suite needed or run."
+}

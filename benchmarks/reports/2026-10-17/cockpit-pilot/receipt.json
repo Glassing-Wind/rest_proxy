@@ -1,0 +1,174 @@
+{
+  "blinded_direct_lead_baseline": "not_run; evaluator had seen ground truth",
+  "client_date": "2026-10-17",
+  "completed_at_utc": "2026-10-17T22:04:22.798481+00:00",
+  "conditions": [
+    {
+      "accepted": 3,
+      "attempts": 6,
+      "elapsed_total_s": 28.563794,
+      "error_stages": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "http_statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "id": "phi-plus",
+      "latency_isolated_or_randomized": false,
+      "schema_valid": 6,
+      "usage_sums_provider_reported": {
+        "completion_tokens": 983,
+        "prompt_tokens": 3850,
+        "reasoning_tokens": 0,
+        "total_tokens": 4833
+      }
+    },
+    {
+      "accepted": 0,
+      "attempts": 6,
+      "elapsed_total_s": 55.112045,
+      "error_stages": [
+        "finish_reason",
+        "finish_reason",
+        "finish_reason",
+        "finish_reason",
+        "finish_reason",
+        "finish_reason"
+      ],
+      "http_statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "id": "qwen",
+      "latency_isolated_or_randomized": false,
+      "schema_valid": 0,
+      "usage_sums_provider_reported": {
+        "completion_tokens": 12288,
+        "prompt_tokens": 2581,
+        "reasoning_tokens": 12262,
+        "total_tokens": 14869
+      }
+    },
+    {
+      "accepted": 0,
+      "attempts": 6,
+      "elapsed_total_s": 1.590401,
+      "error_stages": [
+        "http_status",
+        "http_status",
+        "http_status",
+        "http_status",
+        "http_status",
+        "http_status"
+      ],
+      "http_statuses": [
+        400,
+        400,
+        400,
+        400,
+        400,
+        400
+      ],
+      "id": "phi-mini",
+      "latency_isolated_or_randomized": false,
+      "schema_valid": 0,
+      "usage_sums_provider_reported": null
+    },
+    {
+      "accepted": 0,
+      "attempts": 6,
+      "elapsed_total_s": 117.466735,
+      "error_stages": [
+        "transport_timeout",
+        "http_status",
+        "http_status",
+        "http_status",
+        "http_status",
+        "http_status"
+      ],
+      "http_statuses": [
+        null,
+        400,
+        400,
+        400,
+        400,
+        400
+      ],
+      "id": "phi-mini-anyof",
+      "latency_isolated_or_randomized": false,
+      "schema_valid": 0,
+      "usage_sums_provider_reported": null
+    },
+    {
+      "accepted": 0,
+      "attempts": 6,
+      "elapsed_total_s": 14.390382,
+      "error_stages": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "http_statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "id": "qwen-native-off",
+      "latency_isolated_or_randomized": false,
+      "schema_valid": 0,
+      "usage_sums_provider_reported": {
+        "input_tokens": 2641,
+        "reasoning_output_tokens": 0,
+        "total_output_tokens": 3773
+      }
+    }
+  ],
+  "deployment_or_automatic_routing_enabled": false,
+  "fixture_hashes": {
+    "conflicting_revisions": "dad1bc20375015425280b1f56da4a37d36e3f2ee8bb5bdb831cf9ffc00b7b208",
+    "literal_fields": "1d33d087c56b9420dbfe319ad32fdb2c9c81947e2e255b8d9db16cb1508bf8f7",
+    "missing_field": "afec4c246ad89ff6dd999c5a6ffd3fab6db60bd04c3a0852231756808a27557e",
+    "reference_counterpart": "883e96828a67f4e395127e220ffd7e1c3972e401549c04c01a95faa2dace5456",
+    "source_instructions": "9b0a149e1e56e68c2e3e754f517993492a17bebfbcb9576f08d719d28a4b434d",
+    "unicode_quote": "c54c3c243a5a0a8755ea60390ed8c0bdf3bf058fe13f51db676ed3c81c1bfbf1"
+  },
+  "lesson_release": false,
+  "limitations": [
+    "single non-randomized pass per declared condition",
+    "schema type-array and anyOf conditions differ; native condition lacks constrained decoding",
+    "native reasoning-off requests overlapped the stalled MLX condition; latency not isolated",
+    "Phi-mini first followup timed out, instance deliberately unloaded, remaining errors do not measure answer quality",
+    "final harness stops batches on timeout; pilot ran before that safeguard",
+    "per-call model aliases matched successful responses; weight/runtime execution attestation not established",
+    "no general model ranking, productivity or dollar/quota savings claim"
+  ],
+  "local_http_attempts": 30,
+  "native_generation_payloads_sent": 0,
+  "pending_lesson_ledger_matches_prior_sha256": true,
+  "runtime_preserved": true,
+  "savings": "unmeasured",
+  "schema": "cockpit-live-pilot/1",
+  "scope": "six frozen synthetic sources only",
+  "supervisor_usage_and_human_review_time": "unmeasured",
+  "training": false
+}

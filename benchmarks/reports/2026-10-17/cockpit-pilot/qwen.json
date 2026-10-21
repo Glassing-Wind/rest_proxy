@@ -1,0 +1,232 @@
+{
+  "accepted_cases": 0,
+  "adapter": "loopback_openai_chat",
+  "attempts": 6,
+  "case_count": 6,
+  "cases": [
+    {
+      "attempt": 1,
+      "case_id": "literal_fields",
+      "elapsed_seconds": 9.571973,
+      "error_stage": "finish_reason",
+      "finish_reason": "length",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 7638
+      },
+      "request_sha256": "7e1606599f03a088dd7a0265a9af500befe769c2e5facdb1245eb684f72293c9",
+      "response_bytes_retained": 8726,
+      "response_sha256": "f7214bb0787f9c6b0f8155cfb6884deccdb8818fb792367b514dd85743450d05",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "1d33d087c56b9420dbfe319ad32fdb2c9c81947e2e255b8d9db16cb1508bf8f7",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 2048,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2048
+          },
+          "prompt_tokens": 440,
+          "total_tokens": 2488
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "missing_field",
+      "elapsed_seconds": 8.925973,
+      "error_stage": "finish_reason",
+      "finish_reason": "length",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 7934
+      },
+      "request_sha256": "efae2e7216bed290015e1efd676f54950b57c9164cb4d7a1c2725b56d9b354e9",
+      "response_bytes_retained": 9074,
+      "response_sha256": "7bead68a3c5a78990cd69a7f7c67b3c951c0cec1ab5bec08a0485476de1cccb3",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "afec4c246ad89ff6dd999c5a6ffd3fab6db60bd04c3a0852231756808a27557e",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 2048,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2048
+          },
+          "prompt_tokens": 420,
+          "total_tokens": 2468
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "conflicting_revisions",
+      "elapsed_seconds": 9.489143,
+      "error_stage": "finish_reason",
+      "finish_reason": "length",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 7395
+      },
+      "request_sha256": "f283841750ddecb078dde4c856b4d5a623b6ec97d827500518537a9215f007bc",
+      "response_bytes_retained": 8430,
+      "response_sha256": "99b73eca724307fcd7ee840db1f0b5bf14ff3718e1985d68f8fefe0bfa33bb84",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "dad1bc20375015425280b1f56da4a37d36e3f2ee8bb5bdb831cf9ffc00b7b208",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 2048,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2048
+          },
+          "prompt_tokens": 432,
+          "total_tokens": 2480
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "source_instructions",
+      "elapsed_seconds": 8.75039,
+      "error_stage": "finish_reason",
+      "finish_reason": "length",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 8285
+      },
+      "request_sha256": "d1da78d11635b07198d67878d030c982397ac83fdfe424853e8a3fa8b177a7f8",
+      "response_bytes_retained": 9376,
+      "response_sha256": "5202a6ecf27d9885b66b05dd9c76ee15f396a3b5cd2cee8f90fb74838dbd8de3",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "9b0a149e1e56e68c2e3e754f517993492a17bebfbcb9576f08d719d28a4b434d",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 2048,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2048
+          },
+          "prompt_tokens": 426,
+          "total_tokens": 2474
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "unicode_quote",
+      "elapsed_seconds": 9.344483,
+      "error_stage": "finish_reason",
+      "finish_reason": "length",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 8057
+      },
+      "request_sha256": "743c00c7d9cd92d10f50cd10e15da85c6a1738c01c546975588c3a7c6d7a905b",
+      "response_bytes_retained": 9238,
+      "response_sha256": "fa11fdb164380f68949681146609cc6d33c53d763b4f6b71f1d0938e036ebc23",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "c54c3c243a5a0a8755ea60390ed8c0bdf3bf058fe13f51db676ed3c81c1bfbf1",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 2048,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2022
+          },
+          "prompt_tokens": 422,
+          "total_tokens": 2470
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "reference_counterpart",
+      "elapsed_seconds": 9.030083,
+      "error_stage": "finish_reason",
+      "finish_reason": "length",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "provider_field_present",
+        "characters": 8077
+      },
+      "request_sha256": "0282577fbf7427eca48b1e7e0392a6cf36ee6e829eed5f966fb1c019abaa6f81",
+      "response_bytes_retained": 9248,
+      "response_sha256": "27e9e1355dab8e219171ff442d7da56bdb70b65d70b94874f34f33e5f118af07",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "883e96828a67f4e395127e220ffd7e1c3972e401549c04c01a95faa2dace5456",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "completion_tokens": 2048,
+          "completion_tokens_details": {
+            "reasoning_tokens": 2048
+          },
+          "prompt_tokens": 441,
+          "total_tokens": 2489
+        }
+      }
+    }
+  ],
+  "condition_id": "qwen",
+  "costs": {
+    "availability": "unmeasured",
+    "human_review_seconds": null,
+    "incremental_billed_usd": null,
+    "plan_quota_units": null,
+    "supervisor_time_seconds": null,
+    "supervisor_tokens": null
+  },
+  "data_scope": "six_frozen_synthetic_cases_only",
+  "lesson_release": false,
+  "model_training": false,
+  "native_fallbacks": 0,
+  "output_constraint": "json_schema",
+  "reasoning_control": "runtime_default_not_overridden",
+  "retries": 0,
+  "savings": "unmeasured",
+  "schema": "cockpit-evaluation-summary/1",
+  "schema_value_encoding": "type_array",
+  "tools_invoked": 0
+}

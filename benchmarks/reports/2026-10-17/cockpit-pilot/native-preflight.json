@@ -1,0 +1,24 @@
+{
+  "agent": "cockpit-synthetic",
+  "agent_definition_sha256": "9047ab3abe8fa4f7a8cd16479f463081a9b0fe4e8886ece13804913214b6716b",
+  "attempts": 0,
+  "controller_sha256": "ba8711f2cc522b6843a32c5edc802f44126b4a095c80f93afe4ea07778e067c7",
+  "elapsed_seconds": 3.653121,
+  "exit_code": 0,
+  "generation_payload_sent": false,
+  "hook_config_metadata": {
+    "cli_settings_file_present": false,
+    "global_configuration_changed": false,
+    "global_hooks_file_present": false,
+    "global_settings_file_present": false,
+    "private_workspace_hooks_present": false
+  },
+  "requested_model": "gemini-3.8-flash-low",
+  "result": null,
+  "schema": "native-cockpit-controller/1",
+  "stage": "init_contract",
+  "stdout_bytes": 2640,
+  "stream_sha256": "1972dde23b82d9fb040585f06d34bf5f5cbd09b63fed7c7e8359d7ad70499bc7",
+  "tool_steps": 0,
+  "tools_available_count": 60
+}

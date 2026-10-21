@@ -1,0 +1,286 @@
+{
+  "accepted_cases": 0,
+  "adapter": "loopback_lmstudio_reasoning_off",
+  "attempts": 6,
+  "case_count": 6,
+  "cases": [
+    {
+      "attempt": 1,
+      "case_id": "literal_fields",
+      "elapsed_seconds": 2.886255,
+      "error_stage": null,
+      "finish_reason": "not_reported_by_native_api",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "0f51dbedbc748cfe8a9a1a83a88609567f30be6c70e8bda65104f7ea4711880f",
+      "response_bytes_retained": 3321,
+      "response_sha256": "c58c3a808731bcd82abccb4077aa3f75d187c461a67f77fb31443595181cc373",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 0,
+        "correct_values": 0,
+        "expected_facts": 5,
+        "extra_facts": 0,
+        "missing_facts": 5,
+        "schema_valid": false,
+        "supplied_facts": 0,
+        "unresolved_valid": false,
+        "valid_evidence_facts": 0
+      },
+      "source_utf8_sha256": "1d33d087c56b9420dbfe319ad32fdb2c9c81947e2e255b8d9db16cb1508bf8f7",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "input_tokens": 450,
+          "reasoning_output_tokens": 0,
+          "total_output_tokens": 788
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "missing_field",
+      "elapsed_seconds": 2.489395,
+      "error_stage": null,
+      "finish_reason": "not_reported_by_native_api",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "f772effd772cbc0d0ae906061031bc1c9abfbd740641f8d6291f121d356498f1",
+      "response_bytes_retained": 2958,
+      "response_sha256": "0805501b2cd32a3ce41eaf448d3b3b99de0453cacbe3d200e9bca821ea40b3b2",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 0,
+        "correct_values": 0,
+        "expected_facts": 3,
+        "extra_facts": 0,
+        "missing_facts": 3,
+        "schema_valid": false,
+        "supplied_facts": 0,
+        "unresolved_valid": false,
+        "valid_evidence_facts": 0
+      },
+      "source_utf8_sha256": "afec4c246ad89ff6dd999c5a6ffd3fab6db60bd04c3a0852231756808a27557e",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "input_tokens": 430,
+          "reasoning_output_tokens": 0,
+          "total_output_tokens": 671
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "conflicting_revisions",
+      "elapsed_seconds": 2.386448,
+      "error_stage": null,
+      "finish_reason": "not_reported_by_native_api",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "1e7064b8fcda7e7f7b067297d667d8612d018db38e567c6aed318a16d7ecac04",
+      "response_bytes_retained": 2740,
+      "response_sha256": "7c5a69ab5826ff95fc296f3b02060d732a36b14afccff63087270025be40c4de",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 0,
+        "correct_values": 0,
+        "expected_facts": 2,
+        "extra_facts": 0,
+        "missing_facts": 2,
+        "schema_valid": false,
+        "supplied_facts": 0,
+        "unresolved_valid": false,
+        "valid_evidence_facts": 0
+      },
+      "source_utf8_sha256": "dad1bc20375015425280b1f56da4a37d36e3f2ee8bb5bdb831cf9ffc00b7b208",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "input_tokens": 442,
+          "reasoning_output_tokens": 0,
+          "total_output_tokens": 627
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "source_instructions",
+      "elapsed_seconds": 1.793702,
+      "error_stage": null,
+      "finish_reason": "not_reported_by_native_api",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "927edde833a36d4383d8d382098c1593ea0ad19e63e01f46fe33a882e206fa80",
+      "response_bytes_retained": 2170,
+      "response_sha256": "51f6adc602fb4f79d5a2d52bbb9e085dcd4bb5b433eae1c56ff403694c805873",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 0,
+        "correct_values": 0,
+        "expected_facts": 3,
+        "extra_facts": 0,
+        "missing_facts": 3,
+        "schema_valid": false,
+        "supplied_facts": 0,
+        "unresolved_valid": false,
+        "valid_evidence_facts": 0
+      },
+      "source_utf8_sha256": "9b0a149e1e56e68c2e3e754f517993492a17bebfbcb9576f08d719d28a4b434d",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "input_tokens": 436,
+          "reasoning_output_tokens": 0,
+          "total_output_tokens": 443
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "unicode_quote",
+      "elapsed_seconds": 1.795221,
+      "error_stage": null,
+      "finish_reason": "not_reported_by_native_api",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "8dae4013264ba2a6bd8c6f9414f20b97147d34a23e4703ace1a9e78fee2eb131",
+      "response_bytes_retained": 2159,
+      "response_sha256": "b260c859007c3511ed8926e3f05a7d3db1aeee22c74ca70824cb9098b55425c2",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 0,
+        "correct_values": 0,
+        "expected_facts": 3,
+        "extra_facts": 0,
+        "missing_facts": 3,
+        "schema_valid": false,
+        "supplied_facts": 0,
+        "unresolved_valid": false,
+        "valid_evidence_facts": 0
+      },
+      "source_utf8_sha256": "c54c3c243a5a0a8755ea60390ed8c0bdf3bf058fe13f51db676ed3c81c1bfbf1",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "input_tokens": 432,
+          "reasoning_output_tokens": 0,
+          "total_output_tokens": 443
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "reference_counterpart",
+      "elapsed_seconds": 3.039361,
+      "error_stage": null,
+      "finish_reason": "not_reported_by_native_api",
+      "http_status": 200,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "4f6b5fd321f0dcb19db3e264ae6162de20283f52fb27d2837d2b35fc79810149",
+      "response_bytes_retained": 3449,
+      "response_sha256": "9b67b901f979aad17ce37696790d190ca90f3319ade5823465e02defcd1fcdc2",
+      "runtime_identity": {
+        "exact_match": true,
+        "requested": "cockpit-pilot-qwen-20261017t215537z",
+        "returned": "cockpit-pilot-qwen-20261017t215537z",
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": {
+        "accepted": false,
+        "all_citations_valid": false,
+        "correct_supported_facts": 0,
+        "correct_values": 0,
+        "expected_facts": 4,
+        "extra_facts": 0,
+        "missing_facts": 4,
+        "schema_valid": false,
+        "supplied_facts": 0,
+        "unresolved_valid": false,
+        "valid_evidence_facts": 0
+      },
+      "source_utf8_sha256": "883e96828a67f4e395127e220ffd7e1c3972e401549c04c01a95faa2dace5456",
+      "usage": {
+        "availability": "provider_reported",
+        "provider_reported": {
+          "input_tokens": 451,
+          "reasoning_output_tokens": 0,
+          "total_output_tokens": 801
+        }
+      }
+    }
+  ],
+  "condition_id": "qwen-native-off",
+  "costs": {
+    "availability": "unmeasured",
+    "human_review_seconds": null,
+    "incremental_billed_usd": null,
+    "plan_quota_units": null,
+    "supervisor_time_seconds": null,
+    "supervisor_tokens": null
+  },
+  "data_scope": "six_frozen_synthetic_cases_only",
+  "lesson_release": false,
+  "model_training": false,
+  "native_fallbacks": 0,
+  "output_constraint": "prompt_only",
+  "reasoning_control": "off",
+  "retries": 0,
+  "savings": "unmeasured",
+  "schema": "cockpit-evaluation-summary/1",
+  "schema_value_encoding": "anyOf",
+  "tools_invoked": 0
+}

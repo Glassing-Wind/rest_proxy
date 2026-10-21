@@ -1,0 +1,184 @@
+{
+  "accepted_cases": 0,
+  "adapter": "loopback_openai_chat",
+  "attempts": 6,
+  "case_count": 6,
+  "cases": [
+    {
+      "attempt": 1,
+      "case_id": "literal_fields",
+      "elapsed_seconds": 0.897305,
+      "error_stage": "http_status",
+      "http_status": 400,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "18b9e9e756468af94664ed69bbad9082c429f36bd4236692464d9d271d5b6c29",
+      "response_bytes_retained": 85,
+      "response_sha256": "1ce29ce7368cc8c13fe149136e2f27e24727af4fb12a7bb5932c5b6fbe9a6c3a",
+      "runtime_identity": {
+        "exact_match": false,
+        "requested": "cockpit-pilot-phi-mini-20261017t215537z",
+        "returned": null,
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "1d33d087c56b9420dbfe319ad32fdb2c9c81947e2e255b8d9db16cb1508bf8f7",
+      "usage": {
+        "availability": "unavailable",
+        "provider_reported": null
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "missing_field",
+      "elapsed_seconds": 0.119964,
+      "error_stage": "http_status",
+      "http_status": 400,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "c759793081e8d4458e5268846262c4755b7485a83beb5740740c7378b10c8bf9",
+      "response_bytes_retained": 85,
+      "response_sha256": "1ce29ce7368cc8c13fe149136e2f27e24727af4fb12a7bb5932c5b6fbe9a6c3a",
+      "runtime_identity": {
+        "exact_match": false,
+        "requested": "cockpit-pilot-phi-mini-20261017t215537z",
+        "returned": null,
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "afec4c246ad89ff6dd999c5a6ffd3fab6db60bd04c3a0852231756808a27557e",
+      "usage": {
+        "availability": "unavailable",
+        "provider_reported": null
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "conflicting_revisions",
+      "elapsed_seconds": 0.150229,
+      "error_stage": "http_status",
+      "http_status": 400,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "e9158e884e04c854787cbf099da6f7114f0249dd38f6327112ecc1496e009c8b",
+      "response_bytes_retained": 85,
+      "response_sha256": "1ce29ce7368cc8c13fe149136e2f27e24727af4fb12a7bb5932c5b6fbe9a6c3a",
+      "runtime_identity": {
+        "exact_match": false,
+        "requested": "cockpit-pilot-phi-mini-20261017t215537z",
+        "returned": null,
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "dad1bc20375015425280b1f56da4a37d36e3f2ee8bb5bdb831cf9ffc00b7b208",
+      "usage": {
+        "availability": "unavailable",
+        "provider_reported": null
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "source_instructions",
+      "elapsed_seconds": 0.1122,
+      "error_stage": "http_status",
+      "http_status": 400,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "c168ccfe45e910f218f9b64a55bb9c58dcc3503ecc0a66cb1c443bdc5ca25a15",
+      "response_bytes_retained": 85,
+      "response_sha256": "1ce29ce7368cc8c13fe149136e2f27e24727af4fb12a7bb5932c5b6fbe9a6c3a",
+      "runtime_identity": {
+        "exact_match": false,
+        "requested": "cockpit-pilot-phi-mini-20261017t215537z",
+        "returned": null,
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "9b0a149e1e56e68c2e3e754f517993492a17bebfbcb9576f08d719d28a4b434d",
+      "usage": {
+        "availability": "unavailable",
+        "provider_reported": null
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "unicode_quote",
+      "elapsed_seconds": 0.188714,
+      "error_stage": "http_status",
+      "http_status": 400,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "d0b2efbabd064119fea70f8c31e98b9e63e1357203a3affaa1dce99cd695fed6",
+      "response_bytes_retained": 85,
+      "response_sha256": "1ce29ce7368cc8c13fe149136e2f27e24727af4fb12a7bb5932c5b6fbe9a6c3a",
+      "runtime_identity": {
+        "exact_match": false,
+        "requested": "cockpit-pilot-phi-mini-20261017t215537z",
+        "returned": null,
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "c54c3c243a5a0a8755ea60390ed8c0bdf3bf058fe13f51db676ed3c81c1bfbf1",
+      "usage": {
+        "availability": "unavailable",
+        "provider_reported": null
+      }
+    },
+    {
+      "attempt": 1,
+      "case_id": "reference_counterpart",
+      "elapsed_seconds": 0.121989,
+      "error_stage": "http_status",
+      "http_status": 400,
+      "reasoning": {
+        "availability": "unavailable",
+        "characters": null
+      },
+      "request_sha256": "3e21470d0134f4355e33a959b06305e33630b724e3acaa7c58f6d1d87a117f05",
+      "response_bytes_retained": 85,
+      "response_sha256": "1ce29ce7368cc8c13fe149136e2f27e24727af4fb12a7bb5932c5b6fbe9a6c3a",
+      "runtime_identity": {
+        "exact_match": false,
+        "requested": "cockpit-pilot-phi-mini-20261017t215537z",
+        "returned": null,
+        "weights_and_quantization_identity": "not_established"
+      },
+      "scores": null,
+      "source_utf8_sha256": "883e96828a67f4e395127e220ffd7e1c3972e401549c04c01a95faa2dace5456",
+      "usage": {
+        "availability": "unavailable",
+        "provider_reported": null
+      }
+    }
+  ],
+  "condition_id": "phi-mini",
+  "costs": {
+    "availability": "unmeasured",
+    "human_review_seconds": null,
+    "incremental_billed_usd": null,
+    "plan_quota_units": null,
+    "supervisor_time_seconds": null,
+    "supervisor_tokens": null
+  },
+  "data_scope": "six_frozen_synthetic_cases_only",
+  "lesson_release": false,
+  "model_training": false,
+  "native_fallbacks": 0,
+  "output_constraint": "json_schema",
+  "reasoning_control": "runtime_default_not_overridden",
+  "retries": 0,
+  "savings": "unmeasured",
+  "schema": "cockpit-evaluation-summary/1",
+  "schema_value_encoding": "type_array",
+  "tools_invoked": 0
+}
