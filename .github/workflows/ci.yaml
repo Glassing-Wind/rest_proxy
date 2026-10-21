@@ -85,7 +85,11 @@ jobs:
       - name: Install dependencies
         env:
           LM_PROXY_CI_REQUIRE_TS_PACK_WHEEL: "1"
-        run: bash scripts/install_ci_requirements.sh
+        run: |
+          bash scripts/install_ci_requirements.sh
+          bash scripts/install_ci_requirements.sh requirements-embedded.txt
+          python -m pip install pyarrow==25.0.1
+          python -m pip check
 
       - name: Install offline distribution test backend
         run: pip install setuptools==84.0.0
