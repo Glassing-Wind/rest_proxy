@@ -182,6 +182,6 @@ webencodings==0.5.1
 wrapt==1.17.3
 xmod==1.9.0
 xxhash==3.6.0
-yarl==1.23.0
+yarl==1.25.1
 zipp==3.23.0
 zstandard==0.25.0
